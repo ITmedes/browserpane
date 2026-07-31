@@ -3,7 +3,15 @@
 Issue: `#171` Add Workflow Studio Teach Mode and controlled
 demonstration-to-workflow publishing
 
-Status: Phase N productization plan. Not implemented.
+Status: Planned Phase N feature specification. Not implemented.
+
+Lane: Innovation
+
+Target gate: Phase N capability gate
+
+This document specifies the complete capability. Before any implementation PR,
+create a smaller slice-specific `*_PLAN.md` from `PLAN_TEMPLATE.md`; do not use
+this 408-line feature specification as an unbounded implementation plan.
 
 ## Business Case
 
@@ -334,11 +342,19 @@ The CLI must not print secrets, unrestricted evidence, or compiler payloads.
 - `#21`: generalized artifact and evidence resources.
 - `#47`: supported workflow source, packaging, publishing, and execution.
 - `#71`: Human Handoff and intervention semantics.
+- `#172`: stable external Workflow Endpoint deployment and invocation; deliver
+  before Teach Mode by default.
+- `#174`: bounded Phase 0 process evidence that can validate authoring demand
+  and supply a safe reference workflow.
+- `#175`: protocol specification/conformance for broad capture-client
+  compatibility claims.
 - `#171`: Teach Mode lifecycle, semantic capture, candidate generation, replay,
   publication gate, and controlled repair.
 
-Near-term security, validation, and admin promotion work remains ahead of this
-Phase N slice. Teach Mode must not displace issues `#145` through `#163`.
+Foundation release-gate work remains ahead of this Phase N slice. Teach Mode
+must not displace #151 and the selected security/readiness dependencies or the
+stable workflow publishing/endpoint contracts. Admin-new promotion can proceed
+in parallel when it does not alter those contracts.
 
 ## Test Strategy
 

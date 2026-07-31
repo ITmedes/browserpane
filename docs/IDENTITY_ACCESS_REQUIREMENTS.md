@@ -3,6 +3,16 @@
 This document consolidates the external identity, service-principal, identity
 mapping, and admin identity-polish requirements.
 
+Current ownership boundary:
+
+- #157 owns the admin-new identity/access-review route,
+- #176 owns enforceable organization/project roles and service-principal
+  grants,
+- #177 owns provisioning/deprovisioning and break-glass lifecycle,
+- #70 owns BrowserPane-issued API/service credentials, immutable audit, and
+  retention,
+- #79 owns the later central policy engine.
+
 ## Identity Foundation
 
 BrowserPane uses external OIDC for authentication. BrowserPane identity
@@ -41,6 +51,10 @@ External automation clients need an owner-scoped registry before BrowserPane
 can provide stronger service-principal lifecycle, API keys, audit, and policy
 behavior.
 
+The current registry is metadata plus a disabled-principal guard for new
+delegation. Allowed scopes/projects are not yet a complete enforced
+authorization contract; #176 owns that promotion.
+
 Required service-principal metadata:
 
 - id,
@@ -76,6 +90,10 @@ Required validation and behavior:
 Identity mappings connect safe external identity signals to BrowserPane project
 access and future policy decisions.
 
+The current mappings contribute to access-review evidence. They must not be
+described as full organization/project RBAC until #176 defines and enforces the
+authorization matrix.
+
 Required mapping metadata:
 
 - mapping id,
@@ -103,6 +121,10 @@ Issue `#172` requires a narrower authorization path on top of this identity
 foundation. The current service-principal registry and identity mappings are
 metadata and access-review primitives; they do not yet let a client-credentials
 token invoke an approved workflow owned by another principal.
+
+#172 owns the Workflow Endpoint grant resource and BPM-facing operation
+semantics. #176 owns the generalized organization/project authorization model
+and effective service-principal grants that the endpoint contract consumes.
 
 Required endpoint behavior:
 
@@ -156,6 +178,10 @@ That route should provide:
 - validation errors close to the affected form controls,
 - safe token-claim rendering without raw tokens.
 
+When #176/#177 are implemented, extend the same route with effective role/grant
+evidence, denial reasons, provisioning state, stale access, and break-glass
+review. Do not create a separate identity model in the UI.
+
 ## CLI Requirements
 
 The operator CLI should support:
@@ -206,13 +232,13 @@ Use the relevant subset:
 
 ## Out Of Scope
 
-- BrowserPane-issued API keys and client secrets,
-- SCIM server implementation,
+- BrowserPane-issued API keys and client secrets: #70,
+- SCIM-compatible or equivalent lifecycle APIs: #177,
 - SAML configuration,
-- break-glass accounts,
-- central policy engine,
-- immutable audit/event export,
+- break-glass accounts: #177,
+- central policy engine: #79,
+- immutable audit/event export: #70 and #28,
 - automatic deletion of existing delegated sessions on principal disablement,
 - general project quota/admission enforcement directly from identity mappings
-  until the governance layer consumes those facts. A narrow Workflow Endpoint
-  grant decision is planned explicitly in `#172`.
+  until the governance layer consumes those facts. General authorization is
+  owned by #176; the narrow Workflow Endpoint grant decision is owned by #172.

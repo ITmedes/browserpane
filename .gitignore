@@ -36,3 +36,4 @@ plan-*.md
 *_PLAN.md
 !docs/*_PLAN.md
 !docs/**/*_PLAN.md
+*.docx

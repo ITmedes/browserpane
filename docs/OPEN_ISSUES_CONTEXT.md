@@ -10,13 +10,19 @@ local planning docs and the public issue tracker.
 Source check:
 
 - fetched through the GitHub API on 2026-07-31,
-- open issues excluding pull requests: 47 after the Teach Mode and BPM
-  Workflow Endpoint cross-reference audit,
-- open issue range: `#6` through `#172`,
+- open issues excluding pull requests: 55 after the delivery-governance audit,
+- open issue range: `#6` through `#180`,
 - focused docs-derived implementation issues created on 2026-07-10: `#145`
   through `#170`,
 - focused Phase N Teach Mode issue created on 2026-07-31: `#171`,
 - focused Phase N BPM Workflow Endpoint issue created on 2026-07-31: `#172`,
+- delivery-governance issue created on 2026-07-31: `#173`,
+- focused Phase 0, protocol, identity, observability, API-contract, and
+  open-source-governance issues created on 2026-07-31: `#174` through `#180`,
+- all executable open issues carry a priority, lane, state, and target-gate
+  milestone; umbrella tracker `#6` intentionally carries only priority/state,
+- `#151` is the only Ready product issue and `#173` is the active governance
+  issue; other open work remains Qualified,
 - cross-reference pass on 2026-07-31 verified that every open issue has a
   docs source or docs cross-reference section and links back to this file,
 - closed admin-redesign lineage issue: `#142`, closed as completed on
@@ -30,6 +36,8 @@ Source check:
 | Focused current admin resource issue | `#124` | Use for the session-template catalog route when that slice is selected. |
 | Focused docs-derived work-order issues | `#145` through `#170` | Use these as canonical implementation issues for work-order items 1 through 26. |
 | Focused Phase N productization issues | `#172`, `#171` | Use `#172` for stable project-scoped BPM Workflow Endpoints and their machine-facing run contract. Use `#171` for Workflow Studio Teach Mode, semantic demonstrations, candidate generation, replay gates, immutable publication, and controlled repair. |
+| Delivery governance | `#173` | Owns the canonical roadmap, maturity, gates, risks, plan template, and issue/claim reconciliation. It does not own runtime features. |
+| Focused cross-product gaps | `#174` through `#180` | Use these for Phase 0 delivery, protocol conformance, authorization, identity lifecycle, platform telemetry, API compatibility, and open-source governance. |
 | Product/platform backlog | `#20`, `#21`, `#28`, `#30`, `#31`, `#47`, `#66`, `#69`, `#70`, `#71`, `#72`, `#73`, `#74`, `#75`, `#76`, `#79`, `#80` | Keep as roadmap and enterprise/product context. Prefer the matching focused issue from `#145`-`#170` when an implementation slice is covered there. |
 | Closed admin redesign lineage | `#142` | Historical design record for admin-new. It is not open; route remaining admin implementation slices through the focused admin issues in `#153`-`#163`. |
 
@@ -58,6 +66,14 @@ Source check:
 | `#124` Admin session template catalog management | `DOMAIN_REQUIREMENTS.md`, `RESOURCE_LIFECYCLE_REQUIREMENTS.md`, `ADMIN_NEW_REQUIREMENTS.md`, `ADMIN_NEW_MANUAL_CHECKPOINTS.md` | Item 15 | Focused admin-new resource slice. Use as canonical issue for template catalog work. |
 | `#171` Workflow Studio Teach Mode and controlled demonstration-to-workflow publishing | `BPANE-00171_WORKFLOW_TEACH_MODE_PLAN.md`, `DOMAIN_REQUIREMENTS.md`, `ADMIN_NEW_REQUIREMENTS.md`, `VALIDATION_MATRIX.md` | Item 27, focused Phase N slice | Canonical owner for semantic demonstrations, candidate generation, fresh-context replay, immutable publication gate, and controlled repair. Not implemented and not an admin-new promotion blocker. |
 | `#172` Project-scoped workflow endpoints for BPM and orchestration integrations | `BPANE-00172_BPM_WORKFLOW_ENDPOINT_INTEGRATION_PLAN.md`, `DOMAIN_REQUIREMENTS.md`, `IDENTITY_ACCESS_REQUIREMENTS.md`, `ADMIN_NEW_REQUIREMENTS.md`, `PROJECT_GOVERNANCE_REQUIREMENTS.md`, `RUNTIME_OPERATOR_REQUIREMENTS.md`, `VALIDATION_MATRIX.md` | Item 27, focused Phase N slice | Canonical owner for stable endpoint deployment/revisions, machine grants, typed async invocation, completion profiles, deadlines, overload/readiness, tracing, callbacks, side-effect evidence, artifact handoff, and connector conformance. Implement before `#171` within Phase N by default. |
+| `#173` Executable delivery roadmap, capability maturity, and release gates | `BPANE-00173_DELIVERY_GOVERNANCE_PLAN.md`, `DELIVERY_ROADMAP.md`, `CAPABILITY_MATURITY_MATRIX.md`, `PRODUCT_PHASES_AND_RELEASE_GATES.md`, `RISK_REGISTER.md` | Governance baseline | Canonical owner for delivery structure and cross-reference integrity. No runtime scope. |
+| `#174` Phase 0 reference workflow | `BPANE-00174_PHASE_0_REFERENCE_WORKFLOW_PLAN.md`, `DELIVERY_ROADMAP.md`, `PRODUCT_PHASES_AND_RELEASE_GATES.md` | Pilot Value lane | Canonical owner for candidate qualification, bounded workflow delivery, operating evidence, and Stop/Operate/Phase 1 exit. |
+| `#175` Remote protocol specification and conformance | `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md`, ADR 0003 | Production lane | Canonical owner for wire spec, version negotiation, golden vectors, fuzzing, and gateway/client compatibility. |
+| `#176` Organization/project-role/service-principal grant enforcement | `IDENTITY_ACCESS_REQUIREMENTS.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md` | Enterprise lane | Canonical owner for enforceable authorization and migration from owner-scoped deployments. |
+| `#177` Provisioning/deprovisioning and break-glass lifecycle | `IDENTITY_ACCESS_REQUIREMENTS.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md` | Enterprise lane | Canonical owner for remaining identity lifecycle scope from closed #52. |
+| `#178` Platform telemetry, SLOs, and capacity evidence | `DELIVERY_ROADMAP.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md` | Production lane | Canonical owner for standard metrics/traces, SLOs, alerts, runbooks, and tested envelopes. |
+| `#179` Control API conformance and compatibility | `ADMIN_NEW_API_COVERAGE.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md` | Foundation/Production lane | Canonical owner for OpenAPI lint, route/schema conformance, examples, and breaking-change policy. |
+| `#180` Open-source license/contribution/IP governance | `PRODUCT_PHASES_AND_RELEASE_GATES.md`, `RISK_REGISTER.md`, ADR 0004 | Production governance | Canonical owner for resolving license metadata and contribution/security/IP policy. |
 
 ## Focused Work-Order Issue Matrix
 
@@ -95,18 +111,28 @@ dedicated open issue ownership.
 | 26. Structural refactors | `#170` Split session-control structural refactors by domain | `IMPLEMENTATION_WORK_ORDER.md`, `SECURITY_RUNTIME_ROADMAP.md`, `REVIEW_FINDINGS_RECONCILIATION.md` |
 | Phase N. BPM Workflow Integration Endpoints | `#172` Add project-scoped workflow endpoints for BPM and orchestration integrations | `BPANE-00172_BPM_WORKFLOW_ENDPOINT_INTEGRATION_PLAN.md`, `DOMAIN_REQUIREMENTS.md`, `IDENTITY_ACCESS_REQUIREMENTS.md`, `ADMIN_NEW_REQUIREMENTS.md`, `PROJECT_GOVERNANCE_REQUIREMENTS.md`, `RUNTIME_OPERATOR_REQUIREMENTS.md`, `VALIDATION_MATRIX.md` |
 | Phase N. Workflow Studio Teach Mode | `#171` Add Workflow Studio Teach Mode and controlled demonstration-to-workflow publishing | `BPANE-00171_WORKFLOW_TEACH_MODE_PLAN.md`, `DOMAIN_REQUIREMENTS.md`, `ADMIN_NEW_REQUIREMENTS.md`, `VALIDATION_MATRIX.md` |
+| Delivery governance | `#173` Establish executable delivery roadmap, capability maturity, and release gates | `BPANE-00173_DELIVERY_GOVERNANCE_PLAN.md`, `DELIVERY_ROADMAP.md`, `CAPABILITY_MATURITY_MATRIX.md`, `PRODUCT_PHASES_AND_RELEASE_GATES.md`, `RISK_REGISTER.md` |
+| Phase 0 reference workflow | `#174` Qualify and deliver a Phase 0 reference workflow | `BPANE-00174_PHASE_0_REFERENCE_WORKFLOW_PLAN.md`, `DELIVERY_ROADMAP.md`, `PRODUCT_PHASES_AND_RELEASE_GATES.md` |
+| Remote protocol product contract | `#175` Specify and conformance-test the BrowserPane remote protocol | `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md`, `adr/0003-remote-protocol-product-contract.md` |
+| Organization/project authorization | `#176` Enforce organization, project-role, and service-principal grants | `IDENTITY_ACCESS_REQUIREMENTS.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md` |
+| Identity lifecycle | `#177` Add identity provisioning, deprovisioning, and break-glass lifecycle | `IDENTITY_ACCESS_REQUIREMENTS.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md` |
+| Platform telemetry and SLOs | `#178` Add platform telemetry, SLOs, and capacity evidence | `CAPABILITY_MATURITY_MATRIX.md`, `PRODUCT_PHASES_AND_RELEASE_GATES.md`, `RISK_REGISTER.md` |
+| API conformance | `#179` Enforce control API conformance and compatibility governance | `ADMIN_NEW_API_COVERAGE.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md` |
+| Open-source governance | `#180` Resolve open-source licensing, contribution, and IP governance | `PRODUCT_PHASES_AND_RELEASE_GATES.md`, `RISK_REGISTER.md`, `adr/0004-open-source-license-governance.md` |
 
 ## Issue Body Audit
 
 Checked again on 2026-07-31 against the live issue bodies, current
-`/admin-new/` routes, and the consolidated docs. The first pass covered the
-original 19 open issues; the reverse docs-to-issues pass created focused
-issues `#145` through `#170`.
+`/admin-new/` routes, implementation/test evidence, management claims, and the
+consolidated docs. The first pass covered the original 19 open issues; the
+reverse docs-to-issues pass created focused issues `#145` through `#170`; the
+delivery-governance pass created `#173` through `#180`.
 
-The current live result is 47 open issues: 19 broad/focused pre-existing
-issues, the 26 work-order issues `#145` through `#170`, and focused Phase N
-issues `#171` and `#172`. Every open issue is represented in this document and
-links back to the consolidated docs.
+The current live result is 55 open issues: 19 broad/focused pre-existing
+issues, the 26 work-order issues `#145` through `#170`, focused Phase N issues
+`#171` and `#172`, governance issue `#173`, and seven focused cross-product
+issues `#174` through `#180`. Every open issue is represented in this document
+and links back to the consolidated docs.
 
 The original 19 open issues remain relevant. None should be closed only
 because of the docs consolidation or because `#142` is closed. The focused
@@ -120,9 +146,8 @@ The cross-reference pass also updated the issue bodies in both directions:
   applicable,
 - every focused work-order issue from `#145` through `#170` has both `Docs
   source` and `Docs cross-reference` sections,
-- focused implementation issues `#124`, `#145` through `#170`, `#171`, and
-  `#172` include an explicit example use case and post-implementation smoke
-  sequence,
+- focused implementation issues `#124`, `#145` through `#180` include an
+  explicit example use case and post-implementation smoke sequence,
 - every open issue links back to `docs/OPEN_ISSUES_CONTEXT.md`,
 - stale wording that told slices to stay on broad issues was removed from the
   issue bodies.
@@ -150,6 +175,14 @@ The cross-reference pass also updated the issue bodies in both directions:
 | `#124` | Relevant and focused. This is the cleanest current admin-new implementation issue. | Updated on GitHub 2026-07-10 to name `/admin-new/` explicitly as the target surface. | Admin-new session-template catalog route is missing and should be built when this issue is selected. |
 | `#171` | Relevant and focused Phase N Teach Mode capability. | Created and cross-referenced on GitHub 2026-07-31; boundaries added to `#20`, `#21`, `#47`, `#71`, and `#172`. | Future full-width Workflow Studio and training routes; not an Admin-New promotion blocker. |
 | `#172` | Relevant and focused Phase N external workflow integration capability. | Created and re-audited on GitHub 2026-07-31; boundaries added to `#6`, `#28`, `#47`, `#66`, `#69`-`#72`, `#74`, `#76`, `#79`, `#80`, `#147`, `#150`, `#161`, `#162`, `#164`, and `#171`. | Future Workflow Endpoint catalog/detail, immutable revisions, grants, completion/handoff profiles, runs, overload/readiness, state-event consistency, and delivery diagnostics; not an Admin-New promotion blocker. |
+| `#173` | Current governance slice. | Created on GitHub 2026-07-31 with business case, use case, scope, acceptance, and smoke. | No runtime UI. It governs roadmap, maturity, gates, risks, and claim traceability. |
+| `#174` | Qualified bounded Pilot Value slice. | Created on GitHub 2026-07-31 and backed by a dedicated Phase 0 plan. | Uses only the admin-new/operator surfaces selected by the Pilot agreement. |
+| `#175` | Relevant protocol productization gap. | Created on GitHub 2026-07-31 after Rust/TypeScript version/conformance audit. | Diagnostics may expose safe version/capability metadata; no standalone admin catalog is required. |
+| `#176` | Relevant authorization enforcement gap. | Created on GitHub 2026-07-31 to own organization/project roles and enforced service-principal grants. | Admin-new identity/project views must eventually show effective grants and denial reasons. |
+| `#177` | Relevant later identity-lifecycle gap. | Created on GitHub 2026-07-31 to own provisioning/deprovisioning and safeguarded break-glass controls. | Admin-new identity/access review becomes the operator surface when implemented. |
+| `#178` | Relevant production observability gap. | Created on GitHub 2026-07-31 to separate platform telemetry/SLOs from per-session inspection and readiness. | Admin-new observability consumes the common telemetry contract; it does not define a separate model. |
+| `#179` | Relevant public API governance gap. | Created on GitHub 2026-07-31 for OpenAPI lint, implementation conformance, examples, and compatibility. | Admin-new API companion must render/generate from the canonical contract. |
+| `#180` | Relevant open-source trust/governance gap. | Created on GitHub 2026-07-31 after detecting AGPL root versus MIT Cargo metadata and absent contributor policies. | No dedicated admin route; documentation and release artifacts must be consistent. |
 
 ## Docs-To-Issue Context
 
@@ -164,11 +197,20 @@ shown as `closed #142`.
 | `ADMIN_NEW_MANUAL_CHECKPOINTS.md` | `#124`, `#154`-`#163`, closed `#142` |
 | `ADMIN_NEW_REQUIREMENTS.md` | `#20`, `#21`, `#47`, `#69`, `#124`, `#153`-`#159`, `#161`, `#163`, `#171`, `#172`, closed `#142` |
 | `ADMIN_NEW_STATUS.md` | `#153`, `#163`, `#171`, `#172`, closed `#142` |
+| `BPANE-00151_MINIMAL_CI_VALIDATION_PLAN.md` | `#151`, first Ready Foundation product slice |
 | `BPANE-00171_WORKFLOW_TEACH_MODE_PLAN.md` | `#171`, with dependencies on `#20`, `#21`, `#47`, `#71`, and `#172` |
-| `BPANE-00172_BPM_WORKFLOW_ENDPOINT_INTEGRATION_PLAN.md` | `#172`, with dependencies on `#28`, `#47`, `#66`, `#69`-`#72`, `#74`, `#76`, `#79`, `#80`, `#147`, `#150`, `#161`, `#162`, `#164`, and `#171` |
+| `BPANE-00172_BPM_WORKFLOW_ENDPOINT_INTEGRATION_PLAN.md` | `#172`, with dependencies on `#28`, `#47`, `#66`, `#69`-`#72`, `#74`, `#76`, `#79`, `#80`, `#147`, `#150`, `#161`, `#162`, `#164`, `#174`, `#176`, `#179`, and `#171` |
+| `BPANE-00173_DELIVERY_GOVERNANCE_PLAN.md` | `#173` |
+| `BPANE-00174_PHASE_0_REFERENCE_WORKFLOW_PLAN.md` | `#174`, after `#151`, with threat-profile-selected Foundation controls and conditional delivery dependencies on `#172`, `#149`, `#71`, `#66`, and `#154` |
+| `DELIVERY_ROADMAP.md` | all open issues organized into Foundation, Pilot Value, Operator Product, Production, Enterprise, and Innovation lanes |
+| `CAPABILITY_MATURITY_MATRIX.md` | all product capability owners, especially `#163`, `#171`-`#180` |
+| `PRODUCT_PHASES_AND_RELEASE_GATES.md` | `#151`, `#145`-`#150`, `#152`, `#174`, `#153`-`#163`, and Production/Phase N owners |
+| `RISK_REGISTER.md` | active risk owners, especially `#145`-`#152`, `#165`, and `#175`-`#180` |
+| `PLAN_TEMPLATE.md` | every focused issue entering Ready or In Progress |
+| `adr/` | `#173`, `#174`, `#175`, and `#180` plus related product-boundary issues |
 | `DOMAIN_REQUIREMENTS.md` | `#20`, `#21`, `#28`, `#31`, `#47`, `#69`, `#124`, `#154`-`#157`, `#159`, `#161`, `#171`, `#172`, closed `#142` |
-| `IDENTITY_ACCESS_REQUIREMENTS.md` | `#70`, `#157`, `#172`, closed `#142` |
-| `IMPLEMENTATION_WORK_ORDER.md` | all open issues, with focused ownership for items 1-26 in `#145`-`#170` and Phase N in `#172` then `#171` |
+| `IDENTITY_ACCESS_REQUIREMENTS.md` | `#70`, `#157`, `#172`, `#176`, `#177`, closed `#142` |
+| `IMPLEMENTATION_WORK_ORDER.md` | detailed issue/topic rationale; `DELIVERY_ROADMAP.md` owns current execution order |
 | `OPEN_ISSUES_CONTEXT.md` | all open issues, plus closed `#142` lineage |
 | `PROJECT_GOVERNANCE_REQUIREMENTS.md` | `#70`, `#79`, `#80`, `#161`, `#172`, closed `#142` |
 | `RESOURCE_LIFECYCLE_REQUIREMENTS.md` | `#21`, `#66`, `#76`, `#80`, `#124`, `#148`, `#159`, `#160`, closed `#142` |
@@ -180,27 +222,38 @@ shown as `closed #142`.
 | `SOURCE_PLAN_INVENTORY.md` | `#6`, closed `#142` |
 | `LEGACY_DOC_RETENTION_AUDIT.md` | `#6`, closed `#142` |
 | `LEGACY_SECTION_COVERAGE_AUDIT.md` | `#6`, closed `#142` |
-| `NEXT_WORKING_ROADMAP.md` | `#145`, `#146`, `#149`, `#154`-`#158`, `#171`, `#172`, closed `#142` |
+| `NEXT_WORKING_ROADMAP.md` | admin-new transition context for `#151`, `#145`, `#146`, `#149`, `#154`-`#158`, `#171`-`#180`, closed `#142` |
 | `README.md` | `#6`, closed `#142` |
 | `concept.html` | closed `#142` as design reference only |
 
 ## Issue Scoping Before Implementation
 
-The implementation work order deliberately starts with high-priority security
-and validation slices. After the reverse docs-to-issues audit, work-order items
-1 through 26 have focused open issues. Before coding, select the relevant
-focused issue and capture the exact slice boundary in a checked-in
-`docs/*_PLAN.md` file:
+The delivery roadmap starts with validation and high-priority security slices,
+then allows bounded Pilot, Operator Product, Production, and Enterprise lanes
+to proceed through explicit gates. Before coding, select the relevant focused
+issue and capture the exact slice boundary in a checked-in `docs/*_PLAN.md`:
 
 | Work-order item | Current issue state | Recommended action |
 | --- | --- | --- |
-| Items 1-9: P0/P1 security, runtime, validation, and admin-new foundation | `#145`-`#153` | Use the matching focused issue and a dedicated plan file. |
+| Foundation first slice | `#151` | Ready under `BPANE-00151_MINIMAL_CI_VALIDATION_PLAN.md`; implement and enforce the resulting checks. |
+| Remaining Foundation trust/runtime work | `#145`-`#150`, `#152`, `#179` | Follow `DELIVERY_ROADMAP.md`; use a bounded dedicated plan for each selected issue. |
 | Items 10-19: admin-new parity and promotion work | `#154`-`#163`, with session templates still tracked by `#124` | Use the matching focused issue and keep old admin regression scope explicit. |
 | Items 20-26: scalability, runtime hygiene, docs, performance, and refactors | `#164`-`#170` | Use the matching focused issue and require validation evidence before broad refactors. |
-| Item 27: deferred product and enterprise backlog | Broad issues: `#30`, `#31`, `#66`, `#70`, `#71`, `#73`, `#76`, `#79`, `#80`; focused Phase N issues: `#172`, `#171` | Keep broad topics as product backlog. For Phase N workflow productization, implement `#172` before `#171` by default and use each dedicated plan. |
+| Pilot Value | `#174`, conditional `#172`, `#149`, `#71`, `#66`, `#154` | Use the Phase 0 plan and select only dependencies required by the agreed process. |
+| Production/Enterprise and Innovation | Broad issues plus `#175`-`#180`, `#172`, `#171` | Promote through named release gates; implement `#172` before `#171` by default. |
 
 ## Issue Hygiene Notes
 
+- #173 established priority, lane, state, and target-gate labels/milestones for
+  every executable open issue. Umbrella tracker #6 deliberately has no delivery
+  lane or target milestone. #151 and #173 have accountable assignees; assign
+  other issues only when they enter Ready or In Progress.
+- A GitHub Project with dependency/evidence fields is still optional follow-up.
+  Until one is configured, issue labels and milestones are the live tracker
+  state and `DELIVERY_ROADMAP.md` is the canonical sequencing source.
+- Branch protection requires review/conversation resolution but no status
+  checks. #151 must add real CI checks and make the selected minimal checks
+  required before later issues treat them as evidence.
 - `#142` is closed as completed. It remains the historical admin-new design
   lineage, and its companion-doc section was updated on 2026-07-10 to point at
   the consolidated docs instead of the removed
@@ -209,7 +262,7 @@ focused issue and capture the exact slice boundary in a checked-in
   session-template catalog work, and use `#153`-`#163` for other focused
   admin-new implementation slices.
 - `#6` remains useful as the umbrella tracker, but direct implementation PRs
-  should reference the matching focused issue from `#145`-`#172` where one
+  should reference the matching focused issue from `#145`-`#180` where one
   exists, plus the scoped local plan file.
 - `#31`, `#71`, `#76`, `#79`, and `#80` are represented only at product
   backlog level in the docs. That is intentional for the current admin/security
@@ -218,10 +271,18 @@ focused issue and capture the exact slice boundary in a checked-in
 - `#124` is the cleanest current issue for a focused admin-new resource slice.
 - `#20`, `#21`, `#28`, `#47`, `#66`, `#69`, `#70`, `#72`, `#73`, `#74`, and
   `#75` remain valid but broad. Prefer the matching focused issue from
-  `#145`-`#172` for implementation PRs when the slice is covered there.
+  `#145`-`#180` for implementation PRs when the slice is covered there.
 - `#172` is the canonical external BPM Workflow Endpoint contract. It must not
   absorb workflow authoring/publishing from `#47`, direct session automation
   from `#69`, API key lifecycle from `#70`, generalized event export from
   `#28`, deployment/security/residency/DLP from `#66`, `#72`, `#76`, and `#80`,
   general HA/readiness/policy/CLI/scalability ownership from `#74`, `#79`,
-  `#150`, `#161`, `#162`, and `#164`, or Teach Mode from `#171`.
+  `#150`, `#161`, `#162`, and `#164`, Phase 0 delivery from `#174`,
+  organization grant enforcement from `#176`, API conformance from `#179`, or
+  Teach Mode from `#171`.
+- Closed `#52` remains historical evidence for the implemented identity/access
+  review and service-principal registry slices. Remaining organization/grant
+  enforcement is owned by `#176`; provisioning/deprovisioning and break-glass
+  lifecycle are owned by `#177`.
+- `#173` owns delivery governance only. It must not become a catch-all product
+  epic.
