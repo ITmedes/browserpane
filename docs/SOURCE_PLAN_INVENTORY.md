@@ -83,6 +83,16 @@ A ninth audit pass added:
 - `OPEN_ISSUES_CONTEXT.md` for the live open GitHub issue mapping against the
   consolidated docs and implementation work order.
 
+A tenth productization pass added:
+
+- `BPANE-00171_WORKFLOW_TEACH_MODE_PLAN.md` for semantic demonstration capture,
+  candidate compilation, fresh-context replay, immutable publication, and
+  controlled repair.
+- `BPANE-00172_BPM_WORKFLOW_ENDPOINT_INTEGRATION_PLAN.md` for stable
+  project-scoped workflow endpoints, machine grants, typed asynchronous
+  invocation, completion profiles, endpoint revisions, overload/readiness,
+  traceable callbacks, artifact handoff, and connector conformance.
+
 ### Redesign Foundation Decision
 
 Status: Active requirement.

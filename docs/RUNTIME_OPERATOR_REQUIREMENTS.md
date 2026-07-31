@@ -56,6 +56,50 @@ Validation:
 - bridge logs should not contain `npm warn exec` or `@playwright/mcp@latest`
   after first connect.
 
+## BPM Workflow Endpoint Operations
+
+Issue `#172` introduces a machine-facing long-running activity boundary above
+the owner workflow-run API. Before an endpoint is marked active, operators must
+be able to verify:
+
+- Postgres, runtime dispatch, worker image, credential provider, artifact store,
+  and callback delivery dependencies are ready,
+- the bound immutable workflow and endpoint revision pass contract validation,
+- project policy, endpoint grants, caller limits, deadlines, and result limits
+  are effective,
+- process-variable mapping, connector credential storage, target-system
+  Credential Bindings, and Human Handoff ownership are separated,
+- callback destinations pass the controls owned by `#147`,
+- the selected polling, webhook, or callback-token profile has a passing
+  conformance result,
+- dev/test/prod resources and credentials do not cross environment boundaries.
+
+Operational evidence must distinguish:
+
+- accepted and queued work,
+- endpoint/caller throttling,
+- dependency unavailability or maintenance,
+- running progress and last worker heartbeat,
+- requested and acknowledged cancellation,
+- terminal outcome and retryability,
+- attempt/checkpoint and external-side-effect uncertainty,
+- per-run event sequence and delivery replay/reconciliation health,
+- callback retry/dead-letter/redelivery,
+- artifact expiry or authorization failure.
+
+The integration must not keep the original HTTP invocation open for the full
+browser run. Callback tokens and upstream connector credentials are sensitive
+references and must not appear in labels, logs, event payloads, diagnostics, or
+Admin-New.
+
+Validation:
+
+- dependency-aware readiness and overload tests,
+- restart/reconciliation with idempotent invocation,
+- poll, signed webhook, and callback-token conformance smokes,
+- promotion/rollback and environment-isolation tests,
+- structured log/trace correlation from invocation through artifact/callback.
+
 ## Session Runtime Lifecycle
 
 Runtime lifecycle states must tell operators whether a session has:

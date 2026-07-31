@@ -21,6 +21,8 @@ libraries, components, and smoke scripts.
 | Session preview | `/admin-new/sessions/[session_id]/preview` | Implemented | Popup preview, browser SDK loading, metrics drawer, connect/disconnect behavior. |
 | Recordings | `/admin-new/recordings` | Partial | Top-level catalog/download view exists. Session-scoped recordings subroute and deeper playback management remain missing. |
 | Workflows | `/admin-new/workflows`, `/admin-new/workflows/[workflow_id]` | Partial | Catalog, detail, source tree/code preview, workflow launch controls exist. Publishing/catalog management is still not complete. |
+| Workflow integration endpoints | Recommended future `/admin-new/workflow-endpoints`, `/new`, `/[endpoint_id]`, `/runs`, `/deliveries` | Missing, Phase N | Stable project-scoped BPM action endpoints, service-principal grants, typed contracts, immutable revision promotion/rollback, completion profiles, overload/readiness, and callback diagnostics are planned in `#172`; this is not an admin-new promotion blocker. |
+| Workflow Studio / Teach Mode | Recommended future `/admin-new/workflows/teach`, `/admin-new/workflow-training/[draft_id]` | Missing, Phase N | Semantic demonstration capture, candidate generation, replay, review, immutable publication, and controlled repair are planned in `#171`; this is not an admin-new promotion blocker. |
 | Workflow runs | `/admin-new/runs` | Partial | Overview route exists. Detail route, logs/events/files/controls are still missing. |
 | Identity | Navigation points to `/admin-new/identity` | Missing | No route-backed identity/access-review implementation in unified admin. |
 | API reference | Navigation points to `/admin-new/api` | Missing | No API companion route yet. |

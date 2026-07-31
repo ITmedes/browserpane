@@ -348,6 +348,29 @@ fields:
 - extension versions: `install_path`
 - workspace upload helper metadata such as `x-bpane-file-provenance`
 
+Future Phase N Workflow Endpoint fields from issue `#172` must be added to the
+frozen API and this coverage matrix before UI implementation. They include:
+
+- endpoint key, project, lifecycle state, immutable version binding, contract
+  version, immutable revision, environment, compatibility status, schema
+  metadata, timeout/result limits, and supported controls,
+- service-principal endpoint grants and operation scopes,
+- endpoint invocation idempotency, source/process/activity correlation,
+  deadline, completion profile, caller limits, and bounded input,
+- typed outcome, retryability, progress/heartbeat, cancellation
+  acknowledgement, attempt/checkpoint and side-effect uncertainty,
+  trace/request correlation, and artifact result references,
+- callback contract version, cursor/replay, secret rotation, and redelivery
+  controls,
+- per-run event sequence, delivery replay/reconciliation evidence, Human
+  Handoff ownership profile, and data-classification/retention references,
+- canonical OpenAPI plus generated, tested compatibility exports; compatibility
+  documents must never become independent handwritten contracts.
+
+The endpoint control-plane contract belongs in OpenAPI. Its lifecycle callback
+contract belongs in a companion AsyncAPI document rather than being inferred
+from examples or UI state.
+
 Reusable upload/import helper schemas and headers must remain covered even
 when the operator UI only shows a friendly file picker. This includes file
 name/provenance metadata for workspace uploads and workflow workspace input
