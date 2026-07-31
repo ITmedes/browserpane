@@ -2,7 +2,7 @@
 
 BrowserPane is a self-hostable remote browser and workflow execution platform for humans and agents.
 
-Most browser automation products stop at managed browsers, CDP endpoints, or live debug links. BrowserPane treats the live browser session itself as the product surface: a real Chromium session that browser users, supervisors, and automation can all attach to with shared-session policy, owner/viewer controls, and persistent session resources.
+Many browser automation products expose managed browsers, CDP endpoints, or live debug links. BrowserPane treats the live browser session itself as the product surface: a real Chromium session that browser users, supervisors, and automation can all attach to with shared-session policy, owner/viewer controls, and persistent session resources.
 
 The key technical difference is that BrowserPane includes its own host-layer remote browser stack. The Rust `bpane-host` process runs next to Chromium inside the Linux runtime, captures and classifies the desktop surface, streams tiles, ROI video, audio, cursor, clipboard, files, input, microphone, camera, and resize events through BrowserPane's protocol, and lets the web client render the live session in a regular browser page.
 
@@ -10,16 +10,26 @@ BrowserPane is intended to be integrated into larger automation and workflow sys
 
 This means BrowserPane is not only a wrapper around Playwright, CDP, screenshots, or a hosted debug iframe. It owns the live browser transport path from the Linux host to the browser client.
 
-Checkout on youtube: [https://www.youtube.com/watch?v=zhj2_B4vLMs](https://www.youtube.com/watch?v=zhj2_B4vLMs)
+Project walkthrough: [watch on YouTube](https://www.youtube.com/watch?v=zhj2_B4vLMs).
 
 ## Unified Admin Console
 
 BrowserPane is consolidating live session operation, resource configuration,
-workflow execution, recordings, and governance in the route-backed
-`/admin-new/` application. This is the target standard admin experience. The
-legacy `/admin/` console remains available as a compatibility fallback until
-the [admin-new promotion gate in issue #163](https://github.com/ITmedes/browserpane/issues/163)
+workflow execution, recordings, and project/egress governance in the
+route-backed `/admin-new/` application. This is the target standard admin
+experience. The legacy `/admin/` console remains available as a compatibility
+fallback until the
+[admin-new promotion gate in issue #163](https://github.com/ITmedes/browserpane/issues/163)
 has verified the remaining route parity and regression coverage.
+
+The current prototype includes the dashboard; project, browser-context,
+egress-profile, and file-workspace catalogs; session create/detail and popup
+preview flows; recording catalog/download; workflow source, version, and run
+launching; and the workflow-run catalog. Identity/access review, API/docs
+companions, workflow-run detail, and route-backed session files, recordings,
+network, policy, and observability remain incomplete. See the
+[admin-new implementation status](docs/ADMIN_NEW_STATUS.md) for the maintained
+route-level matrix.
 
 <table>
   <tr>
@@ -35,7 +45,7 @@ has verified the remaining route parity and regression coverage.
     <td width="50%"><a href="assets/readme/browserpane-admin-new-session-live.jpg"><img src="assets/readme/browserpane-admin-new-session-live.jpg" alt="BrowserPane live browser session preview" width="100%"></a></td>
   </tr>
   <tr>
-    <td align="center"><sub>Proxy, TLS interception, and sanitized egress diagnostics</sub></td>
+    <td align="center"><sub>Egress profile, proxy, TLS interception, and status</sub></td>
     <td align="center"><sub>Live browser session with reconnect and metrics controls</sub></td>
   </tr>
   <tr>
@@ -44,15 +54,17 @@ has verified the remaining route parity and regression coverage.
   </tr>
   <tr>
     <td align="center"><sub>Typed workflow inputs, session binding, and API payload</sub></td>
-    <td align="center"><sub>Recording lifecycle, artifacts, and downloads</sub></td>
+    <td align="center"><sub>Recording catalog, artifact state, and downloads</sub></td>
   </tr>
 </table>
 
-The frozen v1 control-plane API contract now lives in [openapi/bpane-control-v1.yaml](openapi/bpane-control-v1.yaml).
+These screenshots show the current `/admin-new/` prototype with local demo
+data. The frozen owner-scoped v1 control-plane contract lives in
+[openapi/bpane-control-v1.yaml](openapi/bpane-control-v1.yaml).
 
 ## Why BrowserPane
 
-BrowserPane will be worth considering if you need more than "a browser for an agent."
+BrowserPane may fit when you need more than "a browser for an agent."
 
 - BrowserPane owns the remote browser protocol. `bpane-host`, `bpane-gateway`, `bpane-protocol`, and `bpane-client` form a browser-native live session stack rather than delegating the user experience to a generic remote desktop product.
 - Shared sessions are a first-class feature, not an afterthought. Multiple browser clients can join the same session with collaborative or restricted viewer behavior.
@@ -75,10 +87,12 @@ BrowserPane is a strong fit for:
 
 BrowserPane is still experimental.
 
-Use `docs/CAPABILITY_MATURITY_MATRIX.md` for evidence-backed capability status
-and `docs/PRODUCT_PHASES_AND_RELEASE_GATES.md` for Foundation, Phase 0,
-Phase 1, Production, and Phase N claim boundaries. A working local flow is
-Prototype evidence; it is not by itself a Production-readiness claim.
+Use the [capability maturity matrix](docs/CAPABILITY_MATURITY_MATRIX.md) for
+evidence-backed status and the
+[product phases and release gates](docs/PRODUCT_PHASES_AND_RELEASE_GATES.md)
+for Foundation, Phase 0, Phase 1, Production, and Phase N claim boundaries. A
+working local flow is Prototype evidence; it is not by itself a
+Production-readiness claim.
 
 Current support and scope:
 
@@ -89,19 +103,25 @@ Current support and scope:
 - Camera: disabled by default in the compose stack and requires browser H.264 encode support plus a mapped `v4l2loopback` device.
 - Control plane: owner-scoped v1 APIs now cover identity/access-review summaries, service principals, identity-to-project mappings, projects, sessions, session templates, egress profiles, automation tasks, session recordings, workflow definitions/runs, file workspaces, credential bindings, and approved extensions.
 - Workflow execution: Git-backed workflow versions run through a gateway-managed `workflow-worker`; the current executor model is Playwright.
-- Admin console: `/admin-new/` is the target standard operator application and
-  already covers the main live-session and resource workflows. `/admin/`
-  remains the compatibility fallback until issue #163 completes the promotion
-  and rollback gate.
+- Admin console: `/admin-new/` is the target standard operator application. Its
+  first-pass dashboard, primary resource catalogs, session creation/detail and
+  popup preview, recording catalog/download, workflow launcher, and workflow-run
+  catalog are implemented. Identity/access review, API/docs companions,
+  workflow-run detail, and session-specific subareas are still open; `/admin/`
+  remains the compatibility fallback until
+  [issue #163](https://github.com/ITmedes/browserpane/issues/163) completes the
+  promotion and rollback gate.
 - Workflow boundary: BrowserPane currently focuses on executing and supervising browser workflows. Broader scheduling, DAG orchestration, and cross-system coordination are expected to sit above BrowserPane rather than inside it.
 - External BPM integration: the stable project-scoped Workflow Endpoint is
-  planned under issue #172; the existing owner-scoped workflow-run API is not
-  that production contract.
+  planned under [issue #172](https://github.com/ITmedes/browserpane/issues/172);
+  the existing owner-scoped workflow-run API is not that production contract.
 - Teach Mode: prose/demonstration-to-workflow authoring and controlled repair
-  are planned under issue #171 and are not current capabilities.
+  are planned under [issue #171](https://github.com/ITmedes/browserpane/issues/171)
+  and are not current capabilities.
 - Remote protocol: the integrated BrowserPane protocol is implemented, while
   its public specification, version negotiation, conformance, fuzzing, and
-  compatibility policy remain planned under issue #175.
+  compatibility policy remain planned under
+  [issue #175](https://github.com/ITmedes/browserpane/issues/175).
 
 ## How The System Is Shaped
 
@@ -139,8 +159,8 @@ bpane-gateway also talks to:
 | Project | Responsibility |
 | --- | --- |
 | `code/apps/bpane-host` | Linux host agent. Captures the desktop surface, classifies tiles, drives ROI H.264 video, emits audio, injects input, and handles clipboard, file transfer, resize, and camera ingress plumbing. |
-| `code/apps/bpane-gateway` | WebTransport entry point, shared-session coordinator, runtime lifecycle boundary, and owner-scoped control-plane API for identity/access review, projects, sessions, session templates, automation tasks, recordings, workflows, files, credentials, and extensions. |
-| `code/shared/bpane-protocol` | Shared binary wire contract. Defines channels, frame envelopes, typed protocol messages, and incremental frame decoding used by the Rust services and validated against the browser client. |
+| `code/apps/bpane-gateway` | WebTransport entry point, shared-session coordinator, runtime lifecycle boundary, and control-plane API for identity/access review, projects, sessions, templates, browser contexts, egress, automation tasks, recordings, workflows, files, credentials, and extensions. |
+| `code/shared/bpane-protocol` | Rust implementation of the binary wire contract. Defines channels, frame envelopes, typed protocol messages, and incremental frame decoding; the TypeScript client maintains the corresponding browser-side codec. |
 | `code/web/bpane-client` | Real browser client. Renders tiles/video, decodes media, captures keyboard/mouse/clipboard input, and manages browser-side audio, camera, and file-transfer flows. |
 | `code/integrations/mcp-bridge` | Automation bridge for MCP/Playwright-style control flows. Exposes compatibility Streamable HTTP on `/mcp`, session-scoped Streamable HTTP on `/sessions/{id}/mcp`, compatibility SSE on `/sse`, session-scoped SSE on `/sessions/{id}/sse`, and integrates with gateway ownership APIs so automation can attach alongside interactive browser users through delegated session control. |
 | `code/integrations/workflow-worker` | On-demand workflow executor. Downloads pinned workflow source snapshots, attaches with session automation access, runs Playwright workflow entrypoints, resolves credential/workspace inputs, and writes logs, outputs, and produced files back to the gateway. |
@@ -160,17 +180,20 @@ That split is what lets the system keep static UI sharp while still handling mov
 
 ## Protocol Model
 
-The shared protocol is a compact binary protocol implemented in `bpane-protocol`.
+The BrowserPane wire contract is a compact binary protocol implemented by the
+Rust `bpane-protocol` crate and the corresponding TypeScript client codec.
 
 - Reliable typed channels are used for control, input, cursor, clipboard, file transfer, and tiles.
 - Raw media channels are used for video, desktop audio, microphone, and camera payloads.
-- The protocol crate is the source of truth for frame/message definitions; the README stays intentionally high-level.
+- The interoperating Rust and TypeScript implementations are the current code-level contract. A language-neutral public specification, explicit version negotiation, and conformance suite remain planned in [issue #175](https://github.com/ITmedes/browserpane/issues/175).
 
 ## Local Development
 
 ### Recommended: Docker Compose
 
-The local session console now defaults to `docker_pool` mode so `Start New Session` provisions an isolated browser runtime instead of reusing one shared legacy worker:
+The local stack defaults to `docker_pool` mode. Creating a session persists its
+control-plane resource; opening its preview starts or reconnects the isolated
+browser runtime when needed.
 
 Generate a dev certificate once:
 
@@ -185,30 +208,30 @@ BPANE_GATEWAY_MAX_ACTIVE_RUNTIMES=2 \
 docker compose -f deploy/compose.yml up --build
 ```
 
-Then open `http://localhost:8080/admin-new/` in Chromium to use the unified
-admin console that is being promoted as the standard BrowserPane operator
-application. The web root currently continues to redirect to `/admin/`, which
-remains the compatibility fallback until issue #163 completes the promotion
-gate.
+Then open `http://localhost:8080/admin-new/` in Chromium to use the target
+unified admin console. The web root currently continues to redirect to
+`/admin/`, which remains the compatibility fallback until issue #163 completes
+the promotion gate.
 
-The redesigned session preview popup includes a local `Metrics` drawer that can
+The unified session preview popup includes a local `Metrics` drawer that can
 sample browser transition diagnostics from the BrowserPane client runtime
 without creating a backend artifact. It reports FPS, transfer rates, tile mix,
 cache health, scroll fallback health, video datagrams, and render backend, and
 can copy the current sample as JSON for debugging.
 
-Use these local dev credentials on the login screen:
+The unified admin redirects unauthenticated users to the local Keycloak login.
+Use these development credentials:
 
 - username: `demo`
 - password: `demo-demo`
 
 Then:
 
-1. Click `Login`
-2. Click `Start New Session` to create a fresh browser, or select an older session and click `Join / Reconnect`
-3. Open the same selected session in another signed-in browser window if you want to share it live with another user
-4. Click `Delegate MCP` if you want the local `mcp-bridge` to drive that exact session
-5. For external MCP clients, prefer the session-scoped URL shown in the admin MCP panel, for example `http://localhost:8931/sessions/{session_id}/mcp`
+1. Open `Sessions`, choose `New session`, configure the resource, and click `Create session`. Creation does not start a browser runtime.
+2. On the session detail page, choose `Connect` or `Start and connect`. The live browser opens in a separate popup window.
+3. Open the same session detail and preview from another signed-in browser window to test collaborative access.
+4. In `MCP Delegation`, choose `Authorize` and, for compatibility clients, `Set default` when the local `mcp-bridge` should drive that session.
+5. For external MCP clients, prefer the session-scoped URL shown in the MCP panel, for example `http://localhost:8931/sessions/{session_id}/mcp`.
 
 If you explicitly want the older single-runtime compatibility stack, opt into it:
 
@@ -228,7 +251,18 @@ The compose stack starts:
 - `mcp-bridge`: MCP bridge on `:8931` (`/sessions/{id}/mcp` for recommended session-scoped Streamable HTTP, `/sessions/{id}/sse` for session-scoped legacy SSE, `/mcp` and `/sse` for compatibility)
 - `recording-worker-image`: one-shot build helper for the on-demand recording worker image used by `recording.mode=always`; the gateway launches short-lived recorder containers when sessions start recording
 
-The local compose file also defines on-demand worker images for workflows and recordings. The gateway launches workflow-worker and recording-worker containers as short-lived jobs; you normally do not start those containers as long-lived services yourself.
+The gateway launches workflow-worker and recording-worker containers as
+short-lived jobs; do not run them as long-lived services. The default compose
+startup builds the `recording-worker-image` helper. Before local workflow runs
+or workflow smokes, build the profile-gated workflow-worker image once:
+
+```bash
+docker compose -f deploy/compose.yml --profile workflow build workflow-worker
+```
+
+Rebuild that image after changing `code/integrations/workflow-worker` or its
+container definition.
+
 The gateway mounts the repository at `/workspace:ro` for local git-backed workflow sources, configures `/workspace` as a trusted Git `safe.directory`, and passes `--workflow-source-trusted-local-root /workspace` so local paths are allowed only from that explicit development root.
 The recording worker uses the generated local SPKI fingerprint from `dev/certs/cert-fingerprint.txt` through the gateway's `--recording-worker-cert-spki-file` setting, so run `./deploy/gen-dev-cert.sh dev/certs` before starting compose after certificate rotations.
 The recording worker forces the SDK render backend to Canvas2D for reliable headless Docker capture. Interactive admin and embedded browser clients keep the default `auto` backend, so GPU/WebGL rendering remains available for end-user sessions when the browser environment supports it.
@@ -259,23 +293,26 @@ docker compose -f deploy/compose.yml up --build
 - `BPANE_RECORDING_WORKER_OUTPUT_VOLUME`
 - `BPANE_RECORDING_WORKER_IMAGE`
 
-The default local auth flow is OIDC-based:
+The default local auth and session flow is OIDC-based:
 
-- open `http://localhost:8080/admin-new/`
-- click `Login`
-- authenticate against the local Keycloak realm
-- use the demo account `demo / demo-demo`
-- return to the admin console and either select an existing session or create a new one, optionally from a session template, reusable browser context, and explicit capability restrictions
-- the admin console joins the selected owner-scoped `/api/v1/sessions` resource, or creates a new one before opening WebTransport
-- the live session panel and session inspector show the applied template, and the inspector can filter sessions by template, lifecycle state, and runtime state
-- sessions created from the admin console use a 5 minute idle timeout and are stopped automatically if they remain unused or become idle without any browser viewers or MCP owner
-- reconnecting a stopped session now restarts the same session resource instead of creating a new one
-- switching the selected session disconnects the embedded browser from the previous live session before selecting the new one
-- the console UI now shows whether the currently selected session is the exact session delegated to the local MCP bridge
-- in Docker-backed runtime modes, BrowserPane mounts session-specific browser data for the Chromium profile, uploads, and downloads so cookies, cache, downloads, and Chromium session-restore state survive worker restarts without sharing one browser data root across sessions
-- Docker-backed runtime assignments are now persisted in Postgres and recovered on gateway restart, so an existing pool-mode worker can be rebound without launching a duplicate container
-- exact in-memory browser process state is only preserved while the worker is still alive; once idle-stop shuts a worker down, reconnect restores the browser from its persisted profile rather than from a true container checkpoint
-- if you want the local `mcp-bridge` to follow that same session, click `Delegate MCP`
+- opening `/admin-new/` automatically redirects unauthenticated users to the
+  local Keycloak realm; there is no separate landing-page login action
+- the session creation form can bind a project, session template, reusable
+  browser context, egress profile, capabilities, recording policy, labels,
+  network identity, viewport, and optional idle timeout before persistence
+- creating a session does not start its runtime; `Connect` or
+  `Start and connect` opens the separate preview and starts/reconnects that
+  exact session resource
+- when a session omits `idle_timeout_sec`, local compose uses the gateway's
+  300-second runtime idle-stop default
+- reconnecting a stopped or released session reuses the same session resource;
+  after a runtime stop it restores from the persisted Chromium profile rather
+  than a suspended process image
+- Docker-backed sessions keep Chromium profile, upload, and download data in
+  session-specific storage, and runtime assignments are persisted in Postgres
+  for gateway restart reconciliation
+- the session detail view shows MCP authorization/default-session state and the
+  immutable session-scoped endpoint for direct MCP clients
 
 The admin console fetches `/auth-config.json` and performs an Authorization Code + PKCE login. Admin API calls use the resulting OIDC bearer token.
 Before WebTransport connect, the console mints a short-lived session-scoped connect ticket from the session API and uses that ticket on the transport URL instead of the long-lived bearer token. The legacy development harness remains available at `/test-embed.html` for smoke tests that still exercise harness-specific hooks.
@@ -309,13 +346,16 @@ Vault, Keycloak admin surfaces, gateway internals, and the MCP bridge.
 See [REMOTE_DEPLOYMENT.md](REMOTE_DEPLOYMENT.md) for the current remote
 deployment assumptions and compose override notes.
 
-### Session Control Plane
+## Control Plane
 
-The local stack now includes a frozen v1 session control plane in `bpane-gateway`.
+`bpane-gateway` exposes the frozen v1 control-plane contract used by the admin
+applications, CLI, integrations, and workers.
 
 Canonical contract:
 
 - [openapi/bpane-control-v1.yaml](openapi/bpane-control-v1.yaml)
+
+Selected resource and diagnostics routes:
 
 - `POST /api/v1/sessions`
 - `GET /api/v1/sessions`
@@ -356,15 +396,19 @@ Canonical contract:
 - `POST /api/v1/sessions/{id}/egress-diagnostics`
 - `POST /api/v1/sessions/{id}/egress-usage`
 
-These endpoints are bearer-protected, owner-scoped, and stored in Postgres. The
-full contract is in the OpenAPI file; the route lists below call out the
-operator-facing surfaces that are most relevant for local development.
+Owner-facing resources are bearer-protected, owner-scoped, and stored in
+Postgres. Explicit worker, recorder, bridge, and observer operations use the
+narrower bearer or session-automation credentials defined per operation. The
+OpenAPI file is canonical; the route lists below are selected local-development
+surfaces, not an exhaustive duplicate of the contract.
+
+### Resources And Policy
 
 Session templates store reusable defaults for session creation, including owner
 mode, project id, viewport, idle timeout, labels, integration context, network identity, and recording policy.
 Creating a session with a UUID `template_id` merges those defaults before the
 session is persisted; explicit caller fields win over template defaults.
-The admin create-session configurator follows the same rule: selecting a
+The unified-admin create-session configurator follows the same rule: selecting a
 template leaves owner mode and idle timeout unset unless the operator chooses an
 explicit override, and the API payload preview shows the exact fields that will
 be sent.
@@ -435,12 +479,11 @@ metadata inspectable for cleanup. Access review evaluates group and claim
 mappings from a bounded safe OIDC claim set (`groups`, `roles`, `tenant`,
 `tenant_id`, `organization`, `organization_id`, `org_id`, `department`,
 `realm_access.roles`, and `resource_access.<client>.roles`) without returning
-raw bearer-token payloads. The admin Operations Overlay has a matching Identity
-tab for access-review visibility, service-principal create/edit/disable/re-enable
-operations, identity-mapping create/edit/disable/re-enable operations, and
-project-name rendering where visible. The operator CLI exposes the same payload
+raw bearer-token payloads. The API and operator CLI expose these operations
 through `identity me`, `identity access-review`, `service-principal`, and
-`identity-mapping` commands.
+`identity-mapping` commands. The legacy `/admin/` console has an Identity tab;
+the target `/admin-new/identity` route remains open under
+[issue #157](https://github.com/ITmedes/browserpane/issues/157).
 Network identity metadata lets callers declare locale, language preferences,
 timezone, geolocation, browser identity, user-agent override, and an
 `egress_profile_id` on either a session template or an explicit session create
@@ -509,8 +552,8 @@ the context has never been used. The gateway scans for expired ready contexts on
 startup and then every `--browser-context-retention-cleanup-interval-secs`
 seconds, unless that interval is set to `0`; docker-backed cleanup removes the
 context profile volume and skips active runtime writers for a later pass. API
-clients and the admin UI use these fields to make the same lifecycle and cleanup
-decisions.
+clients and the available admin views use these fields to make the same
+lifecycle and cleanup decisions.
 Inactive reusable contexts can be cloned with
 `POST /api/v1/browser-contexts/{id}/clone`; docker-backed runtimes copy the
 source Chromium profile volume into a new context-scoped profile volume when the
@@ -527,18 +570,23 @@ metadata defaults to the archive manifest, and imports never overwrite an
 existing context.
 Deleting a reusable context refuses active runtime writers and, for
 docker-backed runtimes, removes the context-scoped Chromium profile volume when
-no active writer exists. The admin create-session configurator can create
-reusable context catalog entries, select a ready context for a new session,
-preview the resulting `browser_context` payload, and show the bound context in
-live session rows and the session inspector detail view. The admin operations
-overlay and `/admin/browser-contexts` route also expose a reusable-context
-catalog with session references, guarded clone/export/import/delete, and copyable API
-examples.
+no active writer exists. In `/admin-new/`, the browser-context area provides a
+catalog, create flow, read-only detail/status view, and guarded delete action;
+the session form can select a ready reusable context and preview the resulting
+`browser_context` payload. Clone, import, and export remain available through
+the API, CLI, and legacy console while unified-admin parity is tracked in
+[issue #160](https://github.com/ITmedes/browserpane/issues/160).
 
-The admin console also uses a bearer-protected realtime WebSocket for
-owner-scoped snapshot updates:
+### Session Runtime And Delegation
+
+The gateway also exposes a bearer-protected realtime WebSocket for owner-scoped
+snapshot updates:
 
 - `GET /api/v1/admin/events`
+
+The legacy `/admin/` console consumes this stream. `/admin-new/` currently
+loads route data through the HTTP clients; its route-backed observability/event
+surface remains part of [issue #156](https://github.com/ITmedes/browserpane/issues/156).
 
 The same frozen API surface also includes session-scoped runtime routes:
 
@@ -598,13 +646,15 @@ Lifecycle control semantics are now explicit:
 - `POST /api/v1/sessions/{id}/kill` force-terminates live attachments and releases the runtime
 - connection-level disconnect routes remove live attachments without stopping the session runtime
 
-The local dev flow uses those routes to bridge browser-owned and automation-owned control:
+The local development flow uses those routes to bridge browser-owned and
+automation-owned control:
 
-- the admin console resolves or creates an owner-scoped session before connect
+- `/admin-new/` creates an explicit owner-scoped session resource before any
+  browser connect; opening a preview never creates a different session
 - it then mints a short-lived `session_connect_ticket` from `POST /api/v1/sessions/{id}/access-tokens`
 - the gateway routes the WebTransport connect through that explicit session id instead of one global token path
-- `Delegate MCP` assigns that session to the local `bpane-mcp-bridge` service principal
-- the console then calls the authenticated gateway proxy at
+- `Authorize` assigns that session to the local `bpane-mcp-bridge` service
+  principal; `Set default` then calls the authenticated gateway proxy at
   `/api/v1/mcp-bridge/control-session`; the gateway validates the owner/session
   and forwards the request to `mcp-bridge` with its internal control bearer
   token so the bridge adopts that same session for later ownership/status calls
@@ -626,6 +676,8 @@ MCP delegation terminology:
 - connected MCP client: one streamable HTTP or SSE MCP transport is bound to a
   bridge target; with `/sessions/{id}/mcp` that target is immutable for the
   connection lifetime
+
+### Operator CLI
 
 Supported local operator CLI:
 
@@ -833,17 +885,24 @@ and call the same API.
 
 The same compose file also starts an authenticated Squid fixture at
 `bpane-egress-auth-observer:3130` with local test credentials
-`proxy-user / proxy-pass`. Create a credential binding through the admin app or
-`POST /api/v1/credential-bindings`, attach its id with
+`proxy-user / proxy-pass`. Create a credential binding through the legacy
+`/admin/` console or `POST /api/v1/credential-bindings`, attach its id with
 `--proxy-credential-binding-id`, and run
 `./scripts/bpane egress-profile diagnostics probe <egress-profile-id>` to prove
 the proxy accepts the binding. Bad credentials or unavailable secret backends
-surface as sanitized diagnostics instead of returning the secret value.
+surface as sanitized diagnostics instead of returning the secret value. A
+unified credential-binding catalog remains open under
+[issue #159](https://github.com/ITmedes/browserpane/issues/159).
 
 For local HTTPS interception, run the mitmproxy-backed observer alongside the
-plain Squid observer:
+plain Squid observer. If `dev/egress-ca.pem` and `dev/egress-ca.key` do not yet
+exist, generate the local test CA first:
 
 ```bash
+openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
+  -subj '/CN=BrowserPane Local Egress Test CA' \
+  -keyout dev/egress-ca.key \
+  -out dev/egress-ca.pem
 docker compose -f deploy/examples/egress-observer/compose.yml up -d
 deploy/examples/egress-observer/prepare-mitmproxy-ca.sh
 docker compose -f deploy/examples/egress-observer/compose.tls.yml up -d
@@ -861,25 +920,20 @@ CA in the remote Chromium certificate viewer. The TLS observer logs decrypted
 request metadata and should only be used for local development or an approved
 sensitive-log sink.
 
-On `localhost`, the admin app auto-creates two owner-scoped local presets when
-it loads the egress catalog: `Local: Egress as Proxy` and `Local: Egress as TLS
-Interceptor`. The session configurator groups egress choices as `No egress`,
-`Egress as Proxy`, and `Egress as TLS Interceptor` so local testers can compare
-all three modes.
+The target `/admin-new/egress` area lists stored profiles and provides create,
+detail, edit, disable, and sanitized status views. It does not currently
+bootstrap the legacy console's two localhost presets. For unified-admin tests,
+create the plain-proxy and TLS-interceptor profiles through the route form, CLI,
+or API before selecting them in a session.
 
-The admin Operations Overlay also includes an egress profile catalog for
-creating, cloning, editing, and disabling approved outbound profiles. The
-catalog shows sanitized proxy, TLS-inspection, custom-CA, log-sink status, and
-proxy-auth binding status, plus diagnostics health. Session diagnostics move
-from configuration proof to runtime launch metadata once the selected profile
-has been applied to a live runtime, and to active-probe proof after the operator
-runs an egress probe from the live or detail session view. Run the probe after
-connecting or starting the session; otherwise diagnostics record a sanitized
-"runtime not ready" failure instead of
-launching a browser implicitly. The probe can optionally receive
-`public_ip_url`, `tls_probe_url`, and `timeout_ms` in the API or the matching
-CLI options `--probe-public-ip-url`, `--probe-tls-url`, and
-`--probe-timeout-ms`.
+Session diagnostics move from configuration proof to runtime launch metadata
+once the selected profile has been applied to a live runtime, and to
+active-probe proof after a probe succeeds. Profile and session probes are
+currently API/CLI operations; run them only after the session runtime is ready.
+Otherwise diagnostics record a sanitized `runtime not ready` failure instead
+of launching a browser implicitly. Probe requests can supply `public_ip_url`,
+`tls_probe_url`, and `timeout_ms`, or the matching CLI options
+`--probe-public-ip-url`, `--probe-tls-url`, and `--probe-timeout-ms`.
 
 ```bash
 cd code/web/bpane-client && npm run smoke:admin-egress-profiles -- --headless
@@ -931,13 +985,16 @@ destructive cleanup.
 
 The operator CLI integration smoke is
 `cd code/web/bpane-client && npm run smoke:bpane-cli -- --headless`. It logs in
-through the admin app, creates a session, initializes a CLI profile, exercises
+through the legacy `/admin/` auth flow, creates a session, initializes a CLI
+profile, exercises
 identity/access-review, service-principal registry lifecycle, identity-mapping
 lifecycle,
 project/session-template/browser-context/egress catalog operations, session
 access/status/diagnostics/disconnect/stop/kill/cleanup, and validates standalone
 MCP health, authorize, set-default, doctor, preflight, repair, revoke, and
 clear-default flows.
+
+### Runtime Notes
 
 Current runtime notes:
 
@@ -961,27 +1018,28 @@ Current runtime notes:
 - the default compose stack runs `docker_pool` for local multi-session testing
 - global compatibility routes like `/api/session/status` and `/api/session/mcp-owner` are compatibility-only and are not part of the frozen v1 contract; multi-runtime backends should use session-scoped `/api/v1/sessions/{id}/...` routes
 
-### Recordings
+## Recordings
 
 BrowserPane session recording is now a control-plane feature rather than only a browser-local blob download.
 
 - Session recording policy supports `disabled`, `manual`, and `always`.
 - Recording resources are session-scoped and persist segment metadata, runtime state, termination reason, and artifact linkage.
-- Recordings can be downloaded from the admin recording library
-  (`/admin-new/recordings` during the redesign), the legacy dev harness where
-  applicable, or through the v1 API.
+- Recordings can be downloaded from the `/admin-new/recordings` catalog, the
+  legacy development harness where applicable, or through the v1 API.
 - Playback/export is modeled separately from raw recording segments, so multi-segment sessions stay explicit.
 - Project policy can set `allow_manual_recordings=false` to block ad-hoc manual
-  recording starts for project sessions. The redesigned admin session form uses
+  recording starts for project sessions. The unified admin session form uses
   `recording.mode=always` for automatic backend recording when the session
   runtime starts. The local compose stack wires this through a Docker-backed
-  `recording-worker` image and a shared recording handoff volume. Manual
-  Record/Stop controls are a separate operator workflow.
+  `recording-worker` image and a shared recording handoff volume. The API also
+  supports manual recording resources, but `/admin-new/` does not currently
+  expose manual Record/Stop controls.
 
 Primary routes:
 
 - `POST /api/v1/sessions/{id}/recordings`
 - `GET /api/v1/sessions/{id}/recordings`
+- `PUT /api/v1/sessions/{id}/recording-policy`
 - `GET /api/v1/sessions/{id}/recordings/{recording_id}`
 - `POST /api/v1/sessions/{id}/recordings/{recording_id}/stop`
 - `GET /api/v1/sessions/{id}/recordings/{recording_id}/content`
@@ -992,14 +1050,17 @@ Primary routes:
 Local automatic backend recording flow:
 
 1. Open `http://localhost:8080/admin-new/sessions`
-2. Create or edit a session with recording enabled
-3. Start or connect the session
-4. Stop the session or finalize the recording
-5. Download from `http://localhost:8080/admin-new/recordings`; a single
+2. Enable recording while creating the session, or enable the always-on policy
+   from an existing session detail page. This does not start the runtime.
+3. Choose `Connect` or `Start and connect`; the recording worker starts with the
+   session runtime.
+4. Disconnect the last interactive preview or use an applicable disconnect,
+   release, stop, or kill action so the gateway finalizes the active segment.
+5. Refresh and download from `http://localhost:8080/admin-new/recordings`; a single
    retained segment downloads as WebM, while sessions with multiple retained
-   segments download as a playback ZIP bundle
+   segments download as a playback ZIP bundle.
 
-### Workflow Platform
+## Workflow Platform
 
 BrowserPane now exposes a first-class workflow execution layer on top of session automation access.
 
@@ -1025,7 +1086,8 @@ Current workflow capabilities:
 - git-backed workflow sources pinned to resolved commits
 - workflow source validation before immutable version creation, including entrypoint checks, bounded file listing, and bounded source snapshot materialization
 - source snapshot materialization per run
-- structured workflow source errors with machine-readable `code`, `category`, and `recovery_hint` fields surfaced through the admin app
+- structured workflow source errors with machine-readable `code`, `category`,
+  and `recovery_hint` fields surfaced through the unified workflow detail
 - file workspaces for reusable inputs and durable outputs
 - Vault-backed credential bindings
 - approved extension references on workflow versions and sessions
@@ -1096,8 +1158,9 @@ Current external-integration limit:
   trace, pagination, deadline, typed-outcome, and connector-compatibility
   contracts are not yet production-shaped for general BPM integration.
 
-The planned external contract is documented in
-`docs/BPANE-00172_BPM_WORKFLOW_ENDPOINT_INTEGRATION_PLAN.md`. It adds stable
+The planned external contract is documented in the
+[BPM workflow endpoint integration plan](docs/BPANE-00172_BPM_WORKFLOW_ENDPOINT_INTEGRATION_PLAN.md).
+It adds stable
 endpoint keys, explicit machine grants, asynchronous polling/webhook/callback
 profiles, enforced schemas, typed outcomes, deadlines, trace correlation,
 artifact references, endpoint revision promotion, connector/target credential
@@ -1108,9 +1171,16 @@ BPMN/DAG engine.
 
 Local usage options:
 
-- UI: use the workflow panel in the admin console
+- UI: `/admin-new/workflows` provides the definition catalog and route-backed
+  source/version/run launcher; `/admin-new/runs` is currently a catalog rather
+  than a complete run-detail surface
 - CLI: use `code/web/bpane-client/scripts/workflow-cli.mjs`
 - raw API: use the OpenAPI contract in `openapi/bpane-control-v1.yaml`
+
+Use the CLI or raw API for complete run logs, events, produced files,
+intervention controls, and delivery diagnostics until
+[issue #154](https://github.com/ITmedes/browserpane/issues/154) adds the unified
+workflow-run detail route.
 
 Unified admin workflow-run catalog smoke:
 
@@ -1121,15 +1191,22 @@ cd code/web/bpane-client && npm run smoke:admin-unified-workflow-runs -- --headl
 Typical local workflow path:
 
 1. Start the local compose stack and log in at `http://localhost:8080/admin-new/`
-2. Create or reconnect a browser session from the admin console
+2. Build the workflow-worker image with the profile-gated compose build command
+   shown under Local Development.
 3. Create reusable inputs as needed:
    - file workspace for reusable input/output files
-   - credential binding for Vault-backed secrets, optionally assigned to the same project as the workflow/session that will consume it
+   - credential binding for Vault-backed secrets, optionally assigned to the
+     same project as the workflow/session that will consume it
    - approved extension if the workflow needs a Chromium extension
-4. Create a workflow definition and a pinned version that points at a git-backed Playwright entrypoint
-5. Start a workflow run from the workflow panel, the CLI, or the raw v1 API
-6. If the run pauses, resolve operator input or approval from the UI, CLI, or API
-7. Inspect logs, events, outputs, recordings, produced files, and webhook deliveries from the run resource and subscription diagnostics
+4. Create a workflow definition through the API or workflow CLI, or use the
+   local `BrowserPane Tour` example. In the unified workflow detail, validate a
+   Git source and publish/select an immutable version.
+5. Configure typed or JSON input, choose whether to create a session or use an
+   existing session, then select `Start` or `Start and connect`.
+6. Track state and linked resources in `/admin-new/runs`. Use the CLI or API for
+   run-detail logs, events, produced files, and intervention controls.
+7. If the run pauses, submit input, resume, reject, or cancel through the CLI or
+   API until the unified run-detail route is implemented.
 
 Workflow run operations available to external systems:
 
@@ -1166,7 +1243,7 @@ routes rather than introducing a second control-plane contract. Use
 `--body-json` / `--body-file` for the full API payload, or the ergonomic
 `workflow run create` flags for the common project-scoped local test path.
 
-### Build, Unit Tests, And Local Smokes
+## Build, Unit Tests, And Local Smokes
 
 Build and unit checks do not require the compose stack. Package scripts named
 `smoke:*` expect the local compose stack and local auth flow to be available
@@ -1177,6 +1254,26 @@ Rust:
 ```bash
 cargo build --workspace
 cargo test --workspace
+```
+
+Unified admin:
+
+```bash
+cd code/web/bpane-admin-unified
+npm ci
+npm run check
+npm test
+npm run build
+```
+
+Compatibility admin while `/admin/` remains the fallback:
+
+```bash
+cd code/web/bpane-admin
+npm ci
+npm run check
+npm test
+npm run build
 ```
 
 Browser client:
@@ -1219,7 +1316,9 @@ Admin and browser-harness smokes are also script-backed. Run the focused
 `smoke:admin-*`, `smoke:workflow-*`, `smoke:test-embed-*`,
 `smoke:browser-policy`, and `smoke:multisession` commands from
 `code/web/bpane-client/package.json` when touching those areas.
-`smoke:admin-session` covers live session join, disconnect, release,
+The `smoke:admin-unified-*` scripts cover the implemented `/admin-new/`
+dashboard and primary resource flows. The legacy `smoke:admin-session` covers
+live session join, disconnect, release,
 profile-backed reconnect, stop/reconnect behavior, session-switch disconnect,
 display upload, policy/lifecycle panels, and Identity tab resource counts,
 service-principal create/update/disable/re-enable,
@@ -1256,25 +1355,31 @@ cd code/web/bpane-client && npm run smoke:multisession -- --headless
 
 ## Authentication Model
 
-- Browser clients authenticate to `bpane-gateway` with bearer access tokens.
+- Admin applications authenticate to `bpane-gateway` with OIDC bearer access
+  tokens; browser transport connections use a separate session-scoped ticket.
 - In the local compose stack, those tokens come from the Keycloak realm on `:8091`.
 - The gateway supports OIDC/JWT validation with issuer, audience, and JWKS configuration.
 - `mcp-bridge` uses OIDC client-credentials to call the gateway HTTP API.
-- The versioned session API is owner-scoped off those bearer-token identities.
-- Session-scoped browser transport now uses short-lived signed connect tickets minted from the session API.
+- Owner-facing v1 resources are scoped from those bearer-token identities;
+  worker and observer routes use explicitly scoped automation credentials where
+  the OpenAPI operation allows them.
+- Session-scoped browser transport uses short-lived signed connect tickets minted from the session API.
 - The old shared dev-token file flow is no longer the default local path.
 
 ## Documentation Policy
 
-This README is intentionally responsibility-oriented and high level.
+This README provides product orientation, the supported local workflow, and
+selected operator examples. Exhaustive API and maturity truth lives in the
+canonical contract and status documents below.
 
 Planning and evidence sources:
 
-- `docs/DELIVERY_ROADMAP.md`: current execution lanes and next slices,
-- `docs/CAPABILITY_MATURITY_MATRIX.md`: current capability maturity,
-- `docs/PRODUCT_PHASES_AND_RELEASE_GATES.md`: promotion evidence,
-- `docs/RISK_REGISTER.md`: active product/delivery risks,
-- `docs/OPEN_ISSUES_CONTEXT.md`: canonical issue ownership map.
+- [docs/DELIVERY_ROADMAP.md](docs/DELIVERY_ROADMAP.md): current execution lanes and next slices
+- [docs/CAPABILITY_MATURITY_MATRIX.md](docs/CAPABILITY_MATURITY_MATRIX.md): current capability maturity
+- [docs/ADMIN_NEW_STATUS.md](docs/ADMIN_NEW_STATUS.md): unified-admin route coverage and promotion gaps
+- [docs/PRODUCT_PHASES_AND_RELEASE_GATES.md](docs/PRODUCT_PHASES_AND_RELEASE_GATES.md): promotion evidence
+- [docs/RISK_REGISTER.md](docs/RISK_REGISTER.md): active product/delivery risks
+- [docs/OPEN_ISSUES_CONTEXT.md](docs/OPEN_ISSUES_CONTEXT.md): canonical issue ownership map
 
 It should explain:
 
