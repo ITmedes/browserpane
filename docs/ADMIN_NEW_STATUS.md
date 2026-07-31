@@ -6,6 +6,11 @@ This file maps the current `code/web/bpane-admin-unified` app to the
 consolidated redesign requirements. It is based on the current routes,
 libraries, components, and smoke scripts.
 
+Capability maturity: Prototype. The route coverage below is current product
+evidence, but default promotion remains a Phase 1 gate owned by #163. Use
+`DELIVERY_ROADMAP.md` for cross-product sequencing and
+`PRODUCT_PHASES_AND_RELEASE_GATES.md` for claim language.
+
 ## Current Route Coverage
 
 | Area | Current route(s) | Status | Notes |
@@ -35,7 +40,7 @@ libraries, components, and smoke scripts.
 | --- | --- | --- | --- |
 | Step 0: Baseline | Keep `/admin/` stable while building `/admin-new/`. | Done | `/admin/` remains present and smoke-covered. |
 | Step 1: New app beside current admin | Scaffold and serve a static SvelteKit app at `/admin-new/` without changing `/admin/`, `/dist/`, auth config, cert metadata, or APIs. | Done | `bpane-admin-unified` exists and is served at `/admin-new/`. |
-| Step 1A: API coverage baseline | Classify every frozen API operation and expose owner, worker, evidence, and compatibility surfaces clearly. | Partial | The audit exists in consolidated docs, but no route-backed `/admin-new/api` or `/coverage` companion exists. |
+| Step 1A: API coverage baseline | Classify every frozen API operation and expose owner, worker, evidence, and compatibility surfaces clearly. | Partial | The inventory exists, but #179 conformance/compatibility enforcement and route-backed `/admin-new/api` or `/coverage` companions are missing. |
 | Step 2: Projects overview | Route-backed project catalog, create, detail/edit, quotas, policy gates, usage, and alerts. | Done | Projects catalog/create/detail/edit are implemented. |
 | Step 3: Resource foundation | Selector-grade browser context, egress profile, and file workspace catalogs/details. | Done for first pass | Core resource catalogs and detail/edit flows are implemented. |
 | Step 4: Create session flow | Session creation form with project/template/context/network/egress/capabilities/recording/payload preview. | Done | Session creation is implemented with selectors and payload preview. |
@@ -67,7 +72,9 @@ Current `bpane-client` scripts include:
 - `smoke:admin-unified-workflows`
 - `smoke:admin-unified-workflow-runs`
 
-These should remain mandatory for PRs that touch the unified admin app.
+These should remain mandatory for PRs that touch the unified admin app. #151
+must make the selected minimal checks enforceable in CI; the existence of local
+scripts alone is not a promotion gate.
 
 ## Promotion Assessment
 
