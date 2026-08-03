@@ -2,7 +2,7 @@
 
 Issue: [#151](https://github.com/ITmedes/browserpane/issues/151)
 
-State: In Progress
+State: Implemented; pending merge
 
 Owner: `thebackplane`
 
@@ -12,7 +12,7 @@ Target gate: Foundation Gate
 
 Depends on: #173 delivery-governance baseline
 
-Last verified: 2026-08-03 on `fix/BPANE-00151-hosted-compose` after hosted compose run `30815108416`
+Last verified: 2026-08-03 on `fix/BPANE-00151-hosted-compose` after hosted compose run `30831720475`
 
 ## Business Outcome
 
@@ -323,8 +323,8 @@ Evidence:
 
 ### Slice 5: Hosted Compose Remediation
 
-Status: Local remediation and all nine compose-profile stages are complete on
-`fix/BPANE-00151-hosted-compose`; hosted compose evidence remains pending.
+Status: Complete on `fix/BPANE-00151-hosted-compose`; required validation,
+Code Quality, all nine hosted compose-profile stages, and hosted cleanup pass.
 
 Hosted run `30815108416` passed 13 of 16 gateway API cases and then failed for
 two distinct reasons:
@@ -384,6 +384,30 @@ Local remediation evidence from 2026-08-03:
   race between parallel `bpane-host` config tests. Environment-mutating config
   tests now serialize and restore their original values; the config module
   passes 100 parallelized repetitions and the full host suite passes.
+- Hosted run `30827207460` passed 15/16 default gateway cases and confirmed the
+  Git and Docker remediations before exposing a separate CDP probe race. The
+  probe had accepted the initial `about:blank` load event, then evaluated while
+  the requested page was replacing its execution context. It now navigates to
+  the stable `test-embed.html` fixture, polls the exact requested document, and
+  requires two ready observations while tolerating only known navigation-churn
+  errors. Five focused probe tests cover the expected document, same-origin
+  redirects, transient CDP errors, stable observations, and terminal errors.
+- The targeted runtime-backed browser-context case passes locally across
+  profile write, stop, restore, export, import, clone, and quota enforcement.
+- Hosted run `30829492868` passed all 16 default and all four Docker-pool gateway
+  cases plus the admin-new dashboard. It then exposed a clean-database
+  assumption in the Projects smoke: the product correctly rendered its tested
+  empty state, while the smoke unconditionally waited for a table. The smoke
+  now validates either initial catalog representation and still requires the
+  populated table after project creation.
+- The Projects component tests and full local Projects smoke pass. The six
+  downstream compose stages also pass in one uninterrupted local run:
+  admin-new sessions, compatibility admin, CLI, dual session-scoped MCP,
+  recording with two retained segments and playback export, and workflow
+  admission/backpressure.
+- Final hosted Compose run `30831720475` passes all nine stages and cleanup.
+  Required Validation run `30831721371` and Code Quality run `30831716880` pass
+  on the same commit.
 
 Remediation smoke sequence:
 
