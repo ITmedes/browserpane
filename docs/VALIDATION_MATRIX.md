@@ -13,8 +13,9 @@ The 2026-08-03 coverage ratchet records:
 
 - all non-ignored Rust workspace tests passed under `cargo llvm-cov`, with
   56.25% line coverage across the workspace,
-- browser-client tests pass with 92.88% lines, 92.88% statements, 93.19%
-  functions, and 87.56% branches across all maintained `js` sources,
+- browser-client tests pass on pinned Node 22/Linux with 92.88% lines, 92.88%
+  statements, 92.98% functions, and 87.70% branches across all maintained `js`
+  sources; the cross-platform function floor is 92.9%,
 - admin-new's 279 tests pass with 88.09% lines, 90.13% statements, 92.78%
   functions, and 74.34% branches across `src/lib`,
 - MCP bridge has focused unit tests,

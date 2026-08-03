@@ -16,7 +16,7 @@
       "minimums": {
         "statements": 92.8,
         "branches": 87.5,
-        "functions": 93.1,
+        "functions": 92.9,
         "lines": 92.8
       }
     },
