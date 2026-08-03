@@ -77,9 +77,13 @@ specifications and still require a bounded slice plan before coding.
   final regression sequence for the side-by-side admin migration.
 - `ADMIN_INTERACTION_REQUIREMENTS.md`: global notifications, panel-local
   feedback, session creation configurator, metrics, and logs.
-- `BPANE-00151_MINIMAL_CI_VALIDATION_PLAN.md`: the single next Ready product
-  slice for dependency remediation, reproducible validation, coverage ratchets,
+- `BPANE-00151_MINIMAL_CI_VALIDATION_PLAN.md`: implemented Foundation baseline
+  for dependency remediation, reproducible validation, coverage ratchets,
   required GitHub checks, and bounded compose evidence.
+- `BPANE-00184_COMPOSE_VALIDATION_PERFORMANCE_PLAN.md`: focused Foundation
+  follow-up for reducing hosted compose feedback time while preserving the
+  complete local and hosted scenario set; measured cold Docker build
+  acceleration remains isolated in GitHub issue `#185`.
 - `BPANE-00171_WORKFLOW_TEACH_MODE_PLAN.md`: Phase N Teach Mode contract,
   semantic demonstration capture, candidate generation, replay, immutable
   publication, controlled repair, and smoke sequence.

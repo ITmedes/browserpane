@@ -1,7 +1,7 @@
 # Open GitHub Issues Context
 
 Created: 2026-07-10
-Revalidated: 2026-07-31
+Revalidated: 2026-08-03
 
 This document maps the current `docs/` workspace to the live open GitHub
 issues for `ITmedes/browserpane`. It is the bridge between the consolidated
@@ -9,9 +9,8 @@ local planning docs and the public issue tracker.
 
 Source check:
 
-- fetched through the GitHub API on 2026-07-31,
-- open issues excluding pull requests: 55 after the delivery-governance audit,
-- open issue range: `#6` through `#180`,
+- fetched through the GitHub API on 2026-08-03,
+- open issue range: `#6` through `#185`,
 - focused docs-derived implementation issues created on 2026-07-10: `#145`
   through `#170`,
 - focused Phase N Teach Mode issue created on 2026-07-31: `#171`,
@@ -19,10 +18,13 @@ Source check:
 - delivery-governance issue created on 2026-07-31: `#173`,
 - focused Phase 0, protocol, identity, observability, API-contract, and
   open-source-governance issues created on 2026-07-31: `#174` through `#180`,
+- focused compose-validation performance issue created on 2026-08-03: `#184`,
+- focused deterministic Docker build-cache follow-up created on 2026-08-03:
+  `#185`,
 - all executable open issues carry a priority, lane, state, and target-gate
   milestone; umbrella tracker `#6` intentionally carries only priority/state,
-- `#151` is the only Ready product issue and `#173` is the active governance
-  issue; other open work remains Qualified,
+- `#151` and `#173` are implemented and closed; `#184` is the implemented
+  bounded sharding slice and `#185` owns its measured cold-build follow-up,
 - cross-reference pass on 2026-07-31 verified that every open issue has a
   docs source or docs cross-reference section and links back to this file,
 - closed admin-redesign lineage issue: `#142`, closed as completed on
@@ -38,6 +40,8 @@ Source check:
 | Focused Phase N productization issues | `#172`, `#171` | Use `#172` for stable project-scoped BPM Workflow Endpoints and their machine-facing run contract. Use `#171` for Workflow Studio Teach Mode, semantic demonstrations, candidate generation, replay gates, immutable publication, and controlled repair. |
 | Delivery governance | `#173` | Owns the canonical roadmap, maturity, gates, risks, plan template, and issue/claim reconciliation. It does not own runtime features. |
 | Focused cross-product gaps | `#174` through `#180` | Use these for Phase 0 delivery, protocol conformance, authorization, identity lifecycle, platform telemetry, API compatibility, and open-source governance. |
+| Focused validation performance | `#184` | Preserve the #151 validation baseline while reducing hosted compose feedback time through isolated execution lanes. |
+| Focused Docker build acceleration | `#185` | Preserve #184 lane coverage while adding deterministic, supply-chain-safe Docker build reuse for trusted hosted runs. |
 | Product/platform backlog | `#20`, `#21`, `#28`, `#30`, `#31`, `#47`, `#66`, `#69`, `#70`, `#71`, `#72`, `#73`, `#74`, `#75`, `#76`, `#79`, `#80` | Keep as roadmap and enterprise/product context. Prefer the matching focused issue from `#145`-`#170` when an implementation slice is covered there. |
 | Closed admin redesign lineage | `#142` | Historical design record for admin-new. It is not open; route remaining admin implementation slices through the focused admin issues in `#153`-`#163`. |
 
@@ -74,6 +78,8 @@ Source check:
 | `#178` Platform telemetry, SLOs, and capacity evidence | `DELIVERY_ROADMAP.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md` | Production lane | Canonical owner for standard metrics/traces, SLOs, alerts, runbooks, and tested envelopes. |
 | `#179` Control API conformance and compatibility | `ADMIN_NEW_API_COVERAGE.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md` | Foundation/Production lane | Canonical owner for OpenAPI lint, route/schema conformance, examples, and breaking-change policy. |
 | `#180` Open-source license/contribution/IP governance | `PRODUCT_PHASES_AND_RELEASE_GATES.md`, `RISK_REGISTER.md`, ADR 0004 | Production governance | Canonical owner for resolving license metadata and contribution/security/IP policy. |
+| `#184` Reduce representative compose validation wall time | `BPANE-00184_COMPOSE_VALIDATION_PERFORMANCE_PLAN.md`, `VALIDATION_MATRIX.md` | Foundation maintenance | Canonical owner for hosted compose sharding and timing evidence without reducing the #151 scenario baseline. |
+| `#185` Persist deterministic Docker build cache | `BPANE-00184_COMPOSE_VALIDATION_PERFORMANCE_PLAN.md`, `VALIDATION_MATRIX.md` | Foundation maintenance | Follow-up owner for BuildKit cache or pinned dependency-builder evaluation after #184; it must preserve coverage and cache trust boundaries. |
 
 ## Focused Work-Order Issue Matrix
 
@@ -197,7 +203,8 @@ shown as `closed #142`.
 | `ADMIN_NEW_MANUAL_CHECKPOINTS.md` | `#124`, `#154`-`#163`, closed `#142` |
 | `ADMIN_NEW_REQUIREMENTS.md` | `#20`, `#21`, `#47`, `#69`, `#124`, `#153`-`#159`, `#161`, `#163`, `#171`, `#172`, closed `#142` |
 | `ADMIN_NEW_STATUS.md` | `#153`, `#163`, `#171`, `#172`, closed `#142` |
-| `BPANE-00151_MINIMAL_CI_VALIDATION_PLAN.md` | `#151`, first Ready Foundation product slice |
+| `BPANE-00151_MINIMAL_CI_VALIDATION_PLAN.md` | closed `#151`, implemented Foundation validation baseline |
+| `BPANE-00184_COMPOSE_VALIDATION_PERFORMANCE_PLAN.md` | `#184`, implemented Foundation validation-performance slice; measured build-cache follow-up `#185` |
 | `BPANE-00171_WORKFLOW_TEACH_MODE_PLAN.md` | `#171`, with dependencies on `#20`, `#21`, `#47`, `#71`, and `#172` |
 | `BPANE-00172_BPM_WORKFLOW_ENDPOINT_INTEGRATION_PLAN.md` | `#172`, with dependencies on `#28`, `#47`, `#66`, `#69`-`#72`, `#74`, `#76`, `#79`, `#80`, `#147`, `#150`, `#161`, `#162`, `#164`, `#174`, `#176`, `#179`, and `#171` |
 | `BPANE-00173_DELIVERY_GOVERNANCE_PLAN.md` | `#173` |
@@ -235,7 +242,8 @@ issue and capture the exact slice boundary in a checked-in `docs/*_PLAN.md`:
 
 | Work-order item | Current issue state | Recommended action |
 | --- | --- | --- |
-| Foundation first slice | `#151` | Ready under `BPANE-00151_MINIMAL_CI_VALIDATION_PLAN.md`; implement and enforce the resulting checks. |
+| Foundation validation baseline | closed `#151` | Keep the implemented validation scope intact. |
+| Foundation validation performance | `#184` implemented; `#185` ready | Retain the measured sharding result; use #185 for deterministic Docker build acceleration without reducing coverage. |
 | Remaining Foundation trust/runtime work | `#145`-`#150`, `#152`, `#179` | Follow `DELIVERY_ROADMAP.md`; use a bounded dedicated plan for each selected issue. |
 | Items 10-19: admin-new parity and promotion work | `#154`-`#163`, with session templates still tracked by `#124` | Use the matching focused issue and keep old admin regression scope explicit. |
 | Items 20-26: scalability, runtime hygiene, docs, performance, and refactors | `#164`-`#170` | Use the matching focused issue and require validation evidence before broad refactors. |

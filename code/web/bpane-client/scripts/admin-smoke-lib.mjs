@@ -78,19 +78,27 @@ export async function disconnectEmbeddedBrowser(page, options) {
 export async function waitForStopEnabled(page, options, sessionId) {
   await openAdminTab(page, 'lifecycle');
   await waitForSessionStopEligibility(page, options, sessionId);
-  await page.getByTestId('session-detail-refresh').click();
   await poll('admin stop button enabled', async () => {
-    return await page.getByTestId('session-stop').isEnabled();
-  }, (enabled) => enabled, options.connectTimeoutMs);
+    const enabled = await page.getByTestId('session-stop').isEnabled().catch(() => false);
+    if (enabled) {
+      return true;
+    }
+    await page.getByTestId('session-detail-refresh').click().catch(() => {});
+    return false;
+  }, Boolean, options.connectTimeoutMs, 1000);
 }
 
 export async function waitForKillEnabled(page, options, sessionId) {
   await openAdminTab(page, 'lifecycle');
   await waitForSessionClients(page, options, sessionId, 0);
-  await page.getByTestId('session-detail-refresh').click();
   await poll('admin kill button enabled', async () => {
-    return await page.getByTestId('session-kill').isEnabled();
-  }, (enabled) => enabled, options.connectTimeoutMs);
+    const enabled = await page.getByTestId('session-kill').isEnabled().catch(() => false);
+    if (enabled) {
+      return true;
+    }
+    await page.getByTestId('session-detail-refresh').click().catch(() => {});
+    return false;
+  }, Boolean, options.connectTimeoutMs, 1000);
 }
 
 export async function waitForSessionState(page, options, sessionId, expectedState) {
