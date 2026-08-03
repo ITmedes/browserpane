@@ -1150,6 +1150,10 @@ GitHub Actions runs the fast floor on pull requests and pushes to `main`. The
 - `Node / Recording worker`
 - `Node / Workflow worker`
 
+`main` branch protection requires all nine contexts in strict mode and binds
+them to the GitHub Actions app. Existing pull-request review and branch-lock
+rules remain independent of these validation checks.
+
 The workflow pins Node and Rust through `.nvmrc` and `rust-toolchain.toml`, pins
 third-party actions to immutable revisions, and publishes only bounded coverage
 summaries. Validate repository documents and workflow policy locally with:

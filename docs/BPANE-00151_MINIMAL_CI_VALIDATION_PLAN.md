@@ -12,7 +12,7 @@ Target gate: Foundation Gate
 
 Depends on: #173 delivery-governance baseline
 
-Last verified: 2026-08-03 on `feature/BPANE-00151` through the hosted Slice 3 checks
+Last verified: 2026-08-03 on `feature/BPANE-00151` through hosted fast validation and enforcement
 
 ## Business Outcome
 
@@ -34,9 +34,9 @@ executed without treating an unrun smoke as green.
 
 ## Current Evidence
 
-- The default branch currently has no required status checks. This branch adds
-  separate fast-validation and representative compose workflows; hosted runs
-  and branch-protection enforcement remain pending.
+- The latest hosted fast workflow passes all nine BrowserPane validation jobs
+  plus the existing CodeQL analysis. `main` now requires the nine BrowserPane
+  contexts in strict mode and binds them to the GitHub Actions app.
 - Rust workspace tests pass on macOS and the canonical Ubuntu runner. The
   measured `cargo llvm-cov` baselines are 56.25% locally on macOS and 54.88%
   on pinned Ubuntu 24.04; the checked floor follows the canonical runner.
@@ -258,7 +258,7 @@ Evidence:
 
 ### Slice 3: CI And Coverage
 
-Status: Implemented locally; hosted execution remains Slice 4 evidence.
+Status: Implemented and verified locally and on hosted Ubuntu runners.
 
 - Add pinned, least-privilege workflows and caching keyed by lockfiles.
 - Establish package coverage baselines and publish summaries.
@@ -294,12 +294,31 @@ Evidence:
 
 ### Slice 4: Enforcement And Evidence
 
-Status: Pending.
+Status: Implemented except for the first post-merge hosted compose run.
 
 - Configure `main` required checks.
 - Demonstrate controlled failures for each major stage.
-- Run the clean full profile, update validation/maturity/risk docs, and capture
-  the Foundation-gate evidence that is actually satisfied.
+- Run the complete fast and compose profiles, update validation/maturity/risk
+  docs, and capture the Foundation-gate evidence that is actually satisfied.
+
+Evidence:
+
+- Hosted run `30810601600` passes all nine BrowserPane jobs and CodeQL. Rust,
+  admin-new, and browser-client coverage summaries are retained as bounded
+  GitHub artifacts.
+- Earlier hosted runs visibly rejected compatibility-admin async timing,
+  admin-new resource/Blob assumptions, browser-client coverage drift, and the
+  Rust platform coverage delta. Focused validation-tool fixtures reject
+  dependency, coverage, document, workflow-policy, subprocess, timeout, and
+  diagnostic-redaction failures.
+- `main` branch protection requires all nine documented contexts in strict
+  mode with GitHub Actions app id `15368`. Existing one-approval,
+  stale-review-dismissal, last-push-approval, conversation-resolution,
+  branch-lock, force-push, deletion, and signature settings were preserved.
+- The 31-stage fast and nine-stage compose profiles pass locally. The compose
+  workflow cannot run from a feature branch before its workflow file exists on
+  the default branch; its first hosted execution is therefore post-merge
+  evidence rather than a pull-request gate.
 
 ## Test Strategy
 
