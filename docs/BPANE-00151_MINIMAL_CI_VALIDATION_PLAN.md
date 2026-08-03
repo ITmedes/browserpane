@@ -323,7 +323,8 @@ Evidence:
 
 ### Slice 5: Hosted Compose Remediation
 
-Status: In Progress on `fix/BPANE-00151-hosted-compose`.
+Status: Local remediation complete on `fix/BPANE-00151-hosted-compose`; hosted
+compose evidence remains pending.
 
 Hosted run `30815108416` passed 13 of 16 gateway API cases and then failed for
 two distinct reasons:
@@ -346,6 +347,22 @@ Implementation requirements:
 4. Re-run the targeted gateway tests, the complete local compose profile, and
    the hosted compose workflow. A hosted 9/9 profile is required before #151 is
    closed again.
+
+Local remediation evidence from 2026-08-03:
+
+- The compose gateway trusts only `/workspace/.tmp/*` in addition to the
+  image-level `/workspace` entry. The production image default remains
+  unchanged.
+- Docker runtime teardown now waits for bounded, observable container removal
+  after `docker stop`, `docker rm -f`, or an already-in-progress removal.
+- The new delayed-removal regression and the existing active-writer conflict
+  regression pass.
+- Each of the three cases that failed in hosted run `30815108416` passes
+  individually against the rebuilt compose stack.
+- `node scripts/validate.mjs --profile compose` passes all nine stages in one
+  uninterrupted canonical-project run: 16 default gateway API cases, four
+  docker-pool cases, and the admin-new, compatibility-admin, CLI, MCP,
+  recording, and workflow smokes.
 
 Remediation smoke sequence:
 
