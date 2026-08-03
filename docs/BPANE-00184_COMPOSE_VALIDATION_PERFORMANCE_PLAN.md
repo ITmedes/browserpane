@@ -3,7 +3,7 @@
 ## Metadata
 
 - Issue: [#184](https://github.com/ITmedes/browserpane/issues/184)
-- State: In Progress
+- State: Implemented; ready for PR
 - Owner: `thebackplane`
 - Lane: Foundation
 - Target gate: Foundation Gate
@@ -45,6 +45,25 @@ inside one ephemeral runner; the existing host `target` cache does not feed
 the Docker builders. The runtime scenarios, rather than compilation alone,
 are the largest repeatable cost.
 
+Post-change hosted run
+[30843583746](https://github.com/ITmedes/browserpane/actions/runs/30843583746)
+completed successfully with the same selected coverage:
+
+| Isolated lane | Result | Duration |
+| --- | --- | ---: |
+| Gateway API `default` | 16 passed | 18 minutes 52 seconds |
+| Gateway API `docker-pool` | 4 passed | 14 minutes 41 seconds |
+| Browser and integration smokes | 8 stages passed | 20 minutes 50 seconds |
+
+The workflow critical path fell from about 36 minutes 43 seconds to 20 minutes
+50 seconds, a reduction of about 43%. The browser lane spent 8 minutes 25
+seconds preparing its cold compose stack and 11 minutes 34 seconds executing
+the eight smoke stages. Persistent Docker build acceleration is therefore the
+next meaningful lever and is isolated in follow-up issue
+[#185](https://github.com/ITmedes/browserpane/issues/185); adding another cold
+runner would increase billed runner time for a comparatively small latency
+gain.
+
 ## Scope
 
 - Preserve all 20 gateway compose API tests and all eight browser-facing smoke
@@ -81,6 +100,9 @@ are the largest repeatable cost.
   architecture, Cargo manifests and lockfile, build profile and features,
   native libraries, and relevant `RUSTFLAGS`; coverage must use a separate
   cache domain.
+- Hosted evidence confirmed that persistent Docker build acceleration is
+  justified. #185 owns the BuildKit cache or dependency-builder decision so
+  this execution-topology slice remains independently reviewable.
 - #151 remains the owner of the validation baseline. #184 changes execution
   topology and performance, not its coverage claim.
 
@@ -214,8 +236,10 @@ workspace issue map and record hosted timing evidence before completion.
 - Validation-tool, shell, document, and workflow-policy checks pass.
 - Redacted diagnostics and cleanup run independently for every lane.
 - Local aggregate compose commands remain compatible.
-- The first hosted run is green and its critical path is materially below the
-  36-minute baseline, targeting 20 minutes or less.
+- A hosted run is green and its critical path is materially below the
+  36-minute baseline. The measured 20-minute-50-second result is accepted for
+  this sharding slice; #185 owns the remaining cold-build work toward a
+  15-minute trusted warm-run target.
 - Issue #184 and this plan contain the measured result and PR evidence.
 
 ## Post-Implementation Smoke Sequence
@@ -233,5 +257,10 @@ workspace issue map and record hosted timing evidence before completion.
 
 - Baseline hosted runs: `30831720475`, `30835269073`
 - Implementation PR: pending
-- Post-change hosted run: pending
-- Final measured critical path: pending
+- Post-change hosted run: `30843583746` (green)
+- Gateway API `default`: 16 passed in an 18-minute-52-second job
+- Gateway API `docker-pool`: 4 passed in a 14-minute-41-second job
+- Browser/admin/integration: all 8 stages passed in a 20-minute-50-second job
+- Final measured critical path: 20 minutes 50 seconds, about 43% below the
+  36-minute-43-second baseline
+- Follow-up build acceleration: #185
