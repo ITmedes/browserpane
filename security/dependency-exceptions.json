@@ -1,0 +1,18 @@
+{
+  "$schema": "./dependency-exceptions.schema.json",
+  "version": 1,
+  "exceptions": [
+    {
+      "ecosystem": "cargo",
+      "manifest": "Cargo.lock",
+      "package": "rsa",
+      "advisory": "RUSTSEC-2023-0071",
+      "dependencyPath": "sqlx optional mysql feature -> sqlx-mysql -> rsa",
+      "runtimeReachability": "Not reachable in the BrowserPane build: sqlx disables default features and enables postgres only; cargo tree reports no active rsa dependency.",
+      "compensatingControl": "Keep SQLx default features disabled, prohibit the mysql feature, and re-check the lock graph during dependency updates.",
+      "reason": "The advisory has no fixed release and the crate remains only in Cargo.lock through SQLx optional dependency metadata.",
+      "owner": "thebackplane",
+      "expiresOn": "2026-11-01"
+    }
+  ]
+}

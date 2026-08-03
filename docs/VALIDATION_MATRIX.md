@@ -1,6 +1,6 @@
 # Consolidated Validation Matrix
 
-Revalidated against current package scripts: 2026-07-31
+Revalidated against current package scripts: 2026-08-03
 
 This matrix defines the available validation surfaces for product slices. Use
 `PRODUCT_PHASES_AND_RELEASE_GATES.md` to decide which evidence is required for
@@ -23,8 +23,9 @@ The 2026-07-31 audit recorded:
   suites,
 - compose and docker-pool tests remain ignored unless the supported stack is
   explicitly started,
-- branch protection has no required status checks and the repository has no
-  GitHub Actions workflow.
+- Slice 1 of #151 now provides a repository dependency scanner and an expiring
+  exception policy, but branch protection still has no required status checks
+  and the repository has no GitHub Actions workflow.
 
 This is meaningful Prototype evidence, not a Production gate. #151 owns the
 enforced baseline; #165 owns missing worker test/runtime hygiene.
@@ -60,10 +61,17 @@ CLI behavior, or test coverage needs to be demonstrated.
 
 ## Dependency And Supply-Chain Floor
 
-Issue `#151` must establish one reproducible local/CI dependency scan covering
-`Cargo.lock` and every committed Node `package-lock.json`. The selected tooling
-and wrapper command must be checked into the repository before being added to
-the canonical command lists in `AGENTS.md` and `README.md`.
+Slice 1 of issue `#151` establishes the local dependency scan covering
+`Cargo.lock` and every committed Node `package-lock.json`:
+
+```bash
+cargo install cargo-audit --locked
+node scripts/check-dependency-safety.mjs
+node --test scripts/dependency-safety/*.test.mjs
+```
+
+The remaining #151 slices must compose this command into the local validation
+runner and required CI checks without weakening its failure policy.
 
 The validation policy must:
 
@@ -79,11 +87,14 @@ The validation policy must:
 - run as GitHub Actions checks required by branch protection,
 - prove each major stage fails visibly through controlled fixtures.
 
-The 2026-07-31 audit found one critical development-only advisory and multiple
-high runtime advisories with patched versions available. Treat that as active
-input to `#151`, not as accepted baseline debt.
+The 2026-08-03 live Dependabot inventory contains one critical and 24 high
+alerts against the default branch. The Slice 1 lock updates remove all local
+npm critical/high findings and all patched RustSec findings. One medium,
+no-fix RSA advisory remains only in SQLx's disabled optional MySQL graph and is
+covered by the exact, expiring exception in
+`security/dependency-exceptions.json`; it is not accepted silently.
 
-#151 is Ready under `BPANE-00151_MINIMAL_CI_VALIDATION_PLAN.md`; keep its
+#151 is In Progress under `BPANE-00151_MINIMAL_CI_VALIDATION_PLAN.md`; keep its
 measured baselines and final required-check names aligned with this matrix.
 
 ## Public Contract And Protocol Floor

@@ -1117,6 +1117,19 @@ Build and unit checks do not require the compose stack. Package scripts named
 `smoke:*` expect the local compose stack and local auth flow to be available
 unless the script documents a narrower setup.
 
+Dependency safety:
+
+```bash
+cargo install cargo-audit --locked
+node scripts/check-dependency-safety.mjs
+node --test scripts/dependency-safety/*.test.mjs
+```
+
+The dependency check scans `Cargo.lock` and every committed npm lockfile. It
+blocks RustSec vulnerabilities and npm critical/high findings unless
+`security/dependency-exceptions.json` contains an exact, unexpired approval;
+expired or stale approvals also fail the check.
+
 Rust:
 
 ```bash

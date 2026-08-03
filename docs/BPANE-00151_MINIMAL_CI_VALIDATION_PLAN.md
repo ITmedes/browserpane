@@ -2,7 +2,7 @@
 
 Issue: [#151](https://github.com/ITmedes/browserpane/issues/151)
 
-State: Ready
+State: In Progress
 
 Owner: `thebackplane`
 
@@ -12,7 +12,7 @@ Target gate: Foundation Gate
 
 Depends on: #173 delivery-governance baseline
 
-Last verified: 2026-07-31 at `9640be4`
+Last verified: 2026-08-03 on `feature/BPANE-00151` from `dec52ec`
 
 ## Business Outcome
 
@@ -46,9 +46,21 @@ executed without treating an unrun smoke as green.
   the recording and workflow workers do not yet have meaningful unit suites.
 - Gateway compose suites exist behind ignored tests and
   `scripts/run-gateway-compose-e2e.sh`; they run only when explicitly selected.
-- The live Dependabot inventory on 2026-07-31 contains 88 open alerts: one
-  critical, 20 high, 50 medium, and 17 low. Critical/high alerts span
-  `Cargo.lock` and four committed Node lockfiles and have patched versions.
+- The live Dependabot inventory on 2026-08-03 contains 92 open alerts: one
+  critical, 24 high, 50 medium, and 17 low. Critical/high alerts span
+  `Cargo.lock` and four of the six committed Node lockfiles. Dependabot will
+  retain the default-branch alerts until the remediated locks merge.
+- Slice 1 updates the affected Rust and Node dependency groups to patched
+  compatible versions. The branch-local npm audits report zero critical/high
+  findings across all six lockfiles. `cargo audit` reports only
+  `RUSTSEC-2023-0071`, a medium, no-fix RSA advisory retained through SQLx's
+  disabled optional MySQL graph; it has an explicit exception through
+  2026-11-01.
+- `scripts/check-dependency-safety.mjs` scans every committed lockfile, fails
+  all RustSec vulnerabilities and npm critical/high advisories unless an exact
+  exception applies, and rejects stale or expired exceptions. Its parser,
+  command-boundary, and policy behavior has 12 focused tests with 91.99% line
+  and 100% function coverage under Node's built-in coverage runner.
 - `AGENTS.md`, `README.md`, and `docs/VALIDATION_MATRIX.md` contain runnable
   commands, but no single executable local CI entry point enforces them.
 
@@ -182,14 +194,29 @@ executed without treating an unrun smoke as green.
 
 ### Slice 1: Inventory And Dependency Remediation
 
+Status: Implemented and locally validated on `feature/BPANE-00151`.
+
 - Freeze the live advisory and package/test inventory.
 - Upgrade critical/high dependency groups with focused regressions.
 - Add the bounded exception schema/checker if any alert remains.
+
+Evidence:
+
+- `node scripts/check-dependency-safety.mjs` passes for `Cargo.lock` plus all
+  six committed npm lockfiles with one exact, unexpired RSA exception.
+- `cargo test --workspace --locked` passes after the Rust dependency updates.
+- Clean install, type/check, unit tests, and production builds pass for the
+  compatibility admin, admin-new, browser client, and MCP bridge packages.
+- Package totals exercised by the focused regressions include 202
+  compatibility-admin tests, 279 admin-new tests, 661 browser-client tests,
+  and 12 MCP bridge tests.
 
 Commit boundary: dependency changes and evidence are reviewable independently
 from workflow plumbing.
 
 ### Slice 2: Local Validation Runner
+
+Status: Pending.
 
 - Add fast, compose, and full profiles with stable stage names.
 - Add self-tests for selection, failure propagation, cleanup, and `--help`.
@@ -197,11 +224,15 @@ from workflow plumbing.
 
 ### Slice 3: CI And Coverage
 
+Status: Pending.
+
 - Add pinned, least-privilege workflows and caching keyed by lockfiles.
 - Establish package coverage baselines and publish summaries.
 - Add bounded compose/API smoke and failure artifacts.
 
 ### Slice 4: Enforcement And Evidence
+
+Status: Pending.
 
 - Configure `main` required checks.
 - Demonstrate controlled failures for each major stage.
