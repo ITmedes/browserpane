@@ -255,11 +255,22 @@ Evidence:
 
 ### Slice 3: CI And Coverage
 
-Status: In progress; local coverage ratchets implemented and validated.
+Status: In progress; coverage ratchets and fast CI implemented locally.
 
 - Add pinned, least-privilege workflows and caching keyed by lockfiles.
 - Establish package coverage baselines and publish summaries.
 - Add bounded compose/API smoke and failure artifacts.
+
+Evidence:
+
+- `.github/workflows/validation.yml` defines stable repository, dependency,
+  Rust, and per-package Node jobs on pinned `ubuntu-24.04` runners.
+- All third-party actions use immutable commit revisions, checkout credentials
+  are not persisted, and root permissions are limited to `contents: read`.
+- `node scripts/check-repository-documents.mjs` parses committed YAML, checks
+  local Markdown targets, and enforces workflow permissions, pins, timeouts,
+  cache keys, and artifact boundaries.
+- Node `22.23.2` and Rust `1.93.1` are pinned for local and CI parity.
 
 ### Slice 4: Enforcement And Evidence
 

@@ -24,12 +24,10 @@ The 2026-08-03 coverage ratchet records:
   explicitly started,
 - Slice 1 of #151 now provides a repository dependency scanner and an expiring
   exception policy.
-- Slice 2 of #151 now provides one local validation runner. Its original
-  28-stage fast profile and nine-stage compose profile pass on
-  `feature/BPANE-00151`, but
-  branch protection still has no required status checks and the repository has
-  no GitHub Actions workflow. Slice 3 adds checked-in Rust, browser-client, and
-  admin-new coverage floors; all 30 expanded fast-profile stages pass locally.
+- Slice 2 of #151 provides one local validation runner. Slice 3 adds checked-in
+  Rust, browser-client, and admin-new coverage floors plus a pinned,
+  least-privilege fast GitHub Actions workflow. Branch protection and the
+  bounded compose workflow still remain to be verified before #151 is done.
 
 This is meaningful Prototype evidence, not a Production gate. #151 owns the
 enforced baseline; #165 owns missing worker test/runtime hygiene.
@@ -40,6 +38,7 @@ enforced baseline; #165 owns missing worker test/runtime hygiene.
 node scripts/validate.mjs --profile fast
 node scripts/validate.mjs --profile compose
 node scripts/validate.mjs --profile full
+node scripts/check-repository-documents.mjs
 ```
 
 - `fast` is the clean, non-compose validation floor.
@@ -63,6 +62,12 @@ Verified on 2026-08-03:
 - the compose gateway stage passes 16 default API and four docker-pool cases,
 - representative admin-new, compatibility-admin, CLI, MCP, recording, and
   workflow admission journeys pass against the running stack.
+
+The fast GitHub workflow exposes stable repository, dependency, Rust, and
+per-package Node checks. It parses all committed YAML, validates local Markdown
+links, and enforces immutable action revisions, least-privilege permissions,
+fixed runner images, job timeouts, lockfile-derived cache keys, and bounded
+artifact paths.
 
 ## Baseline Checks For Any Unified Admin Slice
 

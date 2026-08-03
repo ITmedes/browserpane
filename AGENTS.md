@@ -174,6 +174,7 @@ Current product shape:
 - Explicit compose validation: `node scripts/validate.mjs --profile compose`
 - Full local validation: `node scripts/validate.mjs --profile full`
 - Dependency safety scan: `node scripts/check-dependency-safety.mjs`
+- Repository document/workflow policy: `node scripts/check-repository-documents.mjs`
 - Dependency policy tests: `node --test scripts/dependency-safety/*.test.mjs`
 - Rust coverage ratchet: `node scripts/run-rust-coverage.mjs`
 - Full Rust test suite: `cargo test --workspace`
