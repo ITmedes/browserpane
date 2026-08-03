@@ -12,7 +12,7 @@ Target gate: Foundation Gate
 
 Depends on: #173 delivery-governance baseline
 
-Last verified: 2026-08-03 on `feature/BPANE-00151` from `dec52ec`
+Last verified: 2026-08-03 on `feature/BPANE-00151` through Slice 2
 
 ## Business Outcome
 
@@ -61,8 +61,19 @@ executed without treating an unrun smoke as green.
   exception applies, and rejects stale or expired exceptions. Its parser,
   command-boundary, and policy behavior has 12 focused tests with 91.99% line
   and 100% function coverage under Node's built-in coverage runner.
-- `AGENTS.md`, `README.md`, and `docs/VALIDATION_MATRIX.md` contain runnable
-  commands, but no single executable local CI entry point enforces them.
+- `scripts/validate.mjs` is now the canonical local entry point. It exposes 28
+  fast stages and nine compose stages through `fast`, `compose`, and `full`
+  profiles, with stable names, bounded execution, first-failure exit-code
+  preservation, focused reruns, dry runs, and stage discovery.
+- The complete fast profile and an uninterrupted compose profile pass on this
+  branch. The compose run includes all 16 default gateway API cases, all four
+  docker-pool cases, admin-new and compatibility-admin session journeys, CLI,
+  two simultaneous session-scoped MCP routes, two retained recording segments,
+  workflow worker/project admission, and restoration of normal compose limits.
+- The first composed run exposed a real session-cleanup race after gateway
+  reconciliation. Shared smoke cleanup now requires a stable quiet window,
+  renews its bound only when removal makes progress, and has focused tests for
+  delayed reconciliation, malformed catalogs, deduplication, and timeout.
 
 ## Scope
 
@@ -216,11 +227,24 @@ from workflow plumbing.
 
 ### Slice 2: Local Validation Runner
 
-Status: Pending.
+Status: Implemented and locally validated on `feature/BPANE-00151`.
 
 - Add fast, compose, and full profiles with stable stage names.
 - Add self-tests for selection, failure propagation, cleanup, and `--help`.
 - Align AGENTS and README commands.
+
+Evidence:
+
+- `node scripts/validate.mjs --profile fast` passes all 28 stages.
+- `node scripts/validate.mjs --profile compose` passes all nine stages in one
+  uninterrupted run and leaves the compose stack running with default runtime
+  limits restored.
+- Validation-tool tests cover argument rejection, stage selection, repository
+  drift, child exit-code propagation, timeout process-group termination,
+  cancellation, first-failure behavior, and session cleanup stabilization.
+- The repository baseline verifies canonical files, package-owned commands,
+  required package scripts, documentation references, and every tracked JSON
+  file before expensive stages run.
 
 ### Slice 3: CI And Coverage
 
@@ -293,8 +317,9 @@ Status: Pending.
    dependency safety fails without running a product runtime.
 5. Run the compose profile and verify session/API, admin-new, CLI/MCP,
    workflow, and recording selections plus bounded failure artifacts.
-6. Interrupt a compose stage and confirm cleanup removes test containers while
-   preserving redacted diagnostics.
+6. Interrupt a compose stage and confirm the active process group terminates,
+   no later stage starts, the stack remains inspectable, and a rerun restores
+   any smoke-specific runtime overrides.
 7. Push a test branch, verify all documented required checks execute, and
    confirm `main` cannot merge while one required check is failing.
 8. Restore the branch and verify the same checks pass from a clean run.

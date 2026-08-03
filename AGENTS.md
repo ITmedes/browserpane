@@ -170,6 +170,9 @@ Current product shape:
 
 ## Commands that matter
 
+- Local fast validation: `node scripts/validate.mjs --profile fast`
+- Explicit compose validation: `node scripts/validate.mjs --profile compose`
+- Full local validation: `node scripts/validate.mjs --profile full`
 - Dependency safety scan: `node scripts/check-dependency-safety.mjs`
 - Dependency policy tests: `node --test scripts/dependency-safety/*.test.mjs`
 - Full Rust test suite: `cargo test --workspace`

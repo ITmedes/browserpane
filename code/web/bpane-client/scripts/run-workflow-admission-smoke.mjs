@@ -204,6 +204,7 @@ async function main() {
   let secondRun = null;
   let projectRun = null;
   let queuedProjectRun = null;
+  let gatewayReconfigured = false;
   const requestIdPrefix = `workflow-admission-smoke-${Date.now().toString(36)}`;
 
   try {
@@ -228,6 +229,7 @@ async function main() {
 
     log('Building workflow-worker image');
     buildWorkflowWorkerImage();
+    gatewayReconfigured = true;
     await configureGatewayForWorkerAdmissionSmoke(accessToken, options);
 
     const workflow = await createWorkflow(accessToken, options);
@@ -404,6 +406,13 @@ async function main() {
       await cleanupWorkflowSmokeSessions(accessToken, options, log).catch((error) => {
         log(`Cleanup skipped after workflow admission smoke: ${error}`);
       });
+    }
+    if (gatewayReconfigured) {
+      log('Restoring gateway compose defaults after workflow admission smoke');
+      recreateComposeServices(['gateway']);
+      if (accessToken) {
+        await waitForWorkflowControlPlane(accessToken, options);
+      }
     }
     if (context) {
       await context.close().catch(() => {});
