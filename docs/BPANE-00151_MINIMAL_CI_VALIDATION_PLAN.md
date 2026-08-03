@@ -12,7 +12,7 @@ Target gate: Foundation Gate
 
 Depends on: #173 delivery-governance baseline
 
-Last verified: 2026-08-03 on `feature/BPANE-00151` through the Slice 3 coverage ratchet
+Last verified: 2026-08-03 on `feature/BPANE-00151` through the hosted Slice 3 checks
 
 ## Business Outcome
 
@@ -37,8 +37,9 @@ executed without treating an unrun smoke as green.
 - The default branch currently has no required status checks. This branch adds
   separate fast-validation and representative compose workflows; hosted runs
   and branch-protection enforcement remain pending.
-- Rust workspace tests pass locally. The latest recorded `cargo llvm-cov`
-  baseline is 56.25% line coverage across the workspace.
+- Rust workspace tests pass on macOS and the canonical Ubuntu runner. The
+  measured `cargo llvm-cov` baselines are 56.25% locally on macOS and 54.88%
+  on pinned Ubuntu 24.04; the checked floor follows the canonical runner.
 - `code/web/bpane-client` has unit, build, CLI, and extensive compose smoke
   scripts. Its maintained-source coverage is now ratcheted at 92.8% lines and
   statements, 92.9% functions, and 87.5% branches. The function floor reflects
@@ -64,7 +65,7 @@ executed without treating an unrun smoke as green.
   exception applies, and rejects stale or expired exceptions. Its parser,
   command-boundary, and policy behavior has 12 focused tests with 91.99% line
   and 100% function coverage under Node's built-in coverage runner.
-- `scripts/validate.mjs` is now the canonical local entry point. It exposes 30
+- `scripts/validate.mjs` is now the canonical local entry point. It exposes 31
   fast stages and nine compose stages through `fast`, `compose`, and `full`
   profiles, with stable names, bounded execution, first-failure exit-code
   preservation, focused reruns, dry runs, and stage discovery.
@@ -78,7 +79,7 @@ executed without treating an unrun smoke as green.
   reconciliation. Shared smoke cleanup now requires a stable quiet window,
   renews its bound only when removal makes progress, and has focused tests for
   delayed reconciliation, malformed catalogs, deduplication, and timeout.
-- Checked-in coverage floors now gate fresh Rust workspace coverage at 56.2%
+- Checked-in coverage floors now gate fresh Rust workspace coverage at 54.8%
   lines, browser-client maintained sources at 92.8% lines/statements, 92.9%
   functions, and 87.5% branches, and admin-new `src/lib` at 88.0% lines, 90.1%
   statements, 92.7% functions, and 74.3% branches. Each command emits a local
@@ -244,7 +245,7 @@ Status: Implemented and locally validated on `feature/BPANE-00151`.
 
 Evidence:
 
-- `node scripts/validate.mjs --profile fast` passes all 28 stages.
+- `node scripts/validate.mjs --profile fast` passes all 31 stages.
 - `node scripts/validate.mjs --profile compose` passes all nine stages in one
   uninterrupted run and leaves the compose stack running with default runtime
   limits restored.
@@ -285,6 +286,11 @@ Evidence:
   option-load race, cross-realm Blob assertions, and a Node 22/Linux coverage
   difference. Tests now await observable outcomes, and the browser-client
   function ratchet uses the measured canonical-runner floor of 92.9%.
+- A subsequent hosted run passed every Rust test but exposed the expected
+  platform coverage difference: Ubuntu 24.04 compiles additional host/runtime
+  paths and measures 54.88% lines versus 56.25% on macOS. The Rust floor now
+  follows that canonical result at 54.8%, and CI uploads the summary filename
+  emitted by the baseline checker.
 
 ### Slice 4: Enforcement And Evidence
 
@@ -327,8 +333,8 @@ Status: Pending.
 
 ### Coverage And Quality
 
-- Rust: reproduce the 56.25% line baseline and add critical-path/changed-code
-  ratchets.
+- Rust: preserve the 54.88% canonical Ubuntu line baseline, retain the 56.25%
+  macOS comparison, and add critical-path/changed-code ratchets.
 - Browser client: reproduce the 91.26% core line baseline and prevent
   regression.
 - Admin-new: establish and enforce an initial checked-in baseline from the 279
