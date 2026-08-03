@@ -9,15 +9,14 @@ one important surface, but it is not the only delivery lane.
 
 ## Verified Baseline And Gaps
 
-The 2026-07-31 audit recorded:
+The 2026-08-03 coverage ratchet records:
 
 - all non-ignored Rust workspace tests passed under `cargo llvm-cov`, with
   56.25% line coverage across the workspace,
-- browser-client tests passed with 91.26% line coverage for the core `js`
-  implementation; global output is diluted by smoke scripts and no threshold
-  is enforced,
-- admin-new check, 279 tests, and production build passed, but the package has
-  no coverage script or threshold,
+- browser-client tests pass with 92.88% lines, 92.88% statements, 93.19%
+  functions, and 87.56% branches across all maintained `js` sources,
+- admin-new's 279 tests pass with 88.09% lines, 90.13% statements, 92.78%
+  functions, and 74.34% branches across `src/lib`,
 - MCP bridge has focused unit tests,
 - recording-worker and workflow-worker have build checks but no unit-test
   suites,
@@ -25,10 +24,12 @@ The 2026-07-31 audit recorded:
   explicitly started,
 - Slice 1 of #151 now provides a repository dependency scanner and an expiring
   exception policy.
-- Slice 2 of #151 now provides one local validation runner. Its 28-stage fast
-  profile and nine-stage compose profile pass on `feature/BPANE-00151`, but
+- Slice 2 of #151 now provides one local validation runner. Its original
+  28-stage fast profile and nine-stage compose profile pass on
+  `feature/BPANE-00151`, but
   branch protection still has no required status checks and the repository has
-  no GitHub Actions workflow.
+  no GitHub Actions workflow. Slice 3 adds checked-in Rust, browser-client, and
+  admin-new coverage floors; all 30 expanded fast-profile stages pass locally.
 
 This is meaningful Prototype evidence, not a Production gate. #151 owns the
 enforced baseline; #165 owns missing worker test/runtime hygiene.
@@ -56,7 +57,8 @@ returning.
 
 Verified on 2026-08-03:
 
-- all 28 fast stages pass,
+- all 30 fast stages pass, including the Rust, browser-client, and admin-new
+  coverage ratchets,
 - all nine compose stages pass in one uninterrupted run,
 - the compose gateway stage passes 16 default API and four docker-pool cases,
 - representative admin-new, compatibility-admin, CLI, MCP, recording, and
@@ -69,6 +71,7 @@ Run in `code/web/bpane-admin-unified`:
 ```bash
 npm run check
 npm test
+npm run test:coverage
 npm run build
 ```
 
@@ -88,8 +91,18 @@ npm test
 npm run build
 ```
 
-Use `npm run test:coverage` when the slice affects browser client behavior,
-CLI behavior, or test coverage needs to be demonstrated.
+The browser-client and admin-new `test:coverage` scripts enforce the floors in
+`quality/coverage-baselines.json` and write human-readable summaries below
+`test-results/coverage/`. Rust uses:
+
+```bash
+cargo install cargo-llvm-cov --version 0.8.7 --locked
+node scripts/run-rust-coverage.mjs
+```
+
+These floors are regression ratchets, not a claim that all critical behavior
+has adequate test depth. Raise them with added tests; lowering one requires an
+explicitly reviewed rationale.
 
 ## Dependency And Supply-Chain Floor
 

@@ -39,6 +39,8 @@ export class ValidationStageCatalog {
         'scripts/dependency-safety/audit-parser.test.mjs',
         'scripts/dependency-safety/audit-runner.test.mjs',
         'scripts/dependency-safety/policy.test.mjs',
+        'scripts/coverage/coverage-baseline-checker.test.mjs',
+        'scripts/coverage/rust-coverage-command.test.mjs',
         'code/web/bpane-client/scripts/session-cleanup.test.mjs',
         'scripts/validation/arguments.test.mjs',
         'scripts/validation/repository-baseline.test.mjs',
@@ -55,12 +57,14 @@ export class ValidationStageCatalog {
       this.#stage('rust-clippy', 'Run Rust clippy', 'cargo',
         ['clippy', '--workspace', '--all-targets', '--locked'], root, 1200),
       this.#stage('rust-tests', 'Run Rust workspace tests', 'cargo',
-        ['test', '--workspace', '--locked'], root, 1200)
+        ['test', '--workspace', '--locked'], root, 1200),
+      this.#node('rust-coverage', 'Run Rust coverage ratchet', root,
+        ['scripts/run-rust-coverage.mjs'], 1800)
     ];
     stages.push(...this.#npmPackage(root, 'admin', 'code/web/bpane-admin',
       ['check', 'test', 'build']));
     stages.push(...this.#npmPackage(root, 'admin-new', 'code/web/bpane-admin-unified',
-      ['check', 'test', 'build']));
+      ['check', 'test', 'test:coverage', 'build']));
     stages.push(...this.#npmPackage(root, 'client', 'code/web/bpane-client',
       ['check', 'test', 'test:coverage', 'build']));
     stages.push(...this.#npmPackage(root, 'mcp-bridge', 'code/integrations/mcp-bridge',

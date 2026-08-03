@@ -1126,10 +1126,11 @@ node scripts/validate.mjs --profile compose
 node scripts/validate.mjs --profile full
 ```
 
-`fast` runs the dependency and repository baselines, Rust checks, clean
-installs, maintained Node checks/tests/builds, client coverage, and operational
-script checks. `compose` runs the bounded gateway API, admin, CLI, MCP,
-recording, and workflow smoke set; it may build or start the local stack and
+`fast` runs the dependency and repository baselines, Rust checks and coverage,
+clean installs, maintained Node checks/tests/builds, browser-client and
+admin-new coverage ratchets, and operational script checks. `compose` runs the
+bounded gateway API, admin, CLI, MCP, recording, and workflow smoke set; it may
+build or start the local stack and
 leaves it running for inspection. `full` runs both profiles. Use `--list`,
 `--dry-run`, or repeatable `--stage <id>` selections for focused work. The
 runner stops at the first failing stage, preserves its exit code, prints the
@@ -1154,6 +1155,8 @@ Rust:
 ```bash
 cargo build --workspace
 cargo test --workspace
+cargo install cargo-llvm-cov --version 0.8.7 --locked
+node scripts/run-rust-coverage.mjs
 ```
 
 Unified admin:
@@ -1163,8 +1166,13 @@ cd code/web/bpane-admin-unified
 npm ci
 npm run check
 npm test
+npm run test:coverage
 npm run build
 ```
+
+Coverage floors live in `quality/coverage-baselines.json`. Each coverage
+command writes a concise Markdown result below `test-results/coverage/`; CI
+publishes those summaries without sending coverage data to an external service.
 
 Compatibility admin while `/admin/` remains the fallback:
 

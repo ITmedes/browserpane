@@ -175,6 +175,7 @@ Current product shape:
 - Full local validation: `node scripts/validate.mjs --profile full`
 - Dependency safety scan: `node scripts/check-dependency-safety.mjs`
 - Dependency policy tests: `node --test scripts/dependency-safety/*.test.mjs`
+- Rust coverage ratchet: `node scripts/run-rust-coverage.mjs`
 - Full Rust test suite: `cargo test --workspace`
 - Gateway tests: `cargo test -p bpane-gateway`
 - Gateway compose e2e API suite: `cargo test -p bpane-gateway --test compose_api_surface -- --ignored --test-threads=1`
@@ -220,6 +221,7 @@ Run these in `code/web/bpane-client`:
 - `npm run test:coverage`
 
 Run these where applicable:
+- `cd code/web/bpane-admin-unified && npm run test:coverage`
 - `cd code/integrations/mcp-bridge && npm run build`
 - `cd code/integrations/recording-worker && npm run build`
 - `cd code/integrations/workflow-worker && npm run build`

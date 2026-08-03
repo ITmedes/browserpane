@@ -12,7 +12,7 @@ Target gate: Foundation Gate
 
 Depends on: #173 delivery-governance baseline
 
-Last verified: 2026-08-03 on `feature/BPANE-00151` through Slice 2
+Last verified: 2026-08-03 on `feature/BPANE-00151` through the Slice 3 coverage ratchet
 
 ## Business Outcome
 
@@ -39,9 +39,10 @@ executed without treating an unrun smoke as green.
 - Rust workspace tests pass locally. The latest recorded `cargo llvm-cov`
   baseline is 56.25% line coverage across the workspace.
 - `code/web/bpane-client` has unit, build, CLI, and extensive compose smoke
-  scripts. Its latest recorded core line-coverage baseline is 91.26%.
-- `code/web/bpane-admin-unified` has 279 passing tests plus `check` and `build`,
-  but no checked-in coverage threshold.
+  scripts. Its maintained-source coverage is now ratcheted at 92.8% lines and
+  statements, 93.1% functions, and 87.5% branches.
+- `code/web/bpane-admin-unified` has 279 passing tests plus `check`, coverage,
+  and build; its `src/lib` coverage now has a checked-in four-metric floor.
 - The MCP bridge, recording worker, and workflow worker build independently;
   the recording and workflow workers do not yet have meaningful unit suites.
 - Gateway compose suites exist behind ignored tests and
@@ -61,12 +62,13 @@ executed without treating an unrun smoke as green.
   exception applies, and rejects stale or expired exceptions. Its parser,
   command-boundary, and policy behavior has 12 focused tests with 91.99% line
   and 100% function coverage under Node's built-in coverage runner.
-- `scripts/validate.mjs` is now the canonical local entry point. It exposes 28
+- `scripts/validate.mjs` is now the canonical local entry point. It exposes 30
   fast stages and nine compose stages through `fast`, `compose`, and `full`
   profiles, with stable names, bounded execution, first-failure exit-code
   preservation, focused reruns, dry runs, and stage discovery.
-- The complete fast profile and an uninterrupted compose profile pass on this
-  branch. The compose run includes all 16 default gateway API cases, all four
+- The expanded 30-stage fast profile and an uninterrupted compose profile pass
+  on this branch. The compose run includes all 16 default gateway API cases,
+  all four
   docker-pool cases, admin-new and compatibility-admin session journeys, CLI,
   two simultaneous session-scoped MCP routes, two retained recording segments,
   workflow worker/project admission, and restoration of normal compose limits.
@@ -74,6 +76,11 @@ executed without treating an unrun smoke as green.
   reconciliation. Shared smoke cleanup now requires a stable quiet window,
   renews its bound only when removal makes progress, and has focused tests for
   delayed reconciliation, malformed catalogs, deduplication, and timeout.
+- Checked-in coverage floors now gate fresh Rust workspace coverage at 56.2%
+  lines, browser-client maintained sources at 92.8% lines/statements, 93.1%
+  functions, and 87.5% branches, and admin-new `src/lib` at 88.0% lines, 90.1%
+  statements, 92.7% functions, and 74.3% branches. Each command emits a local
+  Markdown summary for later CI artifact publication.
 
 ## Scope
 
@@ -248,7 +255,7 @@ Evidence:
 
 ### Slice 3: CI And Coverage
 
-Status: Pending.
+Status: In progress; local coverage ratchets implemented and validated.
 
 - Add pinned, least-privilege workflows and caching keyed by lockfiles.
 - Establish package coverage baselines and publish summaries.
