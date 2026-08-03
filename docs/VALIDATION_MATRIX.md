@@ -29,8 +29,9 @@ The 2026-08-03 coverage ratchet records:
 - Slice 2 of #151 provides one local validation runner. Slice 3 adds checked-in
   Rust, browser-client, and admin-new coverage floors plus pinned,
   least-privilege fast and bounded compose GitHub Actions workflows. Hosted
-  fast execution is in progress; branch protection and post-merge hosted
-  compose evidence remain to be verified before #151 is done.
+  fast execution passes all nine BrowserPane jobs, and `main` requires them in
+  strict mode as GitHub Actions checks. The first post-merge hosted compose run
+  remains the final environment-specific evidence.
 
 This is meaningful Prototype evidence, not a Production gate. #151 owns the
 enforced baseline; #165 owns missing worker test/runtime hygiene.
@@ -70,7 +71,8 @@ The fast GitHub workflow exposes stable repository, dependency, Rust, and
 per-package Node checks. It parses all committed YAML, validates local Markdown
 links, and enforces immutable action revisions, least-privilege permissions,
 fixed runner images, job timeouts, lockfile-derived cache keys, and bounded
-artifact paths.
+artifact paths. `main` branch protection requires those nine BrowserPane jobs
+in strict mode and binds them to the GitHub Actions app.
 
 `Compose / Representative compose smoke` runs on pushes to `main`, a weekday
 schedule, and manual dispatch. It is not a pull-request gate until hosted-runner
