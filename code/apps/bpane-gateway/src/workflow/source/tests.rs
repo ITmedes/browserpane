@@ -112,6 +112,110 @@ async fn resolves_git_source_from_local_repository_ref() {
     );
 }
 
+#[cfg(unix)]
+#[tokio::test]
+async fn resolves_local_repository_with_scoped_dubious_ownership_trust() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp = tempdir().unwrap();
+    let repo = temp.path().join("repo");
+    fs::create_dir(&repo).unwrap();
+    git(&["init", "--initial-branch=main"], &repo);
+    git(&["config", "user.email", "workflow@test.local"], &repo);
+    git(&["config", "user.name", "Workflow Test"], &repo);
+    fs::write(repo.join("README.md"), "hello\n").unwrap();
+    git(&["add", "README.md"], &repo);
+    git(&["commit", "-m", "init"], &repo);
+    let expected = git_head(&repo);
+
+    let git_wrapper = temp.path().join("git-assume-different-owner");
+    fs::write(
+        &git_wrapper,
+        r#"#!/bin/sh
+if [ "$1" = "config" ]; then
+  exec git "$@"
+fi
+if [ -z "$GIT_CONFIG_GLOBAL" ]; then
+  echo "fatal: detected dubious ownership in repository" >&2
+  exit 128
+fi
+after_separator=0
+repository=""
+for argument in "$@"; do
+  if [ "$after_separator" = "1" ]; then
+    repository="$argument"
+    break
+  fi
+  if [ "$argument" = "--" ]; then
+    after_separator=1
+  fi
+done
+safe_directories=$(git config --file "$GIT_CONFIG_GLOBAL" --get-all safe.directory)
+case "$safe_directories" in
+  *"$repository/.git"*) ;;
+  *)
+    echo "fatal: protected config does not trust the exact repository" >&2
+    exit 128
+    ;;
+esac
+case "$safe_directories" in
+  *'*'*)
+    echo "fatal: protected config contains wildcard trust" >&2
+    exit 128
+    ;;
+esac
+exec git "$@"
+"#,
+    )
+    .unwrap();
+    let mut permissions = fs::metadata(&git_wrapper).unwrap().permissions();
+    permissions.set_mode(0o700);
+    fs::set_permissions(&git_wrapper, permissions).unwrap();
+
+    let direct = StdCommand::new(&git_wrapper)
+        .env_remove("GIT_CONFIG_GLOBAL")
+        .args(["ls-remote", "--"])
+        .arg(&repo)
+        .arg("HEAD")
+        .output()
+        .unwrap();
+    assert!(!direct.status.success());
+    assert!(String::from_utf8_lossy(&direct.stderr).contains("dubious ownership"));
+
+    let resolver = WorkflowSourceResolver::with_policy(
+        git_wrapper.clone(),
+        WorkflowSourcePolicy::default().with_trusted_local_roots([temp.path().to_path_buf()]),
+    );
+    let resolved = resolver
+        .resolve(Some(WorkflowSource::Git(WorkflowGitSource {
+            repository_url: repo.to_string_lossy().into_owned(),
+            r#ref: Some("HEAD".to_string()),
+            resolved_commit: None,
+            root_path: None,
+        })))
+        .await
+        .unwrap();
+    assert_eq!(
+        resolved,
+        Some(WorkflowSource::Git(WorkflowGitSource {
+            repository_url: repo.to_string_lossy().into_owned(),
+            r#ref: Some("HEAD".to_string()),
+            resolved_commit: Some(expected),
+            root_path: None,
+        }))
+    );
+
+    let after = StdCommand::new(&git_wrapper)
+        .env_remove("GIT_CONFIG_GLOBAL")
+        .args(["ls-remote", "--"])
+        .arg(&repo)
+        .arg("HEAD")
+        .output()
+        .unwrap();
+    assert!(!after.status.success());
+    assert!(String::from_utf8_lossy(&after.stderr).contains("dubious ownership"));
+}
+
 #[tokio::test]
 async fn rejects_git_source_without_ref_or_commit() {
     let resolver = default_resolver();

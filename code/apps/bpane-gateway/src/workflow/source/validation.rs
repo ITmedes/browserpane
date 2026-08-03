@@ -11,7 +11,7 @@ use super::{
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum ValidatedGitRepositorySource {
     Remote { protocol: String },
-    TrustedLocalPath,
+    TrustedLocalPath { canonical_path: PathBuf },
 }
 
 pub(super) fn validate_workflow_source_entrypoint_with_policy(
@@ -145,7 +145,7 @@ fn validate_trusted_local_git_path(
             ))
         })?;
         if canonical_path.starts_with(canonical_root) {
-            return Ok(ValidatedGitRepositorySource::TrustedLocalPath);
+            return Ok(ValidatedGitRepositorySource::TrustedLocalPath { canonical_path });
         }
     }
     Err(WorkflowSourceError::Invalid(format!(
