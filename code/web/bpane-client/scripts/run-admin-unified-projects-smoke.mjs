@@ -40,7 +40,16 @@ async function run() {
       state: 'visible',
       timeout: options.connectTimeoutMs,
     });
-    await assertNoHorizontalOverflow(page, 'projects-list', 'unified project catalog');
+    const initialCatalog = page.locator('[data-testid="projects-list"], [data-testid="projects-empty"]');
+    await initialCatalog.waitFor({
+      state: 'visible',
+      timeout: options.connectTimeoutMs,
+    });
+    const initialCatalogTestId = await initialCatalog.getAttribute('data-testid');
+    if (!initialCatalogTestId) {
+      throw new Error('Expected the unified project catalog or its empty state to expose a test id.');
+    }
+    await assertNoHorizontalOverflow(page, initialCatalogTestId, 'unified project catalog');
     await page.getByTestId('projects-new-link').click();
     await page.getByTestId('project-create-route').waitFor({
       state: 'visible',
