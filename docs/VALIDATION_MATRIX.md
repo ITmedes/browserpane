@@ -27,7 +27,8 @@ The 2026-08-03 coverage ratchet records:
 - Slice 2 of #151 provides one local validation runner. Slice 3 adds checked-in
   Rust, browser-client, and admin-new coverage floors plus a pinned,
   least-privilege fast GitHub Actions workflow. Branch protection and the
-  bounded compose workflow still remain to be verified before #151 is done.
+  bounded compose workflow. Hosted execution and branch protection still
+  remain to be verified before #151 is done.
 
 This is meaningful Prototype evidence, not a Production gate. #151 owns the
 enforced baseline; #165 owns missing worker test/runtime hygiene.
@@ -56,7 +57,7 @@ returning.
 
 Verified on 2026-08-03:
 
-- all 30 fast stages pass, including the Rust, browser-client, and admin-new
+- all 31 fast stages pass, including the Rust, browser-client, and admin-new
   coverage ratchets,
 - all nine compose stages pass in one uninterrupted run,
 - the compose gateway stage passes 16 default API and four docker-pool cases,
@@ -68,6 +69,13 @@ per-package Node checks. It parses all committed YAML, validates local Markdown
 links, and enforces immutable action revisions, least-privilege permissions,
 fixed runner images, job timeouts, lockfile-derived cache keys, and bounded
 artifact paths.
+
+`Compose / Representative compose smoke` runs on pushes to `main`, a weekday
+schedule, and manual dispatch. It is not a pull-request gate until hosted-runner
+reliability is demonstrated. The 60-minute job executes all nine representative
+compose stages, captures only selected control-plane status/log tails after a
+failure, redacts credential and identity material before upload, and always
+removes BrowserPane containers and compose volumes.
 
 ## Baseline Checks For Any Unified Admin Slice
 

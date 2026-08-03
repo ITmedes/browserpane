@@ -34,8 +34,9 @@ executed without treating an unrun smoke as green.
 
 ## Current Evidence
 
-- The repository currently has no `.github/workflows/` validation workflow and
-  no required status checks.
+- The default branch currently has no required status checks. This branch adds
+  separate fast-validation and representative compose workflows; hosted runs
+  and branch-protection enforcement remain pending.
 - Rust workspace tests pass locally. The latest recorded `cargo llvm-cov`
   baseline is 56.25% line coverage across the workspace.
 - `code/web/bpane-client` has unit, build, CLI, and extensive compose smoke
@@ -66,7 +67,7 @@ executed without treating an unrun smoke as green.
   fast stages and nine compose stages through `fast`, `compose`, and `full`
   profiles, with stable names, bounded execution, first-failure exit-code
   preservation, focused reruns, dry runs, and stage discovery.
-- The expanded 30-stage fast profile and an uninterrupted compose profile pass
+- The expanded 31-stage fast profile and an uninterrupted compose profile pass
   on this branch. The compose run includes all 16 default gateway API cases,
   all four
   docker-pool cases, admin-new and compatibility-admin session journeys, CLI,
@@ -255,7 +256,7 @@ Evidence:
 
 ### Slice 3: CI And Coverage
 
-Status: In progress; coverage ratchets and fast CI implemented locally.
+Status: Implemented locally; hosted execution remains Slice 4 evidence.
 
 - Add pinned, least-privilege workflows and caching keyed by lockfiles.
 - Establish package coverage baselines and publish summaries.
@@ -271,6 +272,14 @@ Evidence:
   local Markdown targets, and enforces workflow permissions, pins, timeouts,
   cache keys, and artifact boundaries.
 - Node `22.23.2` and Rust `1.93.1` are pinned for local and CI parity.
+- `.github/workflows/compose.yml` runs the representative nine-stage compose
+  profile on `main`, weekdays, or manual dispatch with a 60-minute job bound.
+- Failure evidence is limited to selected control-plane status and log tails,
+  redacted before a seven-day artifact upload. Cleanup always removes dynamic
+  BrowserPane runtime/worker containers and compose volumes.
+- Redaction and collection tests cover bearer/basic authorization, cookies,
+  OIDC query material, environment/CLI secrets, authenticated proxy URLs,
+  JWTs, UUIDs, PEM blocks, selected commands, and oversized-log truncation.
 
 ### Slice 4: Enforcement And Evidence
 
