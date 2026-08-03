@@ -9,17 +9,18 @@ TEARDOWN=0
 
 usage() {
   cat <<'EOF'
-Usage: scripts/run-gateway-compose-e2e.sh [--suite default|docker-pool|all] [--teardown]
+Usage: scripts/run-gateway-compose-e2e.sh [--suite default|docker-pool|all|stack] [--teardown]
 
 Runs the bpane-gateway compose-backed API e2e suites with stack preflight:
-- verifies docker, docker compose, cargo, and curl are available
+- verifies docker, docker compose, curl, and suite-specific tools are available
 - refreshes local dev certs
 - brings up the local compose stack
 - waits for Keycloak, gateway, and mcp-bridge readiness
-- runs the selected ignored Rust integration test target(s)
+- runs the selected ignored Rust integration test target(s), unless stack-only
 
 Options:
-  --suite      default | docker-pool | all   (default: default)
+  --suite      default | docker-pool | all | stack   (default: default)
+               stack prepares the runtime and exits without running API tests
   --teardown   bring the compose stack down after the run
   --help       show this message
 EOF
@@ -28,6 +29,11 @@ EOF
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --suite)
+      if [[ $# -lt 2 ]]; then
+        echo "--suite requires a value" >&2
+        usage >&2
+        exit 2
+      fi
       SUITE="${2:-}"
       shift 2
       ;;
@@ -48,7 +54,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 case "$SUITE" in
-  default|docker-pool|all) ;;
+  default|docker-pool|all|stack) ;;
   *)
     echo "invalid --suite value: $SUITE" >&2
     usage >&2
@@ -123,9 +129,11 @@ cleanup() {
 trap cleanup EXIT
 
 require_command docker
-require_command cargo
 require_command curl
 require_command python3
+if [[ "$SUITE" != "stack" ]]; then
+  require_command cargo
+fi
 
 mkdir -p "$ROOT_DIR/dev/certs"
 "$ROOT_DIR/deploy/gen-dev-cert.sh" "$ROOT_DIR/dev/certs" >/dev/null
@@ -147,6 +155,8 @@ run_docker_pool_suite() {
 }
 
 case "$SUITE" in
+  stack)
+    ;;
   default)
     run_default_suite
     ;;
