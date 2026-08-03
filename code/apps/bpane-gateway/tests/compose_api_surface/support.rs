@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, OnceLock};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, bail, Context, Result};
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE};
@@ -28,6 +28,8 @@ const DEFAULT_KEYCLOAK_ADMIN_PASSWORD: &str = "admin";
 const DEFAULT_CONTAINER_WORKSPACE_ROOT: &str = "/workspace";
 const DEFAULT_MCP_BRIDGE_BASE_URL: &str = "http://localhost:8931";
 const DEFAULT_MCP_BRIDGE_CONTROL_TOKEN: &str = "browserpane-dev-mcp-bridge-control-token";
+const TOKEN_READINESS_TIMEOUT: Duration = Duration::from_secs(30);
+const TOKEN_RETRY_INTERVAL: Duration = Duration::from_millis(500);
 
 pub fn suite_lock() -> &'static Mutex<()> {
     static SUITE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -1048,6 +1050,21 @@ async fn fetch_client_credentials_token(
     client_id: &str,
     client_secret: &str,
 ) -> Result<String> {
+    retry_token_fetch(
+        "OIDC client credentials token endpoint",
+        TOKEN_READINESS_TIMEOUT,
+        TOKEN_RETRY_INTERVAL,
+        || fetch_client_credentials_token_once(client, token_url, client_id, client_secret),
+    )
+    .await
+}
+
+async fn fetch_client_credentials_token_once(
+    client: &reqwest::Client,
+    token_url: &str,
+    client_id: &str,
+    client_secret: &str,
+) -> Result<String> {
     let response = client
         .post(token_url)
         .form(&[
@@ -1070,6 +1087,16 @@ async fn fetch_client_credentials_token(
 }
 
 async fn fetch_keycloak_admin_token(client: &reqwest::Client) -> Result<String> {
+    retry_token_fetch(
+        "Keycloak admin token endpoint",
+        TOKEN_READINESS_TIMEOUT,
+        TOKEN_RETRY_INTERVAL,
+        || fetch_keycloak_admin_token_once(client),
+    )
+    .await
+}
+
+async fn fetch_keycloak_admin_token_once(client: &reqwest::Client) -> Result<String> {
     let token_url = std::env::var("BPANE_GATEWAY_E2E_KEYCLOAK_ADMIN_TOKEN_URL")
         .unwrap_or_else(|_| DEFAULT_KEYCLOAK_ADMIN_TOKEN_URL.to_string());
     let client_id = std::env::var("BPANE_GATEWAY_E2E_KEYCLOAK_ADMIN_CLIENT_ID")
@@ -1099,6 +1126,30 @@ async fn fetch_keycloak_admin_token(client: &reqwest::Client) -> Result<String> 
         bail!("Keycloak admin token request failed with {status}: {body}");
     }
     json_id(&body, "access_token")
+}
+
+async fn retry_token_fetch<F, Fut>(
+    description: &str,
+    max_wait: Duration,
+    retry_interval: Duration,
+    mut fetch: F,
+) -> Result<String>
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = Result<String>>,
+{
+    let started = Instant::now();
+    loop {
+        match fetch().await {
+            Ok(token) => return Ok(token),
+            Err(error) if started.elapsed() >= max_wait => {
+                return Err(error).with_context(|| {
+                    format!("timed out waiting for {description} after {max_wait:?}")
+                });
+            }
+            Err(_) => sleep(retry_interval).await,
+        }
+    }
 }
 
 fn initialize_git_repository(repo_dir: &Path) -> Result<()> {
@@ -1185,4 +1236,52 @@ pub fn recording_policy(mode: &str) -> Value {
         "mode": mode,
         "format": "webm",
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use super::*;
+
+    #[tokio::test]
+    async fn token_fetch_retries_transient_failures() {
+        let attempts = AtomicUsize::new(0);
+        let token = retry_token_fetch(
+            "test token endpoint",
+            Duration::from_millis(100),
+            Duration::from_millis(1),
+            || {
+                let attempt = attempts.fetch_add(1, Ordering::SeqCst);
+                async move {
+                    if attempt < 2 {
+                        Err(anyhow!("transient token failure {attempt}"))
+                    } else {
+                        Ok("test-token".to_string())
+                    }
+                }
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(token, "test-token");
+        assert_eq!(attempts.load(Ordering::SeqCst), 3);
+    }
+
+    #[tokio::test]
+    async fn token_fetch_timeout_preserves_last_failure() {
+        let error = retry_token_fetch(
+            "test token endpoint",
+            Duration::from_millis(5),
+            Duration::from_millis(1),
+            || async { Err(anyhow!("token endpoint remains unavailable")) },
+        )
+        .await
+        .unwrap_err();
+        let detail = format!("{error:#}");
+
+        assert!(detail.contains("timed out waiting for test token endpoint"));
+        assert!(detail.contains("token endpoint remains unavailable"));
+    }
 }
