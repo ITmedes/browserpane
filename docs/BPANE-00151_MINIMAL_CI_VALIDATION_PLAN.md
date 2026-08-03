@@ -12,7 +12,7 @@ Target gate: Foundation Gate
 
 Depends on: #173 delivery-governance baseline
 
-Last verified: 2026-08-03 on `feature/BPANE-00151` through hosted fast validation and enforcement
+Last verified: 2026-08-03 on `fix/BPANE-00151-hosted-compose` after hosted compose run `30815108416`
 
 ## Business Outcome
 
@@ -294,7 +294,8 @@ Evidence:
 
 ### Slice 4: Enforcement And Evidence
 
-Status: Implemented except for the first post-merge hosted compose run.
+Status: Required checks are enforced; the first post-merge compose run exposed
+two hosted-only acceptance gaps tracked in Slice 5.
 
 - Configure `main` required checks.
 - Demonstrate controlled failures for each major stage.
@@ -319,6 +320,48 @@ Evidence:
   workflow cannot run from a feature branch before its workflow file exists on
   the default branch; its first hosted execution is therefore post-merge
   evidence rather than a pull-request gate.
+
+### Slice 5: Hosted Compose Remediation
+
+Status: In Progress on `fix/BPANE-00151-hosted-compose`.
+
+Hosted run `30815108416` passed 13 of 16 gateway API cases and then failed for
+two distinct reasons:
+
+- workflow source fixtures below `/workspace/.tmp` were rejected by Git's
+  dubious-ownership protection inside the compose gateway container;
+- browser-context deletion raced the asynchronous removal of the deleted
+  session runtime container, leaving the profile volume temporarily in use.
+
+Implementation requirements:
+
+1. Scope Git `safe.directory` configuration to the read-only compose fixture
+   repository subtree. Do not trust every filesystem repository or weaken the
+   production runtime default.
+2. Make deleted-session runtime teardown observable and deterministic before a
+   reusable browser context attempts profile-volume removal. Preserve conflict
+   behavior while a session is genuinely active.
+3. Add focused regression coverage for the hosted ownership model and delayed
+   container cleanup rather than relying only on timing changes in the smoke.
+4. Re-run the targeted gateway tests, the complete local compose profile, and
+   the hosted compose workflow. A hosted 9/9 profile is required before #151 is
+   closed again.
+
+Remediation smoke sequence:
+
+1. Start compose from a checkout owned by a different host UID than the gateway
+   container and publish/validate a workflow from a temporary repository below
+   `/workspace/.tmp`.
+2. Confirm a repository outside the approved compose fixture subtree is not
+   implicitly added to Git's trusted-directory set.
+3. Create a reusable browser context, start a session against it, delete the
+   session, and immediately delete the context.
+4. Confirm context deletion waits for bounded runtime teardown and removes the
+   profile volume without returning a transient conflict.
+5. Confirm deleting a context with a genuinely active writer still returns
+   `409 Conflict`.
+6. Run `node scripts/validate.mjs --profile compose` and verify all nine stages
+   pass with cleanup and redacted diagnostics intact.
 
 ## Test Strategy
 
