@@ -363,6 +363,10 @@ Local remediation evidence from 2026-08-03:
   uninterrupted canonical-project run: 16 default gateway API cases, four
   docker-pool cases, and the admin-new, compatibility-admin, CLI, MCP,
   recording, and workflow smokes.
+- PR #183's first required Rust run exposed a pre-existing process-environment
+  race between parallel `bpane-host` config tests. Environment-mutating config
+  tests now serialize and restore their original values; the config module
+  passes 100 parallelized repetitions and the full host suite passes.
 
 Remediation smoke sequence:
 
