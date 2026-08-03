@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://browserpane.io/schemas/dependency-exceptions.schema.json",
+  "title": "BrowserPane dependency safety exceptions",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "exceptions"],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "version": {
+      "const": 1
+    },
+    "exceptions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ecosystem",
+          "manifest",
+          "package",
+          "advisory",
+          "dependencyPath",
+          "runtimeReachability",
+          "compensatingControl",
+          "reason",
+          "owner",
+          "expiresOn"
+        ],
+        "properties": {
+          "ecosystem": {
+            "enum": ["cargo", "npm"]
+          },
+          "manifest": {
+            "type": "string",
+            "minLength": 1
+          },
+          "package": {
+            "type": "string",
+            "minLength": 1
+          },
+          "advisory": {
+            "type": "string",
+            "minLength": 1
+          },
+          "dependencyPath": {
+            "type": "string",
+            "minLength": 1
+          },
+          "runtimeReachability": {
+            "type": "string",
+            "minLength": 1
+          },
+          "compensatingControl": {
+            "type": "string",
+            "minLength": 1
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          },
+          "owner": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expiresOn": {
+            "type": "string",
+            "format": "date"
+          }
+        }
+      }
+    }
+  }
+}

@@ -170,6 +170,8 @@ Current product shape:
 
 ## Commands that matter
 
+- Dependency safety scan: `node scripts/check-dependency-safety.mjs`
+- Dependency policy tests: `node --test scripts/dependency-safety/*.test.mjs`
 - Full Rust test suite: `cargo test --workspace`
 - Gateway tests: `cargo test -p bpane-gateway`
 - Gateway compose e2e API suite: `cargo test -p bpane-gateway --test compose_api_surface -- --ignored --test-threads=1`
