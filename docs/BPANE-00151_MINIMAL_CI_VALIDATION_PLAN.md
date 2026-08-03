@@ -2,7 +2,7 @@
 
 Issue: [#151](https://github.com/ITmedes/browserpane/issues/151)
 
-State: In Progress
+State: Implemented; pending merge
 
 Owner: `thebackplane`
 
@@ -12,7 +12,7 @@ Target gate: Foundation Gate
 
 Depends on: #173 delivery-governance baseline
 
-Last verified: 2026-08-03 on `feature/BPANE-00151` through hosted fast validation and enforcement
+Last verified: 2026-08-03 on `fix/BPANE-00151-hosted-compose` after hosted compose run `30831720475`
 
 ## Business Outcome
 
@@ -294,7 +294,8 @@ Evidence:
 
 ### Slice 4: Enforcement And Evidence
 
-Status: Implemented except for the first post-merge hosted compose run.
+Status: Required checks are enforced; the first post-merge compose run exposed
+two hosted-only acceptance gaps tracked in Slice 5.
 
 - Configure `main` required checks.
 - Demonstrate controlled failures for each major stage.
@@ -319,6 +320,110 @@ Evidence:
   workflow cannot run from a feature branch before its workflow file exists on
   the default branch; its first hosted execution is therefore post-merge
   evidence rather than a pull-request gate.
+
+### Slice 5: Hosted Compose Remediation
+
+Status: Complete on `fix/BPANE-00151-hosted-compose`; required validation,
+Code Quality, all nine hosted compose-profile stages, and hosted cleanup pass.
+
+Hosted run `30815108416` passed 13 of 16 gateway API cases and then failed for
+two distinct reasons:
+
+- workflow source fixtures below `/workspace/.tmp` were rejected by Git's
+  dubious-ownership protection inside the compose gateway container;
+- browser-context deletion raced the asynchronous removal of the deleted
+  session runtime container, leaving the profile volume temporarily in use.
+
+Hosted branch run `30821576753` then passed 14 of 16 gateway API cases and
+confirmed that deterministic container teardown fixed browser-context deletion.
+Its remaining two failures showed that wildcard or command-scoped
+`safe.directory` values do not satisfy Git's protected-configuration and exact
+repository-path checks for bind-mounted fixture repositories.
+
+Implementation requirements:
+
+1. Validate local workflow repositories against configured trusted roots, then
+   provide the exact canonical repository and `.git` paths through a temporary
+   protected Git configuration for that invocation only. Do not trust every
+   filesystem repository or weaken the production runtime default.
+2. Make deleted-session runtime teardown observable and deterministic before a
+   reusable browser context attempts profile-volume removal. Preserve conflict
+   behavior while a session is genuinely active.
+3. Add focused regression coverage for the hosted ownership model and delayed
+   container cleanup rather than relying only on timing changes in the smoke.
+4. Re-run the targeted gateway tests, the complete local compose profile, and
+   the hosted compose workflow. A hosted 9/9 profile is required before #151 is
+   closed again.
+
+Local remediation evidence from 2026-08-03:
+
+- Local workflow paths are canonicalized only after configured-root validation.
+  Each Git command receives a short-lived protected config containing the exact
+  repository and `.git` paths; no wildcard, process-wide, image-wide, or remote
+  source trust exception remains.
+- A different-owner repository regression proves direct Git access fails before
+  the resolver call, succeeds through the resolver's exact scoped config, and
+  fails directly again after that config is dropped.
+- Docker runtime teardown now waits for bounded, observable container removal
+  after `docker stop`, `docker rm -f`, or an already-in-progress removal.
+- The new delayed-removal regression and the existing active-writer conflict
+  regression pass.
+- Each of the three cases that failed in hosted run `30815108416` passes
+  individually against the rebuilt compose stack.
+- The default gateway API suite passes 16/16 cases. The Docker-pool suite passes
+  4/4 cases, including capacity, admission, queued cancellation, and gateway
+  restart recovery. The remaining eight compose stages pass together: three
+  admin-new smokes, compatibility admin, CLI, MCP, recording, and workflow
+  admission.
+- During the first full local rerun, Keycloak restarted after a local Docker
+  Desktop `SIGBUS`; two following Docker-pool cases reached its token endpoint
+  before startup completed. The shared compose harness now retries transient
+  token-endpoint failures for a bounded 30 seconds and preserves the last error
+  on timeout. Focused recovery and timeout regressions pass.
+- PR #183's first required Rust run exposed a pre-existing process-environment
+  race between parallel `bpane-host` config tests. Environment-mutating config
+  tests now serialize and restore their original values; the config module
+  passes 100 parallelized repetitions and the full host suite passes.
+- Hosted run `30827207460` passed 15/16 default gateway cases and confirmed the
+  Git and Docker remediations before exposing a separate CDP probe race. The
+  probe had accepted the initial `about:blank` load event, then evaluated while
+  the requested page was replacing its execution context. It now navigates to
+  the stable `test-embed.html` fixture, polls the exact requested document, and
+  requires two ready observations while tolerating only known navigation-churn
+  errors. Five focused probe tests cover the expected document, same-origin
+  redirects, transient CDP errors, stable observations, and terminal errors.
+- The targeted runtime-backed browser-context case passes locally across
+  profile write, stop, restore, export, import, clone, and quota enforcement.
+- Hosted run `30829492868` passed all 16 default and all four Docker-pool gateway
+  cases plus the admin-new dashboard. It then exposed a clean-database
+  assumption in the Projects smoke: the product correctly rendered its tested
+  empty state, while the smoke unconditionally waited for a table. The smoke
+  now validates either initial catalog representation and still requires the
+  populated table after project creation.
+- The Projects component tests and full local Projects smoke pass. The six
+  downstream compose stages also pass in one uninterrupted local run:
+  admin-new sessions, compatibility admin, CLI, dual session-scoped MCP,
+  recording with two retained segments and playback export, and workflow
+  admission/backpressure.
+- Final hosted Compose run `30831720475` passes all nine stages and cleanup.
+  Required Validation run `30831721371` and Code Quality run `30831716880` pass
+  on the same commit.
+
+Remediation smoke sequence:
+
+1. Start compose from a checkout owned by a different host UID than the gateway
+   container and publish/validate a workflow from a temporary repository below
+   `/workspace/.tmp`.
+2. Confirm a repository outside the approved compose fixture subtree is not
+   implicitly added to Git's trusted-directory set.
+3. Create a reusable browser context, start a session against it, delete the
+   session, and immediately delete the context.
+4. Confirm context deletion waits for bounded runtime teardown and removes the
+   profile volume without returning a transient conflict.
+5. Confirm deleting a context with a genuinely active writer still returns
+   `409 Conflict`.
+6. Run `node scripts/validate.mjs --profile compose` and verify all nine stages
+   pass with cleanup and redacted diagnostics intact.
 
 ## Test Strategy
 

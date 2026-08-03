@@ -682,6 +682,8 @@ async fn run_profile_state_probe(
             "scripts/cdp-profile-state-probe.mjs",
             "--cdp-endpoint",
             cdp_endpoint,
+            "--origin-url",
+            "http://web:8080/test-embed.html",
             "--action",
             action,
             "--key",

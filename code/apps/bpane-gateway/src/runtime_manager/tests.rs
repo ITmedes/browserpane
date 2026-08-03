@@ -68,6 +68,52 @@ fn test_principal(subject: &str) -> AuthenticatedPrincipal {
     }
 }
 
+#[cfg(unix)]
+#[tokio::test]
+async fn docker_runtime_waits_for_container_removal_after_stop() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp = tempfile::tempdir().unwrap();
+    let command_path = temp.path().join("docker");
+    let inspect_count_path = temp.path().join("inspect-count");
+    std::fs::write(
+        &command_path,
+        format!(
+            "#!/bin/sh\n\
+             case \"$1\" in\n\
+               stop) exit 0 ;;\n\
+               inspect)\n\
+                 count=$(cat \"{}\" 2>/dev/null || printf 0)\n\
+                 count=$((count + 1))\n\
+                 printf '%s' \"$count\" > \"{}\"\n\
+                 if [ \"$count\" -lt 3 ]; then exit 0; fi\n\
+                 printf 'Error: No such object: %s\\n' \"$4\" >&2\n\
+                 exit 1 ;;\n\
+               *) exit 2 ;;\n\
+             esac\n",
+            inspect_count_path.display(),
+            inspect_count_path.display(),
+        ),
+    )
+    .unwrap();
+    let mut permissions = std::fs::metadata(&command_path).unwrap().permissions();
+    permissions.set_mode(0o755);
+    std::fs::set_permissions(&command_path, permissions).unwrap();
+
+    let manager = DockerRuntimeManager::new(
+        DockerRuntimeConfig {
+            docker_bin: command_path.display().to_string(),
+            ..docker_config()
+        },
+        docker_profile(2),
+    )
+    .unwrap();
+
+    manager.stop_container("bpane-runtime-test").await.unwrap();
+
+    assert_eq!(std::fs::read_to_string(inspect_count_path).unwrap(), "3");
+}
+
 #[derive(Debug)]
 struct FixedCredentialProviderBackend {
     payload: Value,
