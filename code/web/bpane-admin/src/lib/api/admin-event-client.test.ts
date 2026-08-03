@@ -223,12 +223,19 @@ describe('AdminEventClient', () => {
   it('routes failed websocket authentication through the shared auth handler', async () => {
     const sockets: FakeAdminEventWebSocket[] = [];
     const authFailures: number[] = [];
+    let resolveAuthenticationFailure: (status: number) => void = () => undefined;
+    const authenticationFailure = new Promise<number>((resolve) => {
+      resolveAuthenticationFailure = resolve;
+    });
     const fetchImpl = vi.fn(async () => new Response('expired', { status: 401 }));
     const client = new AdminEventClient({
       baseUrl: 'http://localhost:8080/admin/',
       accessTokenProvider: () => 'expired-token',
       fetchImpl,
-      onAuthenticationFailure: (error) => authFailures.push(error.status),
+      onAuthenticationFailure: (error) => {
+        authFailures.push(error.status);
+        resolveAuthenticationFailure(error.status);
+      },
       webSocketFactory: (url) => {
         sockets.push(new FakeAdminEventWebSocket(url));
         return sockets.at(-1)!;
@@ -238,8 +245,7 @@ describe('AdminEventClient', () => {
     await flushMicrotasks();
 
     sockets[0]?.networkError();
-    await flushMicrotasks();
-    await flushMicrotasks();
+    expect(await authenticationFailure).toBe(401);
 
     expect(fetchImpl).toHaveBeenCalledWith(
       new URL('http://localhost:8080/api/v1/sessions'),

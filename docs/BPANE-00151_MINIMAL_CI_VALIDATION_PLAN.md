@@ -41,7 +41,8 @@ executed without treating an unrun smoke as green.
   baseline is 56.25% line coverage across the workspace.
 - `code/web/bpane-client` has unit, build, CLI, and extensive compose smoke
   scripts. Its maintained-source coverage is now ratcheted at 92.8% lines and
-  statements, 93.1% functions, and 87.5% branches.
+  statements, 92.9% functions, and 87.5% branches. The function floor reflects
+  the canonical pinned Node 22/Linux result rather than Node 24/macOS output.
 - `code/web/bpane-admin-unified` has 279 passing tests plus `check`, coverage,
   and build; its `src/lib` coverage now has a checked-in four-metric floor.
 - The MCP bridge, recording worker, and workflow worker build independently;
@@ -78,7 +79,7 @@ executed without treating an unrun smoke as green.
   renews its bound only when removal makes progress, and has focused tests for
   delayed reconciliation, malformed catalogs, deduplication, and timeout.
 - Checked-in coverage floors now gate fresh Rust workspace coverage at 56.2%
-  lines, browser-client maintained sources at 92.8% lines/statements, 93.1%
+  lines, browser-client maintained sources at 92.8% lines/statements, 92.9%
   functions, and 87.5% branches, and admin-new `src/lib` at 88.0% lines, 90.1%
   statements, 92.7% functions, and 74.3% branches. Each command emits a local
   Markdown summary for later CI artifact publication.
@@ -280,6 +281,10 @@ Evidence:
 - Redaction and collection tests cover bearer/basic authorization, cookies,
   OIDC query material, environment/CLI secrets, authenticated proxy URLs,
   JWTs, UUIDs, PEM blocks, selected commands, and oversized-log truncation.
+- The first hosted run exposed one asynchronous auth-test race, one resource
+  option-load race, cross-realm Blob assertions, and a Node 22/Linux coverage
+  difference. Tests now await observable outcomes, and the browser-client
+  function ratchet uses the measured canonical-runner floor of 92.9%.
 
 ### Slice 4: Enforcement And Evidence
 

@@ -1137,18 +1137,18 @@ runner stops at the first failing stage, preserves its exit code, prints the
 exact rerun command, and terminates the active child process on timeout or
 interrupt.
 
-GitHub Actions runs the fast floor on pull requests and pushes to `main` as
-these stable checks:
+GitHub Actions runs the fast floor on pull requests and pushes to `main`. The
+`Validation` workflow exposes these stable required-check contexts:
 
-- `Validation / Repository metadata`
-- `Validation / Dependency safety`
-- `Validation / Rust workspace`
-- `Validation / Node / Compatibility admin`
-- `Validation / Node / Admin new`
-- `Validation / Node / Browser client`
-- `Validation / Node / MCP bridge`
-- `Validation / Node / Recording worker`
-- `Validation / Node / Workflow worker`
+- `Repository metadata`
+- `Dependency safety`
+- `Rust workspace`
+- `Node / Compatibility admin`
+- `Node / Admin new`
+- `Node / Browser client`
+- `Node / MCP bridge`
+- `Node / Recording worker`
+- `Node / Workflow worker`
 
 The workflow pins Node and Rust through `.nvmrc` and `rust-toolchain.toml`, pins
 third-party actions to immutable revisions, and publishes only bounded coverage
