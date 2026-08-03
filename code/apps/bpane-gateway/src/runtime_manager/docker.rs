@@ -1,4 +1,5 @@
 mod container;
+mod container_lifecycle;
 mod recovery;
 mod resolve;
 mod session_files;
