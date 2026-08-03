@@ -12,7 +12,8 @@ one important surface, but it is not the only delivery lane.
 The 2026-08-03 coverage ratchet records:
 
 - all non-ignored Rust workspace tests passed under `cargo llvm-cov`, with
-  56.25% line coverage across the workspace,
+  54.88% line coverage on the canonical pinned Ubuntu runner and 56.25% on
+  local macOS; the cross-platform floor is 54.8%,
 - browser-client tests pass on pinned Node 22/Linux with 92.88% lines, 92.88%
   statements, 92.98% functions, and 87.70% branches across all maintained `js`
   sources; the cross-platform function floor is 92.9%,
@@ -26,10 +27,10 @@ The 2026-08-03 coverage ratchet records:
 - Slice 1 of #151 now provides a repository dependency scanner and an expiring
   exception policy.
 - Slice 2 of #151 provides one local validation runner. Slice 3 adds checked-in
-  Rust, browser-client, and admin-new coverage floors plus a pinned,
-  least-privilege fast GitHub Actions workflow. Branch protection and the
-  bounded compose workflow. Hosted execution and branch protection still
-  remain to be verified before #151 is done.
+  Rust, browser-client, and admin-new coverage floors plus pinned,
+  least-privilege fast and bounded compose GitHub Actions workflows. Hosted
+  fast execution is in progress; branch protection and post-merge hosted
+  compose evidence remain to be verified before #151 is done.
 
 This is meaningful Prototype evidence, not a Production gate. #151 owns the
 enforced baseline; #165 owns missing worker test/runtime hygiene.
