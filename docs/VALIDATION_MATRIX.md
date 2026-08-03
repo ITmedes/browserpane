@@ -24,11 +24,43 @@ The 2026-07-31 audit recorded:
 - compose and docker-pool tests remain ignored unless the supported stack is
   explicitly started,
 - Slice 1 of #151 now provides a repository dependency scanner and an expiring
-  exception policy, but branch protection still has no required status checks
-  and the repository has no GitHub Actions workflow.
+  exception policy.
+- Slice 2 of #151 now provides one local validation runner. Its 28-stage fast
+  profile and nine-stage compose profile pass on `feature/BPANE-00151`, but
+  branch protection still has no required status checks and the repository has
+  no GitHub Actions workflow.
 
 This is meaningful Prototype evidence, not a Production gate. #151 owns the
 enforced baseline; #165 owns missing worker test/runtime hygiene.
+
+## Canonical Local Runner
+
+```bash
+node scripts/validate.mjs --profile fast
+node scripts/validate.mjs --profile compose
+node scripts/validate.mjs --profile full
+```
+
+- `fast` is the clean, non-compose validation floor.
+- `compose` is the explicit bounded API/admin/CLI/MCP/recording/workflow path.
+- `full` runs `fast` followed by `compose`.
+- `--list`, `--dry-run`, and repeatable `--stage <id>` selections expose the
+  exact stage catalog without duplicating package-owned commands.
+
+The runner stops on the first failure, preserves its exit code, reports the
+stage-specific rerun command, enforces per-stage timeouts, and terminates the
+active child process on interrupt. The compose profile may build or start the
+local stack and leaves it running for inspection. Smokes that temporarily
+change gateway admission limits restore the normal compose configuration before
+returning.
+
+Verified on 2026-08-03:
+
+- all 28 fast stages pass,
+- all nine compose stages pass in one uninterrupted run,
+- the compose gateway stage passes 16 default API and four docker-pool cases,
+- representative admin-new, compatibility-admin, CLI, MCP, recording, and
+  workflow admission journeys pass against the running stack.
 
 ## Baseline Checks For Any Unified Admin Slice
 
@@ -70,8 +102,9 @@ node scripts/check-dependency-safety.mjs
 node --test scripts/dependency-safety/*.test.mjs
 ```
 
-The remaining #151 slices must compose this command into the local validation
-runner and required CI checks without weakening its failure policy.
+The local validation runner composes this command into its fast profile. The
+remaining #151 slices must run the same policy in required CI checks without
+weakening its failure behavior.
 
 The validation policy must:
 

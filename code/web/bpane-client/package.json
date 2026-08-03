@@ -8,6 +8,7 @@
   },
   "scripts": {
     "build": "vite build && node scripts/copy-audio-worklet.mjs",
+    "check": "tsc --noEmit",
     "benchmark:scroll": "node scripts/run-scroll-benchmark.mjs",
     "benchmark:stress": "node scripts/run-scroll-benchmark.mjs --profile stress",
     "benchmark:realistic": "node scripts/run-scroll-benchmark.mjs --profile realistic",

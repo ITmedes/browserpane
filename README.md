@@ -1117,6 +1117,25 @@ Build and unit checks do not require the compose stack. Package scripts named
 `smoke:*` expect the local compose stack and local auth flow to be available
 unless the script documents a narrower setup.
 
+Canonical local validation:
+
+```bash
+node scripts/validate.mjs --help
+node scripts/validate.mjs --profile fast
+node scripts/validate.mjs --profile compose
+node scripts/validate.mjs --profile full
+```
+
+`fast` runs the dependency and repository baselines, Rust checks, clean
+installs, maintained Node checks/tests/builds, client coverage, and operational
+script checks. `compose` runs the bounded gateway API, admin, CLI, MCP,
+recording, and workflow smoke set; it may build or start the local stack and
+leaves it running for inspection. `full` runs both profiles. Use `--list`,
+`--dry-run`, or repeatable `--stage <id>` selections for focused work. The
+runner stops at the first failing stage, preserves its exit code, prints the
+exact rerun command, and terminates the active child process on timeout or
+interrupt.
+
 Dependency safety:
 
 ```bash
