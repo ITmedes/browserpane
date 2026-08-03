@@ -323,8 +323,8 @@ Evidence:
 
 ### Slice 5: Hosted Compose Remediation
 
-Status: Local remediation complete on `fix/BPANE-00151-hosted-compose`; hosted
-compose evidence remains pending.
+Status: Local remediation and all nine compose-profile stages are complete on
+`fix/BPANE-00151-hosted-compose`; hosted compose evidence remains pending.
 
 Hosted run `30815108416` passed 13 of 16 gateway API cases and then failed for
 two distinct reasons:
@@ -334,11 +334,18 @@ two distinct reasons:
 - browser-context deletion raced the asynchronous removal of the deleted
   session runtime container, leaving the profile volume temporarily in use.
 
+Hosted branch run `30821576753` then passed 14 of 16 gateway API cases and
+confirmed that deterministic container teardown fixed browser-context deletion.
+Its remaining two failures showed that wildcard or command-scoped
+`safe.directory` values do not satisfy Git's protected-configuration and exact
+repository-path checks for bind-mounted fixture repositories.
+
 Implementation requirements:
 
-1. Scope Git `safe.directory` configuration to the read-only compose fixture
-   repository subtree. Do not trust every filesystem repository or weaken the
-   production runtime default.
+1. Validate local workflow repositories against configured trusted roots, then
+   provide the exact canonical repository and `.git` paths through a temporary
+   protected Git configuration for that invocation only. Do not trust every
+   filesystem repository or weaken the production runtime default.
 2. Make deleted-session runtime teardown observable and deterministic before a
    reusable browser context attempts profile-volume removal. Preserve conflict
    behavior while a session is genuinely active.
@@ -350,19 +357,29 @@ Implementation requirements:
 
 Local remediation evidence from 2026-08-03:
 
-- The compose gateway trusts only `/workspace/.tmp/*` in addition to the
-  image-level `/workspace` entry. The production image default remains
-  unchanged.
+- Local workflow paths are canonicalized only after configured-root validation.
+  Each Git command receives a short-lived protected config containing the exact
+  repository and `.git` paths; no wildcard, process-wide, image-wide, or remote
+  source trust exception remains.
+- A different-owner repository regression proves direct Git access fails before
+  the resolver call, succeeds through the resolver's exact scoped config, and
+  fails directly again after that config is dropped.
 - Docker runtime teardown now waits for bounded, observable container removal
   after `docker stop`, `docker rm -f`, or an already-in-progress removal.
 - The new delayed-removal regression and the existing active-writer conflict
   regression pass.
 - Each of the three cases that failed in hosted run `30815108416` passes
   individually against the rebuilt compose stack.
-- `node scripts/validate.mjs --profile compose` passes all nine stages in one
-  uninterrupted canonical-project run: 16 default gateway API cases, four
-  docker-pool cases, and the admin-new, compatibility-admin, CLI, MCP,
-  recording, and workflow smokes.
+- The default gateway API suite passes 16/16 cases. The Docker-pool suite passes
+  4/4 cases, including capacity, admission, queued cancellation, and gateway
+  restart recovery. The remaining eight compose stages pass together: three
+  admin-new smokes, compatibility admin, CLI, MCP, recording, and workflow
+  admission.
+- During the first full local rerun, Keycloak restarted after a local Docker
+  Desktop `SIGBUS`; two following Docker-pool cases reached its token endpoint
+  before startup completed. The shared compose harness now retries transient
+  token-endpoint failures for a bounded 30 seconds and preserves the last error
+  on timeout. Focused recovery and timeout regressions pass.
 - PR #183's first required Rust run exposed a pre-existing process-environment
   race between parallel `bpane-host` config tests. Environment-mutating config
   tests now serialize and restore their original values; the config module
