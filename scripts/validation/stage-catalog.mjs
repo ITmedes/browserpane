@@ -43,6 +43,7 @@ export class ValidationStageCatalog {
         'scripts/coverage/rust-coverage-command.test.mjs',
         'scripts/ci/compose-diagnostics-collector.test.mjs',
         'scripts/ci/diagnostic-redactor.test.mjs',
+        'scripts/ci/gateway-compose-e2e-wrapper.test.mjs',
         'scripts/validation/github-workflow-policy-checker.test.mjs',
         'scripts/validation/markdown-link-checker.test.mjs',
         'scripts/validation/repository-document-checker.test.mjs',
