@@ -99,6 +99,10 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile.gateway
+    environment:
+      GIT_CONFIG_COUNT: "1"
+      GIT_CONFIG_KEY_0: safe.directory
+      GIT_CONFIG_VALUE_0: /workspace/.tmp/*
     command: >
       /usr/local/bin/bpane-gateway
       --agent-socket ${BPANE_GATEWAY_AGENT_SOCKET:-/run/bpane/agent.sock}
