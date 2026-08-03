@@ -5,14 +5,18 @@ const DEFAULT_REQUIRED_PATHS = [
   'AGENTS.md',
   'ARCH.md',
   'README.md',
+  '.github/workflows/validation.yml',
+  '.nvmrc',
   'openapi/bpane-control-v1.yaml',
   'docs/BPANE-00151_MINIMAL_CI_VALIDATION_PLAN.md',
   'docs/VALIDATION_MATRIX.md',
   'quality/coverage-baselines.json',
   'scripts/check-coverage-baseline.mjs',
   'scripts/check-dependency-safety.mjs',
+  'scripts/check-repository-documents.mjs',
   'scripts/run-rust-coverage.mjs',
   'scripts/validate.mjs',
+  'rust-toolchain.toml',
   'security/dependency-exceptions.json',
   'security/dependency-exceptions.schema.json'
 ];
@@ -28,8 +32,10 @@ const DEFAULT_PACKAGES = [
 
 const DEFAULT_DOCUMENTED_COMMANDS = [
   ['AGENTS.md', 'node scripts/check-dependency-safety.mjs'],
+  ['AGENTS.md', 'node scripts/check-repository-documents.mjs'],
   ['AGENTS.md', 'node scripts/validate.mjs --profile fast'],
   ['README.md', 'node scripts/check-dependency-safety.mjs'],
+  ['README.md', 'node scripts/check-repository-documents.mjs'],
   ['README.md', 'node scripts/validate.mjs --profile fast'],
   ['docs/VALIDATION_MATRIX.md', 'node scripts/validate.mjs --profile fast']
 ];

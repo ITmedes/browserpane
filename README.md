@@ -1128,14 +1128,35 @@ node scripts/validate.mjs --profile full
 
 `fast` runs the dependency and repository baselines, Rust checks and coverage,
 clean installs, maintained Node checks/tests/builds, browser-client and
-admin-new coverage ratchets, and operational script checks. `compose` runs the
-bounded gateway API, admin, CLI, MCP, recording, and workflow smoke set; it may
-build or start the local stack and
+admin-new coverage ratchets, Markdown/YAML/workflow policy, and operational
+script checks. `compose` runs the bounded gateway API, admin, CLI, MCP,
+recording, and workflow smoke set; it may build or start the local stack and
 leaves it running for inspection. `full` runs both profiles. Use `--list`,
 `--dry-run`, or repeatable `--stage <id>` selections for focused work. The
 runner stops at the first failing stage, preserves its exit code, prints the
 exact rerun command, and terminates the active child process on timeout or
 interrupt.
+
+GitHub Actions runs the fast floor on pull requests and pushes to `main` as
+these stable checks:
+
+- `Validation / Repository metadata`
+- `Validation / Dependency safety`
+- `Validation / Rust workspace`
+- `Validation / Node / Compatibility admin`
+- `Validation / Node / Admin new`
+- `Validation / Node / Browser client`
+- `Validation / Node / MCP bridge`
+- `Validation / Node / Recording worker`
+- `Validation / Node / Workflow worker`
+
+The workflow pins Node and Rust through `.nvmrc` and `rust-toolchain.toml`, pins
+third-party actions to immutable revisions, and publishes only bounded coverage
+summaries. Validate repository documents and workflow policy locally with:
+
+```bash
+node scripts/check-repository-documents.mjs
+```
 
 Dependency safety:
 
