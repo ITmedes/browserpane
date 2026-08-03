@@ -82,7 +82,8 @@ specifications and still require a bounded slice plan before coding.
   required GitHub checks, and bounded compose evidence.
 - `BPANE-00184_COMPOSE_VALIDATION_PERFORMANCE_PLAN.md`: focused Foundation
   follow-up for reducing hosted compose feedback time while preserving the
-  complete local and hosted scenario set.
+  complete local and hosted scenario set; measured cold Docker build
+  acceleration remains isolated in GitHub issue `#185`.
 - `BPANE-00171_WORKFLOW_TEACH_MODE_PLAN.md`: Phase N Teach Mode contract,
   semantic demonstration capture, candidate generation, replay, immutable
   publication, controlled repair, and smoke sequence.
