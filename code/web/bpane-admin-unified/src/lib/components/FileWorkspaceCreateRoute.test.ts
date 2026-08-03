@@ -43,6 +43,10 @@ describe('FileWorkspaceCreateRoute', () => {
     await input(target, 'file-workspace-edit-name', 'Support inputs');
     await input(target, 'file-workspace-edit-labels', 'team=support');
     await select(target, 'file-workspace-edit-project-binding', 'project');
+    await vi.waitFor(() => {
+      const projectSelect = byTestId(target, 'file-workspace-edit-project-id') as HTMLSelectElement;
+      expect(Array.from(projectSelect.options, (option) => option.value)).toContain('project-1');
+    });
     await select(target, 'file-workspace-edit-project-id', 'project-1');
     byTestId(target, 'file-workspace-edit-save').click();
 

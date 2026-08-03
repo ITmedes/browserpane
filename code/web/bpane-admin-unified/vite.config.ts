@@ -8,6 +8,12 @@ export default defineConfig(({ mode }) => {
     test: {
       environment: 'jsdom' as const,
       include: ['src/**/*.test.ts'],
+      coverage: {
+        provider: 'v8' as const,
+        include: ['src/lib/**/*.{ts,svelte}'],
+        reporter: ['text', 'json-summary'],
+        reportsDirectory: 'coverage',
+      },
     },
   };
 

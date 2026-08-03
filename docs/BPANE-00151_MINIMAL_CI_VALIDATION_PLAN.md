@@ -2,7 +2,7 @@
 
 Issue: [#151](https://github.com/ITmedes/browserpane/issues/151)
 
-State: Ready
+State: In Progress
 
 Owner: `thebackplane`
 
@@ -12,7 +12,7 @@ Target gate: Foundation Gate
 
 Depends on: #173 delivery-governance baseline
 
-Last verified: 2026-07-31 at `9640be4`
+Last verified: 2026-08-03 on `feature/BPANE-00151` through hosted fast validation and enforcement
 
 ## Business Outcome
 
@@ -34,23 +34,56 @@ executed without treating an unrun smoke as green.
 
 ## Current Evidence
 
-- The repository currently has no `.github/workflows/` validation workflow and
-  no required status checks.
-- Rust workspace tests pass locally. The latest recorded `cargo llvm-cov`
-  baseline is 56.25% line coverage across the workspace.
+- The latest hosted fast workflow passes all nine BrowserPane validation jobs
+  plus the existing CodeQL analysis. `main` now requires the nine BrowserPane
+  contexts in strict mode and binds them to the GitHub Actions app.
+- Rust workspace tests pass on macOS and the canonical Ubuntu runner. The
+  measured `cargo llvm-cov` baselines are 56.25% locally on macOS and 54.88%
+  on pinned Ubuntu 24.04; the checked floor follows the canonical runner.
 - `code/web/bpane-client` has unit, build, CLI, and extensive compose smoke
-  scripts. Its latest recorded core line-coverage baseline is 91.26%.
-- `code/web/bpane-admin-unified` has 279 passing tests plus `check` and `build`,
-  but no checked-in coverage threshold.
+  scripts. Its maintained-source coverage is now ratcheted at 92.8% lines and
+  statements, 92.9% functions, and 87.5% branches. The function floor reflects
+  the canonical pinned Node 22/Linux result rather than Node 24/macOS output.
+- `code/web/bpane-admin-unified` has 279 passing tests plus `check`, coverage,
+  and build; its `src/lib` coverage now has a checked-in four-metric floor.
 - The MCP bridge, recording worker, and workflow worker build independently;
   the recording and workflow workers do not yet have meaningful unit suites.
 - Gateway compose suites exist behind ignored tests and
   `scripts/run-gateway-compose-e2e.sh`; they run only when explicitly selected.
-- The live Dependabot inventory on 2026-07-31 contains 88 open alerts: one
-  critical, 20 high, 50 medium, and 17 low. Critical/high alerts span
-  `Cargo.lock` and four committed Node lockfiles and have patched versions.
-- `AGENTS.md`, `README.md`, and `docs/VALIDATION_MATRIX.md` contain runnable
-  commands, but no single executable local CI entry point enforces them.
+- The live Dependabot inventory on 2026-08-03 contains 92 open alerts: one
+  critical, 24 high, 50 medium, and 17 low. Critical/high alerts span
+  `Cargo.lock` and four of the six committed Node lockfiles. Dependabot will
+  retain the default-branch alerts until the remediated locks merge.
+- Slice 1 updates the affected Rust and Node dependency groups to patched
+  compatible versions. The branch-local npm audits report zero critical/high
+  findings across all six lockfiles. `cargo audit` reports only
+  `RUSTSEC-2023-0071`, a medium, no-fix RSA advisory retained through SQLx's
+  disabled optional MySQL graph; it has an explicit exception through
+  2026-11-01.
+- `scripts/check-dependency-safety.mjs` scans every committed lockfile, fails
+  all RustSec vulnerabilities and npm critical/high advisories unless an exact
+  exception applies, and rejects stale or expired exceptions. Its parser,
+  command-boundary, and policy behavior has 12 focused tests with 91.99% line
+  and 100% function coverage under Node's built-in coverage runner.
+- `scripts/validate.mjs` is now the canonical local entry point. It exposes 31
+  fast stages and nine compose stages through `fast`, `compose`, and `full`
+  profiles, with stable names, bounded execution, first-failure exit-code
+  preservation, focused reruns, dry runs, and stage discovery.
+- The expanded 31-stage fast profile and an uninterrupted compose profile pass
+  on this branch. The compose run includes all 16 default gateway API cases,
+  all four
+  docker-pool cases, admin-new and compatibility-admin session journeys, CLI,
+  two simultaneous session-scoped MCP routes, two retained recording segments,
+  workflow worker/project admission, and restoration of normal compose limits.
+- The first composed run exposed a real session-cleanup race after gateway
+  reconciliation. Shared smoke cleanup now requires a stable quiet window,
+  renews its bound only when removal makes progress, and has focused tests for
+  delayed reconciliation, malformed catalogs, deduplication, and timeout.
+- Checked-in coverage floors now gate fresh Rust workspace coverage at 54.8%
+  lines, browser-client maintained sources at 92.8% lines/statements, 92.9%
+  functions, and 87.5% branches, and admin-new `src/lib` at 88.0% lines, 90.1%
+  statements, 92.7% functions, and 74.3% branches. Each command emits a local
+  Markdown summary for later CI artifact publication.
 
 ## Scope
 
@@ -182,31 +215,110 @@ executed without treating an unrun smoke as green.
 
 ### Slice 1: Inventory And Dependency Remediation
 
+Status: Implemented and locally validated on `feature/BPANE-00151`.
+
 - Freeze the live advisory and package/test inventory.
 - Upgrade critical/high dependency groups with focused regressions.
 - Add the bounded exception schema/checker if any alert remains.
+
+Evidence:
+
+- `node scripts/check-dependency-safety.mjs` passes for `Cargo.lock` plus all
+  six committed npm lockfiles with one exact, unexpired RSA exception.
+- `cargo test --workspace --locked` passes after the Rust dependency updates.
+- Clean install, type/check, unit tests, and production builds pass for the
+  compatibility admin, admin-new, browser client, and MCP bridge packages.
+- Package totals exercised by the focused regressions include 202
+  compatibility-admin tests, 279 admin-new tests, 661 browser-client tests,
+  and 12 MCP bridge tests.
 
 Commit boundary: dependency changes and evidence are reviewable independently
 from workflow plumbing.
 
 ### Slice 2: Local Validation Runner
 
+Status: Implemented and locally validated on `feature/BPANE-00151`.
+
 - Add fast, compose, and full profiles with stable stage names.
 - Add self-tests for selection, failure propagation, cleanup, and `--help`.
 - Align AGENTS and README commands.
 
+Evidence:
+
+- `node scripts/validate.mjs --profile fast` passes all 31 stages.
+- `node scripts/validate.mjs --profile compose` passes all nine stages in one
+  uninterrupted run and leaves the compose stack running with default runtime
+  limits restored.
+- Validation-tool tests cover argument rejection, stage selection, repository
+  drift, child exit-code propagation, timeout process-group termination,
+  cancellation, first-failure behavior, and session cleanup stabilization.
+- The repository baseline verifies canonical files, package-owned commands,
+  required package scripts, documentation references, and every tracked JSON
+  file before expensive stages run.
+
 ### Slice 3: CI And Coverage
+
+Status: Implemented and verified locally and on hosted Ubuntu runners.
 
 - Add pinned, least-privilege workflows and caching keyed by lockfiles.
 - Establish package coverage baselines and publish summaries.
 - Add bounded compose/API smoke and failure artifacts.
 
+Evidence:
+
+- `.github/workflows/validation.yml` defines stable repository, dependency,
+  Rust, and per-package Node jobs on pinned `ubuntu-24.04` runners.
+- All third-party actions use immutable commit revisions, checkout credentials
+  are not persisted, and root permissions are limited to `contents: read`.
+- `node scripts/check-repository-documents.mjs` parses committed YAML, checks
+  local Markdown targets, and enforces workflow permissions, pins, timeouts,
+  cache keys, and artifact boundaries.
+- Node `22.23.2` and Rust `1.93.1` are pinned for local and CI parity.
+- `.github/workflows/compose.yml` runs the representative nine-stage compose
+  profile on `main`, weekdays, or manual dispatch with a 60-minute job bound.
+- Failure evidence is limited to selected control-plane status and log tails,
+  redacted before a seven-day artifact upload. Cleanup always removes dynamic
+  BrowserPane runtime/worker containers and compose volumes.
+- Redaction and collection tests cover bearer/basic authorization, cookies,
+  OIDC query material, environment/CLI secrets, authenticated proxy URLs,
+  JWTs, UUIDs, PEM blocks, selected commands, and oversized-log truncation.
+- The first hosted run exposed one asynchronous auth-test race, one resource
+  option-load race, cross-realm Blob assertions, and a Node 22/Linux coverage
+  difference. Tests now await observable outcomes, and the browser-client
+  function ratchet uses the measured canonical-runner floor of 92.9%.
+- A subsequent hosted run passed every Rust test but exposed the expected
+  platform coverage difference: Ubuntu 24.04 compiles additional host/runtime
+  paths and measures 54.88% lines versus 56.25% on macOS. The Rust floor now
+  follows that canonical result at 54.8%, and CI uploads the summary filename
+  emitted by the baseline checker.
+
 ### Slice 4: Enforcement And Evidence
+
+Status: Implemented except for the first post-merge hosted compose run.
 
 - Configure `main` required checks.
 - Demonstrate controlled failures for each major stage.
-- Run the clean full profile, update validation/maturity/risk docs, and capture
-  the Foundation-gate evidence that is actually satisfied.
+- Run the complete fast and compose profiles, update validation/maturity/risk
+  docs, and capture the Foundation-gate evidence that is actually satisfied.
+
+Evidence:
+
+- Hosted run `30810601600` passes all nine BrowserPane jobs and CodeQL. Rust,
+  admin-new, and browser-client coverage summaries are retained as bounded
+  GitHub artifacts.
+- Earlier hosted runs visibly rejected compatibility-admin async timing,
+  admin-new resource/Blob assumptions, browser-client coverage drift, and the
+  Rust platform coverage delta. Focused validation-tool fixtures reject
+  dependency, coverage, document, workflow-policy, subprocess, timeout, and
+  diagnostic-redaction failures.
+- `main` branch protection requires all nine documented contexts in strict
+  mode with GitHub Actions app id `15368`. Existing one-approval,
+  stale-review-dismissal, last-push-approval, conversation-resolution,
+  branch-lock, force-push, deletion, and signature settings were preserved.
+- The 31-stage fast and nine-stage compose profiles pass locally. The compose
+  workflow cannot run from a feature branch before its workflow file exists on
+  the default branch; its first hosted execution is therefore post-merge
+  evidence rather than a pull-request gate.
 
 ## Test Strategy
 
@@ -240,8 +352,8 @@ from workflow plumbing.
 
 ### Coverage And Quality
 
-- Rust: reproduce the 56.25% line baseline and add critical-path/changed-code
-  ratchets.
+- Rust: preserve the 54.88% canonical Ubuntu line baseline, retain the 56.25%
+  macOS comparison, and add critical-path/changed-code ratchets.
 - Browser client: reproduce the 91.26% core line baseline and prevent
   regression.
 - Admin-new: establish and enforce an initial checked-in baseline from the 279
@@ -262,8 +374,9 @@ from workflow plumbing.
    dependency safety fails without running a product runtime.
 5. Run the compose profile and verify session/API, admin-new, CLI/MCP,
    workflow, and recording selections plus bounded failure artifacts.
-6. Interrupt a compose stage and confirm cleanup removes test containers while
-   preserving redacted diagnostics.
+6. Interrupt a compose stage and confirm the active process group terminates,
+   no later stage starts, the stack remains inspectable, and a rerun restores
+   any smoke-specific runtime overrides.
 7. Push a test branch, verify all documented required checks execute, and
    confirm `main` cannot merge while one required check is failing.
 8. Restore the branch and verify the same checks pass from a clean run.

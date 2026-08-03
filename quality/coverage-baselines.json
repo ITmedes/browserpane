@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "targets": {
+    "rust-workspace": {
+      "label": "Rust workspace",
+      "format": "llvm-summary",
+      "report": "target/llvm-cov/coverage-summary.json",
+      "minimums": {
+        "lines": 54.8
+      }
+    },
+    "browser-client": {
+      "label": "Browser client maintained sources",
+      "format": "istanbul-summary",
+      "report": "code/web/bpane-client/coverage/coverage-summary.json",
+      "minimums": {
+        "statements": 92.8,
+        "branches": 87.5,
+        "functions": 92.9,
+        "lines": 92.8
+      }
+    },
+    "admin-new": {
+      "label": "Admin-new maintained library",
+      "format": "istanbul-summary",
+      "report": "code/web/bpane-admin-unified/coverage/coverage-summary.json",
+      "minimums": {
+        "statements": 90.1,
+        "branches": 74.3,
+        "functions": 92.7,
+        "lines": 88.0
+      }
+    }
+  }
+}

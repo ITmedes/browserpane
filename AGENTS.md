@@ -170,6 +170,15 @@ Current product shape:
 
 ## Commands that matter
 
+- Local fast validation: `node scripts/validate.mjs --profile fast`
+- Explicit compose validation: `node scripts/validate.mjs --profile compose`
+- Full local validation: `node scripts/validate.mjs --profile full`
+- Dependency safety scan: `node scripts/check-dependency-safety.mjs`
+- Repository document/workflow policy: `node scripts/check-repository-documents.mjs`
+- Redacted compose diagnostics: `node scripts/collect-compose-diagnostics.mjs`
+- CI compose cleanup: `scripts/ci/cleanup-compose.sh`
+- Dependency policy tests: `node --test scripts/dependency-safety/*.test.mjs`
+- Rust coverage ratchet: `node scripts/run-rust-coverage.mjs`
 - Full Rust test suite: `cargo test --workspace`
 - Gateway tests: `cargo test -p bpane-gateway`
 - Gateway compose e2e API suite: `cargo test -p bpane-gateway --test compose_api_surface -- --ignored --test-threads=1`
@@ -215,6 +224,7 @@ Run these in `code/web/bpane-client`:
 - `npm run test:coverage`
 
 Run these where applicable:
+- `cd code/web/bpane-admin-unified && npm run test:coverage`
 - `cd code/integrations/mcp-bridge && npm run build`
 - `cd code/integrations/recording-worker && npm run build`
 - `cd code/integrations/workflow-worker && npm run build`
