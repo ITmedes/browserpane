@@ -17,7 +17,7 @@ afterEach(async () => {
 
 describe('RecordingOverviewRoute', () => {
   it('loads visible session recordings and downloads a selected artifact', async () => {
-    const createObjectURL = vi.fn(() => 'blob:recording');
+    const createObjectURL = vi.fn<(blob: Blob) => string>(() => 'blob:recording');
     const revokeObjectURL = vi.fn();
     Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectURL });
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectURL });
@@ -49,7 +49,8 @@ describe('RecordingOverviewRoute', () => {
     await vi.waitFor(() => {
       expect(byTestId(target, 'recordings-action-success').textContent).toContain('Download started');
     });
-    expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+    expect(createObjectURL).toHaveBeenCalledOnce();
+    expect(createObjectURL.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ size: 15 }));
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:recording');
     expect(anchorClick).toHaveBeenCalled();
     const recordingCalls = fetchImpl.mock.calls.filter((call) => String(call[0]).includes('/recordings'));
@@ -64,7 +65,7 @@ describe('RecordingOverviewRoute', () => {
   });
 
   it('downloads a playback zip when the session has multiple downloadable segments', async () => {
-    const createObjectURL = vi.fn(() => 'blob:recording-zip');
+    const createObjectURL = vi.fn<(blob: Blob) => string>(() => 'blob:recording-zip');
     const revokeObjectURL = vi.fn();
     Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectURL });
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectURL });
@@ -107,7 +108,8 @@ describe('RecordingOverviewRoute', () => {
     expect(fetchImpl.mock.calls.map((call) => String(call[0]))).not.toContain(
       'http://localhost:3000/api/v1/sessions/session-1/recordings/recording-1/content',
     );
-    expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+    expect(createObjectURL).toHaveBeenCalledOnce();
+    expect(createObjectURL.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ size: 13 }));
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:recording-zip');
   });
 

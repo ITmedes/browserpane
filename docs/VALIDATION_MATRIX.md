@@ -1,6 +1,6 @@
 # Consolidated Validation Matrix
 
-Revalidated against current package scripts: 2026-07-31
+Revalidated against current package scripts: 2026-08-03
 
 This matrix defines the available validation surfaces for product slices. Use
 `PRODUCT_PHASES_AND_RELEASE_GATES.md` to decide which evidence is required for
@@ -9,25 +9,77 @@ one important surface, but it is not the only delivery lane.
 
 ## Verified Baseline And Gaps
 
-The 2026-07-31 audit recorded:
+The 2026-08-03 coverage ratchet records:
 
 - all non-ignored Rust workspace tests passed under `cargo llvm-cov`, with
-  56.25% line coverage across the workspace,
-- browser-client tests passed with 91.26% line coverage for the core `js`
-  implementation; global output is diluted by smoke scripts and no threshold
-  is enforced,
-- admin-new check, 279 tests, and production build passed, but the package has
-  no coverage script or threshold,
+  54.88% line coverage on the canonical pinned Ubuntu runner and 56.25% on
+  local macOS; the cross-platform floor is 54.8%,
+- browser-client tests pass on pinned Node 22/Linux with 92.88% lines, 92.88%
+  statements, 92.98% functions, and 87.70% branches across all maintained `js`
+  sources; the cross-platform function floor is 92.9%,
+- admin-new's 279 tests pass with 88.09% lines, 90.13% statements, 92.78%
+  functions, and 74.34% branches across `src/lib`,
 - MCP bridge has focused unit tests,
 - recording-worker and workflow-worker have build checks but no unit-test
   suites,
 - compose and docker-pool tests remain ignored unless the supported stack is
   explicitly started,
-- branch protection has no required status checks and the repository has no
-  GitHub Actions workflow.
+- Slice 1 of #151 now provides a repository dependency scanner and an expiring
+  exception policy.
+- Slice 2 of #151 provides one local validation runner. Slice 3 adds checked-in
+  Rust, browser-client, and admin-new coverage floors plus pinned,
+  least-privilege fast and bounded compose GitHub Actions workflows. Hosted
+  fast execution passes all nine BrowserPane jobs, and `main` requires them in
+  strict mode as GitHub Actions checks. The first post-merge hosted compose run
+  remains the final environment-specific evidence.
 
 This is meaningful Prototype evidence, not a Production gate. #151 owns the
 enforced baseline; #165 owns missing worker test/runtime hygiene.
+
+## Canonical Local Runner
+
+```bash
+node scripts/validate.mjs --profile fast
+node scripts/validate.mjs --profile compose
+node scripts/validate.mjs --profile full
+node scripts/check-repository-documents.mjs
+```
+
+- `fast` is the clean, non-compose validation floor.
+- `compose` is the explicit bounded API/admin/CLI/MCP/recording/workflow path.
+- `full` runs `fast` followed by `compose`.
+- `--list`, `--dry-run`, and repeatable `--stage <id>` selections expose the
+  exact stage catalog without duplicating package-owned commands.
+
+The runner stops on the first failure, preserves its exit code, reports the
+stage-specific rerun command, enforces per-stage timeouts, and terminates the
+active child process on interrupt. The compose profile may build or start the
+local stack and leaves it running for inspection. Smokes that temporarily
+change gateway admission limits restore the normal compose configuration before
+returning.
+
+Verified on 2026-08-03:
+
+- all 31 fast stages pass, including the Rust, browser-client, and admin-new
+  coverage ratchets,
+- all nine compose stages pass in one uninterrupted run,
+- the compose gateway stage passes 16 default API and four docker-pool cases,
+- representative admin-new, compatibility-admin, CLI, MCP, recording, and
+  workflow admission journeys pass against the running stack.
+
+The fast GitHub workflow exposes stable repository, dependency, Rust, and
+per-package Node checks. It parses all committed YAML, validates local Markdown
+links, and enforces immutable action revisions, least-privilege permissions,
+fixed runner images, job timeouts, lockfile-derived cache keys, and bounded
+artifact paths. `main` branch protection requires those nine BrowserPane jobs
+in strict mode and binds them to the GitHub Actions app.
+
+`Compose / Representative compose smoke` runs on pushes to `main`, a weekday
+schedule, and manual dispatch. It is not a pull-request gate until hosted-runner
+reliability is demonstrated. The 60-minute job executes all nine representative
+compose stages, captures only selected control-plane status/log tails after a
+failure, redacts credential and identity material before upload, and always
+removes BrowserPane containers and compose volumes.
 
 ## Baseline Checks For Any Unified Admin Slice
 
@@ -36,6 +88,7 @@ Run in `code/web/bpane-admin-unified`:
 ```bash
 npm run check
 npm test
+npm run test:coverage
 npm run build
 ```
 
@@ -55,15 +108,33 @@ npm test
 npm run build
 ```
 
-Use `npm run test:coverage` when the slice affects browser client behavior,
-CLI behavior, or test coverage needs to be demonstrated.
+The browser-client and admin-new `test:coverage` scripts enforce the floors in
+`quality/coverage-baselines.json` and write human-readable summaries below
+`test-results/coverage/`. Rust uses:
+
+```bash
+cargo install cargo-llvm-cov --version 0.8.7 --locked
+node scripts/run-rust-coverage.mjs
+```
+
+These floors are regression ratchets, not a claim that all critical behavior
+has adequate test depth. Raise them with added tests; lowering one requires an
+explicitly reviewed rationale.
 
 ## Dependency And Supply-Chain Floor
 
-Issue `#151` must establish one reproducible local/CI dependency scan covering
-`Cargo.lock` and every committed Node `package-lock.json`. The selected tooling
-and wrapper command must be checked into the repository before being added to
-the canonical command lists in `AGENTS.md` and `README.md`.
+Slice 1 of issue `#151` establishes the local dependency scan covering
+`Cargo.lock` and every committed Node `package-lock.json`:
+
+```bash
+cargo install cargo-audit --locked
+node scripts/check-dependency-safety.mjs
+node --test scripts/dependency-safety/*.test.mjs
+```
+
+The local validation runner composes this command into its fast profile. The
+remaining #151 slices must run the same policy in required CI checks without
+weakening its failure behavior.
 
 The validation policy must:
 
@@ -79,11 +150,14 @@ The validation policy must:
 - run as GitHub Actions checks required by branch protection,
 - prove each major stage fails visibly through controlled fixtures.
 
-The 2026-07-31 audit found one critical development-only advisory and multiple
-high runtime advisories with patched versions available. Treat that as active
-input to `#151`, not as accepted baseline debt.
+The 2026-08-03 live Dependabot inventory contains one critical and 24 high
+alerts against the default branch. The Slice 1 lock updates remove all local
+npm critical/high findings and all patched RustSec findings. One medium,
+no-fix RSA advisory remains only in SQLx's disabled optional MySQL graph and is
+covered by the exact, expiring exception in
+`security/dependency-exceptions.json`; it is not accepted silently.
 
-#151 is Ready under `BPANE-00151_MINIMAL_CI_VALIDATION_PLAN.md`; keep its
+#151 is In Progress under `BPANE-00151_MINIMAL_CI_VALIDATION_PLAN.md`; keep its
 measured baselines and final required-check names aligned with this matrix.
 
 ## Public Contract And Protocol Floor

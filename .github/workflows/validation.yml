@@ -1,0 +1,176 @@
+name: Validation
+
+'on':
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  repository:
+    name: Repository metadata
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version-file: .nvmrc
+      - name: Run repository validation
+        run: >-
+          node scripts/validate.mjs
+          --stage validation-tool-tests
+          --stage repository-baseline
+          --stage repository-documents
+          --stage egress-observer-check
+          --stage egress-observer-tests
+
+  dependencies:
+    name: Dependency safety
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version-file: .nvmrc
+      - name: Select pinned Rust toolchain
+        run: rustup show active-toolchain
+      - name: Cache cargo-audit
+        id: cargo-audit-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: ~/.cargo/bin/cargo-audit
+          key: cargo-audit-0.22.2-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+      - name: Install cargo-audit
+        if: steps.cargo-audit-cache.outputs.cache-hit != 'true'
+        run: cargo install cargo-audit --version 0.22.2 --locked
+      - name: Audit committed locks
+        run: node scripts/validate.mjs --stage dependency-safety
+
+  rust:
+    name: Rust workspace
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version-file: .nvmrc
+      - name: Install native build dependencies
+        run: >-
+          sudo apt-get update && sudo apt-get install -y
+          build-essential cmake pkg-config
+          libavcodec-dev libavutil-dev libdrm-dev libevdev-dev libopus-dev
+          libpipewire-0.3-dev libva-dev libx11-dev libxdamage-dev
+          libxfixes-dev libxrandr-dev
+      - name: Select pinned Rust toolchain
+        run: rustup show active-toolchain
+      - name: Cache Rust build inputs
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: |
+            ~/.cargo/git
+            ~/.cargo/registry
+            target
+          key: rust-1.93.1-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+      - name: Cache cargo-llvm-cov
+        id: llvm-cov-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: ~/.cargo/bin/cargo-llvm-cov
+          key: cargo-llvm-cov-0.8.7-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+      - name: Install cargo-llvm-cov
+        if: steps.llvm-cov-cache.outputs.cache-hit != 'true'
+        run: cargo install cargo-llvm-cov --version 0.8.7 --locked
+      - name: Validate Rust workspace
+        run: >-
+          node scripts/validate.mjs
+          --stage rust-fmt
+          --stage rust-clippy
+          --stage rust-tests
+          --stage rust-coverage
+      - name: Publish Rust coverage summary
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: rust-coverage-${{ github.run_id }}
+          path: test-results/coverage/rust-workspace.md
+          if-no-files-found: ignore
+          retention-days: 7
+
+  node:
+    name: Node / ${{ matrix.label }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Compatibility admin
+            lockfile: code/web/bpane-admin/package-lock.json
+            stages: --stage admin-install --stage admin-check --stage admin-test --stage admin-build
+          - label: Admin new
+            lockfile: code/web/bpane-admin-unified/package-lock.json
+            stages: --stage admin-new-install --stage admin-new-check --stage admin-new-test --stage admin-new-test-coverage --stage admin-new-build
+          - label: Browser client
+            lockfile: code/web/bpane-client/package-lock.json
+            stages: --stage client-install --stage client-check --stage client-test --stage client-test-coverage --stage client-build
+          - label: MCP bridge
+            lockfile: code/integrations/mcp-bridge/package-lock.json
+            stages: --stage mcp-bridge-install --stage mcp-bridge-test --stage mcp-bridge-build
+          - label: Recording worker
+            lockfile: code/integrations/recording-worker/package-lock.json
+            stages: --stage recording-worker-install --stage recording-worker-build
+          - label: Workflow worker
+            lockfile: code/integrations/workflow-worker/package-lock.json
+            stages: --stage workflow-worker-install --stage workflow-worker-build
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: ${{ matrix.lockfile }}
+      - name: Validate package
+        run: node scripts/validate.mjs ${{ matrix.stages }}
+      - name: Publish admin-new coverage summary
+        if: always() && matrix.label == 'Admin new'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: admin-new-coverage-${{ github.run_id }}
+          path: test-results/coverage/admin-new.md
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Publish browser-client coverage summary
+        if: always() && matrix.label == 'Browser client'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: browser-client-coverage-${{ github.run_id }}
+          path: test-results/coverage/browser-client.md
+          if-no-files-found: ignore
+          retention-days: 7

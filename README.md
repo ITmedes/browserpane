@@ -1117,11 +1117,77 @@ Build and unit checks do not require the compose stack. Package scripts named
 `smoke:*` expect the local compose stack and local auth flow to be available
 unless the script documents a narrower setup.
 
+Canonical local validation:
+
+```bash
+node scripts/validate.mjs --help
+node scripts/validate.mjs --profile fast
+node scripts/validate.mjs --profile compose
+node scripts/validate.mjs --profile full
+```
+
+`fast` runs the dependency and repository baselines, Rust checks and coverage,
+clean installs, maintained Node checks/tests/builds, browser-client and
+admin-new coverage ratchets, Markdown/YAML/workflow policy, and operational
+script checks. `compose` runs the bounded gateway API, admin, CLI, MCP,
+recording, and workflow smoke set; it may build or start the local stack and
+leaves it running for inspection. `full` runs both profiles. Use `--list`,
+`--dry-run`, or repeatable `--stage <id>` selections for focused work. The
+runner stops at the first failing stage, preserves its exit code, prints the
+exact rerun command, and terminates the active child process on timeout or
+interrupt.
+
+GitHub Actions runs the fast floor on pull requests and pushes to `main`. The
+`Validation` workflow exposes these stable required-check contexts:
+
+- `Repository metadata`
+- `Dependency safety`
+- `Rust workspace`
+- `Node / Compatibility admin`
+- `Node / Admin new`
+- `Node / Browser client`
+- `Node / MCP bridge`
+- `Node / Recording worker`
+- `Node / Workflow worker`
+
+`main` branch protection requires all nine contexts in strict mode and binds
+them to the GitHub Actions app. Existing pull-request review and branch-lock
+rules remain independent of these validation checks.
+
+The workflow pins Node and Rust through `.nvmrc` and `rust-toolchain.toml`, pins
+third-party actions to immutable revisions, and publishes only bounded coverage
+summaries. Validate repository documents and workflow policy locally with:
+
+```bash
+node scripts/check-repository-documents.mjs
+```
+
+`Compose / Representative compose smoke` runs after pushes to `main`, on its
+weekday schedule, or by manual dispatch. It is intentionally not a pull-request
+merge check yet. The job runs the nine-stage compose profile with a 60-minute
+job limit, uploads only redacted and bounded control-plane diagnostics after a
+failure, and always removes BrowserPane test containers and compose volumes.
+
+Dependency safety:
+
+```bash
+cargo install cargo-audit --locked
+node scripts/check-dependency-safety.mjs
+node --test scripts/dependency-safety/*.test.mjs
+```
+
+The dependency check scans `Cargo.lock` and every committed npm lockfile. It
+blocks RustSec vulnerabilities and npm critical/high findings unless
+`security/dependency-exceptions.json` contains an exact, unexpired approval;
+expired or stale approvals also fail the check.
+
 Rust:
 
 ```bash
 cargo build --workspace
 cargo test --workspace
+cargo install cargo-llvm-cov --version 0.8.7 --locked
+node scripts/run-rust-coverage.mjs
 ```
 
 Unified admin:
@@ -1131,8 +1197,13 @@ cd code/web/bpane-admin-unified
 npm ci
 npm run check
 npm test
+npm run test:coverage
 npm run build
 ```
+
+Coverage floors live in `quality/coverage-baselines.json`. Each coverage
+command writes a concise Markdown result below `test-results/coverage/`; CI
+publishes those summaries without sending coverage data to an external service.
 
 Compatibility admin while `/admin/` remains the fallback:
 

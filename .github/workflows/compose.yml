@@ -1,0 +1,78 @@
+name: Compose
+
+'on':
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: '17 2 * * 1-5'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: compose-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  representative-smoke:
+    name: Representative compose smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: code/web/bpane-client/package-lock.json
+      - name: Install native build dependencies
+        run: >-
+          sudo apt-get update && sudo apt-get install -y
+          build-essential cmake pkg-config
+          libavcodec-dev libavutil-dev libdrm-dev libevdev-dev libopus-dev
+          libpipewire-0.3-dev libva-dev libx11-dev libxdamage-dev
+          libxfixes-dev libxrandr-dev
+      - name: Select pinned Rust toolchain
+        run: rustup show active-toolchain
+      - name: Cache Rust build inputs
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: |
+            ~/.cargo/git
+            ~/.cargo/registry
+            target
+          key: compose-rust-1.93.1-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+      - name: Verify runtime prerequisites
+        run: |
+          docker compose version
+          if command -v google-chrome >/dev/null; then
+            google-chrome --version
+          else
+            chromium --version
+          fi
+      - name: Install browser-client dependencies
+        run: node scripts/validate.mjs --stage client-install
+      - name: Build workflow worker image
+        run: docker compose -f deploy/compose.yml --profile workflow build workflow-worker
+      - name: Run representative compose validation
+        run: node scripts/validate.mjs --profile compose
+      - name: Collect redacted failure diagnostics
+        if: failure()
+        run: node scripts/collect-compose-diagnostics.mjs
+      - name: Publish redacted failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: compose-diagnostics-${{ github.run_id }}
+          path: test-results/ci-diagnostics/compose.log
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Clean compose resources
+        if: always()
+        run: scripts/ci/cleanup-compose.sh

@@ -21,6 +21,8 @@ dev/egress-mitmproxy/
 # Node modules (if Vite is set up)
 node_modules/
 dist/
+code/web/bpane-client/coverage/
+code/web/bpane-admin-unified/coverage/
 code/web/bpane-admin/.svelte-kit/
 code/web/bpane-admin/build/
 code/web/bpane-admin-unified/.svelte-kit/

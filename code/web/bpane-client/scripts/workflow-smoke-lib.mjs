@@ -4,6 +4,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { SessionCleanup } from './session-cleanup.mjs';
 
 export const DEFAULTS = {
   pageUrl: 'http://localhost:8080',
@@ -280,23 +281,13 @@ export async function killSession(accessToken, options, sessionId) {
 }
 
 export async function cleanupWorkflowSmokeSessions(accessToken, options, log = () => {}) {
-  const response = await waitForWorkflowControlPlane(accessToken, options);
-  const sessions = Array.isArray(response.sessions) ? response.sessions : [];
-  let removed = 0;
-  for (const session of sessions) {
-    const sessionId = typeof session?.id === 'string' ? session.id : '';
-    const sessionState = typeof session?.state === 'string' ? session.state : '';
-    if (!sessionId) {
-      continue;
-    }
-    if (sessionState === 'stopped') {
-      continue;
-    }
-    await killSession(accessToken, options, sessionId);
-    removed += 1;
-  }
-  if (removed > 0) {
-    log(`Removed ${removed} stale visible sessions before the smoke run.`);
+  const result = await new SessionCleanup({
+    list: async () => await waitForWorkflowControlPlane(accessToken, options),
+    kill: async (sessionId) => await killSession(accessToken, options, sessionId),
+    timeoutMs: Math.max(15_000, Math.min(options.connectTimeoutMs, 30_000)),
+  }).run();
+  if (result.removedSessionIds.length > 0) {
+    log(`Removed ${result.removedSessionIds.length} stale visible sessions before the smoke run.`);
   }
 }
 
