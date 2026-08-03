@@ -3,7 +3,7 @@
 ## Metadata
 
 - Issue: [#184](https://github.com/ITmedes/browserpane/issues/184)
-- State: Implemented; ready for PR
+- State: In Review
 - Owner: `thebackplane`
 - Lane: Foundation
 - Target gate: Foundation Gate
@@ -256,7 +256,7 @@ workspace issue map and record hosted timing evidence before completion.
 ## Evidence Record
 
 - Baseline hosted runs: `30831720475`, `30835269073`
-- Implementation PR: pending
+- Implementation PR: [#186](https://github.com/ITmedes/browserpane/pull/186)
 - Post-change hosted run: `30843583746` (green)
 - Gateway API `default`: 16 passed in an 18-minute-52-second job
 - Gateway API `docker-pool`: 4 passed in a 14-minute-41-second job
