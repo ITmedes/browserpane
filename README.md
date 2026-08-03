@@ -1158,6 +1158,12 @@ summaries. Validate repository documents and workflow policy locally with:
 node scripts/check-repository-documents.mjs
 ```
 
+`Compose / Representative compose smoke` runs after pushes to `main`, on its
+weekday schedule, or by manual dispatch. It is intentionally not a pull-request
+merge check yet. The job runs the nine-stage compose profile with a 60-minute
+job limit, uploads only redacted and bounded control-plane diagnostics after a
+failure, and always removes BrowserPane test containers and compose volumes.
+
 Dependency safety:
 
 ```bash

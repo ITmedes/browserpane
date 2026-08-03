@@ -175,6 +175,8 @@ Current product shape:
 - Full local validation: `node scripts/validate.mjs --profile full`
 - Dependency safety scan: `node scripts/check-dependency-safety.mjs`
 - Repository document/workflow policy: `node scripts/check-repository-documents.mjs`
+- Redacted compose diagnostics: `node scripts/collect-compose-diagnostics.mjs`
+- CI compose cleanup: `scripts/ci/cleanup-compose.sh`
 - Dependency policy tests: `node --test scripts/dependency-safety/*.test.mjs`
 - Rust coverage ratchet: `node scripts/run-rust-coverage.mjs`
 - Full Rust test suite: `cargo test --workspace`
