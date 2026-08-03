@@ -263,7 +263,7 @@ docker compose -f deploy/compose.yml --profile workflow build workflow-worker
 Rebuild that image after changing `code/integrations/workflow-worker` or its
 container definition.
 
-The gateway mounts the repository at `/workspace:ro` for local git-backed workflow sources, configures `/workspace` as a trusted Git `safe.directory`, and passes `--workflow-source-trusted-local-root /workspace` so local paths are allowed only from that explicit development root.
+The gateway mounts the repository at `/workspace:ro` for local git-backed workflow sources and passes `--workflow-source-trusted-local-root /workspace`. The source resolver rejects local paths outside that explicit development root and gives Git short-lived, repository-scoped `safe.directory` entries only for each validated local source.
 The recording worker uses the generated local SPKI fingerprint from `dev/certs/cert-fingerprint.txt` through the gateway's `--recording-worker-cert-spki-file` setting, so run `./deploy/gen-dev-cert.sh dev/certs` before starting compose after certificate rotations.
 The recording worker forces the SDK render backend to Canvas2D for reliable headless Docker capture. Interactive admin and embedded browser clients keep the default `auto` backend, so GPU/WebGL rendering remains available for end-user sessions when the browser environment supports it.
 

@@ -1,7 +1,44 @@
 use super::*;
+use std::ffi::OsString;
+use std::sync::{Mutex, MutexGuard};
+
+static ENVIRONMENT_LOCK: Mutex<()> = Mutex::new(());
+
+struct EnvironmentFixture {
+    _lock: MutexGuard<'static, ()>,
+    original_values: Vec<(&'static str, Option<OsString>)>,
+}
+
+impl EnvironmentFixture {
+    fn capture(names: &[&'static str]) -> Self {
+        let lock = ENVIRONMENT_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let original_values = names
+            .iter()
+            .map(|name| (*name, std::env::var_os(name)))
+            .collect();
+        Self {
+            _lock: lock,
+            original_values,
+        }
+    }
+}
+
+impl Drop for EnvironmentFixture {
+    fn drop(&mut self) {
+        for (name, value) in self.original_values.drain(..) {
+            match value {
+                Some(value) => std::env::set_var(name, value),
+                None => std::env::remove_var(name),
+            }
+        }
+    }
+}
 
 #[test]
 fn h264_mode_defaults_to_video_tiles() {
+    let _environment = EnvironmentFixture::capture(&["BPANE_H264_MODE"]);
     // With no env var set, from_env() should return VideoTiles.
     std::env::remove_var("BPANE_H264_MODE");
     assert_eq!(H264Mode::from_env(), H264Mode::VideoTiles);
@@ -24,12 +61,14 @@ fn h264_mode_off_does_not_start_enabled() {
 
 #[test]
 fn tile_size_default_is_64() {
+    let _environment = EnvironmentFixture::capture(&["BPANE_TILE_SIZE"]);
     std::env::remove_var("BPANE_TILE_SIZE");
     assert_eq!(tile_size_from_env(), 64);
 }
 
 #[test]
 fn tile_size_clamps_below_minimum() {
+    let _environment = EnvironmentFixture::capture(&["BPANE_TILE_SIZE"]);
     std::env::set_var("BPANE_TILE_SIZE", "8");
     let size = tile_size_from_env();
     assert!(size >= 32, "tile size {size} should be >= 32");
@@ -38,6 +77,7 @@ fn tile_size_clamps_below_minimum() {
 
 #[test]
 fn tile_size_aligns_to_16() {
+    let _environment = EnvironmentFixture::capture(&["BPANE_TILE_SIZE"]);
     std::env::set_var("BPANE_TILE_SIZE", "100");
     let size = tile_size_from_env();
     assert_eq!(size % 16, 0, "tile size {size} should be 16-aligned");
@@ -47,6 +87,7 @@ fn tile_size_aligns_to_16() {
 
 #[test]
 fn env_bool_parses_true_variants() {
+    let _environment = EnvironmentFixture::capture(&["_TEST_BOOL_TRUE"]);
     for val in &["1", "true", "yes", "on", "TRUE", "Yes", "ON"] {
         std::env::set_var("_TEST_BOOL_TRUE", val);
         assert!(env_bool("_TEST_BOOL_TRUE", false), "failed for {val}");
@@ -56,6 +97,7 @@ fn env_bool_parses_true_variants() {
 
 #[test]
 fn env_bool_parses_false_variants() {
+    let _environment = EnvironmentFixture::capture(&["_TEST_BOOL_FALSE"]);
     for val in &["0", "false", "no", "off", "FALSE", "No", "OFF"] {
         std::env::set_var("_TEST_BOOL_FALSE", val);
         assert!(!env_bool("_TEST_BOOL_FALSE", true), "failed for {val}");
@@ -65,6 +107,7 @@ fn env_bool_parses_false_variants() {
 
 #[test]
 fn env_bool_returns_default_when_unset() {
+    let _environment = EnvironmentFixture::capture(&["_TEST_BOOL_UNSET"]);
     std::env::remove_var("_TEST_BOOL_UNSET");
     assert!(env_bool("_TEST_BOOL_UNSET", true));
     assert!(!env_bool("_TEST_BOOL_UNSET", false));
@@ -72,6 +115,7 @@ fn env_bool_returns_default_when_unset() {
 
 #[test]
 fn env_u16_clamped_respects_bounds() {
+    let _environment = EnvironmentFixture::capture(&["_TEST_U16"]);
     std::env::set_var("_TEST_U16", "999");
     assert_eq!(env_u16_clamped("_TEST_U16", 50, 10, 100), 100);
     std::env::set_var("_TEST_U16", "5");
@@ -83,6 +127,7 @@ fn env_u16_clamped_respects_bounds() {
 
 #[test]
 fn env_f32_clamped_rejects_nan() {
+    let _environment = EnvironmentFixture::capture(&["_TEST_F32"]);
     std::env::set_var("_TEST_F32", "NaN");
     assert_eq!(env_f32_clamped("_TEST_F32", 0.5, 0.0, 1.0), 0.5);
     std::env::remove_var("_TEST_F32");
@@ -90,6 +135,20 @@ fn env_f32_clamped_rejects_nan() {
 
 #[test]
 fn tile_capture_config_has_sane_defaults() {
+    let _environment = EnvironmentFixture::capture(&[
+        "BPANE_H264_MODE",
+        "BPANE_TILE_SIZE",
+        "BPANE_TILE_CODEC",
+        "BPANE_CHROMIUM_WHEEL_STEP_PX",
+        "BPANE_SCROLL_COPY_QUANTUM_PX",
+        "BPANE_SCROLL_ACTIVE_FRAME_INTERVAL_MS",
+        "BPANE_SCROLL_ACTIVE_CAPTURE_FRAMES",
+        "BPANE_CDP_MIN_VIDEO_WIDTH",
+        "BPANE_CDP_MIN_VIDEO_HEIGHT",
+        "BPANE_CDP_MIN_VIDEO_AREA_RATIO",
+        "BPANE_CDP_VIDEO_TILE_MARGIN",
+        "BPANE_SCROLL_THIN_MODE",
+    ]);
     // Clear all env vars that could affect config.
     for var in &[
         "BPANE_H264_MODE",
@@ -121,6 +180,7 @@ fn tile_capture_config_has_sane_defaults() {
 
 #[test]
 fn tile_capture_config_off_disables_classification() {
+    let _environment = EnvironmentFixture::capture(&["BPANE_H264_MODE"]);
     std::env::set_var("BPANE_H264_MODE", "off");
     let cfg = TileCaptureConfig::from_env();
     assert_eq!(cfg.h264_mode, H264Mode::Off);
@@ -130,12 +190,14 @@ fn tile_capture_config_off_disables_classification() {
 
 #[test]
 fn tile_codec_defaults_to_qoi() {
+    let _environment = EnvironmentFixture::capture(&["BPANE_TILE_CODEC"]);
     std::env::remove_var("BPANE_TILE_CODEC");
     assert_eq!(tile_codec_from_env(), TileCodec::Qoi);
 }
 
 #[test]
 fn tile_codec_parses_zstd() {
+    let _environment = EnvironmentFixture::capture(&["BPANE_TILE_CODEC"]);
     std::env::set_var("BPANE_TILE_CODEC", "zstd");
     assert_eq!(tile_codec_from_env(), TileCodec::Zstd);
     std::env::remove_var("BPANE_TILE_CODEC");
@@ -143,6 +205,7 @@ fn tile_codec_parses_zstd() {
 
 #[test]
 fn tile_codec_unknown_falls_back_to_qoi() {
+    let _environment = EnvironmentFixture::capture(&["BPANE_TILE_CODEC"]);
     std::env::set_var("BPANE_TILE_CODEC", "jpeg");
     assert_eq!(tile_codec_from_env(), TileCodec::Qoi);
     std::env::remove_var("BPANE_TILE_CODEC");
@@ -150,6 +213,7 @@ fn tile_codec_unknown_falls_back_to_qoi() {
 
 #[test]
 fn video_tile_margin_clamps_to_supported_range() {
+    let _environment = EnvironmentFixture::capture(&["BPANE_CDP_VIDEO_TILE_MARGIN"]);
     std::env::set_var("BPANE_CDP_VIDEO_TILE_MARGIN", "9");
     let cfg = TileCaptureConfig::from_env();
     assert_eq!(cfg.cdp_video_tile_margin, 3);
@@ -158,6 +222,7 @@ fn video_tile_margin_clamps_to_supported_range() {
 
 #[test]
 fn env_u32_clamped_respects_bounds() {
+    let _environment = EnvironmentFixture::capture(&["_TEST_U32"]);
     std::env::set_var("_TEST_U32", "99999");
     assert_eq!(env_u32_clamped("_TEST_U32", 500, 100, 1000), 1000);
     std::env::set_var("_TEST_U32", "50");
@@ -169,12 +234,14 @@ fn env_u32_clamped_respects_bounds() {
 
 #[test]
 fn env_u32_clamped_returns_default_when_unset() {
+    let _environment = EnvironmentFixture::capture(&["_TEST_U32_UNSET"]);
     std::env::remove_var("_TEST_U32_UNSET");
     assert_eq!(env_u32_clamped("_TEST_U32_UNSET", 500, 100, 1000), 500);
 }
 
 #[test]
 fn env_u32_clamped_returns_default_on_invalid() {
+    let _environment = EnvironmentFixture::capture(&["_TEST_U32_BAD"]);
     std::env::set_var("_TEST_U32_BAD", "not_a_number");
     assert_eq!(env_u32_clamped("_TEST_U32_BAD", 500, 100, 1000), 500);
     std::env::remove_var("_TEST_U32_BAD");

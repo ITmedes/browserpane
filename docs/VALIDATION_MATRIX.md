@@ -31,7 +31,9 @@ The 2026-08-03 coverage ratchet records:
   least-privilege fast and bounded compose GitHub Actions workflows. Hosted
   fast execution passes all nine BrowserPane jobs, and `main` requires them in
   strict mode as GitHub Actions checks. The first post-merge hosted compose run
-  remains the final environment-specific evidence.
+  exposed fixture-ownership and asynchronous Docker-removal gaps. Both are
+  remediated locally; a hosted 9/9 rerun remains the final environment-specific
+  evidence for #151.
 
 This is meaningful Prototype evidence, not a Production gate. #151 owns the
 enforced baseline; #165 owns missing worker test/runtime hygiene.
@@ -157,8 +159,9 @@ no-fix RSA advisory remains only in SQLx's disabled optional MySQL graph and is
 covered by the exact, expiring exception in
 `security/dependency-exceptions.json`; it is not accepted silently.
 
-#151 is In Progress under `BPANE-00151_MINIMAL_CI_VALIDATION_PLAN.md`; keep its
-measured baselines and final required-check names aligned with this matrix.
+#151 is in hosted-remediation review under
+`BPANE-00151_MINIMAL_CI_VALIDATION_PLAN.md`; keep its measured baselines and
+final required-check names aligned with this matrix.
 
 ## Public Contract And Protocol Floor
 

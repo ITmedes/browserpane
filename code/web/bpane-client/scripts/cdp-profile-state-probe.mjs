@@ -1,11 +1,12 @@
 import process from 'node:process';
 import { lookup } from 'node:dns/promises';
 import net from 'node:net';
+import { pathToFileURL } from 'node:url';
 
 const DEFAULTS = {
   action: 'get',
   cdpEndpoint: '',
-  originUrl: 'http://web:8080/',
+  originUrl: 'http://web:8080/test-embed.html',
   key: 'bpane_context_probe',
   value: '',
   cookieName: 'bpane_context_probe',
@@ -85,6 +86,100 @@ function withTimeout(promise, timeoutMs, description) {
   });
 }
 
+function sleep(durationMs) {
+  return new Promise((resolve) => setTimeout(resolve, durationMs));
+}
+
+export function isTransientDocumentError(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  return [
+    'Inspected target navigated or closed',
+    'Execution context was destroyed',
+    'Cannot find context with specified id',
+  ].some((fragment) => message.includes(fragment));
+}
+
+export function isExpectedDocumentReady(documentState, expectedUrl) {
+  if (!documentState || !['interactive', 'complete'].includes(documentState.readyState)) {
+    return false;
+  }
+  try {
+    const actual = new URL(documentState.href);
+    const expected = new URL(expectedUrl);
+    actual.hash = '';
+    expected.hash = '';
+    return actual.href === expected.href;
+  } catch {
+    return false;
+  }
+}
+
+async function evaluateValue(connection, expression) {
+  const evaluation = await connection.send('Runtime.evaluate', {
+    expression,
+    returnByValue: true,
+  });
+  if (evaluation.exceptionDetails) {
+    throw new Error(
+      evaluation.exceptionDetails.exception?.description
+      ?? evaluation.exceptionDetails.text
+      ?? 'CDP evaluation failed with an unknown exception',
+    );
+  }
+  return evaluation?.result?.value;
+}
+
+export async function waitForExpectedDocument(
+  connection,
+  expectedUrl,
+  timeoutMs,
+  { now = Date.now, wait = sleep, pollIntervalMs = 100 } = {},
+) {
+  const deadline = now() + timeoutMs;
+  let lastDetail = 'no document state observed';
+  let stableHref = '';
+  let stablePasses = 0;
+
+  while (now() <= deadline) {
+    try {
+      const documentState = await evaluateValue(
+        connection,
+        '({ href: location.href, readyState: document.readyState })',
+      );
+      lastDetail = JSON.stringify(documentState);
+      if (isExpectedDocumentReady(documentState, expectedUrl)) {
+        if (documentState.href === stableHref) {
+          stablePasses++;
+        } else {
+          stableHref = documentState.href;
+          stablePasses = 1;
+        }
+        if (stablePasses >= 2) {
+          return documentState;
+        }
+      } else {
+        stableHref = '';
+        stablePasses = 0;
+      }
+    } catch (error) {
+      if (!isTransientDocumentError(error)) {
+        throw error;
+      }
+      lastDetail = error instanceof Error ? error.message : String(error);
+      stableHref = '';
+      stablePasses = 0;
+    }
+
+    const remainingMs = deadline - now();
+    if (remainingMs <= 0) {
+      break;
+    }
+    await wait(Math.min(pollIntervalMs, remainingMs));
+  }
+
+  throw new Error(`Timed out waiting for ${expectedUrl} to become stable; last state: ${lastDetail}`);
+}
+
 async function normalizeCdpEndpoint(cdpEndpoint) {
   const url = new URL(cdpEndpoint);
   if (url.hostname !== 'localhost' && net.isIP(url.hostname) === 0) {
@@ -129,7 +224,6 @@ class CdpConnection {
   constructor(webSocketUrl) {
     this.nextId = 1;
     this.pending = new Map();
-    this.eventWaiters = new Map();
     this.socket = new WebSocket(webSocketUrl);
     this.socket.addEventListener('message', (event) => this.handleMessage(event));
   }
@@ -163,12 +257,6 @@ class CdpConnection {
       return;
     }
 
-    const waiters = this.eventWaiters.get(message.method);
-    if (!waiters?.length) {
-      return;
-    }
-    const waiter = waiters.shift();
-    waiter.resolve(message.params ?? {});
   }
 
   send(method, params = {}) {
@@ -178,15 +266,6 @@ class CdpConnection {
     });
     this.socket.send(JSON.stringify({ id, method, params }));
     return promise;
-  }
-
-  waitForEvent(method, timeoutMs) {
-    const promise = new Promise((resolve, reject) => {
-      const waiters = this.eventWaiters.get(method) ?? [];
-      waiters.push({ resolve, reject });
-      this.eventWaiters.set(method, waiters);
-    });
-    return withTimeout(promise, timeoutMs, method);
   }
 
   close() {
@@ -245,31 +324,18 @@ async function runProbe(options) {
     await connection.open(options.timeoutMs);
     await connection.send('Page.enable');
     await connection.send('Runtime.enable');
-    const loadEvent = connection.waitForEvent('Page.loadEventFired', options.timeoutMs);
     const navigation = await connection.send('Page.navigate', { url: options.originUrl });
     if (navigation.errorText) {
       throw new Error(`CDP navigation to ${options.originUrl} failed: ${navigation.errorText}`);
     }
-    await loadEvent;
+    await waitForExpectedDocument(connection, options.originUrl, options.timeoutMs);
     const expression = options.action === 'set' ? writeStateExpression(options) : readStateExpression(options);
-    const evaluation = await connection.send('Runtime.evaluate', {
-      expression,
-      returnByValue: true,
-    });
-    if (evaluation.exceptionDetails) {
-      throw new Error(
-        `CDP state probe evaluation failed: ${
-          evaluation.exceptionDetails.exception?.description
-          ?? evaluation.exceptionDetails.text
-          ?? 'unknown exception'
-        }`,
-      );
-    }
+    const state = await evaluateValue(connection, expression);
     return {
       action: options.action,
       checkedAt: new Date().toISOString(),
       originUrl: options.originUrl,
-      ...(evaluation?.result?.value ?? {}),
+      ...(state ?? {}),
     };
   } finally {
     connection.close();
@@ -277,12 +343,15 @@ async function runProbe(options) {
   }
 }
 
-const options = parseArgs(process.argv.slice(2));
-runProbe(options)
-  .then((result) => {
-    console.log(JSON.stringify(result, null, 2));
-  })
-  .catch((error) => {
-    console.error(`[cdp-profile-state-probe] ${error.stack || error.message}`);
-    process.exitCode = 1;
-  });
+const mainUrl = process.argv[1] ? pathToFileURL(process.argv[1]).href : '';
+if (import.meta.url === mainUrl) {
+  const options = parseArgs(process.argv.slice(2));
+  runProbe(options)
+    .then((result) => {
+      console.log(JSON.stringify(result, null, 2));
+    })
+    .catch((error) => {
+      console.error(`[cdp-profile-state-probe] ${error.stack || error.message}`);
+      process.exitCode = 1;
+    });
+}

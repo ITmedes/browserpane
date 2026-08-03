@@ -72,10 +72,11 @@ on-demand `workflow-worker` image profile launched by the gateway. Recording
 workers are launched separately by the gateway and are not modeled as a
 long-lived compose service. Local compose defaults to the `docker_pool`
 session runtime backend. The gateway image trusts the mounted local checkout at
-`/workspace` as a Git `safe.directory` so local git-backed workflow sources can
-resolve inside the container without dubious-ownership failures; compose also
-passes `/workspace` through the workflow source trusted-local-root policy so
-local repository paths are limited to that explicit development mount.
+`/workspace` through the workflow source trusted-local-root policy. The source
+resolver rejects paths outside that explicit development mount, then supplies
+short-lived `safe.directory` entries for only the validated repository while
+Git resolves or materializes it. The image does not carry a process-wide Git
+trust exception.
 
 ```
               Browser / E2E Test

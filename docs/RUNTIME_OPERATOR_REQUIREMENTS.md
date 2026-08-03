@@ -12,10 +12,11 @@ old plans.
 
 Required behavior:
 
-- the gateway must trust the local `/workspace` bind mount explicitly for
-  compose workflow source resolution,
-- custom deployments should document `safe.directory=/workspace` rather than a
-  broad `safe.directory=*` trust rule,
+- the gateway must allow the local `/workspace` bind mount explicitly through
+  its workflow source trusted-local-root policy,
+- the source resolver must apply short-lived, repository-scoped
+  `safe.directory` entries only after a local path passes trusted-root
+  validation; custom deployments must not require process-wide Git trust,
 - workflow source failures must distinguish invalid input, git resolution,
   repository access, materialization, archive/snapshot, and worker/source
   infrastructure failures,

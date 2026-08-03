@@ -566,58 +566,6 @@ impl DockerRuntimeManager {
             .collect())
     }
 
-    pub(super) async fn stop_container(
-        &self,
-        container_name: &str,
-    ) -> Result<(), RuntimeManagerError> {
-        let stop_output = Command::new(&self.config.docker_bin)
-            .arg("stop")
-            .arg("-t")
-            .arg("20")
-            .arg(container_name)
-            .output()
-            .await
-            .map_err(|error| {
-                RuntimeManagerError::StartupFailed(format!(
-                    "failed to stop docker runtime: {error}"
-                ))
-            })?;
-        if stop_output.status.success() {
-            return Ok(());
-        }
-
-        let stderr = String::from_utf8_lossy(&stop_output.stderr);
-        if stderr.contains("No such container") {
-            return Ok(());
-        }
-
-        let rm_output = Command::new(&self.config.docker_bin)
-            .arg("rm")
-            .arg("-f")
-            .arg(container_name)
-            .output()
-            .await
-            .map_err(|error| {
-                RuntimeManagerError::StartupFailed(format!(
-                    "failed to force-remove docker runtime: {error}"
-                ))
-            })?;
-        if rm_output.status.success() {
-            return Ok(());
-        }
-
-        let rm_stderr = String::from_utf8_lossy(&rm_output.stderr);
-        if rm_stderr.contains("No such container") {
-            return Ok(());
-        }
-
-        Err(RuntimeManagerError::StartupFailed(format!(
-            "docker stop failed: {}; docker rm failed: {}",
-            stderr.trim(),
-            rm_stderr.trim()
-        )))
-    }
-
     async fn wait_for_socket(
         &self,
         socket_path: &str,
@@ -637,35 +585,6 @@ impl DockerRuntimeManager {
             }
             sleep(Duration::from_millis(200)).await;
         }
-    }
-
-    pub(super) async fn container_exists(
-        &self,
-        container_name: &str,
-    ) -> Result<bool, RuntimeManagerError> {
-        let output = Command::new(&self.config.docker_bin)
-            .arg("inspect")
-            .arg("--type")
-            .arg("container")
-            .arg(container_name)
-            .output()
-            .await
-            .map_err(|error| {
-                RuntimeManagerError::StartupFailed(format!(
-                    "failed to inspect docker runtime {container_name}: {error}"
-                ))
-            })?;
-        if output.status.success() {
-            return Ok(true);
-        }
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        if stderr.contains("No such object") || stderr.contains("No such container") {
-            return Ok(false);
-        }
-        Err(RuntimeManagerError::StartupFailed(format!(
-            "docker inspect failed for {container_name}: {}",
-            stderr.trim()
-        )))
     }
 }
 
