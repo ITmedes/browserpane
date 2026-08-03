@@ -8,7 +8,10 @@ const DEFAULT_REQUIRED_PATHS = [
   'openapi/bpane-control-v1.yaml',
   'docs/BPANE-00151_MINIMAL_CI_VALIDATION_PLAN.md',
   'docs/VALIDATION_MATRIX.md',
+  'quality/coverage-baselines.json',
+  'scripts/check-coverage-baseline.mjs',
   'scripts/check-dependency-safety.mjs',
+  'scripts/run-rust-coverage.mjs',
   'scripts/validate.mjs',
   'security/dependency-exceptions.json',
   'security/dependency-exceptions.schema.json'
@@ -16,7 +19,7 @@ const DEFAULT_REQUIRED_PATHS = [
 
 const DEFAULT_PACKAGES = [
   ['code/web/bpane-admin', ['check', 'test', 'build']],
-  ['code/web/bpane-admin-unified', ['check', 'test', 'build']],
+  ['code/web/bpane-admin-unified', ['check', 'test', 'test:coverage', 'build']],
   ['code/web/bpane-client', ['check', 'test', 'test:coverage', 'build']],
   ['code/integrations/mcp-bridge', ['test', 'build']],
   ['code/integrations/recording-worker', ['build']],

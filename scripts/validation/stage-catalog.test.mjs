@@ -13,7 +13,9 @@ test('catalog exposes stable, unique fast and compose profiles', () => {
   assert.equal(new Set(full.map((stage) => stage.id)).size, full.length);
   assert.equal(full.length, fast.length + compose.length);
   assert.ok(fast.some((stage) => stage.id === 'dependency-safety'));
+  assert.ok(fast.some((stage) => stage.id === 'rust-coverage'));
   assert.ok(fast.some((stage) => stage.id === 'admin-new-test'));
+  assert.ok(fast.some((stage) => stage.id === 'admin-new-test-coverage'));
   assert.ok(compose.some((stage) => stage.id === 'compose-gateway-api'));
   assert.ok(compose.some((stage) => stage.id === 'compose-recording'));
 });

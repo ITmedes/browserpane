@@ -5,5 +5,11 @@ export default defineConfig({
     environment: 'jsdom',
     include: ['js/__tests__/**/*.test.ts'],
     globals: true,
+    coverage: {
+      provider: 'v8',
+      include: ['js/**/*.{ts,js}'],
+      reporter: ['text', 'json-summary'],
+      reportsDirectory: 'coverage',
+    },
   },
 });
