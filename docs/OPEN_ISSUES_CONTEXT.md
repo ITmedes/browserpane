@@ -79,7 +79,7 @@ Source check:
 | `#179` Control API conformance and compatibility | `ADMIN_NEW_API_COVERAGE.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md` | Foundation/Production lane | Canonical owner for OpenAPI lint, route/schema conformance, examples, and breaking-change policy. |
 | `#180` Open-source license/contribution/IP governance | `PRODUCT_PHASES_AND_RELEASE_GATES.md`, `RISK_REGISTER.md`, ADR 0004 | Production governance | Canonical owner for resolving license metadata and contribution/security/IP policy. |
 | `#184` Reduce representative compose validation wall time | `BPANE-00184_COMPOSE_VALIDATION_PERFORMANCE_PLAN.md`, `VALIDATION_MATRIX.md` | Foundation maintenance | Canonical owner for hosted compose sharding and timing evidence without reducing the #151 scenario baseline. |
-| `#185` Persist deterministic Docker build cache | `BPANE-00184_COMPOSE_VALIDATION_PERFORMANCE_PLAN.md`, `VALIDATION_MATRIX.md` | Foundation maintenance | Follow-up owner for BuildKit cache or pinned dependency-builder evaluation after #184; it must preserve coverage and cache trust boundaries. |
+| `#185` Persist deterministic Docker build cache | `BPANE-00185_CI_RUST_BUILDER_PLAN.md`, `BPANE-00184_COMPOSE_VALIDATION_PERFORMANCE_PLAN.md`, `VALIDATION_MATRIX.md` | Foundation maintenance | Follow-up owner for a deterministic GHCR Rust builder after #184; it must preserve coverage and cache trust boundaries. |
 
 ## Focused Work-Order Issue Matrix
 
@@ -205,6 +205,7 @@ shown as `closed #142`.
 | `ADMIN_NEW_STATUS.md` | `#153`, `#163`, `#171`, `#172`, closed `#142` |
 | `BPANE-00151_MINIMAL_CI_VALIDATION_PLAN.md` | closed `#151`, implemented Foundation validation baseline |
 | `BPANE-00184_COMPOSE_VALIDATION_PERFORMANCE_PLAN.md` | `#184`, implemented Foundation validation-performance slice; measured build-cache follow-up `#185` |
+| `BPANE-00185_CI_RUST_BUILDER_PLAN.md` | `#185`, active deterministic GHCR builder and compose-consumption slice |
 | `BPANE-00171_WORKFLOW_TEACH_MODE_PLAN.md` | `#171`, with dependencies on `#20`, `#21`, `#47`, `#71`, and `#172` |
 | `BPANE-00172_BPM_WORKFLOW_ENDPOINT_INTEGRATION_PLAN.md` | `#172`, with dependencies on `#28`, `#47`, `#66`, `#69`-`#72`, `#74`, `#76`, `#79`, `#80`, `#147`, `#150`, `#161`, `#162`, `#164`, `#174`, `#176`, `#179`, and `#171` |
 | `BPANE-00173_DELIVERY_GOVERNANCE_PLAN.md` | `#173` |

@@ -54,3 +54,44 @@ test('workflow policy rejects mutable, privileged, unbounded, and secret-bearing
   assert.ok(errors.some((error) => error.includes('pull_request_target')));
   assert.ok(errors.some((error) => error.includes('must not reference')));
 });
+
+test('workflow policy permits only guarded main-branch package publication', () => {
+  const publish = {
+    on: { pull_request: {}, push: { branches: ['main'] }, workflow_dispatch: {} },
+    permissions: { contents: 'read' },
+    jobs: {
+      publish: {
+        if: "github.event_name != 'pull_request'",
+        permissions: { contents: 'read', packages: 'write' },
+        'runs-on': 'ubuntu-24.04',
+        'timeout-minutes': 30,
+        steps: [],
+      },
+    },
+  };
+  assert.deepEqual(new GitHubWorkflowPolicyChecker().check('builder.yml', publish), []);
+
+  publish.jobs.publish.if = undefined;
+  const errors = new GitHubWorkflowPolicyChecker().check('builder.yml', publish);
+  assert.ok(errors.some((error) => error.includes('root permissions must be exactly')));
+});
+
+test('workflow policy permits read-only package consumers', () => {
+  const workflow = {
+    on: { workflow_dispatch: {} },
+    permissions: { contents: 'read' },
+    jobs: {
+      consume: {
+        permissions: { contents: 'read', packages: 'read' },
+        'runs-on': 'ubuntu-24.04',
+        'timeout-minutes': 20,
+        steps: [],
+      },
+    },
+  };
+  assert.deepEqual(new GitHubWorkflowPolicyChecker().check('compose.yml', workflow), []);
+
+  workflow.jobs.consume.permissions.contents = 'write';
+  const errors = new GitHubWorkflowPolicyChecker().check('compose.yml', workflow);
+  assert.ok(errors.some((error) => error.includes('package consumer permissions')));
+});
