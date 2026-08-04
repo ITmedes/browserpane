@@ -1,6 +1,6 @@
 # Consolidated Validation Matrix
 
-Revalidated against current package scripts: 2026-08-03
+Revalidated against current package scripts: 2026-08-04
 
 This matrix defines the available validation surfaces for product slices. Use
 `PRODUCT_PHASES_AND_RELEASE_GATES.md` to decide which evidence is required for
@@ -9,16 +9,16 @@ one important surface, but it is not the only delivery lane.
 
 ## Verified Baseline And Gaps
 
-The 2026-08-03 coverage ratchet records:
+The 2026-08-04 coverage ratchet records:
 
 - all non-ignored Rust workspace tests passed under `cargo llvm-cov`, with
-  54.88% line coverage on the canonical pinned Ubuntu runner and 56.25% on
+  54.88% line coverage on the canonical pinned Ubuntu runner and 56.88% on
   local macOS; the cross-platform floor is 54.8%,
 - browser-client tests pass on pinned Node 22/Linux with 92.88% lines, 92.88%
-  statements, 92.98% functions, and 87.70% branches across all maintained `js`
+  statements, 93.19% functions, and 87.57% branches across all maintained `js`
   sources; the cross-platform function floor is 92.9%,
-- admin-new's 279 tests pass with 88.09% lines, 90.13% statements, 92.78%
-  functions, and 74.34% branches across `src/lib`,
+- admin-new's 278 tests pass with 88.33% lines, 90.39% statements, 92.72%
+  functions, and 74.86% branches across `src/lib`,
 - MCP bridge has focused unit tests,
 - recording-worker and workflow-worker have build checks but no unit-test
   suites,
@@ -60,12 +60,12 @@ local stack and leaves it running for inspection. Smokes that temporarily
 change gateway admission limits restore the normal compose configuration before
 returning.
 
-Verified on 2026-08-03:
+Verified on 2026-08-04:
 
-- all 31 fast stages pass, including the Rust, browser-client, and admin-new
+- all 36 fast stages pass, including the Rust, browser-client, and admin-new
   coverage ratchets,
-- all nine compose stages pass in one uninterrupted run,
-- the compose gateway stage passes 16 default API and four docker-pool cases,
+- all 10 compose stages pass in one uninterrupted run,
+- the compose gateway stage passes 17 default API and four docker-pool cases,
 - representative admin-new, compatibility-admin, CLI, MCP, recording, and
   workflow admission journeys pass against the running stack.
 
@@ -78,7 +78,7 @@ in strict mode and binds them to the GitHub Actions app.
 
 `Compose / Representative compose smoke` runs on pushes to `main`, a weekday
 schedule, and manual dispatch. It is not a pull-request gate until hosted-runner
-reliability is demonstrated. The 60-minute job executes all nine representative
+reliability is demonstrated. The 60-minute job executes all 10 representative
 compose stages, captures only selected control-plane status/log tails after a
 failure, redacts credential and identity material before upload, and always
 removes BrowserPane containers and compose volumes.
@@ -434,6 +434,21 @@ cargo test --workspace
 cargo test -p bpane-gateway
 cargo test -p bpane-gateway --test compose_api_surface <target_test_name> -- --ignored --test-threads=1
 ```
+
+For session-control persistence changes, run the identical store contract
+against the in-memory reference and a migrated, schema-isolated Postgres store:
+
+```bash
+cargo test -p bpane-gateway session_store_contract_in_memory
+docker compose -f deploy/compose.yml up -d postgres
+BPANE_SESSION_STORE_CONTRACT_POSTGRES_URL=postgresql://browserpane:browserpane-dev@localhost:5433/browserpane cargo test -p bpane-gateway session_store_contract_postgres -- --ignored --test-threads=1
+```
+
+The Postgres fixture creates a unique `bpane_store_contract_*` schema, runs the
+normal gateway migrations there, and drops it after the contract completes.
+`scripts/run-gateway-compose-e2e.sh` runs this contract automatically for every
+non-stack suite, so the full local validator and hosted Compose workflow retain
+persisted-store parity coverage.
 
 For route/API contract changes, check:
 

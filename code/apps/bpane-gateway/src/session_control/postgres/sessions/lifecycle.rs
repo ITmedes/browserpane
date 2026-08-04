@@ -556,10 +556,9 @@ impl SessionRepository<'_> {
         principal: &AuthenticatedPrincipal,
         id: Uuid,
     ) -> Result<Option<StoredSession>, SessionStoreError> {
-        let current = self
-            .get_session_for_owner(principal, id)
-            .await?
-            .ok_or_else(|| SessionStoreError::NotFound(format!("session {id} not found")))?;
+        let Some(current) = self.get_session_for_owner(principal, id).await? else {
+            return Ok(None);
+        };
         if current.state == SessionLifecycleState::Stopped {
             return Err(SessionStoreError::Conflict(format!(
                 "session {id} is stopped; create a new session instead of releasing it"
@@ -640,11 +639,12 @@ impl SessionRepository<'_> {
                 SessionStoreError::Backend(format!("failed to update session state: {error}"))
             })?;
 
-        let stopped = row.as_ref().map(row_to_stored_session).transpose()?;
-        if stopped.is_some() {
+        let updated = row.as_ref().map(row_to_stored_session).transpose()?;
+        if updated.is_some() {
             self.promote_queued_project_sessions().await?;
+            return Ok(updated);
         }
-        Ok(stopped)
+        self.get_session_by_id(id).await
     }
 
     pub(in crate::session_control) async fn record_session_egress_usage(
