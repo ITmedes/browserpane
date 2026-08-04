@@ -330,7 +330,10 @@ async fn creates_lists_gets_and_stops_a_session_resource() {
     let issued = response_json(issue_response).await;
     assert_eq!(issued["session_id"], session_id);
     assert_eq!(issued["token_type"], "session_connect_ticket");
-    assert!(issued["token"].as_str().unwrap().starts_with("v1."));
+    assert!(issued["token"]
+        .as_str()
+        .unwrap()
+        .starts_with("v2.session-connect."));
     assert!(issued["expires_at"].is_string());
     assert_eq!(issued["connect"]["gateway_url"], "https://localhost:4433");
     assert_eq!(issued["connect"]["transport_path"], "/session");

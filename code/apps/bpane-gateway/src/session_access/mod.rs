@@ -13,6 +13,7 @@ mod tests {
 
     use uuid::Uuid;
 
+    use super::admin_events::AdminEventAccessTokenError;
     use super::automation::SessionAutomationAccessTokenError;
     use super::*;
     use crate::auth::AuthenticatedPrincipal;
@@ -28,12 +29,13 @@ mod tests {
     }
 
     #[test]
-    fn connect_and_automation_credentials_reject_cross_purpose_replay() {
+    fn all_credentials_reject_cross_purpose_replay() {
         let root_secret = b"shared-root-secret".to_vec();
         let connect =
             SessionConnectTicketManager::new(root_secret.clone(), Duration::from_secs(300));
         let automation =
-            SessionAutomationAccessTokenManager::new(root_secret, Duration::from_secs(300));
+            SessionAutomationAccessTokenManager::new(root_secret.clone(), Duration::from_secs(300));
+        let admin_events = AdminEventAccessTokenManager::new(root_secret, Duration::from_secs(60));
         let session_id = Uuid::now_v7();
         let connect_ticket = connect
             .issue_ticket(session_id, &principal())
@@ -43,14 +45,31 @@ mod tests {
             .issue_token(session_id, &principal())
             .unwrap()
             .token;
+        let admin_event_token = admin_events.issue_token(&principal()).unwrap().token;
 
         assert_eq!(
             connect.validate_ticket(&automation_token),
             Err(SessionConnectTicketError::WrongPurpose)
         );
         assert_eq!(
+            connect.validate_ticket(&admin_event_token),
+            Err(SessionConnectTicketError::WrongPurpose)
+        );
+        assert_eq!(
             automation.validate_token(&connect_ticket),
             Err(SessionAutomationAccessTokenError::WrongPurpose)
+        );
+        assert_eq!(
+            automation.validate_token(&admin_event_token),
+            Err(SessionAutomationAccessTokenError::WrongPurpose)
+        );
+        assert_eq!(
+            admin_events.validate_token(&connect_ticket),
+            Err(AdminEventAccessTokenError::WrongPurpose)
+        );
+        assert_eq!(
+            admin_events.validate_token(&automation_token),
+            Err(AdminEventAccessTokenError::WrongPurpose)
         );
     }
 }
