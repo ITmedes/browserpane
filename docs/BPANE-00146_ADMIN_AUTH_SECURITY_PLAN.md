@@ -47,13 +47,13 @@ rejected without exposing token details.
 
 1. Add a framework-neutral `@browserpane/admin-auth` package consumed by both
    admin applications; keep route/UI composition in each app.
-2. Use the maintained `jose` library for asymmetric ID-token signature and
-   claim verification against OIDC discovery and JWKS.
+2. Use the OpenID-certified, provider-neutral `oauth4webapi` library for OIDC
+   discovery, PKCE, authorization-response validation, token grants, ID-token
+   signature/claim validation, and signing-key rotation.
 3. Validate discovery issuer, token issuer, audience/authorized party, expiry,
    nonce, and bounded PKCE transaction age.
-4. Persist access and ID tokens only in per-tab session storage; keep refresh
-   tokens in memory and fall back to OIDC SSO after a page reload when refresh
-   is no longer possible.
+4. Keep access, ID, and refresh tokens in memory only; persist only the bounded
+   PKCE transaction and use the provider SSO redirect after a page reload.
 5. Make invalid callback, invalid stored identity, failed refresh, logout, and
    API authentication failure clear local state consistently.
 6. Apply CSP and standard browser security headers to `/admin/` and
@@ -83,24 +83,23 @@ rejected without exposing token details.
   be replayed in the same tab.
 - Require the returned state and verified ID-token nonce to match.
 
-### Identity Verification
+### Protocol And Identity Verification
 
-- Require discovery `issuer` to match configured issuer after trailing-slash
-  normalization.
-- Fetch `jwks_uri` with `no-store` and cache the parsed key set only in memory.
-- Accept asymmetric signing algorithms supported by the implementation; never
-  accept `none` or shared-secret ID-token algorithms.
-- Verify signature, issuer, audience, expiry, and authorized party where
-  multiple audiences are present.
-- Map only validated string identity claims into the admin snapshot.
+- Delegate discovery, PKCE, authorization-response, token-endpoint response,
+  ID-token signature/claim validation, and JWKS rotation to `oauth4webapi`.
+- Require the processed response to contain a validated ID token and map only
+  validated string identity claims into the admin snapshot.
+- Keep BrowserPane code focused on transaction ownership, token lifetime,
+  application snapshots, redirects, and failure recovery.
 
 ### Browser Token Storage
 
-- Access and ID tokens may remain in `sessionStorage` because both current
-  applications are static SPAs and must survive ordinary navigation/reload.
-- Refresh tokens remain in memory and are omitted from persisted JSON.
-- Restored ID tokens are reverified before claims or authenticated state are
-  exposed.
+- Access, ID, and refresh tokens remain in memory and are never written to web
+  storage.
+- A page reload performs a normal OIDC authorization redirect; an existing IdP
+  session normally completes that round trip without another credential prompt.
+- Only the short-lived PKCE state, nonce, verifier, redirect URI, and creation
+  time are written to per-tab `sessionStorage`.
 - Removing all JavaScript-readable bearer material requires a future BFF and
   is not implied by this slice.
 
@@ -119,13 +118,14 @@ rejected without exposing token details.
 ### Slice 1: Shared Auth Core
 
 - Add the package and replace duplicated app modules with narrow re-exports.
-- Add OIDC discovery and wire validation, nonce-aware transaction state, ID
-  token verifier, and storage policy.
+- Add provider-neutral OIDC protocol integration, nonce-aware transaction
+  state, validated-claim mapping, and memory-only token policy.
 - Add package-level tests for positive and negative security cases.
 
 ### Slice 2: Admin Integration And Recovery
 
-- Initialize and reverify restored sessions asynchronously in both shells.
+- Initialize both shells asynchronously and recover page reloads through the
+  normal OIDC SSO redirect instead of restoring bearer material.
 - Align automatic login, invalid-auth recovery, refresh failure, and logout.
 - Keep route-specific account presentation and API clients unchanged.
 
@@ -147,25 +147,27 @@ rejected without exposing token details.
 
 - PKCE URL contains S256 challenge, state, and nonce.
 - Missing, mismatched, expired, or malformed transaction state is rejected.
-- Valid asymmetric ID token passes signature, issuer, audience, expiry, nonce,
-  and authorized-party checks.
+- Valid asymmetric ID token passes library-owned signature, issuer, audience,
+  expiry, nonce, and authorized-party checks.
 - Unsigned, wrong-key, wrong-issuer, wrong-audience, wrong-nonce, expired, and
   symmetric-algorithm tokens fail.
-- Persisted token JSON excludes refresh tokens and malformed storage is cleared.
+- Web storage contains no access, ID, or refresh token and malformed
+  transaction storage is cleared.
 - Refresh rotation remains available in memory and failure clears auth state.
 
 ### Integration
 
 - Both apps compile and execute against the same auth package.
 - Successful login exposes only verified identity claims.
-- Restored sessions are reverified before routes render.
+- Reloaded routes complete an OIDC SSO round trip before protected content
+  renders.
 - Invalid authentication triggers one bounded redirect instead of a loop.
 - nginx contract tests prove both admin locations carry the same headers.
 
 ### Smoke And E2E
 
 - Complete Keycloak login for `/admin/` and `/admin-new/`.
-- Confirm persisted token state contains no refresh token.
+- Confirm web storage contains no access, ID, or refresh token.
 - Exercise logout and automatic SSO login recovery.
 - Exercise expired/invalid local auth recovery without an infinite redirect.
 - Check live CSP, content-type, referrer, frame, and permissions headers.
@@ -186,7 +188,7 @@ rejected without exposing token details.
 - Identity display never consumes unverified JWT payloads.
 - State, nonce, issuer, audience, expiry, signature, and transaction age have
   positive and negative coverage.
-- Persisted admin token state contains no refresh token.
+- Web storage contains no admin access, ID, or refresh token.
 - Both routes recover consistently from expiry and invalid authentication.
 - Both routes deliver the agreed browser security headers.
 - Unit, integration, coverage, build, compose, and browser smoke checks pass.
@@ -201,7 +203,8 @@ rejected without exposing token details.
 4. Fetch `/admin/` and `/admin-new/` and assert the complete security-header
    contract.
 5. Sign in to both routes through Keycloak and confirm authenticated content.
-6. Inspect per-tab storage and confirm no refresh token is persisted.
+6. Inspect per-tab storage and confirm no access, ID, or refresh token is
+   persisted.
 7. Log out, sign in again through existing SSO, and exercise invalid/expired
    local state recovery.
 8. Run compatibility admin session and admin-new dashboard/session smokes.
@@ -211,6 +214,11 @@ rejected without exposing token details.
 ## Evidence Record
 
 - Plan and issue alignment: pending first implementation commit.
+- Library audit: `oidc-client-ts` and `keycloak-js` were rejected as the core
+  abstraction because the former does not verify ID-token signatures in its
+  current browser response validator and the latter is provider-specific.
+  `oauth4webapi` owns the standards-sensitive protocol implementation; local
+  code owns BrowserPane integration and memory-only state.
 - Shared auth validation: pending.
 - Admin integration validation: pending.
 - Header contract validation: pending.
