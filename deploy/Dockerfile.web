@@ -9,18 +9,24 @@ RUN npm run build
 
 # Stage 2: Build the bpane-admin console
 FROM node:22-alpine AS build-admin
+WORKDIR /bpane-admin-auth
+COPY code/web/bpane-admin-auth/package.json ./
+COPY code/web/bpane-admin-auth/src ./src
 WORKDIR /admin
 ENV BPANE_ADMIN_BASE_PATH=/admin
-COPY code/web/bpane-admin/package.json code/web/bpane-admin/package-lock.json* ./
+COPY code/web/bpane-admin/package.json code/web/bpane-admin/package-lock.json* code/web/bpane-admin/.npmrc ./
 RUN npm ci
 COPY code/web/bpane-admin/ ./
 RUN npm run build
 
 # Stage 3: Build the new route-backed bpane-admin console
 FROM node:22-alpine AS build-admin-unified
+WORKDIR /bpane-admin-auth
+COPY code/web/bpane-admin-auth/package.json ./
+COPY code/web/bpane-admin-auth/src ./src
 WORKDIR /admin-unified
 ENV BPANE_ADMIN_BASE_PATH=/admin-new
-COPY code/web/bpane-admin-unified/package.json code/web/bpane-admin-unified/package-lock.json* ./
+COPY code/web/bpane-admin-unified/package.json code/web/bpane-admin-unified/package-lock.json* code/web/bpane-admin-unified/.npmrc ./
 RUN npm ci
 COPY code/web/bpane-admin-unified/ ./
 RUN npm run build

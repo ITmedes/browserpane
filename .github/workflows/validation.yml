@@ -127,6 +127,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - label: Admin auth
+            lockfile: code/web/bpane-admin-auth/package-lock.json
+            stages: --stage admin-auth-install --stage admin-auth-check --stage admin-auth-test --stage admin-auth-test-coverage --stage admin-auth-build
           - label: Compatibility admin
             lockfile: code/web/bpane-admin/package-lock.json
             stages: --stage admin-install --stage admin-check --stage admin-test --stage admin-build

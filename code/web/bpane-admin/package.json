@@ -10,6 +10,9 @@
     "check": "svelte-kit sync && tsc --noEmit",
     "test": "vitest run"
   },
+  "dependencies": {
+    "@browserpane/admin-auth": "file:../bpane-admin-auth"
+  },
   "devDependencies": {
     "@sveltejs/adapter-static": "^3.0.10",
     "@sveltejs/kit": "^2.59.0",
