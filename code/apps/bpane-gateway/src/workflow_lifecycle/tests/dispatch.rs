@@ -387,14 +387,17 @@ async fn queues_waiting_run_when_project_workflow_quota_is_exhausted() {
 
     manager.reconcile_waiting_runs().await.unwrap();
 
-    for _ in 0..200 {
-        if capture_file.exists() {
-            break;
+    let queued_run_id = queued_run.id.to_string();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if fs::read_to_string(&capture_file)
+                .is_ok_and(|capture| capture.contains(&queued_run_id))
+            {
+                break;
+            }
+            sleep(Duration::from_millis(20)).await;
         }
-        sleep(Duration::from_millis(20)).await;
-    }
-    assert!(capture_file.exists());
-    assert!(fs::read_to_string(&capture_file)
-        .unwrap()
-        .contains(&queued_run.id.to_string()));
+    })
+    .await
+    .expect("queued workflow run should be written to the worker capture");
 }
