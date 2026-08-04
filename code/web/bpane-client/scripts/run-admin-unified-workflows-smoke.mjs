@@ -154,7 +154,6 @@ function sourceTreeSelector(path) {
 
 async function verifyResponsiveDetailLayout(page, options) {
   await page.setViewportSize({ width: 390, height: 900 });
-  await page.reload({ waitUntil: 'domcontentloaded' });
   await page.getByTestId('workflow-definition-detail-route').waitFor({
     state: 'visible',
     timeout: options.connectTimeoutMs,
