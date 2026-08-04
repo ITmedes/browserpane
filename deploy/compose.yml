@@ -131,6 +131,8 @@ services:
       --public-gateway-url https://localhost:4433
       --mcp-bridge-control-url ${BPANE_GATEWAY_MCP_BRIDGE_CONTROL_URL:-http://mcp-bridge:8931/control-session}
       --mcp-bridge-control-token ${BPANE_MCP_BRIDGE_CONTROL_TOKEN:-browserpane-dev-mcp-bridge-control-token}
+      --readiness-check-timeout-secs ${BPANE_GATEWAY_READINESS_CHECK_TIMEOUT_SECS:-3}
+      --shutdown-drain-timeout-secs ${BPANE_GATEWAY_SHUTDOWN_DRAIN_TIMEOUT_SECS:-15}
       --cert /certs/cert.pem
       --key /certs/cert.key
       --workflow-worker-docker-bin ${BPANE_WORKFLOW_WORKER_DOCKER_BIN:-docker}
@@ -205,6 +207,12 @@ services:
       - "4433:4433/udp"
       - "4433:4433/tcp"
       - "8932:8932/tcp"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8932/readyz"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
     volumes:
       - agent-socket:/run/bpane
       - /var/run/docker.sock:/var/run/docker.sock
@@ -249,8 +257,10 @@ services:
     volumes:
       - ../dev/certs:/usr/share/nginx/html/certs:ro
     depends_on:
-      - gateway
-      - keycloak
+      gateway:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
     networks:
       - bpane-internal
 
@@ -272,9 +282,12 @@ services:
     ports:
       - "8931:8931"
     depends_on:
-      - gateway
-      - host
-      - keycloak
+      gateway:
+        condition: service_healthy
+      host:
+        condition: service_started
+      keycloak:
+        condition: service_started
     networks:
       - bpane-internal
 
