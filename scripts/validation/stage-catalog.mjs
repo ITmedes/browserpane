@@ -76,6 +76,8 @@ export class ValidationStageCatalog {
       this.#node('rust-coverage', 'Run Rust coverage ratchet', root,
         ['scripts/run-rust-coverage.mjs'], 1800)
     ];
+    stages.push(...this.#npmPackage(root, 'admin-auth', 'code/web/bpane-admin-auth',
+      ['check', 'test', 'test:coverage', 'build']));
     stages.push(...this.#npmPackage(root, 'admin', 'code/web/bpane-admin',
       ['check', 'test', 'build']));
     stages.push(...this.#npmPackage(root, 'admin-new', 'code/web/bpane-admin-unified',

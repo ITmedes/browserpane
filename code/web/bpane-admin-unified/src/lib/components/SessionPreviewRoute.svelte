@@ -3,7 +3,7 @@
   import { LogOut, RefreshCw, Unplug } from '@lucide/svelte';
   import { AuthConfigClient, type AuthConfig } from '$lib/auth/auth-config';
   import { BrowserTokenStore } from '$lib/auth/browser-token-store';
-  import { OidcAuthClient } from '$lib/auth/oidc-auth-client';
+  import { OidcAuthClient, OidcAuthClientFactory } from '$lib/auth/oidc-auth-client';
   import type { AuthSnapshot } from '$lib/auth/oidc-types';
   import type { UnifiedAdminContext } from '$lib/auth/unified-admin-context';
   import { SessionPreviewConnector } from '$lib/session-preview/session-preview-connector';
@@ -70,13 +70,14 @@
         return;
       }
 
-      authClient = new OidcAuthClient({
+      authClient = OidcAuthClientFactory.create({
         config,
         tokenStore: new BrowserTokenStore(window.sessionStorage),
       });
       if (config.mode === 'oidc') {
         await completeLoginRedirect();
       }
+      await authClient.initialize();
       auth = authClient.getSnapshot();
       if (!auth.authenticated && config.mode === 'oidc') {
         await login();
