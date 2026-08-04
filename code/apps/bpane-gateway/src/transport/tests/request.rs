@@ -54,6 +54,36 @@ fn extract_token_from_path() {
     assert_eq!(extract_token("/session?other=1"), None);
 }
 
+#[test]
+fn sanitizes_request_targets_before_logging() {
+    assert_eq!(
+        sanitized_request_path_for_log(
+            "/session?access_token=owner-secret&session_id=0195bf4d-d091-7000-8000-000000000001"
+        ),
+        "/session"
+    );
+    assert_eq!(
+        sanitized_request_path_for_log("/session?session_ticket=scoped-secret"),
+        "/session"
+    );
+    assert_eq!(
+        sanitized_request_path_for_log("/session#fragment-secret"),
+        "/session"
+    );
+    assert_eq!(
+        sanitized_request_path_for_log("/session\r\nforged-log?token=secret"),
+        "/sessionforged-log"
+    );
+    assert_eq!(
+        sanitized_request_path_for_log("not-a-path?token=secret"),
+        "/"
+    );
+    assert_eq!(
+        sanitized_request_path_for_log(&format!("/{}?token=secret", "a".repeat(300))).len(),
+        256
+    );
+}
+
 #[tokio::test]
 async fn validate_request_path_accepts_valid_token() {
     let validator = AuthValidator::from_hmac_secret(b"transport-request-secret".to_vec());

@@ -27,6 +27,10 @@ pub struct AuthConfig {
     #[arg(long, default_value_t = 300)]
     pub session_ticket_ttl_secs: u64,
 
+    /// Lifetime for minted admin-event access tokens.
+    #[arg(long, default_value_t = 60)]
+    pub admin_event_token_ttl_secs: u64,
+
     /// Write the generated legacy dev token to this file.
     /// Ignored when OIDC auth is enabled.
     #[arg(long)]

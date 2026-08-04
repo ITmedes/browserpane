@@ -19,7 +19,9 @@ use crate::recording::{
     RecordingArtifactStore, RecordingObservability, SessionRecordingPlaybackResource,
 };
 use crate::recording_lifecycle::RecordingLifecycleManager;
-use crate::session_access::{SessionAutomationAccessTokenManager, SessionConnectTicketManager};
+use crate::session_access::{
+    AdminEventAccessTokenManager, SessionAutomationAccessTokenManager, SessionConnectTicketManager,
+};
 use crate::session_control::{
     BrowserContextPersistenceMode, CreateSessionRequest, EgressCustomCaConfig,
     EgressDiagnosticsResource, EgressProfileState, EgressProxyConfig,
@@ -46,6 +48,7 @@ pub(crate) struct ApiServerConfig {
     pub bind_addr: SocketAddr,
     pub registry: Arc<SessionRegistry>,
     pub auth_validator: Arc<AuthValidator>,
+    pub admin_event_access_token_manager: Arc<AdminEventAccessTokenManager>,
     pub connect_ticket_manager: Arc<SessionConnectTicketManager>,
     pub automation_access_token_manager: Arc<SessionAutomationAccessTokenManager>,
     pub session_store: SessionStore,
@@ -70,6 +73,7 @@ pub(crate) struct ApiServerConfig {
 pub(super) struct ApiState {
     pub(super) registry: Arc<SessionRegistry>,
     pub(super) auth_validator: Arc<AuthValidator>,
+    pub(super) admin_event_access_token_manager: Arc<AdminEventAccessTokenManager>,
     pub(super) connect_ticket_manager: Arc<SessionConnectTicketManager>,
     pub(super) automation_access_token_manager: Arc<SessionAutomationAccessTokenManager>,
     pub(super) session_store: SessionStore,

@@ -1,16 +1,13 @@
 use std::time::Duration;
 
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use base64::Engine;
 use chrono::{DateTime, Utc};
-use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
-use sha2::Sha256;
 use uuid::Uuid;
 
 use crate::auth::AuthenticatedPrincipal;
-
-type AccessTokenHmacSha256 = Hmac<Sha256>;
+use crate::session_access::token_codec::{
+    PurposeBoundTokenCodec, PurposeBoundTokenError, TokenPurpose,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SessionAutomationAccessTokenClaims {
@@ -30,13 +27,14 @@ pub struct IssuedSessionAutomationAccessToken {
 
 #[derive(Debug, Clone)]
 pub struct SessionAutomationAccessTokenManager {
-    secret: Vec<u8>,
+    codec: PurposeBoundTokenCodec,
     ttl: Duration,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SessionAutomationAccessTokenError {
     Malformed,
+    WrongPurpose,
     InvalidSignature,
     Expired,
     InvalidPayload,
@@ -46,6 +44,7 @@ impl std::fmt::Display for SessionAutomationAccessTokenError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Malformed => write!(f, "malformed session automation access token"),
+            Self::WrongPurpose => write!(f, "wrong session automation access token purpose"),
             Self::InvalidSignature => {
                 write!(f, "invalid session automation access token signature")
             }
@@ -59,7 +58,10 @@ impl std::error::Error for SessionAutomationAccessTokenError {}
 
 impl SessionAutomationAccessTokenManager {
     pub fn new(secret: Vec<u8>, ttl: Duration) -> Self {
-        Self { secret, ttl }
+        Self {
+            codec: PurposeBoundTokenCodec::new(&secret, TokenPurpose::SessionAutomation),
+            ttl,
+        }
     }
 
     pub fn issue_token(
@@ -77,12 +79,8 @@ impl SessionAutomationAccessTokenManager {
             client_id: principal.client_id.clone(),
             expires_at_unix: expires_at.timestamp(),
         };
-        let payload = serde_json::to_vec(&claims)
-            .map_err(|_| SessionAutomationAccessTokenError::InvalidPayload)?;
-        let payload_encoded = URL_SAFE_NO_PAD.encode(&payload);
-        let signature_encoded = URL_SAFE_NO_PAD.encode(self.sign(&payload)?);
         Ok(IssuedSessionAutomationAccessToken {
-            token: format!("v1.{payload_encoded}.{signature_encoded}"),
+            token: self.codec.encode(&claims).map_err(map_codec_error)?,
             expires_at,
             claims,
         })
@@ -92,44 +90,23 @@ impl SessionAutomationAccessTokenManager {
         &self,
         token: &str,
     ) -> Result<SessionAutomationAccessTokenClaims, SessionAutomationAccessTokenError> {
-        let mut parts = token.split('.');
-        let version = parts
-            .next()
-            .ok_or(SessionAutomationAccessTokenError::Malformed)?;
-        let payload_encoded = parts
-            .next()
-            .ok_or(SessionAutomationAccessTokenError::Malformed)?;
-        let signature_encoded = parts
-            .next()
-            .ok_or(SessionAutomationAccessTokenError::Malformed)?;
-        if parts.next().is_some() || version != "v1" {
-            return Err(SessionAutomationAccessTokenError::Malformed);
-        }
-
-        let payload = URL_SAFE_NO_PAD
-            .decode(payload_encoded)
-            .map_err(|_| SessionAutomationAccessTokenError::Malformed)?;
-        let signature = URL_SAFE_NO_PAD
-            .decode(signature_encoded)
-            .map_err(|_| SessionAutomationAccessTokenError::Malformed)?;
-        let expected_signature = self.sign(&payload)?;
-        if signature != expected_signature {
-            return Err(SessionAutomationAccessTokenError::InvalidSignature);
-        }
-
-        let claims: SessionAutomationAccessTokenClaims = serde_json::from_slice(&payload)
-            .map_err(|_| SessionAutomationAccessTokenError::InvalidPayload)?;
+        let claims: SessionAutomationAccessTokenClaims =
+            self.codec.decode(token).map_err(map_codec_error)?;
         if Utc::now().timestamp() > claims.expires_at_unix {
             return Err(SessionAutomationAccessTokenError::Expired);
         }
         Ok(claims)
     }
+}
 
-    fn sign(&self, payload: &[u8]) -> Result<Vec<u8>, SessionAutomationAccessTokenError> {
-        let mut mac = AccessTokenHmacSha256::new_from_slice(&self.secret)
-            .map_err(|_| SessionAutomationAccessTokenError::InvalidPayload)?;
-        mac.update(payload);
-        Ok(mac.finalize().into_bytes().to_vec())
+fn map_codec_error(error: PurposeBoundTokenError) -> SessionAutomationAccessTokenError {
+    match error {
+        PurposeBoundTokenError::Malformed => SessionAutomationAccessTokenError::Malformed,
+        PurposeBoundTokenError::WrongPurpose => SessionAutomationAccessTokenError::WrongPurpose,
+        PurposeBoundTokenError::InvalidSignature => {
+            SessionAutomationAccessTokenError::InvalidSignature
+        }
+        PurposeBoundTokenError::InvalidPayload => SessionAutomationAccessTokenError::InvalidPayload,
     }
 }
 
@@ -183,10 +160,7 @@ mod tests {
             .unwrap();
         let mut claims = manager.validate_token(&issued.token).unwrap();
         claims.expires_at_unix = Utc::now().timestamp() - 1;
-        let payload = serde_json::to_vec(&claims).unwrap();
-        let payload_encoded = URL_SAFE_NO_PAD.encode(&payload);
-        let signature_encoded = URL_SAFE_NO_PAD.encode(manager.sign(&payload).unwrap());
-        let expired = format!("v1.{payload_encoded}.{signature_encoded}");
+        let expired = manager.codec.encode(&claims).unwrap();
         assert_eq!(
             manager.validate_token(&expired),
             Err(SessionAutomationAccessTokenError::Expired)

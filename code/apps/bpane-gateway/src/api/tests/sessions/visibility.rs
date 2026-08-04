@@ -9,6 +9,7 @@ async fn scopes_session_resources_to_the_authenticated_owner() {
     let state = Arc::new(ApiState {
         registry: Arc::new(SessionRegistry::new(10, false)),
         auth_validator,
+        admin_event_access_token_manager: test_admin_event_access_token_manager(),
         connect_ticket_manager: Arc::new(SessionConnectTicketManager::new(
             vec![5; 32],
             Duration::from_secs(300),
@@ -84,6 +85,7 @@ async fn rejects_session_scoped_runtime_routes_for_unknown_or_foreign_sessions_b
     let state = Arc::new(ApiState {
         registry: Arc::new(SessionRegistry::new(10, false)),
         auth_validator,
+        admin_event_access_token_manager: test_admin_event_access_token_manager(),
         connect_ticket_manager: Arc::new(SessionConnectTicketManager::new(
             vec![5; 32],
             Duration::from_secs(300),

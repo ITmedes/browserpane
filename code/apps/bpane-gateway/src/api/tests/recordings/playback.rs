@@ -11,6 +11,7 @@ async fn playback_manifest_and_export_bundle_follow_ready_segments() {
     let state = Arc::new(ApiState {
         registry: Arc::new(SessionRegistry::new(10, false)),
         auth_validator,
+        admin_event_access_token_manager: test_admin_event_access_token_manager(),
         connect_ticket_manager: Arc::new(SessionConnectTicketManager::new(
             vec![5; 32],
             Duration::from_secs(300),

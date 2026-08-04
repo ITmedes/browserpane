@@ -6,6 +6,8 @@ use crate::session_access::{SessionConnectTicketError, SessionConnectTicketManag
 use crate::session_control::{session_project_policy, SessionStore, StoredSession};
 use crate::session_hub::BrowserClientRole;
 
+const MAX_LOG_PATH_CHARS: usize = 256;
+
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum RequestValidationError {
     MissingCredential,
@@ -83,6 +85,29 @@ pub(super) async fn validate_request_path(
                 transport_policy,
             })
         }
+    }
+}
+
+pub(super) fn sanitized_request_path_for_log(request_target: &str) -> String {
+    let path = request_target
+        .split('?')
+        .next()
+        .unwrap_or_default()
+        .split('#')
+        .next()
+        .unwrap_or_default();
+    if !path.starts_with('/') {
+        return "/".to_string();
+    }
+    let sanitized: String = path
+        .chars()
+        .filter(|character| !character.is_control())
+        .take(MAX_LOG_PATH_CHARS)
+        .collect();
+    if sanitized.is_empty() {
+        "/".to_string()
+    } else {
+        sanitized
     }
 }
 

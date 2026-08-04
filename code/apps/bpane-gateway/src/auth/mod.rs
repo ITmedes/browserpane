@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use serde::{Deserialize, Serialize};
+
 mod hmac;
 mod oidc;
 
@@ -30,13 +32,13 @@ pub struct AuthenticatedPrincipal {
     pub safe_claims: AuthenticatedPrincipalClaims,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AuthenticatedPrincipalClaims {
     pub groups: Vec<String>,
     pub claims: Vec<AuthenticatedPrincipalClaimValue>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AuthenticatedPrincipalClaimValue {
     pub name: String,
     pub value: String,

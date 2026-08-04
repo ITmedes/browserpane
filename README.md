@@ -447,14 +447,19 @@ console while unified-admin parity is tracked in
 
 ### Session Runtime And Delegation
 
-The gateway also exposes a bearer-protected realtime WebSocket for owner-scoped
-snapshot updates:
+The gateway also exposes an owner-scoped realtime WebSocket for snapshot
+updates:
 
+- `POST /api/v1/admin/events/access-tokens`
 - `GET /api/v1/admin/events`
 
-The legacy `/admin/` console consumes this stream. `/admin-new/` currently
-loads route data through the HTTP clients; its route-backed observability/event
-surface remains part of [issue #156](https://github.com/ITmedes/browserpane/issues/156).
+The browser mints a short-lived `admin_event_access_token` through the
+bearer-authenticated POST, opens the WebSocket without URL credentials, and
+sends the scoped token in its first message. Each reconnect mints a fresh
+token. The legacy `/admin/` console consumes this stream. `/admin-new/`
+currently loads route data through the HTTP clients; its route-backed
+observability/event surface remains part of
+[issue #156](https://github.com/ITmedes/browserpane/issues/156).
 
 The same frozen API surface also includes session-scoped runtime routes:
 
