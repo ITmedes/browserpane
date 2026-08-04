@@ -96,7 +96,12 @@ Current product shape:
   - `recording/observability.rs`: gateway-local counters/timestamps for recording finalization, playback export generation, and retention passes.
   - `recording/retention.rs`: periodic cleanup of completed recording artifacts after the session-scoped retention window expires; it clears artifact refs but preserves recording segment metadata.
   - `workflow_lifecycle.rs`: control-plane launch/supervision for workflow workers. The gateway can auto-start Playwright workflow workers as short-lived Docker jobs, persist run-worker assignments, fail stale active runs after restart instead of leaving them orphaned, and manage awaiting-input runtime hold/release semantics for paused workflow runs.
-  - `workflow_event_delivery/`: owner-scoped workflow event subscriptions, signed outbound webhook delivery, retry/backoff, and persisted delivery diagnostics.
+  - `workflow_event_delivery/`: owner-scoped workflow event subscriptions,
+    signed outbound webhook delivery, retry/backoff, and persisted delivery
+    diagnostics. Its destination policy uses standard URL/DNS/HTTP facilities,
+    checks every resolved address, pins approved DNS answers, disables redirects
+    and implicit proxies, and permits non-public/HTTP receivers only through
+    repeatable exact-origin deployment configuration.
   - `workflow/observability.rs`: gateway-local counters/timestamps for workflow event delivery, produced-file uploads, and workflow retention passes.
   - `workflow/retention.rs`: periodic cleanup of retained workflow logs and structured outputs after the configured workflow retention windows expire.
   - `runtime_manager.rs`: current `SessionManager` backend implementation; supports `static_single`, `docker_single`, and `docker_pool`. Local compose defaults to `docker_pool` for browser-session testing. Docker-backed workers carry a session id plus explicit session data paths for Chromium profile, uploads, and downloads. Reusable browser contexts mount a context-scoped Chromium profile volume while keeping upload/download/session-file data session-scoped, and the runtime admits only one active writer per reusable context. Docker-backed browser-context cloning, export, and import package profile volume data through the session manager boundary. Docker runtime assignments are persisted/reconciled through Postgres on gateway restart.

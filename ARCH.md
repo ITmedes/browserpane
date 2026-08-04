@@ -350,6 +350,13 @@ service.
   - persists owner-scoped outbound webhook subscriptions
   - signs lifecycle deliveries and records attempt diagnostics
   - preserves lifecycle ordering across `created`, `running`, `awaiting_input`, `resumed`, terminal states, and retries
+  - parses and canonicalizes targets with the URL Standard implementation,
+    resolves and classifies every IPv4/IPv6 answer, and revalidates persisted
+    destinations before each attempt
+  - pins approved DNS answers into a per-delivery `reqwest` client while
+    retaining the original host for HTTP Host and TLS certificate verification
+  - disables redirects and implicit system proxies; public HTTPS is the default,
+    with repeatable exact-origin exceptions for deployment-controlled receivers
 
 ### bpane-client
 

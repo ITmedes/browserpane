@@ -1,7 +1,7 @@
 # Consolidated Implementation Work Order
 
 Created: 2026-07-07
-Revalidated: 2026-07-31
+Revalidated: 2026-08-04
 
 This file preserves the detailed rationale and topic inventory across the
 active `docs/` workspace. It is broader than the review cleanup plan: it maps
@@ -121,7 +121,7 @@ Validation:
 
 Tier: P0.
 
-Status: implemented and validated by #146; awaiting merge.
+Status: implemented and merged by #146 through PR #190.
 
 Why next:
 
@@ -150,6 +150,8 @@ Validation:
 
 Tier: P0/P1.
 
+Status: implemented and validated by #147; under review.
+
 Why here:
 
 - It is a high-risk network boundary.
@@ -158,17 +160,23 @@ Why here:
 
 Scope:
 
-- parse `target_url` with URL semantics,
-- reject loopback, link-local, private, multicast, and unspecified IP ranges,
-- disable redirects by default,
-- add optional allowlist configuration for enterprise deployments,
-- document remaining DNS-rebinding tradeoffs.
+- parse and canonicalize `target_url` with the `url` crate,
+- reject every non-public answer by default, including loopback, link-local,
+  private, multicast, unspecified, shared, documentation, benchmarking, and
+  reserved addresses,
+- resolve immediately before dispatch and pin approved answers into `reqwest`,
+- disable redirects and implicit system proxy discovery,
+- permit controlled HTTP/non-public receivers only through exact-origin
+  deployment configuration.
 
 Validation:
 
-- URL/IP-range unit tests,
-- redirect rejection tests,
-- API validation tests for bad subscription URLs.
+- 21 focused URL, address, DNS, redirect, API, dispatch, signing, retry, and
+  ordering tests,
+- 382 passing gateway tests,
+- dependency safety across Cargo and seven npm lockfiles,
+- 16 passing authenticated compose API surfaces, including successful delivery
+  to the explicitly allowed fixed receiver.
 
 ### 4. Browser Context Import Safety
 

@@ -13,7 +13,9 @@ use crate::session_registry::SessionRegistry;
 use crate::workflow::{
     WorkflowObservability, WorkflowRetentionManager, WorkflowSourcePolicy, WorkflowSourceResolver,
 };
-use crate::workflow_event_delivery::{WorkflowEventDeliveryConfig, WorkflowEventDeliveryManager};
+use crate::workflow_event_delivery::{
+    WorkflowEventDeliveryConfig, WorkflowEventDeliveryManager, WorkflowEventDestinationPolicy,
+};
 use crate::workflow_lifecycle::{WorkflowLifecycleManager, WorkflowWorkerConfig};
 
 use super::WorkflowServices;
@@ -50,6 +52,11 @@ impl WorkflowServices {
         lifecycle.reconcile_persisted_state().await?;
 
         let observability = Arc::new(WorkflowObservability::default());
+        let event_destination_policy =
+            Arc::new(WorkflowEventDestinationPolicy::with_resolution_timeout(
+                &config.workflow.workflow_event_delivery_allowed_origins,
+                Duration::from_secs(config.workflow.workflow_event_delivery_timeout_secs),
+            )?);
         let event_delivery = Arc::new(WorkflowEventDeliveryManager::new(
             session_store.clone(),
             observability.clone(),
@@ -66,6 +73,7 @@ impl WorkflowServices {
                     config.workflow.workflow_event_delivery_base_backoff_secs,
                 ),
             },
+            event_destination_policy.clone(),
         )?);
         event_delivery.reconcile_persisted_state().await?;
         event_delivery.start();
@@ -96,6 +104,7 @@ impl WorkflowServices {
             source_resolver,
             lifecycle,
             observability,
+            event_destination_policy,
             log_retention,
             output_retention,
         })

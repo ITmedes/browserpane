@@ -13,6 +13,7 @@ use super::model::{
     PersistWorkflowEventSubscriptionRequest, StoredWorkflowEventDelivery,
     StoredWorkflowEventDeliveryAttempt, WorkflowEventDeliveryAttemptResource,
 };
+use super::parse_target_url;
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -63,11 +64,8 @@ pub fn validate_workflow_event_subscription_request(
             "workflow event subscription name must not be empty".to_string(),
         ));
     }
-    if !(request.target_url.starts_with("http://") || request.target_url.starts_with("https://")) {
-        return Err(SessionStoreError::InvalidRequest(
-            "workflow event subscription target_url must be http or https".to_string(),
-        ));
-    }
+    parse_target_url(&request.target_url)
+        .map_err(|error| SessionStoreError::InvalidRequest(error.to_string()))?;
     if request.signing_secret.trim().is_empty() {
         return Err(SessionStoreError::InvalidRequest(
             "workflow event subscription signing_secret must not be empty".to_string(),

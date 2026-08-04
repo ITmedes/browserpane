@@ -962,7 +962,8 @@ Current workflow capabilities:
   queued sessions to be cancelled before runtime admission
 - durable operator intervention state with `submit-input`, `resume`, `reject`, and `cancel`
 - explicit runtime hold/release semantics for paused runs (`live_runtime` vs `profile_restart`)
-- signed outbound workflow lifecycle webhook delivery
+- signed outbound workflow lifecycle webhook delivery with URL, DNS/IP,
+  redirect, and DNS-rebinding controls
 - git-backed workflow sources pinned to resolved commits
 - workflow source validation before immutable version creation, including entrypoint checks, bounded file listing, and bounded source snapshot materialization
 - source snapshot materialization per run
@@ -1001,6 +1002,33 @@ Primary workflow routes:
 - `GET /api/v1/workflow-event-subscriptions`
 - `GET /api/v1/workflow-event-subscriptions/{id}`
 - `GET /api/v1/workflow-event-subscriptions/{id}/deliveries`
+
+Workflow event destinations are secure by default. New subscriptions require
+public HTTPS targets without URL credentials or fragments. The gateway checks
+every resolved IPv4/IPv6 address immediately before creation and every delivery,
+pins the approved addresses into the outbound connection, disables redirects,
+and disables implicit system proxy discovery. Persisted destinations that no
+longer satisfy the policy fail without a retry or network request.
+
+Controlled local or internal receivers require an exact deployment-owned
+origin exception. Repeat the gateway flag for each origin; paths and queries
+beneath that origin remain valid, while wildcards and suffix matching are not
+supported:
+
+```bash
+bpane-gateway \
+  --workflow-event-delivery-allowed-origin http://events.internal:8080 \
+  --workflow-event-delivery-allowed-origin https://hooks.example.com:8443
+```
+
+Local compose defaults `BPANE_WORKFLOW_EVENT_DELIVERY_ALLOWED_ORIGIN` to
+`http://web:8080` for its fixed POST-only compose receiver and
+`BPANE_WORKFLOW_EVENT_DELIVERY_SMOKE_ALLOWED_ORIGIN` to
+`http://bpane-workflow-webhook-smoke:9107` for the isolated signature/order
+smoke container. Override or remove those exceptions when testing
+production-like public HTTPS delivery. Explicit webhook proxy support is not
+part of the current contract because an independently resolving proxy would
+bypass destination pinning.
 
 Automation task routes used by workflow executors and lower-level automation
 integrations:

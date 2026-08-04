@@ -17,6 +17,7 @@ use crate::session_control::{SessionOwnerMode, SessionStore};
 use crate::session_manager::SessionManager;
 use crate::session_registry::SessionRegistry;
 use crate::workflow::{WorkflowObservability, WorkflowSourceResolver};
+use crate::workflow_event_delivery::WorkflowEventDestinationPolicy;
 use crate::workflow_lifecycle::WorkflowLifecycleManager;
 
 mod auth;
@@ -65,6 +66,7 @@ pub(super) struct WorkflowServices {
     pub(super) source_resolver: Arc<WorkflowSourceResolver>,
     pub(super) lifecycle: Arc<WorkflowLifecycleManager>,
     pub(super) observability: Arc<WorkflowObservability>,
+    pub(super) event_destination_policy: Arc<WorkflowEventDestinationPolicy>,
     pub(super) log_retention: Option<ChronoDuration>,
     pub(super) output_retention: Option<ChronoDuration>,
 }

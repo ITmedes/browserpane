@@ -37,6 +37,9 @@ async fn playback_manifest_and_export_bundle_follow_ready_segments() {
         recording_lifecycle: Arc::new(RecordingLifecycleManager::disabled()),
         workflow_lifecycle: Arc::new(WorkflowLifecycleManager::disabled()),
         workflow_observability: Arc::new(WorkflowObservability::default()),
+        workflow_event_destination_policy: Arc::new(
+            crate::workflow_event_delivery::WorkflowEventDestinationPolicy::default(),
+        ),
         workflow_log_retention: None,
         workflow_output_retention: None,
         idle_stop_timeout: Duration::from_secs(300),

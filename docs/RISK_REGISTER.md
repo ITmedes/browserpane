@@ -2,7 +2,7 @@
 
 Governance issue: [#173](https://github.com/ITmedes/browserpane/issues/173)
 
-Last reviewed: 2026-07-31
+Last reviewed: 2026-08-04
 
 ## Scale
 
@@ -18,7 +18,7 @@ Last reviewed: 2026-07-31
 | R-002 | Open critical/high dependency advisories affect build or runtime dependencies. | High | Critical | #151 / #75 | Upgrade, reachability review, bounded exception with owner/expiry, recurring scan. | Foundation |
 | R-003 | Different token purposes share signing material and credentials appear in URL/query paths. | High | Critical | #145 | Purpose-separated credentials, constant-time/library verification, redaction tests. | Foundation |
 | R-004 | Shared admin authentication/browser security is insufficient for promotion. | High | Critical | #146 / #72 | CSP/origin/auth lifecycle/CSRF/frame policies and negative tests. | Foundation |
-| R-005 | Webhook delivery can reach unsafe destinations or redirect targets. | Medium | Critical | #147 | DNS/IP/redirect/allowlist controls and rebinding tests. | Foundation |
+| R-005 | Webhook delivery can reach unsafe destinations or redirect targets. | Low | Critical | #147 | Implemented on the review branch: URL/DNS/IP validation, pinned delivery, no redirects/proxies, exact-origin exceptions, negative and compose tests; close after merge. | Foundation |
 | R-006 | Public OpenAPI can drift from code or break clients silently. | High | High | #179 | Lint, conformance, examples, breaking-diff policy and CI gate. | Foundation |
 | R-007 | Protocol version is not enforced and compatibility is undocumented. | Medium | Critical | #175 | Version negotiation, shared vectors, fuzzing, compatibility matrix. | Production |
 | R-008 | In-memory and Postgres behavior can diverge. | Medium | High | #152 | Shared store contract suite and compose verification. | Foundation |

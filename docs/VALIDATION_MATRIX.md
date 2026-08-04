@@ -539,6 +539,21 @@ Current #146 evidence:
 - rebuilt compose web image plus live auth/security, dashboard, admin-new
   session, and compatibility session smokes.
 
+Current #147 evidence:
+
+- 21 focused workflow-event tests cover URL structure, alternate IPv4 forms,
+  IPv4-mapped IPv6, address classes, DNS failures/timeouts/mixed answers,
+  canonical persistence, exact-origin matching, DNS pinning, redirect blocking,
+  persisted-target revalidation, signing, ordering, and retries,
+- all 382 gateway unit/integration tests pass,
+- changed code is Clippy-clean; the unsuppressed crate command remains blocked
+  only by pre-existing lint categories outside #147,
+- dependency safety passes for Cargo and seven npm lockfiles,
+- Rust workspace line coverage is 56.57% against the enforced 54.80% floor,
+- all 16 authenticated default compose API surfaces pass against rebuilt
+  images, including successful signed delivery to the fixed explicitly allowed
+  receiver.
+
 Webhook, import, and lifecycle:
 
 - webhook target validation must reject loopback, link-local, private,
