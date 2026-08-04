@@ -3,13 +3,13 @@
 ## Metadata
 
 - Issue: [#150](https://github.com/ITmedes/browserpane/issues/150)
-- State: In Progress
+- State: Review
 - Owner: `thebackplane`
 - Lane: Foundation
 - Target gate: Foundation Gate
 - Branch: `feature/BPANE-00150`
 - Depends on: #147 workflow webhook SSRF controls
-- Last verified: 2026-08-04 on `main` at `98d2837`
+- Last verified: 2026-08-04 on `feature/BPANE-00150` through the full validation profile
 
 ## Business Outcome
 
