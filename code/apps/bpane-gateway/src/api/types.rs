@@ -39,6 +39,7 @@ use crate::workflow::{
     WorkflowObservability, WorkflowRunProducedFileResource, WorkflowRunState, WorkflowSource,
     WorkflowSourceResolver,
 };
+use crate::workflow_event_delivery::WorkflowEventDestinationPolicy;
 use crate::workflow_lifecycle::WorkflowLifecycleManager;
 use crate::workspaces::WorkspaceFileStore;
 
@@ -61,6 +62,7 @@ pub(crate) struct ApiServerConfig {
     pub recording_lifecycle: Arc<RecordingLifecycleManager>,
     pub workflow_lifecycle: Arc<WorkflowLifecycleManager>,
     pub workflow_observability: Arc<WorkflowObservability>,
+    pub workflow_event_destination_policy: Arc<WorkflowEventDestinationPolicy>,
     pub workflow_log_retention: Option<ChronoDuration>,
     pub workflow_output_retention: Option<ChronoDuration>,
     pub idle_stop_timeout: std::time::Duration,
@@ -86,6 +88,7 @@ pub(super) struct ApiState {
     pub(super) recording_lifecycle: Arc<RecordingLifecycleManager>,
     pub(super) workflow_lifecycle: Arc<WorkflowLifecycleManager>,
     pub(super) workflow_observability: Arc<WorkflowObservability>,
+    pub(super) workflow_event_destination_policy: Arc<WorkflowEventDestinationPolicy>,
     pub(super) workflow_log_retention: Option<ChronoDuration>,
     pub(super) workflow_output_retention: Option<ChronoDuration>,
     pub(super) idle_stop_timeout: std::time::Duration,

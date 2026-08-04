@@ -34,6 +34,9 @@ async fn recording_operations_snapshot_tracks_finalize_playback_and_failures() {
         recording_lifecycle: Arc::new(RecordingLifecycleManager::disabled()),
         workflow_lifecycle: Arc::new(WorkflowLifecycleManager::disabled()),
         workflow_observability: Arc::new(WorkflowObservability::default()),
+        workflow_event_destination_policy: Arc::new(
+            crate::workflow_event_delivery::WorkflowEventDestinationPolicy::default(),
+        ),
         workflow_log_retention: None,
         workflow_output_retention: None,
         idle_stop_timeout: Duration::from_secs(300),
