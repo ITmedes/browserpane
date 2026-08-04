@@ -270,3 +270,5 @@ smokes. Host-side Cargo caches do not feed the isolated Docker builders.
   workflow explicitly bootstraps a `docker-container` builder in both the PR
   validation and trusted publication jobs, and its contract test requires that
   builder before the attested push.
+- Corrective publication PR:
+  [#188](https://github.com/ITmedes/browserpane/pull/188)
