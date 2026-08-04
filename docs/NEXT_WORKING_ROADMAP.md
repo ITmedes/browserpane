@@ -36,27 +36,29 @@ Merged PR `#143` is the current status checkpoint:
 
 Foundation prerequisite from the 2026-07-31 delivery audit:
 
-- implement #151 before Slice A so dependency remediation, CI, coverage
-  baselines, contract checks, and required branch checks protect the security
-  and admin changes below,
-- create a bounded #151 `*_PLAN.md` from `PLAN_TEMPLATE.md` before coding,
-- then continue with #145 and the admin trust sequence unless a reviewed
-  Foundation/Pilot gate changes the order.
+- #151 established dependency remediation, CI, coverage baselines, contract
+  checks, and required branch checks before Slice A,
+- #145 then implemented and validated the token-domain and URL/log credential
+  cleanup,
+- continue with #146 and the remaining admin trust sequence after #145 review
+  and merge unless a reviewed Foundation/Pilot gate changes the order.
 
 Review reconciliation update:
 
 - workflow-source RCE/preview-symlink and bridge-local control-auth findings
   from `review/` are treated as superseded by the current baseline,
-- token-domain separation, raw credential URL/log cleanup, admin-event query
-  auth, browser admin auth/CSP, webhook SSRF, browser-context import limits,
-  and graceful shutdown remain confirmed-open,
+- token-domain separation, raw credential URL/log cleanup, and admin-event
+  query auth are implemented by #145; browser admin auth/CSP, webhook SSRF,
+  browser-context import limits, and graceful shutdown remain confirmed-open,
 - recording artifact finalization remains a valid cleanup item, but it should
   not displace confirmed-open token/auth/webhook/import/lifecycle findings when
   choosing the next security-driven slice.
 
 ### Slice A: Token Domain Separation And URL Credential Cleanup
 
-Priority: high security cleanup before admin-new promotion.
+State: implemented and validated by #145; review and merge remain.
+
+Priority: completed high security cleanup before admin-new promotion.
 
 Why:
 

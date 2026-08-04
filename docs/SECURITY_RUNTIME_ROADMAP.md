@@ -1,6 +1,6 @@
 # Security And Runtime Cleanup Roadmap
 
-Revalidated: 2026-07-31
+Revalidated: 2026-08-04
 
 This document preserves the still-valid cleanup findings that gate production
 readiness and `/admin-new` promotion. It is standalone and does not require the
@@ -36,9 +36,9 @@ Important status:
 - bridge-local `/control-session` unauthenticated takeover is treated as
   superseded by the current bridge-control-auth slice, while production
   exposure of MCP transports still needs network/origin/auth hardening,
-- token-domain confusion, raw credential logging/URL transport, admin browser
-  auth, webhook SSRF, browser-context import limits, graceful shutdown, and
-  control-plane aggregation scalability remain open.
+- token-domain confusion and raw credential logging/URL transport are resolved
+  by #145; admin browser auth, webhook SSRF, browser-context import limits,
+  graceful shutdown, and control-plane aggregation scalability remain open.
 
 ## Completed High-Priority Slices In The Current Baseline
 
@@ -87,7 +87,7 @@ Remaining MCP hardening:
 - replace broad CORS with configured allowed origins,
 - split health detail by trust level.
 
-## Next Cleanup Slices
+## Completed High-Priority Slice: #145
 
 ### Token Domain Separation And Credential Redaction
 
@@ -127,6 +127,15 @@ Validation:
 - old-admin realtime/event and reconnect smokes,
 - admin-new auth/session regression coverage if shared credential issuance
   changes.
+
+Current state: implemented and validated on `feature/BPANE-00145`. Connect,
+automation, and admin-event credentials use separate v2 purpose domains;
+admin-event WebSockets use a short-lived first-frame credential; transport
+request logging strips credential-bearing query data and control characters.
+The complete evidence is recorded in
+`BPANE-00145_TOKEN_DOMAIN_SEPARATION_PLAN.md`.
+
+## Next Cleanup Slices
 
 ### Admin Browser Auth And Web Security
 

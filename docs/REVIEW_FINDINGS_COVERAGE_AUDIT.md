@@ -1,6 +1,7 @@
 # Review Findings Coverage Audit
 
 Created: 2026-07-07
+Revalidated: 2026-08-04
 
 This document is the traceability check between the raw `review/` reports and
 the consolidated `docs/` workspace. It complements
@@ -29,7 +30,7 @@ superseded by the current code baseline.
 | Source report | Coverage status | Current owner |
 | --- | --- | --- |
 | `review/00_OVERVIEW.md` | Covered. The cross-cutting themes are mapped to token/browser-auth hardening, admin promotion gates, operations/readiness, ARCH accuracy, and CI/lint guardrails. | `NEXT_WORKING_ROADMAP.md`, `SECURITY_RUNTIME_ROADMAP.md`, `ADMIN_NEW_STATUS.md` |
-| `review/00_VERIFICATION.md` | Covered. Corrected P0 security items are reflected, with workflow-source and preview-symlink findings marked superseded and token/log auth issues kept open. | `REVIEW_FINDINGS_RECONCILIATION.md`, `SECURITY_RUNTIME_ROADMAP.md` |
+| `review/00_VERIFICATION.md` | Covered. Workflow-source and preview-symlink findings are superseded; token/log auth findings are implemented by #145. | `REVIEW_FINDINGS_RECONCILIATION.md`, `SECURITY_RUNTIME_ROADMAP.md` |
 | `review/SECURITY.md` | Covered through the corrected V2 layer. Still-open H/M/L items are mapped explicitly. | `REVIEW_FINDINGS_RECONCILIATION.md`, `SECURITY_RUNTIME_ROADMAP.md`, `VALIDATION_MATRIX.md` |
 | `review/SECURITY_V2.md` | Covered. This is the main security source for the next cleanup slices. | `NEXT_WORKING_ROADMAP.md`, `SECURITY_RUNTIME_ROADMAP.md` |
 | `review/PERFORMANCE.md` | Covered. Top findings are mapped to catalog scalability, host/client render backlog, gateway fan-out, archive/export, webhook delivery, and worker reliability. | `REVIEW_FINDINGS_RECONCILIATION.md`, `SECURITY_RUNTIME_ROADMAP.md`, `VALIDATION_MATRIX.md` |
@@ -48,20 +49,20 @@ superseded by the current code baseline.
 | C1 workflow git RCE | Superseded by current workflow source hardening; retained as completed baseline and regression validation. |
 | N1 workflow source-preview symlink read | Superseded by current source preview containment; retained as regression validation. |
 | N2 unauthenticated bridge-local `/control-session` takeover | Mostly superseded by bridge control auth; remaining host-exposed MCP transport hardening stays open. |
-| N3 token cryptographic confusion | Open and promoted to Slice A. |
-| M3 bearer credentials in URLs/logs | Open and promoted to Slice A. |
+| N3 token cryptographic confusion | Resolved by #145 with purpose-bound tokens and independent derived signing keys. |
+| M3 bearer credentials in URLs/logs | Resolved by #145 with scoped first-frame event authentication and redacted transport targets. |
 | H1 webhook SSRF | Open as a focused security/runtime cleanup slice. |
 | H2/H3 admin token storage, nonce, ID-token verification | Open and promoted to Slice B. |
 | M1 browser-context import decompression | Open as browser-context import safety. |
 | M2 missing CSP/security headers | Open and promoted to Slice B. |
 | M4 dev HMAC fallback and token logging | Retained as local-dev caveat plus safer-defaults/documentation work. |
-| L1 non-constant-time HMAC | Folded into Slice A. |
+| L1 non-constant-time HMAC | Resolved by #145 through library-backed HMAC verification. |
 | L2 tar symlink/hardlink import | Folded into browser-context import safety. |
 | L3 workflow-worker entrypoint containment | Treated as defense-in-depth; current source hardening and worker validation should keep regression coverage. |
 | L4 legacy singleton routes authorize any principal | Retained as compatibility-surface risk; not a promotion blocker if kept out of production multi-tenant flows. |
 | L5 demo password shipped in local auth config | Retained as local-only documentation/security posture caveat. |
 | L6 secret zeroization and Vault error body hygiene | Retained as lower-priority secret-handling hardening. |
-| N4 log injection via request path | Folded into Slice A log sanitization. |
+| N4 log injection via request path | Resolved by #145 through control-character removal and bounded path-only diagnostics. |
 | N5 worker writes live token to `context.json` | Retained as worker hygiene backlog. |
 | N6 `RwLock` poison cascade | Retained as resilience hardening backlog. |
 
