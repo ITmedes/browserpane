@@ -143,6 +143,8 @@ dependency-safety workflow after adding `ip_network` as a direct dependency.
 - Add a fixed compose webhook receiver route and configure only that origin.
 - Make the compose e2e verify successful delivery rather than connection
   failure to port 1.
+- Give the existing browser-level signature/order receiver a stable local Docker
+  alias and configure that exact origin without wildcard matching.
 
 ### Slice 4: Contracts And Documentation
 
@@ -241,5 +243,8 @@ dependency-safety workflow after adding `ip_network` as a direct dependency.
 - `scripts/run-gateway-compose-e2e.sh --suite default`: 16 authenticated
   compose API surfaces passed against rebuilt images in 416 seconds, including
   the signed workflow-event delivery receiver.
+- `npm run smoke:workflow-events -- --headless`: validates the stable-alias
+  receiver, three ordered lifecycle events, HMAC signatures, delivery
+  diagnostics, and workflow observability counters.
 - `docker compose -f deploy/compose.yml config -q`, repository document checks,
   formatting, and diff checks passed.
