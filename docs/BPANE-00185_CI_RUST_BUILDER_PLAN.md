@@ -252,6 +252,12 @@ smokes. Host-side Cargo caches do not feed the isolated Docker builders.
   `/opt/cargo`, and `/build` absent.
 - Containerized test contract: `bpane-protocol` passed 124 unit, integration,
   property, wire-fixture, and doc tests through `deploy/Dockerfile.test`.
+- Repository fast profile: all 31 stages passed, including Rust tests and
+  coverage, admin and browser-client tests and coverage, Node integration
+  builds, dependency safety, and repository/workflow policy.
+- Local compose replacement was intentionally not run because the developer
+  stack contains active long-lived services; the three hosted compose lanes
+  remain the non-destructive end-to-end publication gate.
 - Published content tag and digest: pending
 - Cold/fallback run: pending
 - First-pull run: pending
