@@ -39,22 +39,50 @@ paths:
       tags: [Admin Events]
       summary: Open the admin realtime snapshot WebSocket
       operationId: openAdminEvents
+      security: []
       description: >
         Upgrades to a WebSocket that emits owner-scoped JSON snapshot events for
         sessions, workflow runs, session files, recordings, and MCP delegation
-        whenever the corresponding snapshot changes.
-      parameters:
-        - name: access_token
-          in: query
-          required: false
-          schema:
-            type: string
-          description: Browser WebSocket fallback token. Prefer Authorization bearer headers where available.
+        whenever the corresponding snapshot changes. The URL accepts no
+        credential. Within five seconds after upgrade, the client must send
+        `{"message_type":"admin.authenticate","token":"..."}` with an
+        `admin_event_access_token` minted by
+        `POST /api/v1/admin/events/access-tokens`. The server acknowledges
+        successful authentication with
+        `{"message_type":"admin.authenticated"}` before emitting snapshots.
       responses:
         '101':
-          description: WebSocket upgraded; text messages contain admin snapshot events or admin.error payloads.
+          description: >
+            WebSocket upgraded. Missing, malformed, expired, or wrong-purpose
+            initial authentication messages close the socket with policy code
+            1008. After the authentication acknowledgement, text messages
+            contain admin snapshot events or admin.error payloads.
+  /api/v1/admin/events/access-tokens:
+    post:
+      tags: [Admin Events]
+      summary: Mint scoped access for the admin realtime snapshot WebSocket
+      operationId: issueAdminEventAccessToken
+      description: >
+        Authenticates the owner bearer and returns a short-lived,
+        purpose-separated token for one admin-event WebSocket authentication
+        handshake. Responses are non-cacheable. Mint a fresh token for every
+        connect or reconnect and never place it in the WebSocket URL.
+      responses:
+        '200':
+          description: Short-lived admin-event access token and handshake metadata
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                enum: [no-store]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminEventAccessTokenResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/BackendUnavailable'
   /api/v1/identity/me:
     get:
       tags: [Identity]
@@ -3395,6 +3423,43 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
   schemas:
+    AdminEventAccessTokenResponse:
+      type: object
+      additionalProperties: false
+      required: [token_type, token, expires_at, websocket]
+      properties:
+        token_type:
+          type: string
+          enum: [admin_event_access_token]
+        token:
+          type: string
+          description: Short-lived purpose-separated admin-event credential.
+        expires_at:
+          type: string
+          format: date-time
+        websocket:
+          $ref: '#/components/schemas/AdminEventWebSocketAccess'
+    AdminEventWebSocketAccess:
+      type: object
+      additionalProperties: false
+      required:
+        - endpoint_path
+        - auth_type
+        - authentication_message_type
+        - authenticated_message_type
+      properties:
+        endpoint_path:
+          type: string
+          enum: [/api/v1/admin/events]
+        auth_type:
+          type: string
+          enum: [initial_message]
+        authentication_message_type:
+          type: string
+          enum: [admin.authenticate]
+        authenticated_message_type:
+          type: string
+          enum: [admin.authenticated]
     SessionLifecycleState:
       type: string
       enum:

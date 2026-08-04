@@ -93,7 +93,7 @@ The API companion and coverage view must include these families:
 
 ### `ui-primary`
 
-- Admin events: `openAdminEvents`
+- Admin events: `issueAdminEventAccessToken`, `openAdminEvents`
 - Browser contexts: `listBrowserContexts`, `createBrowserContext`,
   `importBrowserContext`, `getBrowserContext`, `cloneBrowserContext`,
   `exportBrowserContext`, `deleteBrowserContext`
@@ -437,7 +437,8 @@ These endpoints must be documented separately from the frozen owner-scoped API:
 
 - web-tier `/auth-config.json`
 - configured OIDC issuer discovery, authorization, token, and logout endpoints
-- gateway admin event stream `/api/v1/admin/events`
+- gateway admin-event token issuance `/api/v1/admin/events/access-tokens` and
+  first-message-authenticated stream `/api/v1/admin/events`
 - local `mcp-bridge` `/health`
 - local `mcp-bridge` `/control-session` GET/PUT/DELETE
 - MCP protocol routes `/mcp`, `/sse`, `/sessions/{session_id}/mcp`,

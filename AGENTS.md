@@ -101,7 +101,10 @@ Current product shape:
   - `workflow/retention.rs`: periodic cleanup of retained workflow logs and structured outputs after the configured workflow retention windows expire.
   - `runtime_manager.rs`: current `SessionManager` backend implementation; supports `static_single`, `docker_single`, and `docker_pool`. Local compose defaults to `docker_pool` for browser-session testing. Docker-backed workers carry a session id plus explicit session data paths for Chromium profile, uploads, and downloads. Reusable browser contexts mount a context-scoped Chromium profile volume while keeping upload/download/session-file data session-scoped, and the runtime admits only one active writer per reusable context. Docker-backed browser-context cloning, export, and import package profile volume data through the session manager boundary. Docker runtime assignments are persisted/reconciled through Postgres on gateway restart.
   - `runtime_manager/docker/container.rs`: docker runtime launch argument materialization, including safe egress observer labels, startup audit logs for correlating proxy access logs back to BrowserPane sessions, and TLS-interception CA bundle materialization for docker-backed runtimes.
-  - `api.rs`: legacy compatibility endpoints plus the frozen owner-scoped `/api/v1/sessions` surface and session-scoped `access-tokens`, `automation-owner`, `status`, `mcp-owner`, `egress-diagnostics`, and `egress-usage` routes.
+  - `session_access/`: purpose-separated v2 HMAC credentials for browser
+    connect, automation, and admin-event access. Cross-purpose replay is
+    rejected even though all managers derive keys from one configured root.
+  - `api.rs`: legacy compatibility endpoints plus the frozen owner-scoped `/api/v1/sessions` surface, scoped admin-event token issuance/first-message WebSocket authentication, and session-scoped `access-tokens`, `automation-owner`, `status`, `mcp-owner`, `egress-diagnostics`, and `egress-usage` routes.
 - `code/shared/bpane-protocol`
   - Shared wire protocol, frame envelope, channel IDs, and message types.
 - `code/web/bpane-client/js`
@@ -116,7 +119,9 @@ Current product shape:
 - `code/web/bpane-admin`
   - Stable/default SvelteKit admin console served at `/admin/`.
   - Owns the current operations overlay, route-backed inspection surfaces, and
-    gateway admin-event WebSocket consumer.
+    gateway admin-event WebSocket consumer. The consumer mints a short-lived
+    event token over authenticated HTTP, opens a query-free socket, and sends
+    the scoped token in the first message on every connect/reconnect.
 - `code/web/bpane-admin-unified`
   - Side-by-side SvelteKit admin console under active development at
     `/admin-new/`.
