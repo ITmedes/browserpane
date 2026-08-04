@@ -569,7 +569,9 @@ Current #150 evidence:
   policy, formatting, workspace Clippy/tests/coverage, all maintained Node
   checks/tests/coverage/builds, 17 default compose API surfaces, 4 docker-pool
   lifecycle/capacity surfaces, and auth, admin-new, compatibility admin, CLI,
-  MCP, recording, and workflow browser smokes.
+  MCP, recording, and workflow browser smokes,
+- the dedicated admin-event reconnect smoke also passed across a real gateway
+  restart with fresh scoped authentication and realtime session-list recovery.
 
 Webhook, import, and lifecycle:
 

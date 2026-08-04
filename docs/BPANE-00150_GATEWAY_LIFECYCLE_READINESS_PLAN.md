@@ -225,5 +225,8 @@ Final validation on 2026-08-04:
 - auth/security, admin-new dashboard/projects/sessions, compatibility admin,
   CLI, MCP multi-session, recording artifact/playback, and workflow-admission
   browser smokes passed,
+- the dedicated admin-event reconnect smoke passed across an actual gateway
+  restart with a fresh scoped token, query-free WebSocket URL, realtime session
+  synchronization, and credential-free gateway logs,
 - the restored local stack reports `/healthz` 200, `/readyz` 200, and a healthy
   gateway container.
