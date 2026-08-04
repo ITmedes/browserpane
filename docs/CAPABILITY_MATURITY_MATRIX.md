@@ -2,7 +2,7 @@
 
 Governance issue: [#173](https://github.com/ITmedes/browserpane/issues/173)
 
-Last verified: 2026-07-31 at `9640be4`
+Last verified: 2026-08-04 at `fb03270`
 
 ## Maturity Definitions
 
@@ -42,7 +42,7 @@ capability.
 | Workflow Human Handoff | Partial prototype | run input/hold/resume primitives exist | #71, #154 |
 | Recording lifecycle and playback | Prototype | recorder worker, segmented artifacts, playback/export | #149, #21, #165 |
 | Generalized artifact/evidence model | Partial prototype | recordings, workspace files, workflow produced files remain separate resources | #21, #70, #28 |
-| Workflow event delivery | Prototype | signed delivery, retry/backoff, diagnostics | #147, #28, #165 |
+| Workflow event delivery | Prototype | signed delivery, retry/backoff, diagnostics, DNS/IP/redirect policy, pinned delivery, compose E2E | #147 review, #28, #165 |
 | OIDC login and current-principal identity | Prototype | Keycloak compose, JWT validation, identity/access-review APIs | #146, #157 |
 | Service-principal registry | Implemented metadata; grants not fully enforced | registry CRUD and disabled-delegation guard | #176, #70 |
 | Organization/project RBAC | Planned | Current mappings are descriptive and owner-scoped | #176 |

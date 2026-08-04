@@ -3,13 +3,13 @@
 ## Metadata
 
 - Issue: [#147](https://github.com/ITmedes/browserpane/issues/147)
-- State: In Progress
+- State: Review
 - Owner: `thebackplane`
 - Lane: Foundation
 - Target gate: Foundation Gate
 - Branch: `feature/BPANE-00147`
 - Depends on: #145 token-domain and URL credential cleanup
-- Last verified: 2026-08-04 on `main` at `0738294`
+- Last verified: 2026-08-04 on `feature/BPANE-00147` at `fb03270`
 
 ## Business Outcome
 
@@ -62,6 +62,10 @@ Use established components for protocol-sensitive behavior:
 - `reqwest::redirect::Policy::none`: no automatic redirect traversal.
 - `reqwest::ClientBuilder::resolve_to_addrs`: bind the request hostname to the
   already validated addresses and close the DNS-rebinding/TOCTOU window.
+- `reqwest::ClientBuilder::no_proxy`: disable implicit environment proxy
+  discovery so a proxy cannot independently resolve and bypass the pinned
+  destination. Explicit webhook-proxy support requires a separate secure
+  contract.
 
 Do not introduce regex URL validation, hand-written IP bit masks, a custom HTTP
 transport, or an unreviewed SSRF helper crate. Run `cargo audit` and the existing
@@ -223,3 +227,19 @@ dependency-safety workflow after adding `ip_network` as a direct dependency.
 7. Remove the allowed origin, restart the gateway, and confirm the local target
    is rejected at creation and dispatch.
 8. Run the gateway compose API surface suites and repository document checks.
+
+## Evidence Record
+
+- `cargo test -p bpane-gateway workflow_event --no-fail-fast`: 21 focused tests
+  passed.
+- `cargo test -p bpane-gateway --no-fail-fast`: 382 gateway tests and all
+  non-compose integration targets passed.
+- Changed code passed Clippy with only the repository's pre-existing unrelated
+  lint categories suppressed; the strict unsuppressed result was recorded.
+- `node scripts/check-dependency-safety.mjs`: Cargo and seven npm lockfiles
+  passed the repository policy.
+- `scripts/run-gateway-compose-e2e.sh --suite default`: 16 authenticated
+  compose API surfaces passed against rebuilt images in 416 seconds, including
+  the signed workflow-event delivery receiver.
+- `docker compose -f deploy/compose.yml config -q`, repository document checks,
+  formatting, and diff checks passed.
