@@ -41,6 +41,7 @@ export class ValidationStageCatalog {
         'scripts/dependency-safety/policy.test.mjs',
         'scripts/coverage/coverage-baseline-checker.test.mjs',
         'scripts/coverage/rust-coverage-command.test.mjs',
+        'scripts/ci/ci-rust-builder-ref.test.mjs',
         'scripts/ci/compose-workflow-contract.test.mjs',
         'scripts/ci/compose-diagnostics-collector.test.mjs',
         'scripts/ci/diagnostic-redactor.test.mjs',
