@@ -240,6 +240,8 @@ dependency-safety workflow after adding `ip_network` as a direct dependency.
   lint categories suppressed; the strict unsuppressed result was recorded.
 - `node scripts/check-dependency-safety.mjs`: Cargo and seven npm lockfiles
   passed the repository policy.
+- `node scripts/run-rust-coverage.mjs`: workspace line coverage was 56.57%
+  against the enforced 54.80% floor.
 - `scripts/run-gateway-compose-e2e.sh --suite default`: 16 authenticated
   compose API surfaces passed against rebuilt images in 416 seconds, including
   the signed workflow-event delivery receiver.
