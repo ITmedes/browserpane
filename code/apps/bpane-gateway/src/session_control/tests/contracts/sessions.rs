@@ -107,6 +107,31 @@ pub(super) async fn run_session_contracts(store: &SessionStore) -> anyhow::Resul
         "repeated active transition was not idempotent"
     );
 
+    let recovered = store
+        .mark_session_ready_after_runtime_loss(created.id)
+        .await
+        .context("restore contract session after runtime loss")?
+        .context("contract session disappeared during runtime-loss recovery")?;
+    ensure!(
+        recovered.state == SessionLifecycleState::Ready,
+        "runtime-loss recovery did not restore the session to ready"
+    );
+    ensure!(
+        recovered.project_id == created.project_id
+            && recovered.admission == created.admission
+            && recovered.capabilities == created.capabilities,
+        "runtime-loss recovery did not preserve the session contract"
+    );
+    let active = store
+        .mark_session_active(created.id)
+        .await
+        .context("reactivate contract session after runtime loss")?
+        .context("contract session disappeared after runtime-loss recovery")?;
+    ensure!(
+        active.state == SessionLifecycleState::Active,
+        "recovered session was not active"
+    );
+
     let idle = store
         .mark_session_idle(created.id)
         .await
