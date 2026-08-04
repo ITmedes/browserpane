@@ -14,6 +14,7 @@ const KEY_DERIVATION_CONTEXT: &str = "browserpane/token-domain/v2/";
 pub(super) enum TokenPurpose {
     SessionConnect,
     SessionAutomation,
+    AdminEvents,
 }
 
 impl TokenPurpose {
@@ -21,6 +22,7 @@ impl TokenPurpose {
         match self {
             Self::SessionConnect => "session-connect",
             Self::SessionAutomation => "session-automation",
+            Self::AdminEvents => "admin-events",
         }
     }
 }

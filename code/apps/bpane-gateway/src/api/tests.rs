@@ -28,7 +28,9 @@ use crate::recording::{
     prepare_session_recording_playback, RecordingArtifactStore, RecordingObservability,
 };
 use crate::recording_lifecycle::{RecordingLifecycleManager, RecordingWorkerConfig};
-use crate::session_access::{SessionAutomationAccessTokenManager, SessionConnectTicketManager};
+use crate::session_access::{
+    AdminEventAccessTokenManager, SessionAutomationAccessTokenManager, SessionConnectTicketManager,
+};
 use crate::session_control::{
     PersistSessionFileRequest, SessionFileSource, SessionRecordingFormat, SessionRecordingMode,
     SessionRecordingPolicy, SessionRecordingState as StoredSessionRecordingState,
@@ -42,6 +44,7 @@ use crate::workspaces::WorkspaceFileStore;
 mod support;
 pub(crate) use support::*;
 
+mod admin_events;
 mod automation_tasks;
 mod browser_contexts;
 mod credential_bindings;

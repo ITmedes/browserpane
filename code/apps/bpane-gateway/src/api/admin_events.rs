@@ -1,10 +1,10 @@
 use std::time::Duration;
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::extract::Query;
-use axum::http::header::AUTHORIZATION;
-use axum::routing::get;
-use serde::{Deserialize, Serialize};
+use axum::http::header::{CACHE_CONTROL, PRAGMA};
+use axum::routing::{get, post};
+use chrono::DateTime;
+use serde::Serialize;
 use tokio::time::{interval, MissedTickBehavior};
 
 use super::*;
@@ -15,29 +15,86 @@ use snapshots::{
 
 const ADMIN_EVENT_POLL_INTERVAL: Duration = Duration::from_millis(750);
 
+mod authentication;
 mod snapshots;
 
-#[derive(Debug, Deserialize)]
-struct AdminEventsQuery {
-    #[serde(default)]
-    access_token: Option<String>,
+#[derive(Debug, Serialize)]
+struct AdminEventAccessTokenResponse {
+    token_type: &'static str,
+    token: String,
+    expires_at: DateTime<Utc>,
+    websocket: AdminEventWebSocketAccess,
+}
+
+#[derive(Debug, Serialize)]
+struct AdminEventWebSocketAccess {
+    endpoint_path: &'static str,
+    auth_type: &'static str,
+    authentication_message_type: &'static str,
+    authenticated_message_type: &'static str,
 }
 
 pub(super) fn admin_event_routes() -> Router<Arc<ApiState>> {
-    Router::new().route("/api/v1/admin/events", get(open_admin_events))
+    Router::new()
+        .route("/api/v1/admin/events", get(open_admin_events))
+        .route(
+            "/api/v1/admin/events/access-tokens",
+            post(issue_admin_event_access_token),
+        )
 }
 
-async fn open_admin_events(
+async fn issue_admin_event_access_token(
     headers: HeaderMap,
-    Query(query): Query<AdminEventsQuery>,
     State(state): State<Arc<ApiState>>,
-    ws: WebSocketUpgrade,
-) -> Result<Response, (StatusCode, Json<ErrorResponse>)> {
-    let principal = authenticate_admin_events_request(&headers, &query, &state.auth_validator)
+) -> Result<(HeaderMap, Json<AdminEventAccessTokenResponse>), (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
         .await
         .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let issued = state
+        .admin_event_access_token_manager
+        .issue_token(&principal)
+        .map_err(|error| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(ErrorResponse {
+                    error: format!("failed to issue admin event access token: {error}"),
+                }),
+            )
+        })?;
+    let mut response_headers = HeaderMap::new();
+    response_headers.insert(
+        CACHE_CONTROL,
+        "no-store".parse().expect("valid header value"),
+    );
+    response_headers.insert(PRAGMA, "no-cache".parse().expect("valid header value"));
+    Ok((
+        response_headers,
+        Json(AdminEventAccessTokenResponse {
+            token_type: "admin_event_access_token",
+            token: issued.token,
+            expires_at: issued.expires_at,
+            websocket: AdminEventWebSocketAccess {
+                endpoint_path: "/api/v1/admin/events",
+                auth_type: "initial_message",
+                authentication_message_type: "admin.authenticate",
+                authenticated_message_type: "admin.authenticated",
+            },
+        }),
+    ))
+}
 
-    Ok(ws.on_upgrade(move |socket| stream_admin_events(socket, state, principal)))
+async fn open_admin_events(State(state): State<Arc<ApiState>>, ws: WebSocketUpgrade) -> Response {
+    ws.on_upgrade(move |socket| authenticate_and_stream_admin_events(socket, state))
+}
+
+async fn authenticate_and_stream_admin_events(mut socket: WebSocket, state: Arc<ApiState>) {
+    let Some(principal) =
+        authentication::authenticate_socket(&mut socket, &state.admin_event_access_token_manager)
+            .await
+    else {
+        return;
+    };
+    stream_admin_events(socket, state, principal).await;
 }
 
 async fn stream_admin_events(
@@ -166,63 +223,4 @@ async fn emit_admin_error(
     }
     *sequence += 1;
     Ok(())
-}
-
-async fn authenticate_admin_events_request(
-    headers: &HeaderMap,
-    query: &AdminEventsQuery,
-    auth_validator: &AuthValidator,
-) -> Result<AuthenticatedPrincipal, String> {
-    let Some(token) = admin_events_token(headers, query) else {
-        return Err("missing bearer token".to_string());
-    };
-    auth_validator
-        .authenticate(token)
-        .await
-        .map_err(|error| format!("invalid bearer token: {error}"))
-}
-
-fn admin_events_token<'a>(headers: &'a HeaderMap, query: &'a AdminEventsQuery) -> Option<&'a str> {
-    let header_token = headers
-        .get(AUTHORIZATION)
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.strip_prefix("Bearer "));
-    header_token.or(query.access_token.as_deref())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use axum::http::HeaderMap;
-
-    #[tokio::test]
-    async fn admin_event_auth_accepts_browser_query_token() {
-        let auth_validator = AuthValidator::from_hmac_secret(vec![7; 32]);
-        let token = auth_validator.generate_token().unwrap();
-        let principal = authenticate_admin_events_request(
-            &HeaderMap::new(),
-            &AdminEventsQuery {
-                access_token: Some(token),
-            },
-            &auth_validator,
-        )
-        .await
-        .unwrap();
-
-        assert_eq!(principal.issuer, "bpane-gateway");
-    }
-
-    #[tokio::test]
-    async fn admin_event_auth_requires_a_token() {
-        let auth_validator = AuthValidator::from_hmac_secret(vec![7; 32]);
-        let error = authenticate_admin_events_request(
-            &HeaderMap::new(),
-            &AdminEventsQuery { access_token: None },
-            &auth_validator,
-        )
-        .await
-        .unwrap_err();
-
-        assert_eq!(error, "missing bearer token");
-    }
 }

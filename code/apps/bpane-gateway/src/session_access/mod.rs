@@ -1,7 +1,9 @@
+pub mod admin_events;
 pub mod automation;
 pub mod connect;
 mod token_codec;
 
+pub use admin_events::AdminEventAccessTokenManager;
 pub use automation::{SessionAutomationAccessTokenClaims, SessionAutomationAccessTokenManager};
 pub use connect::{SessionConnectTicketError, SessionConnectTicketManager};
 

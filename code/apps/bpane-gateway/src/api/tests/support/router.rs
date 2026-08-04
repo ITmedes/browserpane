@@ -51,6 +51,7 @@ fn base_api_state(
     Arc::new(ApiState {
         registry: Arc::new(SessionRegistry::new(10, false)),
         auth_validator,
+        admin_event_access_token_manager: test_admin_event_access_token_manager(),
         connect_ticket_manager: Arc::new(SessionConnectTicketManager::new(
             vec![5; 32],
             Duration::from_secs(300),
@@ -160,6 +161,7 @@ pub(crate) fn test_router_with_recording_lifecycle(
     let state = Arc::new(ApiState {
         registry: Arc::new(SessionRegistry::new(10, false)),
         auth_validator,
+        admin_event_access_token_manager: test_admin_event_access_token_manager(),
         connect_ticket_manager,
         automation_access_token_manager,
         session_store,
@@ -230,6 +232,7 @@ pub(crate) fn test_router_with_workflow_lifecycle(
     let state = Arc::new(ApiState {
         registry,
         auth_validator,
+        admin_event_access_token_manager: test_admin_event_access_token_manager(),
         connect_ticket_manager: Arc::new(SessionConnectTicketManager::new(
             vec![5; 32],
             Duration::from_secs(300),
@@ -270,6 +273,7 @@ pub(crate) async fn test_router_with_live_agent_state(
     let state = Arc::new(ApiState {
         registry: Arc::new(SessionRegistry::new(10, false)),
         auth_validator,
+        admin_event_access_token_manager: test_admin_event_access_token_manager(),
         connect_ticket_manager: Arc::new(SessionConnectTicketManager::new(
             vec![5; 32],
             Duration::from_secs(300),
@@ -344,6 +348,7 @@ pub(crate) async fn test_router_with_docker_pool() -> (Router, String) {
     let state = Arc::new(ApiState {
         registry: Arc::new(SessionRegistry::new(10, false)),
         auth_validator,
+        admin_event_access_token_manager: test_admin_event_access_token_manager(),
         connect_ticket_manager: Arc::new(SessionConnectTicketManager::new(
             vec![5; 32],
             Duration::from_secs(300),
@@ -375,6 +380,13 @@ pub(crate) async fn test_router_with_docker_pool() -> (Router, String) {
 pub(crate) fn test_artifact_store() -> Arc<RecordingArtifactStore> {
     let root = std::env::temp_dir().join(format!("bpane-artifacts-test-{}", uuid::Uuid::now_v7()));
     Arc::new(RecordingArtifactStore::local_fs(root))
+}
+
+pub(crate) fn test_admin_event_access_token_manager() -> Arc<AdminEventAccessTokenManager> {
+    Arc::new(AdminEventAccessTokenManager::new(
+        vec![4; 32],
+        Duration::from_secs(60),
+    ))
 }
 
 pub(crate) fn test_workspace_file_store() -> Arc<WorkspaceFileStore> {
