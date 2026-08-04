@@ -51,6 +51,13 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+      - name: Set up attestation-capable Buildx builder
+        run: |
+          docker buildx create \
+            --name bpane-ci-rust-builder \
+            --driver docker-container \
+            --use
+          docker buildx inspect --bootstrap
       - name: Resolve deterministic image reference
         id: image
         run: |
@@ -73,6 +80,9 @@ jobs:
           scripts/ci/inspect-ci-rust-builder.sh
           "${{ steps.image.outputs.image }}"
           "${{ steps.image.outputs.tag }}"
+      - name: Remove Buildx builder
+        if: always()
+        run: docker buildx rm bpane-ci-rust-builder >/dev/null 2>&1 || true
 
   publish:
     name: Publish builder image
@@ -87,6 +97,13 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+      - name: Set up attestation-capable Buildx builder
+        run: |
+          docker buildx create \
+            --name bpane-ci-rust-builder \
+            --driver docker-container \
+            --use
+          docker buildx inspect --bootstrap
       - name: Resolve deterministic image reference
         id: image
         run: |
@@ -128,6 +145,9 @@ jobs:
           scripts/ci/inspect-ci-rust-builder.sh \
             "${{ steps.image.outputs.image }}" \
             "${{ steps.image.outputs.tag }}"
+      - name: Remove Buildx builder
+        if: always()
+        run: docker buildx rm bpane-ci-rust-builder >/dev/null 2>&1 || true
       - name: Log out of GitHub Container Registry
         if: always()
         run: docker logout ghcr.io
