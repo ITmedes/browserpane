@@ -25,6 +25,7 @@ pub(crate) struct GatewayApp {
     lifecycle: Arc<GatewayLifecycle>,
     readiness: Arc<GatewayReadiness>,
     shutdown_drain_timeout: Duration,
+    shutdown_readiness_grace: Duration,
 }
 
 impl GatewayApp {
@@ -147,6 +148,9 @@ impl GatewayApp {
             lifecycle,
             readiness,
             shutdown_drain_timeout: Duration::from_secs(config.gateway.shutdown_drain_timeout_secs),
+            shutdown_readiness_grace: Duration::from_secs(
+                config.gateway.shutdown_readiness_grace_secs,
+            ),
         })
     }
 
@@ -157,6 +161,7 @@ impl GatewayApp {
             lifecycle,
             readiness,
             shutdown_drain_timeout,
+            shutdown_readiness_grace,
         } = self;
 
         lifecycle.mark_running();
@@ -167,6 +172,7 @@ impl GatewayApp {
             api_server_config,
             api_lifecycle,
             readiness,
+            shutdown_readiness_grace,
         ));
         let api_abort = api_task.abort_handle();
 
@@ -235,6 +241,9 @@ fn validate_operational_timeouts(config: &Config) -> anyhow::Result<()> {
     }
     if config.gateway.shutdown_drain_timeout_secs == 0 {
         bail!("--shutdown-drain-timeout-secs must be greater than zero");
+    }
+    if config.gateway.shutdown_readiness_grace_secs >= config.gateway.shutdown_drain_timeout_secs {
+        bail!("--shutdown-readiness-grace-secs must be less than --shutdown-drain-timeout-secs");
     }
     Ok(())
 }

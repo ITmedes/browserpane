@@ -160,4 +160,11 @@ fn operational_timeouts_must_be_nonzero() {
         .unwrap_err()
         .to_string()
         .contains("--shutdown-drain-timeout-secs"));
+
+    config.gateway.shutdown_drain_timeout_secs = 2;
+    config.gateway.shutdown_readiness_grace_secs = 2;
+    assert!(super::validate_operational_timeouts(&config)
+        .unwrap_err()
+        .to_string()
+        .contains("--shutdown-readiness-grace-secs"));
 }

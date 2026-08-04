@@ -142,6 +142,7 @@ pub async fn run_api_server(
     config: ApiServerConfig,
     lifecycle: Arc<GatewayLifecycle>,
     readiness: Arc<GatewayReadiness>,
+    shutdown_readiness_grace: std::time::Duration,
 ) -> anyhow::Result<()> {
     let bind_addr = config.bind_addr;
     let state = Arc::new(ApiState {
@@ -177,6 +178,7 @@ pub async fn run_api_server(
     axum::serve(listener, app)
         .with_graceful_shutdown(async move {
             lifecycle.wait_for_draining().await;
+            tokio::time::sleep(shutdown_readiness_grace).await;
             info!("HTTP API listener stopped accepting new connections");
         })
         .await?;
