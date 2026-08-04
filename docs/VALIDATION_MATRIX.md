@@ -554,6 +554,20 @@ Current #147 evidence:
   images, including successful signed delivery to the fixed explicitly allowed
   receiver.
 
+Current #150 evidence:
+
+- focused gateway lifecycle and readiness tests cover monotonic/idempotent
+  transitions, dependency composition, timeout/failure behavior, sanitized
+  response schemas, and operational timeout validation,
+- the compose API test verifies public probe schemas, Postgres loss producing
+  `/readyz` 503 while `/healthz` remains 200, and readiness recovery after
+  Postgres restart,
+- a real gateway-container SIGTERM smoke observed readiness withdrawal before
+  HTTP listener closure, bounded WebTransport task drain, clean process exit,
+  and successful gateway restart,
+- full gateway/workspace and affected browser regression results must be added
+  before #150 moves to review.
+
 Webhook, import, and lifecycle:
 
 - webhook target validation must reject loopback, link-local, private,
@@ -561,8 +575,9 @@ Webhook, import, and lifecycle:
 - browser-context import tests must cover body/profile limits, ZIP entry count,
   symlink/hardlink tar entries, duplicate profile archives, and manifest
   errors,
-- graceful shutdown tests should prove SIGINT/SIGTERM stops new work, drains
-  bounded in-flight work, and exposes readiness/lifecycle state.
+- gateway lifecycle regressions must continue to prove SIGINT/SIGTERM stops new
+  work, drains owned in-flight work within the bound, and exposes sanitized
+  readiness/lifecycle state.
 
 Scalability and performance:
 

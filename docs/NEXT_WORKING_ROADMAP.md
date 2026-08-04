@@ -42,9 +42,10 @@ Foundation prerequisite from the 2026-07-31 delivery audit:
   cleanup,
 - #146 is merged through PR #190 with shared admin OIDC and browser-security
   controls,
-- #147 is implemented and validated on `feature/BPANE-00147`; continue with
-  #150 after #147 review and merge unless a reviewed Foundation/Pilot gate
-  changes the order.
+- #147 merged through PR #191,
+- #150 lifecycle, health, dependency readiness, and bounded drain are
+  implemented on `feature/BPANE-00150`; finish validation/review before #152
+  unless a reviewed Foundation/Pilot gate changes the order.
 
 Review reconciliation update:
 
@@ -52,8 +53,9 @@ Review reconciliation update:
   from `review/` are treated as superseded by the current baseline,
 - token-domain separation, raw credential URL/log cleanup, and admin-event
   query auth are implemented by #145; browser admin auth/CSP is implemented by
-  #146; webhook SSRF controls are implemented by #147; browser-context import
-  limits and graceful shutdown remain confirmed-open,
+  #146; webhook SSRF controls are implemented by #147; gateway graceful
+  shutdown/readiness is implemented by #150; browser-context import limits
+  remain confirmed-open,
 - recording artifact finalization remains a valid cleanup item, but it should
   not displace confirmed-open token/auth/webhook/import/lifecycle findings when
   choosing the next security-driven slice.

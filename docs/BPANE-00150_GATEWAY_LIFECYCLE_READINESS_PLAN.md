@@ -197,3 +197,20 @@ available.
    completed versus timed-out work.
 8. Restart the gateway and run session reconnect, MCP delegation, workflow,
    recording, and compose API regression smokes.
+
+## Implementation Evidence
+
+Implemented on `feature/BPANE-00150`:
+
+- shared monotonic lifecycle state and coordinated SIGINT/SIGTERM drain,
+- public `/healthz` and dependency-aware `/readyz`,
+- bounded Postgres, runtime-manager, configured Vault, and local artifact-store
+  checks,
+- HTTP admission rejection and graceful shutdown during drain,
+- WebTransport accept withdrawal with owned connection-task drain,
+- compose readiness health check and readiness-based e2e preflight,
+- focused tests plus compose Postgres loss/recovery and real SIGTERM/restart
+  smoke evidence.
+
+The broad gateway/workspace and affected browser regression results remain to
+be recorded before review.
