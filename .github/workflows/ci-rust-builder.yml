@@ -1,0 +1,123 @@
+name: CI Rust builder
+
+'on':
+  pull_request:
+    paths:
+      - deploy/Dockerfile.ci-rust
+      - rust-toolchain.toml
+      - Cargo.lock
+      - Cargo.toml
+      - code/shared/bpane-protocol/Cargo.toml
+      - code/apps/bpane-host/Cargo.toml
+      - code/apps/bpane-gateway/Cargo.toml
+      - scripts/ci/ci-rust-builder-ref.mjs
+      - scripts/ci/ci-rust-builder-workflow-contract.test.mjs
+      - .github/workflows/ci-rust-builder.yml
+  push:
+    branches:
+      - main
+    paths:
+      - deploy/Dockerfile.ci-rust
+      - rust-toolchain.toml
+      - Cargo.lock
+      - Cargo.toml
+      - code/shared/bpane-protocol/Cargo.toml
+      - code/apps/bpane-host/Cargo.toml
+      - code/apps/bpane-gateway/Cargo.toml
+      - scripts/ci/ci-rust-builder-ref.mjs
+      - scripts/ci/ci-rust-builder-workflow-contract.test.mjs
+      - .github/workflows/ci-rust-builder.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-rust-builder-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate builder image
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Resolve deterministic image reference
+        id: image
+        run: |
+          image=$(node scripts/ci/ci-rust-builder-ref.mjs)
+          tag=$(node scripts/ci/ci-rust-builder-ref.mjs --format tag)
+          echo "image=${image}" >> "${GITHUB_OUTPUT}"
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+      - name: Build builder image without publication
+        run: >-
+          docker buildx build
+          --platform linux/amd64
+          --load
+          --file deploy/Dockerfile.ci-rust
+          --tag "${{ steps.image.outputs.image }}"
+          --build-arg "BPANE_BUILDER_REVISION=${GITHUB_SHA}"
+          --build-arg "BPANE_BUILDER_VERSION=${{ steps.image.outputs.tag }}"
+          .
+      - name: Verify builder image contract
+        run: >-
+          scripts/ci/inspect-ci-rust-builder.sh
+          "${{ steps.image.outputs.image }}"
+          "${{ steps.image.outputs.tag }}"
+
+  publish:
+    name: Publish builder image
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Resolve deterministic image reference
+        id: image
+        run: |
+          image=$(node scripts/ci/ci-rust-builder-ref.mjs)
+          tag=$(node scripts/ci/ci-rust-builder-ref.mjs --format tag)
+          echo "image=${image}" >> "${GITHUB_OUTPUT}"
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+      - name: Authenticate to GitHub Container Registry
+        run: >-
+          echo "${{ github.token }}" |
+          docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+      - name: Check immutable content tag
+        id: existing
+        run: |
+          if docker buildx imagetools inspect "${{ steps.image.outputs.image }}" >/dev/null 2>&1; then
+            echo "published=true" >> "${GITHUB_OUTPUT}"
+            echo "Builder content tag already exists; it will not be replaced."
+          else
+            echo "published=false" >> "${GITHUB_OUTPUT}"
+          fi
+      - name: Build and publish builder image
+        if: steps.existing.outputs.published != 'true'
+        run: >-
+          docker buildx build
+          --platform linux/amd64
+          --provenance=mode=max
+          --sbom=true
+          --push
+          --file deploy/Dockerfile.ci-rust
+          --tag "${{ steps.image.outputs.image }}"
+          --build-arg "BPANE_BUILDER_REVISION=${GITHUB_SHA}"
+          --build-arg "BPANE_BUILDER_VERSION=${{ steps.image.outputs.tag }}"
+          .
+      - name: Verify published manifest
+        run: docker buildx imagetools inspect "${{ steps.image.outputs.image }}"
+      - name: Log out of GitHub Container Registry
+        if: always()
+        run: docker logout ghcr.io
