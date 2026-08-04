@@ -35,6 +35,8 @@ pub enum CredentialProviderError {
 
 #[async_trait]
 pub trait CredentialProviderBackend: Send + Sync {
+    async fn check_readiness(&self) -> Result<(), CredentialProviderError>;
+
     async fn store_secret(
         &self,
         request: StoreCredentialSecretRequest,
@@ -54,6 +56,10 @@ pub struct CredentialProvider {
 impl CredentialProvider {
     pub fn new(backend: Arc<dyn CredentialProviderBackend>) -> Self {
         Self { backend }
+    }
+
+    pub async fn check_readiness(&self) -> Result<(), CredentialProviderError> {
+        self.backend.check_readiness().await
     }
 
     pub async fn store_secret(
@@ -137,6 +143,18 @@ impl VaultKvV2CredentialProvider {
 
 #[async_trait]
 impl CredentialProviderBackend for VaultKvV2CredentialProvider {
+    async fn check_readiness(&self) -> Result<(), CredentialProviderError> {
+        self.client
+            .get(format!("{}/v1/sys/health", self.base_url))
+            .query(&[("standbyok", "true"), ("perfstandbyok", "true")])
+            .send()
+            .await
+            .map_err(|_| CredentialProviderError::Backend("vault health check failed".to_string()))?
+            .error_for_status()
+            .map(|_| ())
+            .map_err(|_| CredentialProviderError::Backend("vault health check failed".to_string()))
+    }
+
     async fn store_secret(
         &self,
         request: StoreCredentialSecretRequest,
@@ -243,5 +261,39 @@ fn ensure_json_object(payload: Value) -> Result<Value, CredentialProviderError> 
         Err(CredentialProviderError::InvalidRequest(
             "credential payload must be a JSON object".to_string(),
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn vault_readiness_uses_standard_health_endpoint() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            axum::serve(
+                listener,
+                axum::Router::new().route(
+                    "/v1/sys/health",
+                    axum::routing::get(|| async { axum::http::StatusCode::OK }),
+                ),
+            )
+            .await
+            .unwrap();
+        });
+        let provider = CredentialProvider::new(Arc::new(
+            VaultKvV2CredentialProvider::new(
+                format!("http://{address}"),
+                "token".to_string(),
+                "secret".to_string(),
+                None,
+            )
+            .unwrap(),
+        ));
+
+        provider.check_readiness().await.unwrap();
+        server.abort();
     }
 }

@@ -108,6 +108,13 @@ impl SessionStore {
         })
     }
 
+    pub(crate) async fn check_readiness(&self) -> Result<(), SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(_) => Ok(()),
+            SessionStoreBackend::Postgres(store) => store.db.check_readiness().await,
+        }
+    }
+
     pub(crate) async fn enforce_project_retained_storage_quota(
         &self,
         principal: &AuthenticatedPrincipal,

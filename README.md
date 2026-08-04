@@ -251,6 +251,25 @@ The compose stack starts:
 - `mcp-bridge`: MCP bridge on `:8931` (`/sessions/{id}/mcp` for recommended session-scoped Streamable HTTP, `/sessions/{id}/sse` for session-scoped legacy SSE, `/mcp` and `/sse` for compatibility)
 - `recording-worker-image`: one-shot build helper for the on-demand recording worker image used by `recording.mode=always`; the gateway launches short-lived recorder containers when sessions start recording
 
+The gateway exposes unauthenticated, resource-free operational probes on its
+HTTP port:
+
+```bash
+curl -fsS http://localhost:8932/healthz
+curl -fsS http://localhost:8932/readyz
+```
+
+`/healthz` reports process liveness. `/readyz` admits traffic only while the
+gateway is running and its configured session store, runtime manager,
+credential provider, and recording/workspace artifact stores are reachable.
+Compose uses `/readyz` for the gateway health check. On SIGINT or SIGTERM the
+gateway first withdraws readiness, rejects new API and WebTransport work, keeps
+the probes visible for a short grace period, and then drains owned in-flight
+work up to a bounded timeout. The local defaults can be overridden with
+`BPANE_GATEWAY_READINESS_CHECK_TIMEOUT_SECS`,
+`BPANE_GATEWAY_SHUTDOWN_READINESS_GRACE_SECS`, and
+`BPANE_GATEWAY_SHUTDOWN_DRAIN_TIMEOUT_SECS`.
+
 The gateway launches workflow-worker and recording-worker containers as
 short-lived jobs; do not run them as long-lived services. The default compose
 startup builds the `recording-worker-image` helper. Before local workflow runs

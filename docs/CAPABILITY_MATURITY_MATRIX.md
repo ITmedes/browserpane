@@ -2,7 +2,7 @@
 
 Governance issue: [#173](https://github.com/ITmedes/browserpane/issues/173)
 
-Last verified: 2026-08-04 at `fb03270`
+Last verified: 2026-08-04 on `feature/BPANE-00150`
 
 ## Maturity Definitions
 
@@ -42,16 +42,16 @@ capability.
 | Workflow Human Handoff | Partial prototype | run input/hold/resume primitives exist | #71, #154 |
 | Recording lifecycle and playback | Prototype | recorder worker, segmented artifacts, playback/export | #149, #21, #165 |
 | Generalized artifact/evidence model | Partial prototype | recordings, workspace files, workflow produced files remain separate resources | #21, #70, #28 |
-| Workflow event delivery | Prototype | signed delivery, retry/backoff, diagnostics, DNS/IP/redirect policy, pinned delivery, compose E2E | #147 review, #28, #165 |
+| Workflow event delivery | Prototype | signed delivery, retry/backoff, diagnostics, DNS/IP/redirect policy, pinned delivery, compose E2E; #147 merged through PR #191 | #28, #165 |
 | OIDC login and current-principal identity | Prototype | Keycloak compose, JWT validation, identity/access-review APIs | #146, #157 |
 | Service-principal registry | Implemented metadata; grants not fully enforced | registry CRUD and disabled-delegation guard | #176, #70 |
 | Organization/project RBAC | Planned | Current mappings are descriptive and owner-scoped | #176 |
 | Provisioning/deprovisioning and break-glass | Planned | Explicitly outside current identity baseline | #177 |
 | Admin-new resource console | Prototype | dashboard and major resource catalogs/details | #153-#163, #124 |
 | Admin-new default promotion | Planned | Old admin remains required fallback | #163 |
-| Gateway health/readiness/drain | Planned | No complete dependency-aware production contract | #150 |
+| Gateway health/readiness/drain | Implemented | Public liveness/readiness probes, configured dependency checks, SIGINT/SIGTERM readiness withdrawal, bounded HTTP/WebTransport drain, unit and compose failure-path evidence on #150 branch | #66, #74, #178 production packaging/HA/telemetry |
 | Platform telemetry and SLOs | Planned | Subsystem-local/client diagnostics only | #178 |
-| Compose deployment | Prototype | Supported local development baseline | #66, #150, #166 |
+| Compose deployment | Prototype | Supported local development baseline with dependency-aware gateway health check | #66, #166, #178 |
 | Kubernetes/Fargate/cloud adapters | Planned | Architecture options, no production support claim | #66, #167 |
 | HA and disaster recovery | Planned | No supported HA/DR contract | #73, #74 |
 | Supply-chain/release governance | Planned | Local tests and Dependabot exist; no enforced CI/SBOM/signing | #151, #75 |

@@ -52,4 +52,16 @@ pub struct GatewayConfig {
     /// Timeout for gateway-to-MCP-bridge control calls.
     #[arg(long = "mcp-bridge-control-timeout-secs", default_value_t = 5)]
     pub mcp_bridge_control_timeout_secs: u64,
+
+    /// Maximum duration of one dependency readiness check.
+    #[arg(long = "readiness-check-timeout-secs", default_value_t = 3)]
+    pub readiness_check_timeout_secs: u64,
+
+    /// Maximum duration allowed for active work to drain during shutdown.
+    #[arg(long = "shutdown-drain-timeout-secs", default_value_t = 15)]
+    pub shutdown_drain_timeout_secs: u64,
+
+    /// Time to advertise not-ready before closing the HTTP listener.
+    #[arg(long = "shutdown-readiness-grace-secs", default_value_t = 2)]
+    pub shutdown_readiness_grace_secs: u64,
 }

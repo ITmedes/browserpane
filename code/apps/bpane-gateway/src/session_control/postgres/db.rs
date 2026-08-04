@@ -63,4 +63,17 @@ impl PostgresDb {
             ))
         })
     }
+
+    pub(in crate::session_control) async fn check_readiness(
+        &self,
+    ) -> Result<(), SessionStoreError> {
+        self.client()
+            .await?
+            .simple_query("SELECT 1")
+            .await
+            .map(|_| ())
+            .map_err(|error| {
+                SessionStoreError::Backend(format!("postgres readiness query failed: {error}"))
+            })
+    }
 }

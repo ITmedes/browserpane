@@ -2,11 +2,19 @@
 mod suite;
 
 use suite::{
-    automation_access_boundaries, browser_contexts, credentials_extensions, identity,
-    network_identity, ownership_boundaries, projects, recording_artifacts, service_principals,
-    session_churn, session_compatibility, session_templates, sessions_recordings, support,
-    workflow_run_controls, workflows_events, workspaces_automation,
+    automation_access_boundaries, browser_contexts, credentials_extensions, health_readiness,
+    identity, network_identity, ownership_boundaries, projects, recording_artifacts,
+    service_principals, session_churn, session_compatibility, session_templates,
+    sessions_recordings, support, workflow_run_controls, workflows_events, workspaces_automation,
 };
+
+#[tokio::test]
+#[ignore = "requires running local compose stack"]
+async fn compose_gateway_health_and_readiness_surface() -> anyhow::Result<()> {
+    let _guard = support::suite_lock().lock().await;
+    let harness = support::ComposeHarness::connect().await?;
+    health_readiness::run(&harness).await
+}
 
 #[tokio::test]
 #[ignore = "requires running local compose stack"]

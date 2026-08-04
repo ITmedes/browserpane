@@ -4,7 +4,7 @@ Status: Canonical execution roadmap
 
 Governance issue: [#173](https://github.com/ITmedes/browserpane/issues/173)
 
-Last implementation audit: 2026-08-04 at `b6fd13c`
+Last implementation audit: 2026-08-04 on `feature/BPANE-00150`
 
 ## How To Use This Document
 
@@ -44,7 +44,7 @@ or capacity decision.
 
 | Lane | Outcome | Current entry point | Promotion target |
 | --- | --- | --- | --- |
-| Foundation | Trusted build, auth, contracts, storage, and lifecycle baseline. | #151 | Foundation Gate |
+| Foundation | Trusted build, auth, contracts, storage, and lifecycle baseline. | #150 | Foundation Gate |
 | Pilot Value | One bounded reference workflow with accepted evidence and runbook. | #174 | Phase 0 Gate |
 | Operator Product | Complete and promote `/admin-new/` as the default operator console. | #153 | Phase 1 Gate |
 | Production | Harden deployment, security, recovery, supply chain, and telemetry. | #72 / #66 / #178 | Production Baseline |
@@ -60,22 +60,24 @@ or capacity decision.
 | 0 | #151 | Done | #173 governance baseline | Required CI, dependency, coverage, and validation checks. |
 | 1 | #145 | Done | #151 required checks | Separate credential domains and remove bearer credentials from URLs/logs. |
 | 2 | #146 | Done | #145 secure credential contract | Harden shared admin auth, CSP, and browser security. |
-| 3 | #147 | Review | #145 credential/log baseline | Add callback and webhook SSRF controls. |
+| 3 | #147 | Done | #145 credential/log baseline | Callback and webhook SSRF controls merged through PR #191. |
+| 4 | #150 | Review | #147 callback boundary | Lifecycle, dependency readiness, and bounded drain implemented and fully validated. |
 
 ### Next Three Product Slices
 
 | Order | Issue | State | Dependency | Outcome |
 | --- | --- | --- | --- | --- |
-| 1 | #146 | Done | #145 secure credential contract | Harden shared admin auth, CSP, origin, and browser security. |
-| 2 | #147 | Review | #145 credential/log baseline | Add callback and webhook SSRF controls. |
-| 3 | #150 | Qualified | #147 callback boundary | Add lifecycle, dependency readiness, and bounded drain. |
+| 1 | #147 | Done | #145 credential/log baseline | Add callback and webhook SSRF controls. |
+| 2 | #150 | Review | #147 callback boundary | Add lifecycle, dependency readiness, and bounded drain. |
+| 3 | #152 | Qualified | #150 stable readiness contract | Add shared in-memory/Postgres store contract tests. |
 
 #151, #184, and #185 established and accelerated the required validation
 baseline. #145 is merged through
 `docs/BPANE-00145_TOKEN_DOMAIN_SEPARATION_PLAN.md`; #146 is merged through PR
-#190 and documented in `docs/BPANE-00146_ADMIN_AUTH_SECURITY_PLAN.md`. #147 is
-implemented and validated on `feature/BPANE-00147`; #150 is the next Foundation
-slice after #147 review and merge.
+#190 and documented in `docs/BPANE-00146_ADMIN_AUTH_SECURITY_PLAN.md`. #147
+merged through PR #191. #150 is implemented and has passed the canonical full
+46-stage validation profile on `feature/BPANE-00150`; review/merge remains
+before #152 becomes the next Foundation slice.
 
 ## Foundation Gate Sequence
 

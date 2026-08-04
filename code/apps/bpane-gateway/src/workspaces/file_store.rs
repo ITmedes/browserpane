@@ -41,6 +41,8 @@ impl WorkspaceFileStoreError {
 
 #[async_trait]
 pub trait WorkspaceFileStoreBackend: Send + Sync {
+    async fn check_readiness(&self) -> Result<(), WorkspaceFileStoreError>;
+
     async fn write(
         &self,
         request: StoreWorkspaceFileRequest,
@@ -63,6 +65,10 @@ impl WorkspaceFileStore {
 
     pub fn local_fs(root: PathBuf) -> Self {
         Self::new(Arc::new(LocalFsWorkspaceFileStore { root }))
+    }
+
+    pub async fn check_readiness(&self) -> Result<(), WorkspaceFileStoreError> {
+        self.backend.check_readiness().await
     }
 
     pub async fn write(
@@ -88,6 +94,10 @@ pub struct LocalFsWorkspaceFileStore {
 
 #[async_trait]
 impl WorkspaceFileStoreBackend for LocalFsWorkspaceFileStore {
+    async fn check_readiness(&self) -> Result<(), WorkspaceFileStoreError> {
+        check_local_store_root(&self.root).await
+    }
+
     async fn write(
         &self,
         request: StoreWorkspaceFileRequest,
@@ -120,6 +130,19 @@ impl WorkspaceFileStoreBackend for LocalFsWorkspaceFileStore {
             Err(error) => Err(error.into()),
         }
     }
+}
+
+async fn check_local_store_root(root: &Path) -> Result<(), WorkspaceFileStoreError> {
+    fs::create_dir_all(root).await?;
+    let probe_path = root.join(format!(".bpane-readiness-{}", Uuid::now_v7()));
+    let file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&probe_path)
+        .await?;
+    drop(file);
+    fs::remove_file(probe_path).await?;
+    Ok(())
 }
 
 impl LocalFsWorkspaceFileStore {
@@ -223,5 +246,17 @@ mod tests {
             error,
             WorkspaceFileStoreError::InvalidReference(_)
         ));
+    }
+
+    #[tokio::test]
+    async fn local_fs_store_readiness_creates_and_cleans_probe() {
+        let temp_dir = tempdir().unwrap();
+        let root = temp_dir.path().join("workspace-files");
+        let store = WorkspaceFileStore::local_fs(root.clone());
+
+        store.check_readiness().await.unwrap();
+
+        assert!(root.exists());
+        assert_eq!(std::fs::read_dir(root).unwrap().count(), 0);
     }
 }

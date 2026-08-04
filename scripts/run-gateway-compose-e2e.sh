@@ -90,34 +90,8 @@ wait_for_http() {
   done
 }
 
-fetch_gateway_service_token() {
-  curl -fsS \
-    -X POST \
-    "http://localhost:8091/realms/browserpane-dev/protocol/openid-connect/token" \
-    -H "content-type: application/x-www-form-urlencoded" \
-    --data "grant_type=client_credentials&client_id=bpane-mcp-bridge&client_secret=bpane-mcp-bridge-secret" \
-    | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])'
-}
-
 wait_for_gateway_api() {
-  local max_attempts=60
-  local attempt=1
-
-  while (( attempt <= max_attempts )); do
-    local token
-    if token="$(fetch_gateway_service_token 2>/dev/null)"; then
-      if curl -fsS \
-        -H "Authorization: Bearer $token" \
-        "http://localhost:8932/api/v1/sessions" >/dev/null 2>&1; then
-        return 0
-      fi
-    fi
-    sleep 2
-    attempt=$((attempt + 1))
-  done
-
-  echo "timed out waiting for gateway API readiness" >&2
-  exit 1
+  wait_for_http "gateway dependency readiness" "http://localhost:8932/readyz"
 }
 
 cleanup() {
@@ -130,7 +104,6 @@ trap cleanup EXIT
 
 require_command docker
 require_command curl
-require_command python3
 if [[ "$SUITE" != "stack" ]]; then
   require_command cargo
 fi
