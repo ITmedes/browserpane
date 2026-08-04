@@ -45,6 +45,7 @@ export class ValidationStageCatalog {
         'scripts/ci/ci-rust-builder-ref.test.mjs',
         'scripts/ci/ci-rust-builder-resolver.test.mjs',
         'scripts/ci/ci-rust-builder-workflow-contract.test.mjs',
+        'scripts/ci/admin-security-headers-contract.test.mjs',
         'scripts/ci/compose-workflow-contract.test.mjs',
         'scripts/ci/compose-diagnostics-collector.test.mjs',
         'scripts/ci/diagnostic-redactor.test.mjs',
@@ -76,6 +77,8 @@ export class ValidationStageCatalog {
       this.#node('rust-coverage', 'Run Rust coverage ratchet', root,
         ['scripts/run-rust-coverage.mjs'], 1800)
     ];
+    stages.push(...this.#npmPackage(root, 'admin-auth', 'code/web/bpane-admin-auth',
+      ['check', 'test', 'test:coverage', 'build']));
     stages.push(...this.#npmPackage(root, 'admin', 'code/web/bpane-admin',
       ['check', 'test', 'build']));
     stages.push(...this.#npmPackage(root, 'admin-new', 'code/web/bpane-admin-unified',
@@ -100,6 +103,8 @@ export class ValidationStageCatalog {
     return [
       this.#stage('compose-gateway-api', 'Run gateway compose API suites', 'bash',
         ['scripts/run-gateway-compose-e2e.sh', '--suite', 'all'], root, 2700),
+      this.#npmSmoke('compose-admin-auth-security', 'Smoke shared admin authentication', client,
+        'smoke:admin-auth-security'),
       this.#npmSmoke('compose-admin-new-dashboard', 'Smoke admin-new dashboard', client,
         'smoke:admin-unified-dashboard'),
       this.#npmSmoke('compose-admin-new-projects', 'Smoke admin-new projects', client,

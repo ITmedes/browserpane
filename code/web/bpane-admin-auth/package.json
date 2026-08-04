@@ -1,0 +1,26 @@
+{
+  "name": "@browserpane/admin-auth",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./svelte-csp-config": "./src/svelte-csp-config.js"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage && node ../../../scripts/check-coverage-baseline.mjs --target admin-auth"
+  },
+  "dependencies": {
+    "oauth4webapi": "^3.8.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "@vitest/coverage-v8": "^4.1.5",
+    "jose": "^6.2.8",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.5"
+  }
+}

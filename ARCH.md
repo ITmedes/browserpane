@@ -491,7 +491,15 @@ Gateway-supervised passive session recorder.
 The default dev stack no longer uses a shared token file.
 
 - `web` serves `/auth-config.json`
-- the admin console discovers the OIDC provider and performs Authorization Code + PKCE
+- both admin consoles consume `code/web/bpane-admin-auth`; the package delegates
+  OIDC discovery, PKCE, authorization-response validation, token grants,
+  signature/claim validation, and JWKS rotation to the OpenID-certified
+  `oauth4webapi` implementation
+- BrowserPane's auth adapter owns runtime config, a ten-minute login transaction,
+  memory-only token lifetime, admin auth snapshots, redirects, and recovery
+- access, ID, and refresh tokens are never written to web storage; only the
+  bounded PKCE transaction uses per-tab `sessionStorage`, and page reloads
+  recover through a normal provider SSO redirect
 - local browser users authenticate against Keycloak on `http://localhost:8091`
 - the local demo user is `demo / demo-demo`
 - after login, the admin console lists owner-scoped `/api/v1/sessions`, projects, session templates, egress profiles, browser contexts, file workspaces, session-derived recording segments, and the current `/api/v1/identity/access-review`; it lets the user join an existing session, start a new one with optional project, template, network-identity, egress-profile, reusable-context, and capability bindings, create project-owned reusable contexts and file workspaces where needed, inspect and download retained recording artifacts where available, inspect project/admission metadata on live rows and session detail views, inspect the current principal, resource counts, project usage, registered service principals, identity-to-project mappings, unmapped principal signals, and delegated automation principals in the Identity tab, create/edit/disable/re-enable service principals and identity-to-project mappings from that tab, inspect API-backed reusable context references, active writer state, profile storage usage, storage-limit state, and retention expiry, clone or export inactive reusable contexts, import BrowserPane export archives as new reusable contexts, and delete unused contexts in the operations overlay or `/admin/browser-contexts`, then uses the selected session resource's connect metadata

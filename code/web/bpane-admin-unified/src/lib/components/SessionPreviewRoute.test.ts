@@ -25,6 +25,16 @@ afterEach(async () => {
 });
 
 describe('SessionPreviewRoute', () => {
+  it('reports missing OIDC configuration in a standalone preview window', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response('', { status: 404 })));
+
+    const target = renderComponent(SessionPreviewRoute);
+
+    await vi.waitFor(() => {
+      expect(byTestId(target, 'session-preview-error').textContent).toContain('OIDC authentication is not configured');
+    });
+  });
+
   it('loads the selected session and connects the popup viewport', async () => {
     const disconnect = vi.fn();
     const connect = vi.fn(async () => ({

@@ -314,7 +314,14 @@ The default local auth and session flow is OIDC-based:
 - the session detail view shows MCP authorization/default-session state and the
   immutable session-scoped endpoint for direct MCP clients
 
-The admin console fetches `/auth-config.json` and performs an Authorization Code + PKCE login. Admin API calls use the resulting OIDC bearer token.
+The admin consoles fetch `/auth-config.json` and use the shared
+`@browserpane/admin-auth` package for Authorization Code + PKCE. Its
+provider-neutral protocol core is `oauth4webapi`; BrowserPane only owns runtime
+configuration, the bounded login transaction, auth snapshots, redirects, and
+application recovery. Access, ID, and refresh tokens stay in memory. Only the
+short-lived PKCE verifier, state, nonce, redirect URI, and creation time enter
+per-tab `sessionStorage`; reloading performs a normal OIDC redirect and normally
+recovers through the existing provider SSO session.
 Before WebTransport connect, the console mints a short-lived session-scoped connect ticket from the session API and uses that ticket on the transport URL instead of the long-lived bearer token. The legacy development harness remains available at `/test-embed.html` for smoke tests that still exercise harness-specific hooks.
 
 For Chromium, WebTransport still needs trusted TLS on localhost. The current runtime SPKI fingerprint is served at:
@@ -1327,6 +1334,9 @@ cd code/web/bpane-client && npm run smoke:multisession -- --headless
 
 - Admin applications authenticate to `bpane-gateway` with OIDC bearer access
   tokens; browser transport connections use a separate session-scoped ticket.
+- Both admin applications share the OpenID-certified `oauth4webapi` protocol
+  core. Admin access, ID, and refresh tokens remain in memory rather than web
+  storage; reload recovery uses the identity provider's SSO session.
 - In the local compose stack, those tokens come from the Keycloak realm on `:8091`.
 - The gateway supports OIDC/JWT validation with issuer, audience, and JWKS configuration.
 - `mcp-bridge` uses OIDC client-credentials to call the gateway HTTP API.

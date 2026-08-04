@@ -5,7 +5,7 @@
   import { WorkflowClient } from '../api/workflow-client';
   import { AuthConfigClient, type AuthConfig } from '../auth/auth-config';
   import { BrowserTokenStore } from '../auth/browser-token-store';
-  import { OidcAuthClient } from '../auth/oidc-auth-client';
+  import { OidcAuthClient, OidcAuthClientFactory } from '../auth/oidc-auth-client';
   import type { AuthSnapshot } from '../auth/oidc-types';
   import AdminHeader from '../presentation/AdminHeader.svelte';
   import AdminMessage from '../presentation/AdminMessage.svelte';
@@ -60,16 +60,19 @@
         auth = null;
         return;
       }
-      authClient = new OidcAuthClient({
+      authClient = OidcAuthClientFactory.create({
         config,
         tokenStore: new BrowserTokenStore(window.sessionStorage),
       });
       if (config.mode === 'oidc') {
         await completeLoginRedirect();
       }
+      await authClient.initialize();
       auth = authClient.getSnapshot();
       if (auth.authenticated) {
         bindAuthenticatedClients();
+      } else if (config.mode === 'oidc') {
+        await login();
       }
     } catch (error) {
       authError = errorMessage(error);

@@ -33,6 +33,7 @@ test('compose workflow preserves every browser-facing smoke stage', () => {
   const job = workflow.jobs['browser-integrations'];
   const command = stepByName(job, 'Run browser-facing compose validation').run;
   const expectedStages = [
+    'compose-admin-auth-security',
     'compose-admin-new-dashboard',
     'compose-admin-new-projects',
     'compose-admin-new-sessions',

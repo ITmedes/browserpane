@@ -20,6 +20,17 @@
         "lines": 92.8
       }
     },
+    "admin-auth": {
+      "label": "Shared admin authentication",
+      "format": "istanbul-summary",
+      "report": "code/web/bpane-admin-auth/coverage/coverage-summary.json",
+      "minimums": {
+        "statements": 80.0,
+        "branches": 70.0,
+        "functions": 95.0,
+        "lines": 80.0
+      }
+    },
     "admin-new": {
       "label": "Admin-new maintained library",
       "format": "istanbul-summary",
