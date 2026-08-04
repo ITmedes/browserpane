@@ -262,4 +262,4 @@ smokes. Host-side Cargo caches do not feed the isolated Docker builders.
 - Cold/fallback run: pending
 - First-pull run: pending
 - Warm run: pending
-- Implementation PR: pending
+- Implementation PR: [#187](https://github.com/ITmedes/browserpane/pull/187)
