@@ -1,61 +1,98 @@
+import * as oauth from 'oauth4webapi';
 import type { AuthConfig } from './auth-config';
-import type { OidcMetadata, PkceState } from './oidc-types';
+import type { OidcExchangeResult, OidcTokenSet, PkceState } from './oidc-types';
 import { OidcWireMapper } from './oidc-wire-mapper';
 import { PkceCodec } from './pkce-codec';
 
 export class OidcEndpointClient {
-  readonly #config: AuthConfig;
+  readonly #client: oauth.Client;
   readonly #fetchImpl: typeof fetch;
-  #metadata: OidcMetadata | null = null;
+  readonly #issuer: URL;
+  readonly #nowMs: () => number;
+  readonly #allowInsecure: boolean;
+  #metadata: oauth.AuthorizationServer | null = null;
 
-  constructor(config: AuthConfig, fetchImpl: typeof fetch) {
-    this.#config = config;
+  constructor(config: AuthConfig, fetchImpl: typeof fetch, nowMs: () => number) {
+    this.#issuer = issuerUrl(requiredString(config.issuer, 'OIDC issuer'));
     this.#fetchImpl = fetchImpl;
+    this.#nowMs = nowMs;
+    this.#allowInsecure = this.#issuer.protocol === 'http:';
+    this.#client = {
+      client_id: requiredString(config.clientId, 'OIDC client id'),
+      [oauth.clockSkew]: (nowMs() - Date.now()) / 1000,
+      [oauth.clockTolerance]: 5,
+    };
   }
 
-  async fetchMetadata(): Promise<OidcMetadata> {
+  async fetchMetadata(): Promise<oauth.AuthorizationServer> {
     if (this.#metadata) {
       return this.#metadata;
     }
-    const issuer = this.issuer();
-    const response = await this.#fetchImpl(`${issuer}/.well-known/openid-configuration`, {
-      cache: 'no-store',
-    });
-    if (!response.ok) {
-      throw new Error(`OIDC discovery failed with HTTP ${response.status}`);
-    }
-    const metadata = OidcWireMapper.toMetadata(await response.json());
-    if (normalizeIssuer(metadata.issuer) !== issuer) {
-      throw new Error('OIDC discovery issuer mismatch');
-    }
-    this.#metadata = metadata;
-    return metadata;
+    const response = await oauth.discoveryRequest(this.#issuer, this.#requestOptions());
+    this.#metadata = await oauth.processDiscoveryResponse(this.#issuer, response);
+    return this.#metadata;
   }
 
-  async exchangeAuthorizationCode(code: string, pkce: PkceState): Promise<unknown> {
+  async buildAuthorizationUrl(pkce: PkceState, scope: string): Promise<string> {
     const metadata = await this.fetchMetadata();
-    const body = new URLSearchParams({
-      grant_type: 'authorization_code',
-      client_id: this.clientId(),
-      code,
-      redirect_uri: pkce.redirectUri,
-      code_verifier: pkce.verifier,
-    });
-    const response = await this.#postTokenRequest(metadata.token_endpoint, body);
-    if (!response.ok) {
-      throw new Error(`OIDC code exchange failed with HTTP ${response.status}`);
-    }
-    return await response.json();
+    const endpoint = requiredString(metadata.authorization_endpoint, 'OIDC authorization endpoint');
+    const url = new URL(endpoint);
+    url.searchParams.set('client_id', this.clientId());
+    url.searchParams.set('redirect_uri', pkce.redirectUri);
+    url.searchParams.set('response_type', 'code');
+    url.searchParams.set('scope', scope);
+    url.searchParams.set('state', pkce.state);
+    url.searchParams.set('nonce', pkce.nonce);
+    url.searchParams.set('code_challenge', await oauth.calculatePKCECodeChallenge(pkce.verifier));
+    url.searchParams.set('code_challenge_method', 'S256');
+    return url.toString();
   }
 
-  async refreshAccessToken(refreshToken: string): Promise<unknown | null> {
+  async exchangeAuthorizationCode(currentUrl: URL, pkce: PkceState): Promise<OidcExchangeResult> {
     const metadata = await this.fetchMetadata();
-    const response = await this.#postTokenRequest(metadata.token_endpoint, new URLSearchParams({
-      grant_type: 'refresh_token',
-      client_id: this.clientId(),
-      refresh_token: refreshToken,
-    }));
-    return response.ok ? await response.json() : null;
+    const parameters = oauth.validateAuthResponse(metadata, this.#client, currentUrl, pkce.state);
+    const response = await oauth.authorizationCodeGrantRequest(
+      metadata,
+      this.#client,
+      oauth.None(),
+      parameters,
+      pkce.redirectUri,
+      pkce.verifier,
+      this.#requestOptions(),
+    );
+    const result = await oauth.processAuthorizationCodeResponse(metadata, this.#client, response, {
+      expectedNonce: pkce.nonce,
+      requireIdToken: true,
+    });
+    await oauth.validateApplicationLevelSignature(metadata, response, this.#requestOptions());
+    const claims = oauth.getValidatedIdTokenClaims(result);
+    if (!claims) {
+      throw new Error('OIDC ID token is required');
+    }
+    return {
+      tokens: OidcWireMapper.toTokenSet(result, this.#nowMs()),
+      claims: OidcWireMapper.toClaims(claims),
+    };
+  }
+
+  async refreshAccessToken(refreshToken: string, previous: OidcTokenSet): Promise<OidcExchangeResult> {
+    const metadata = await this.fetchMetadata();
+    const response = await oauth.refreshTokenGrantRequest(
+      metadata,
+      this.#client,
+      oauth.None(),
+      refreshToken,
+      this.#requestOptions(),
+    );
+    const result = await oauth.processRefreshTokenResponse(metadata, this.#client, response);
+    if (result.id_token) {
+      await oauth.validateApplicationLevelSignature(metadata, response, this.#requestOptions());
+    }
+    const claims = oauth.getValidatedIdTokenClaims(result);
+    return {
+      tokens: OidcWireMapper.toTokenSet(result, this.#nowMs(), previous),
+      ...(claims ? { claims: OidcWireMapper.toClaims(claims) } : {}),
+    };
   }
 
   async buildLogoutUrl(idToken: string | undefined, currentUrl: URL): Promise<string> {
@@ -73,24 +110,44 @@ export class OidcEndpointClient {
   }
 
   clientId(): string {
-    return requiredString(this.#config.clientId, 'OIDC client id');
+    return this.#client.client_id;
   }
 
-  issuer(): string {
-    return normalizeIssuer(requiredString(this.#config.issuer, 'OIDC issuer'));
+  #requestOptions() {
+    return {
+      [oauth.customFetch]: this.#customFetch,
+      ...(this.#allowInsecure ? { [oauth.allowInsecureRequests]: true } : {}),
+    };
   }
 
-  fetchImpl(): typeof fetch {
-    return this.#fetchImpl;
-  }
+  #customFetch = <Method, BodyType>(
+    url: string,
+    options: oauth.CustomFetchOptions<Method, BodyType>,
+  ): Promise<Response> => {
+    const init: RequestInit = {
+      headers: options.headers,
+      method: String(options.method),
+      redirect: options.redirect,
+      ...(options.signal ? { signal: options.signal } : {}),
+      ...(options.body !== undefined ? { body: options.body as BodyInit } : {}),
+    };
+    return this.#fetchImpl(url, init);
+  };
+}
 
-  async #postTokenRequest(tokenEndpoint: string, body: URLSearchParams): Promise<Response> {
-    return await this.#fetchImpl(tokenEndpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body,
-    });
+function issuerUrl(value: string): URL {
+  const url = new URL(value.replace(/\/$/, ''));
+  if (url.protocol === 'https:') {
+    return url;
   }
+  if (url.protocol === 'http:' && isLoopbackHost(url.hostname)) {
+    return url;
+  }
+  throw new Error('OIDC issuer must use HTTPS unless it is a loopback development endpoint');
+}
+
+function isLoopbackHost(hostname: string): boolean {
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
 }
 
 function requiredString(value: unknown, label: string): string {
@@ -98,8 +155,4 @@ function requiredString(value: unknown, label: string): string {
     throw new Error(`${label} must be a non-empty string`);
   }
   return value;
-}
-
-function normalizeIssuer(value: string): string {
-  return value.replace(/\/$/, '');
 }

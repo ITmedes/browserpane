@@ -3,31 +3,31 @@ import { BrowserTokenStore } from './browser-token-store';
 import { MemoryStorage } from './test-support/memory-storage';
 
 describe('BrowserTokenStore', () => {
-  it('persists access and ID tokens without the refresh token', () => {
+  it('removes current and legacy token state without persisting credentials', () => {
     const storage = new MemoryStorage();
-    const store = new BrowserTokenStore(storage);
+    storage.setItem('bpane.admin.auth.tokens.v2', '{"access_token":"current"}');
+    storage.setItem('bpane.admin.auth.tokens.v1', '{"refresh_token":"legacy"}');
 
-    store.saveTokens({
-      access_token: 'access-token',
-      id_token: 'id-token',
-      refresh_token: 'refresh-token',
-      expiresAtMs: 12_345,
-    });
+    new BrowserTokenStore(storage).clearTokens();
 
-    const persisted = storage.getItem('bpane.admin.auth.tokens.v2');
-    expect(persisted).toContain('access-token');
-    expect(persisted).toContain('id-token');
-    expect(persisted).not.toContain('refresh-token');
-    expect(store.loadTokens()).not.toHaveProperty('refresh_token');
+    expect(storage.getItem('bpane.admin.auth.tokens.v2')).toBeNull();
+    expect(storage.getItem('bpane.admin.auth.tokens.v1')).toBeNull();
   });
 
-  it('clears malformed and legacy token state', () => {
+  it('round-trips the short-lived login transaction without token material', () => {
     const storage = new MemoryStorage();
-    storage.setItem('bpane.admin.auth.tokens.v2', '{broken');
-    storage.setItem('bpane.admin.auth.tokens.v1', '{"refresh_token":"legacy-secret"}');
     const store = new BrowserTokenStore(storage);
+    const transaction = {
+      verifier: 'verifier',
+      state: 'state',
+      nonce: 'nonce',
+      redirectUri: 'https://app.example.test/admin-new/',
+      createdAtMs: 12_345,
+    };
 
-    expect(store.loadTokens()).toBeNull();
+    store.savePkceState(transaction);
+
+    expect(store.loadPkceState()).toEqual(transaction);
     expect(storage.getItem('bpane.admin.auth.tokens.v2')).toBeNull();
     expect(storage.getItem('bpane.admin.auth.tokens.v1')).toBeNull();
   });

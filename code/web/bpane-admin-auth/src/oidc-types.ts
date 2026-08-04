@@ -1,11 +1,3 @@
-export type OidcMetadata = {
-  readonly issuer: string;
-  readonly authorization_endpoint: string;
-  readonly token_endpoint: string;
-  readonly jwks_uri: string;
-  readonly end_session_endpoint?: string;
-};
-
 export type OidcTokenSet = {
   readonly access_token: string;
   readonly token_type?: string;
@@ -19,6 +11,11 @@ export type OidcClaims = {
   readonly sub: string;
   readonly preferred_username?: string;
   readonly email?: string;
+};
+
+export type OidcExchangeResult = {
+  readonly tokens: OidcTokenSet;
+  readonly claims?: OidcClaims;
 };
 
 export type PkceState = {

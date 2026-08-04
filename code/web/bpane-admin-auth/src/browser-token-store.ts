@@ -1,4 +1,4 @@
-import type { OidcTokenSet, PkceState } from './oidc-types';
+import type { PkceState } from './oidc-types';
 
 const TOKEN_STORAGE_KEY = 'bpane.admin.auth.tokens.v2';
 const PKCE_STORAGE_KEY = 'bpane.admin.auth.pkce.v2';
@@ -12,33 +12,6 @@ export class BrowserTokenStore {
 
   constructor(storage: StorageLike) {
     this.#storage = storage;
-  }
-
-  loadTokens(): OidcTokenSet | null {
-    const value = this.#readJson(TOKEN_STORAGE_KEY);
-    if (!value || typeof value.access_token !== 'string' || typeof value.expiresAtMs !== 'number') {
-      this.clearTokens();
-      return null;
-    }
-    return {
-      access_token: value.access_token,
-      expiresAtMs: value.expiresAtMs,
-      ...optionalStringProperty('token_type', value.token_type),
-      ...optionalNumberProperty('expires_in', value.expires_in),
-      ...optionalStringProperty('id_token', value.id_token),
-    };
-  }
-
-  saveTokens(tokens: OidcTokenSet): void {
-    const persisted = {
-      access_token: tokens.access_token,
-      expiresAtMs: tokens.expiresAtMs,
-      ...optionalStringProperty('token_type', tokens.token_type),
-      ...optionalNumberProperty('expires_in', tokens.expires_in),
-      ...optionalStringProperty('id_token', tokens.id_token),
-    };
-    this.#storage.setItem(TOKEN_STORAGE_KEY, JSON.stringify(persisted));
-    this.#storage.removeItem(LEGACY_TOKEN_STORAGE_KEY);
   }
 
   clearTokens(): void {
@@ -92,12 +65,4 @@ export class BrowserTokenStore {
       return null;
     }
   }
-}
-
-function optionalStringProperty<Key extends string>(key: Key, value: unknown): Partial<Record<Key, string>> {
-  return typeof value === 'string' && value.length > 0 ? { [key]: value } as Record<Key, string> : {};
-}
-
-function optionalNumberProperty<Key extends string>(key: Key, value: unknown): Partial<Record<Key, number>> {
-  return typeof value === 'number' && Number.isFinite(value) ? { [key]: value } as Record<Key, number> : {};
 }

@@ -3,13 +3,13 @@
 ## Metadata
 
 - Issue: [#146](https://github.com/ITmedes/browserpane/issues/146)
-- State: In Progress
+- State: Implementation Complete
 - Owner: `thebackplane`
 - Lane: Foundation
 - Target gate: Foundation Gate
 - Branch: `feature/BPANE-00146`
 - Depends on: #145 token-domain and URL credential cleanup
-- Last verified: 2026-08-04 at `7c034a3`
+- Last verified: 2026-08-04 on `feature/BPANE-00146`
 
 ## Business Outcome
 
@@ -30,7 +30,7 @@ and redirects consistently when authentication can no longer be recovered. A
 copied callback, wrong-audience token, unsigned token, or embedded admin page is
 rejected without exposing token details.
 
-## Current Evidence
+## Pre-Implementation Evidence
 
 - Both admin packages contain duplicate production auth modules.
 - Authorization Code with PKCE and state is implemented, but nonce is absent.
@@ -54,7 +54,7 @@ rejected without exposing token details.
    nonce, and bounded PKCE transaction age.
 4. Keep access, ID, and refresh tokens in memory only; persist only the bounded
    PKCE transaction and use the provider SSO redirect after a page reload.
-5. Make invalid callback, invalid stored identity, failed refresh, logout, and
+5. Make invalid callback, stale transaction, failed refresh, logout, and
    API authentication failure clear local state consistently.
 6. Apply CSP and standard browser security headers to `/admin/` and
    `/admin-new/` without blocking Keycloak, API, WebTransport, WebSocket,
@@ -213,13 +213,22 @@ rejected without exposing token details.
 
 ## Evidence Record
 
-- Plan and issue alignment: pending first implementation commit.
+- Plan and issue alignment: #146 is the canonical foundation slice; commits
+  `e0979ea`, `d2c5b04`, and the current certified-core implementation follow
+  this plan.
 - Library audit: `oidc-client-ts` and `keycloak-js` were rejected as the core
   abstraction because the former does not verify ID-token signatures in its
   current browser response validator and the latter is provider-specific.
   `oauth4webapi` owns the standards-sensitive protocol implementation; local
   code owns BrowserPane integration and memory-only state.
-- Shared auth validation: pending.
-- Admin integration validation: pending.
-- Header contract validation: pending.
-- Compose/browser smoke evidence: pending.
+- Shared auth validation: 4 files and 30 tests pass; production dependency
+  audit reports zero vulnerabilities; coverage remains above the package
+  ratchet.
+- Admin integration validation: compatibility admin 45 files/200 tests and
+  admin-new 101 files/278 tests pass, with typechecks and production builds.
+- Header contract validation: static nginx contract, CSP-aware production
+  bundles, and live response checks pass for both admin routes.
+- Compose/browser smoke evidence: the rebuilt `deploy-web` image passes real
+  Keycloak login, memory-only storage, SSO reload, logout/relogin, admin-new
+  dashboard/session/MCP/preview/restart, and compatibility admin
+  connect/disconnect/reconnect/stop flows.

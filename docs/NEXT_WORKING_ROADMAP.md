@@ -40,16 +40,18 @@ Foundation prerequisite from the 2026-07-31 delivery audit:
   checks, and required branch checks before Slice A,
 - #145 then implemented and validated the token-domain and URL/log credential
   cleanup,
-- continue with #146 and the remaining admin trust sequence after #145 review
-  and merge unless a reviewed Foundation/Pilot gate changes the order.
+- #146 now implements and validates shared admin OIDC and browser-security
+  controls; continue with #147 after #146 review and merge unless a reviewed
+  Foundation/Pilot gate changes the order.
 
 Review reconciliation update:
 
 - workflow-source RCE/preview-symlink and bridge-local control-auth findings
   from `review/` are treated as superseded by the current baseline,
 - token-domain separation, raw credential URL/log cleanup, and admin-event
-  query auth are implemented by #145; browser admin auth/CSP, webhook SSRF,
-  browser-context import limits, and graceful shutdown remain confirmed-open,
+  query auth are implemented by #145; browser admin auth/CSP is implemented by
+  #146; webhook SSRF, browser-context import limits, and graceful shutdown
+  remain confirmed-open,
 - recording artifact finalization remains a valid cleanup item, but it should
   not displace confirmed-open token/auth/webhook/import/lifecycle findings when
   choosing the next security-driven slice.
@@ -99,6 +101,8 @@ Validation:
 ### Slice B: Admin Browser Auth And Web Security
 
 Priority: high before default admin promotion.
+
+Status: implemented and validated by #146; retained as a regression baseline.
 
 Why:
 

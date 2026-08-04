@@ -121,6 +121,8 @@ Validation:
 
 Tier: P0.
 
+Status: implemented and validated by #146; awaiting merge.
+
 Why next:
 
 - It removes duplicated security-sensitive auth behavior across the two admin
