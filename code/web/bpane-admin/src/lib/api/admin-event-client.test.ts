@@ -2,9 +2,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { AdminEventMapper } from './admin-event-mapper';
 import {
   AdminEventClient,
-  buildAdminEventUrl,
   type AdminEventWebSocket,
 } from './admin-event-client';
+import { AdminEventStreamAccessMapper } from './admin-event-stream-access';
 
 const SESSION = {
   id: '019df4d2-f4f7-7b00-9e0c-79683b1c82f6',
@@ -152,22 +152,24 @@ describe('AdminEventMapper', () => {
 });
 
 describe('AdminEventClient', () => {
-  it('builds browser-compatible websocket urls from http origins', () => {
-    expect(buildAdminEventUrl('http://localhost:8080/admin/', 'token value')).toBe(
-      'ws://localhost:8080/api/v1/admin/events?access_token=token+value',
+  it('builds browser-compatible websocket urls without credentials', () => {
+    expect(AdminEventStreamAccessMapper.toWebSocketUrl('http://localhost:8080/admin/')).toBe(
+      'ws://localhost:8080/api/v1/admin/events',
     );
-    expect(buildAdminEventUrl('https://browserpane.example/admin/', 'secure-token')).toBe(
-      'wss://browserpane.example/api/v1/admin/events?access_token=secure-token',
+    expect(AdminEventStreamAccessMapper.toWebSocketUrl('https://browserpane.example/admin/')).toBe(
+      'wss://browserpane.example/api/v1/admin/events',
     );
   });
 
-  it('opens a websocket and maps incoming events', async () => {
+  it('mints scoped access, authenticates the websocket, and maps incoming events', async () => {
     const events: string[] = [];
     const received: string[] = [];
     const sockets: FakeAdminEventWebSocket[] = [];
+    const fetchImpl = vi.fn(async () => eventTokenResponse('event-token'));
     const client = new AdminEventClient({
       baseUrl: 'http://localhost:8080/admin/',
       accessTokenProvider: () => 'owner-token',
+      fetchImpl,
       webSocketFactory: (url) => {
         sockets.push(new FakeAdminEventWebSocket(url));
         return sockets.at(-1)!;
@@ -178,8 +180,10 @@ describe('AdminEventClient', () => {
       onEvent: (event) => received.push(event.type),
       onStatus: (status) => events.push(status),
     });
-    await flushMicrotasks();
+    await vi.waitFor(() => expect(sockets).toHaveLength(1));
     sockets[0]?.open();
+    expect(events).toEqual(['connecting']);
+    sockets[0]?.message({ message_type: 'admin.authenticated' });
     sockets[0]?.message({
       event_type: 'sessions.snapshot',
       sequence: 1,
@@ -188,20 +192,30 @@ describe('AdminEventClient', () => {
     });
     subscription.close();
 
-    expect(sockets[0]?.url).toBe(
-      'ws://localhost:8080/api/v1/admin/events?access_token=owner-token',
+    expect(fetchImpl).toHaveBeenCalledWith(
+      new URL('http://localhost:8080/api/v1/admin/events/access-tokens'),
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ authorization: 'Bearer owner-token' }),
+      }),
     );
+    expect(sockets[0]?.url).toBe('ws://localhost:8080/api/v1/admin/events');
+    expect(sockets[0]?.sent).toEqual([
+      JSON.stringify({ message_type: 'admin.authenticate', token: 'event-token' }),
+    ]);
     expect(events).toEqual(['connecting', 'open', 'closed']);
     expect(received).toEqual(['sessions.snapshot']);
   });
 
-  it('reconnects with a fresh access token after server close', async () => {
+  it('reconnects with freshly minted stream access after server close', async () => {
     vi.useFakeTimers();
     const sockets: FakeAdminEventWebSocket[] = [];
-    const tokens = ['first-token', 'second-token'];
+    const eventTokens = ['first-event-token', 'second-event-token'];
+    const fetchImpl = vi.fn(async () => eventTokenResponse(eventTokens.shift() ?? 'fallback'));
     const client = new AdminEventClient({
       baseUrl: 'https://browserpane.example/admin/',
-      accessTokenProvider: () => tokens.shift() ?? 'fallback-token',
+      accessTokenProvider: () => 'owner-token',
+      fetchImpl,
       reconnectDelayMs: 25,
       webSocketFactory: (url) => {
         sockets.push(new FakeAdminEventWebSocket(url));
@@ -209,18 +223,24 @@ describe('AdminEventClient', () => {
       },
     });
     const subscription = client.subscribe({ onEvent: () => undefined });
-    await flushMicrotasks();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sockets).toHaveLength(1);
 
+    sockets[0]?.open();
+    expect(sockets[0]?.sent[0]).toContain('first-event-token');
     sockets[0]?.serverClose();
     await vi.advanceTimersByTimeAsync(25);
 
     expect(sockets).toHaveLength(2);
-    expect(sockets[1]?.url).toContain('access_token=second-token');
+    sockets[1]?.open();
+    expect(sockets[1]?.url).toBe('wss://browserpane.example/api/v1/admin/events');
+    expect(sockets[1]?.sent[0]).toContain('second-event-token');
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
     subscription.close();
     vi.useRealTimers();
   });
 
-  it('routes failed websocket authentication through the shared auth handler', async () => {
+  it('routes failed stream-token issuance through the shared auth handler', async () => {
     const sockets: FakeAdminEventWebSocket[] = [];
     const authFailures: number[] = [];
     let resolveAuthenticationFailure: (status: number) => void = () => undefined;
@@ -242,21 +262,53 @@ describe('AdminEventClient', () => {
       },
     });
     const subscription = client.subscribe({ onEvent: () => undefined });
-    await flushMicrotasks();
-
-    sockets[0]?.networkError();
     expect(await authenticationFailure).toBe(401);
 
     expect(fetchImpl).toHaveBeenCalledWith(
-      new URL('http://localhost:8080/api/v1/sessions'),
+      new URL('http://localhost:8080/api/v1/admin/events/access-tokens'),
       expect.objectContaining({
-        method: 'GET',
+        method: 'POST',
         headers: expect.objectContaining({
           authorization: 'Bearer expired-token',
         }),
       }),
     );
     expect(authFailures).toEqual([401]);
+    expect(sockets).toHaveLength(0);
+    subscription.close();
+  });
+
+  it('rejects untrusted websocket metadata before opening a socket', async () => {
+    const sockets: FakeAdminEventWebSocket[] = [];
+    let resolveError: (error: Error) => void = () => undefined;
+    const reportedError = new Promise<Error>((resolve) => {
+      resolveError = resolve;
+    });
+    const client = new AdminEventClient({
+      baseUrl: 'https://browserpane.example/admin/',
+      accessTokenProvider: () => 'owner-token',
+      fetchImpl: async () => Response.json({
+        ...(await eventTokenResponse('event-token').json()),
+        websocket: {
+          endpoint_path: '//attacker.example/events',
+          auth_type: 'initial_message',
+          authentication_message_type: 'admin.authenticate',
+          authenticated_message_type: 'admin.authenticated',
+        },
+      }),
+      webSocketFactory: (url) => {
+        sockets.push(new FakeAdminEventWebSocket(url));
+        return sockets.at(-1)!;
+      },
+    });
+
+    const subscription = client.subscribe({
+      onEvent: () => undefined,
+      onError: resolveError,
+    });
+
+    expect((await reportedError).message).toContain('expected contract');
+    expect(sockets).toHaveLength(0);
     subscription.close();
   });
 });
@@ -266,11 +318,16 @@ class FakeAdminEventWebSocket implements AdminEventWebSocket {
   onmessage: ((event: { readonly data: unknown }) => void) | null = null;
   onclose: (() => void) | null = null;
   onerror: (() => void) | null = null;
+  readonly sent: string[] = [];
 
   constructor(readonly url: string) {}
 
   close(): void {
     this.onclose?.();
+  }
+
+  send(data: string): void {
+    this.sent.push(data);
   }
 
   open(): void {
@@ -290,7 +347,16 @@ class FakeAdminEventWebSocket implements AdminEventWebSocket {
   }
 }
 
-async function flushMicrotasks(): Promise<void> {
-  await Promise.resolve();
-  await Promise.resolve();
+function eventTokenResponse(token: string): Response {
+  return Response.json({
+    token_type: 'admin_event_access_token',
+    token,
+    expires_at: '2026-05-04T19:03:00Z',
+    websocket: {
+      endpoint_path: '/api/v1/admin/events',
+      auth_type: 'initial_message',
+      authentication_message_type: 'admin.authenticate',
+      authenticated_message_type: 'admin.authenticated',
+    },
+  });
 }

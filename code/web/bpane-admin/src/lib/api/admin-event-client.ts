@@ -1,11 +1,11 @@
 import { AdminEventMapper, type AdminEvent } from './admin-event-mapper';
+import { AdminEventStreamAccessMapper, type AdminEventStreamAccess } from './admin-event-stream-access';
 import {
   sendAuthenticatedRequest,
   type AccessTokenProvider,
   type AuthenticationFailureHandler,
   type FetchLike,
 } from './authenticated-api';
-
 export type AdminEventConnectionStatus = 'connecting' | 'open' | 'closed' | 'reconnecting';
 
 export type AdminEventWebSocket = {
@@ -13,6 +13,7 @@ export type AdminEventWebSocket = {
   onmessage: ((event: { readonly data: unknown }) => void) | null;
   onclose: (() => void) | null;
   onerror: (() => void) | null;
+  send: (data: string) => void;
   close: () => void;
 };
 
@@ -78,23 +79,39 @@ export class AdminEventClient {
     const connect = async (): Promise<void> => {
       try {
         emitStatus('connecting');
-        const url = buildAdminEventUrl(this.#baseUrl, await this.#accessTokenProvider());
+        const access = await this.#issueAccessToken();
         if (closed) {
           return;
         }
-        let opened = false;
-        socket = this.#webSocketFactory(url);
+        let authenticated = false;
+        socket = this.#webSocketFactory(
+          AdminEventStreamAccessMapper.toWebSocketUrl(this.#baseUrl, access.endpointPath),
+        );
         socket.onopen = () => {
-          opened = true;
-          emitStatus('open');
+          socket?.send(JSON.stringify({
+            message_type: access.authenticationMessageType,
+            token: access.token,
+          }));
         };
-        socket.onmessage = (event) => handleMessage(event.data, handlers, emitError);
+        socket.onmessage = (event) => {
+          if (!authenticated) {
+            if (isAuthenticationAcknowledgement(event.data, access.authenticatedMessageType)) {
+              authenticated = true;
+              emitStatus('open');
+              return;
+            }
+            emitError(new Error('admin event stream rejected its authentication handshake'));
+            socket?.close();
+            return;
+          }
+          handleMessage(event.data, handlers, emitError);
+        };
         socket.onerror = () => {
           emitError(new Error('admin event stream websocket error'));
           void this.#probeAuthentication();
         };
         socket.onclose = () => {
-          if (!closed && !opened) {
+          if (!closed && !authenticated) {
             void this.#probeAuthentication();
           }
           scheduleReconnect();
@@ -116,6 +133,19 @@ export class AdminEventClient {
         emitStatus('closed');
       },
     };
+  }
+
+  async #issueAccessToken(): Promise<AdminEventStreamAccess> {
+    const response = await sendAuthenticatedRequest({
+      baseUrl: this.#baseUrl,
+      accessTokenProvider: this.#accessTokenProvider,
+      fetchImpl: this.#fetchImpl,
+      onAuthenticationFailure: this.#onAuthenticationFailure,
+      method: 'POST',
+      path: '/api/v1/admin/events/access-tokens',
+      accept: 'application/json',
+    });
+    return AdminEventStreamAccessMapper.fromResponse(await response.json());
   }
 
   async #probeAuthentication(): Promise<void> {
@@ -140,11 +170,17 @@ export class AdminEventClient {
   }
 }
 
-export function buildAdminEventUrl(baseUrl: string | URL, accessToken: string): string {
-  const url = new URL('/api/v1/admin/events', baseUrl);
-  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-  url.searchParams.set('access_token', accessToken);
-  return url.toString();
+function isAuthenticationAcknowledgement(data: unknown, expectedMessageType: string): boolean {
+  try {
+    const parsed = JSON.parse(String(data)) as unknown;
+    return Boolean(
+      parsed
+      && typeof parsed === 'object'
+      && (parsed as Record<string, unknown>).message_type === expectedMessageType,
+    );
+  } catch {
+    return false;
+  }
 }
 
 function handleMessage(
