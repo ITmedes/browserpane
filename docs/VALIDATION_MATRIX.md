@@ -1,6 +1,6 @@
 # Consolidated Validation Matrix
 
-Revalidated against current package scripts: 2026-08-03
+Revalidated against current package scripts: 2026-08-04
 
 This matrix defines the available validation surfaces for product slices. Use
 `PRODUCT_PHASES_AND_RELEASE_GATES.md` to decide which evidence is required for
@@ -65,7 +65,7 @@ Verified on 2026-08-03:
 - all 31 fast stages pass, including the Rust, browser-client, and admin-new
   coverage ratchets,
 - all nine compose stages pass in one uninterrupted run,
-- the compose gateway stage passes 16 default API and four docker-pool cases,
+- the compose gateway stage passes 19 default API and six docker-pool cases,
 - representative admin-new, compatibility-admin, CLI, MCP, recording, and
   workflow admission journeys pass against the running stack.
 
@@ -434,6 +434,21 @@ cargo test --workspace
 cargo test -p bpane-gateway
 cargo test -p bpane-gateway --test compose_api_surface <target_test_name> -- --ignored --test-threads=1
 ```
+
+For session-control persistence changes, run the identical store contract
+against the in-memory reference and a migrated, schema-isolated Postgres store:
+
+```bash
+cargo test -p bpane-gateway session_store_contract_in_memory
+docker compose -f deploy/compose.yml up -d postgres
+BPANE_SESSION_STORE_CONTRACT_POSTGRES_URL=postgresql://browserpane:browserpane-dev@localhost:5433/browserpane cargo test -p bpane-gateway session_store_contract_postgres -- --ignored --test-threads=1
+```
+
+The Postgres fixture creates a unique `bpane_store_contract_*` schema, runs the
+normal gateway migrations there, and drops it after the contract completes.
+`scripts/run-gateway-compose-e2e.sh` runs this contract automatically for every
+non-stack suite, so the full local validator and hosted Compose workflow retain
+persisted-store parity coverage.
 
 For route/API contract changes, check:
 
