@@ -44,7 +44,8 @@ Foundation prerequisite from the 2026-07-31 delivery audit:
   controls,
 - #147 merged through PR #191,
 - #150 lifecycle, health, dependency readiness, and bounded drain merged
-  through PR #192; #152 is the active Foundation contract-parity slice.
+  through PR #192; #152 has completed local contract-parity implementation and
+  validation and is awaiting review.
 
 Review reconciliation update:
 
