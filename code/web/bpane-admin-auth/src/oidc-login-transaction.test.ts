@@ -20,7 +20,7 @@ describe('OidcLoginTransaction', () => {
     let nowMs = 1_000;
     const store = new BrowserTokenStore(new MemoryStorage());
     const transactions = new OidcLoginTransaction(store, () => nowMs);
-    const created = transactions.create(new URL('http://localhost:8080/admin/'));
+    transactions.create(new URL('http://localhost:8080/admin/'));
     nowMs += 10 * 60_000 + 1;
 
     expect(() => transactions.consume()).toThrow('OIDC login transaction expired');
