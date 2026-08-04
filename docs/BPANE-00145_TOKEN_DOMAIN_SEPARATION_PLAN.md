@@ -3,13 +3,13 @@
 ## Metadata
 
 - Issue: [#145](https://github.com/ITmedes/browserpane/issues/145)
-- State: In Progress
+- State: Implemented and validated; ready for review
 - Owner: `thebackplane`
 - Lane: Foundation
 - Target gate: Foundation Gate
 - Branch: `feature/BPANE-00145`
 - Depends on: #151 validation baseline, #184 compose sharding, #185 GHCR builder
-- Last verified: 2026-08-04 at `b6fd13c`
+- Last verified: 2026-08-04 at `576ea2d`
 
 ## Business Outcome
 
@@ -31,7 +31,7 @@ WebSocket authenticates after upgrade without putting an owner bearer or event
 credential in its URL, and a rejected WebTransport request cannot write the
 raw query string into gateway logs.
 
-## Current Evidence
+## Pre-Implementation Evidence
 
 - Connect and automation managers receive the same root secret.
 - Both token classes use the indistinguishable
@@ -240,9 +240,29 @@ turning purpose substitution into a valid token.
 
 ## Evidence Record
 
-- Plan and issue alignment: pending first implementation commit.
-- Unit/API validation: pending.
-- Compatibility-admin validation: pending.
-- Admin-new regression validation: pending.
-- Compose smoke evidence: pending.
-
+- Plan and issue alignment: issue #145 is the canonical slice; implementation
+  is split across commits `c081ddc`, `03ca23e`, `5d72f6f`, `dcdd717`,
+  `08b0370`, `dbc82e3`, and `576ea2d`.
+- Gateway unit/API validation: `cargo test -p bpane-gateway` passed all 370
+  non-ignored tests. Focused admin-event, session-access, transport-log, token
+  descriptor, malformed, expired, and all six cross-purpose replay directions
+  also passed.
+- Compatibility-admin validation: `npm run check`, `npm test` (203 tests), and
+  `npm run build` passed. This package has no coverage script.
+- Admin-new regression validation: `npm run check`, `npm test` (279 tests),
+  `npm run test:coverage` (88.09% lines, 92.78% functions), and
+  `npm run build` passed.
+- Browser-client regression validation: `npx tsc --noEmit`, `npm test` (661
+  tests), `npm run test:coverage` (92.88% lines, 93.19% functions), and
+  `npm run build` passed.
+- Compose API evidence: `scripts/run-gateway-compose-e2e.sh --suite all`
+  passed 16/16 compose API tests and 4/4 docker-pool lifecycle tests against
+  rebuilt production images.
+- Browser/MCP smoke evidence: `smoke:admin-event-reconnect`,
+  `smoke:admin-session`, and `smoke:mcp-session-endpoints` passed. They proved
+  query-free event authentication with a fresh scoped token after restart,
+  credential absence from observed gateway logs, session
+  connect/disconnect/reconnect/stop, and two independently routed live MCP
+  sessions.
+- Contract/document validation: OpenAPI YAML parsing and
+  `node scripts/check-repository-documents.mjs` passed.
