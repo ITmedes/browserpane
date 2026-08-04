@@ -17,7 +17,7 @@ export class GitHubWorkflowPolicyChecker {
       return errors;
     }
     for (const [jobId, job] of Object.entries(workflow.jobs)) {
-      this.#checkJob(relativePath, jobId, job, errors);
+      this.#checkJob(relativePath, workflow, jobId, job, errors);
     }
     if (JSON.stringify(workflow).includes('secrets.')) {
       errors.push(`${relativePath} must not reference repository or environment secrets`);
@@ -39,7 +39,7 @@ export class GitHubWorkflowPolicyChecker {
     }
   }
 
-  #checkJob(path, jobId, job, errors) {
+  #checkJob(path, workflow, jobId, job, errors) {
     const prefix = `${path} job ${jobId}`;
     if (job['runs-on'] !== 'ubuntu-24.04') {
       errors.push(`${prefix} must pin runs-on to ubuntu-24.04`);
@@ -49,9 +49,27 @@ export class GitHubWorkflowPolicyChecker {
       errors.push(`${prefix} must set timeout-minutes between 1 and 60`);
     }
     if (job.permissions !== undefined) {
-      this.#checkPermissions(prefix, job.permissions, errors);
+      if (this.#isTrustedPackagePublisher(workflow, job)) {
+        const keys = Object.keys(job.permissions);
+        if (keys.length !== 2
+          || job.permissions.contents !== 'read'
+          || job.permissions.packages !== 'write') {
+          errors.push(`${prefix} package publisher permissions must be contents: read and packages: write`);
+        }
+      } else {
+        this.#checkPermissions(prefix, job.permissions, errors);
+      }
     }
     for (const step of job.steps ?? []) this.#checkStep(prefix, step, errors);
+  }
+
+  #isTrustedPackagePublisher(workflow, job) {
+    const branches = workflow.on?.push?.branches;
+    return job.permissions?.packages === 'write'
+      && job.if === "github.event_name != 'pull_request'"
+      && Array.isArray(branches)
+      && branches.length === 1
+      && branches[0] === 'main';
   }
 
   #checkStep(prefix, step, errors) {
