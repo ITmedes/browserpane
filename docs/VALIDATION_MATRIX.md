@@ -508,6 +508,18 @@ Token and URL credential cleanup:
 - admin event clients must not place owner bearer tokens in WebSocket query
   strings after the replacement auth path lands.
 
+Issue #145 evidence recorded on 2026-08-04:
+
+- `cargo test -p bpane-gateway`: 370 non-ignored tests passed,
+- compatibility admin: check, 203 tests, and production build passed,
+- admin-new: check, 279 tests, coverage baseline, and production build passed,
+- browser client: typecheck, 661 tests, coverage baseline, and build passed,
+- `scripts/run-gateway-compose-e2e.sh --suite all`: 16 compose API tests and 4
+  docker-pool lifecycle tests passed,
+- `smoke:admin-event-reconnect`, `smoke:admin-session`, and
+  `smoke:mcp-session-endpoints` passed against the rebuilt local stack,
+- repository document and OpenAPI YAML checks passed.
+
 Admin browser auth and web security:
 
 - old and unified admin auth tests must cover OIDC nonce creation/validation,

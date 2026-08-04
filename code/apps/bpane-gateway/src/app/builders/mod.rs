@@ -10,7 +10,9 @@ use crate::config::Config;
 use crate::credentials::{CredentialProvider, VaultKvV2CredentialProvider};
 use crate::recording::{RecordingArtifactStore, RecordingObservability};
 use crate::recording_lifecycle::RecordingLifecycleManager;
-use crate::session_access::{SessionAutomationAccessTokenManager, SessionConnectTicketManager};
+use crate::session_access::{
+    AdminEventAccessTokenManager, SessionAutomationAccessTokenManager, SessionConnectTicketManager,
+};
 use crate::session_control::{SessionOwnerMode, SessionStore};
 use crate::session_manager::SessionManager;
 use crate::session_registry::SessionRegistry;
@@ -39,6 +41,7 @@ pub(in crate::app) use self::workflow::workflow_retention_window;
 
 pub(super) struct AuthServices {
     pub(super) auth_validator: Arc<AuthValidator>,
+    pub(super) admin_event_access_token_manager: Arc<AdminEventAccessTokenManager>,
     pub(super) connect_ticket_manager: Arc<SessionConnectTicketManager>,
     pub(super) automation_access_token_manager: Arc<SessionAutomationAccessTokenManager>,
 }

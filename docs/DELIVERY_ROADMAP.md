@@ -4,7 +4,7 @@ Status: Canonical execution roadmap
 
 Governance issue: [#173](https://github.com/ITmedes/browserpane/issues/173)
 
-Last implementation audit: 2026-07-31 at `9640be4`
+Last implementation audit: 2026-08-04 at `b6fd13c`
 
 ## How To Use This Document
 
@@ -53,24 +53,25 @@ or capacity decision.
 
 ## Immediate Sequence
 
-### Current Governance Slice
+### Current Foundation Slice
 
 | Order | Issue | State | Dependency | Outcome |
 | --- | --- | --- | --- | --- |
-| 0 | #173 | In Progress | None | Establish this delivery system and missing ownership. |
+| 0 | #151 | Done | #173 governance baseline | Required CI, dependency, coverage, and validation checks. |
+| 1 | #145 | Implemented and validated; review pending | #151 required checks | Separate credential domains and remove bearer credentials from URLs/logs. |
 
 ### Next Three Product Slices
 
 | Order | Issue | State | Dependency | Outcome |
 | --- | --- | --- | --- | --- |
-| 1 | #151 | Ready; next product slice | #173 governance baseline | Remediate critical/high dependency risk and enforce CI/validation. |
-| 2 | #145 | Qualified | #151 required checks | Separate credential domains and remove bearer credentials from URLs/logs. |
-| 3 | #146 | Qualified | #145 secure credential contract | Harden shared admin auth, CSP, origin, and browser security. |
+| 1 | #145 | Implemented and validated; review pending | #151 required checks | Separate credential domains and remove bearer credentials from URLs/logs. |
+| 2 | #146 | Qualified | #145 secure credential contract | Harden shared admin auth, CSP, origin, and browser security. |
+| 3 | #147 | Qualified | #145 credential/log baseline | Add callback and webhook SSRF controls. |
 
-#151 is decomposed in `docs/BPANE-00151_MINIMAL_CI_VALIDATION_PLAN.md` and is
-assigned as the single next Ready product slice. It must result in actual
-GitHub Actions required checks; an undocumented or optional local wrapper is
-not sufficient.
+#151, #184, and #185 established and accelerated the required validation
+baseline. #145 is implemented and validated through
+`docs/BPANE-00145_TOKEN_DOMAIN_SEPARATION_PLAN.md`; #146 is the next qualified
+Foundation product slice after #145 review and merge.
 
 ## Foundation Gate Sequence
 

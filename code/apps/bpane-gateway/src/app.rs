@@ -98,6 +98,7 @@ impl GatewayApp {
             bind_addr: api_bind_addr,
             registry,
             auth_validator: auth_services.auth_validator,
+            admin_event_access_token_manager: auth_services.admin_event_access_token_manager,
             connect_ticket_manager: auth_services.connect_ticket_manager,
             automation_access_token_manager: auth_services.automation_access_token_manager,
             session_store,

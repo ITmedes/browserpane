@@ -37,7 +37,10 @@ async fn issues_session_automation_access_descriptor() {
     let issued = response_json(issue_response).await;
     assert_eq!(issued["session_id"], session_id);
     assert_eq!(issued["token_type"], "session_automation_access_token");
-    assert!(issued["token"].as_str().unwrap().starts_with("v1."));
+    assert!(issued["token"]
+        .as_str()
+        .unwrap()
+        .starts_with("v2.session-automation."));
     assert!(issued["expires_at"].is_string());
     assert_eq!(issued["automation"]["endpoint_url"], "http://host:9223");
     assert_eq!(issued["automation"]["protocol"], "chrome_devtools_protocol");

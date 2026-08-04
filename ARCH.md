@@ -498,6 +498,8 @@ The default dev stack no longer uses a shared token file.
 - docker-backed reusable browser contexts mount a context-scoped Chromium profile volume at the session profile path while keeping uploads, downloads, and session-file mounts in the session-scoped data volume; runtime admission allows only one active writer per reusable context
 - browser-context retention cleanup is metadata-driven per context and removes expired reusable profile data only when the runtime manager confirms there is no active writer
 - the console then mints a short-lived `session_connect_ticket` through `POST /api/v1/sessions/{id}/access-tokens`
+- the compatibility admin mints a short-lived `admin_event_access_token` through `POST /api/v1/admin/events/access-tokens`, opens `/api/v1/admin/events` without query credentials, and authenticates with the scoped token in the first WebSocket message; reconnects mint fresh tokens
+- connect, automation, and admin-event credentials use purpose-separated v2 HMAC domains derived from the configured root secret; a credential issued for one domain is rejected by the other validators
 - admin-created sessions currently request `idle_timeout_sec = 300`, and the gateway stops them automatically once they stay unused or idle for that timeout window
 - switching the selected session disconnects the embedded browser from the previous live session before selecting the new one
 - `Delegate MCP` calls `POST /api/v1/sessions/{id}/automation-owner` for the local `bpane-mcp-bridge` principal and then assigns that same session to `mcp-bridge` through the gateway-mediated `/api/v1/mcp-bridge/control-session` proxy
@@ -508,6 +510,7 @@ The default dev stack no longer uses a shared token file.
   - HTTP API bearer token for authenticated control calls
 - the browser transport then uses the minted ticket as:
   - WebTransport query param: `session_ticket=...`
+- gateway rejection diagnostics remove query strings and control characters before logging WebTransport request paths
 - `bpane-gateway` resolves that ticket back to the delegated or owner-visible `session_id` before admitting the transport
 - `mcp-bridge` obtains its own bearer token with client credentials
 - the versioned session API is also bearer-protected and owner-scoped

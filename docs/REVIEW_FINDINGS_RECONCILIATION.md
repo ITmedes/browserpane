@@ -48,8 +48,8 @@ The consolidated docs already represented much of the review:
 
 The review still adds sharper current guidance in these areas:
 
-- token-domain separation is the highest confirmed-open security cleanup in
-  the current code,
+- token-domain separation was the highest confirmed-open security cleanup and
+  is now implemented and validated by #145,
 - admin browser auth and web security need their own explicit slice,
 - graceful shutdown is not just an HA topic; it is a cheap single-node
   reliability blocker,
@@ -69,24 +69,24 @@ The review still adds sharper current guidance in these areas:
 | C1 workflow git RCE through `repository_url` and dangerous git protocols | Superseded by current code/docs. The current tree validates repository URL forms, sets `GIT_ALLOW_PROTOCOL`, and disables `protocol.ext`. | `SECURITY_RUNTIME_ROADMAP.md`, `DOMAIN_REQUIREMENTS.md`, `VALIDATION_MATRIX.md` |
 | N1 workflow source-preview symlink host-file read | Superseded by current code/docs. The current tree uses symlink/canonicalization checks on workflow source paths. | `SECURITY_RUNTIME_ROADMAP.md`, `VALIDATION_MATRIX.md` |
 | N2 bridge-local `/control-session` unauthenticated takeover | Partially superseded. Current bridge local control routes require internal authorization and gateway proxying exists. Remaining production issue: host-exposed MCP transports still need inbound auth/origin/network policy. | `SECURITY_RUNTIME_ROADMAP.md`, `RUNTIME_OPERATOR_REQUIREMENTS.md` |
-| N3 connect ticket and automation token are cryptographically interchangeable | Open. Current code still uses the same shared secret, byte-identical claims, identical token format, and plain equality for HMAC bytes. | `SECURITY_RUNTIME_ROADMAP.md`, `NEXT_WORKING_ROADMAP.md` |
-| M3 bearer material in WebTransport/admin URLs and logs | Open. Transport warnings still log raw request paths, and old admin event clients still use `access_token` query auth. | `SECURITY_RUNTIME_ROADMAP.md`, `NEXT_WORKING_ROADMAP.md` |
+| N3 connect ticket and automation token are cryptographically interchangeable | Resolved by #145. Connect and automation tokens use explicit v2 purposes, independently derived signing keys, and pairwise wrong-purpose rejection. | `BPANE-00145_TOKEN_DOMAIN_SEPARATION_PLAN.md`, `SECURITY_RUNTIME_ROADMAP.md` |
+| M3 bearer material in WebTransport/admin URLs and logs | Resolved by #145. Admin events use a short-lived first-frame credential on a query-free WebSocket URL, and transport warnings strip query/fragment credentials. | `BPANE-00145_TOKEN_DOMAIN_SEPARATION_PLAN.md`, `SECURITY_RUNTIME_ROADMAP.md` |
 | H1 webhook SSRF through weak `target_url` validation and redirects | Open and represented. Needs URL parsing, redirect blocking, IP/private-range denial, and optional allowlist. | `SECURITY_RUNTIME_ROADMAP.md` |
 | M1 browser-context import unbounded decompression | Open and represented. Current import still disables the body limit and reads `profile.tar.gz` into memory without an uncompressed-size cap. | `SECURITY_RUNTIME_ROADMAP.md`, `RESOURCE_LIFECYCLE_REQUIREMENTS.md` |
 | M2 no CSP/security headers | Open, previously under-specified. Now promoted into an explicit admin web-security cleanup. | `SECURITY_RUNTIME_ROADMAP.md` |
 | H2/H3 admin tokens in `sessionStorage`, no OIDC nonce, no ID-token verification | Open. Needs shared admin auth hardening across old and unified apps. | `SECURITY_RUNTIME_ROADMAP.md`, `ADMIN_NEW_IMPLEMENTATION_GUARDRAILS.md` |
 | M4 legacy HMAC dev-token fallback and generated token logging | Open as a local-dev caveat. Needs documentation and safer defaults before non-local deployment. | `SECURITY_RUNTIME_ROADMAP.md`, `RUNTIME_OPERATOR_REQUIREMENTS.md` |
-| L1 non-constant-time HMAC comparison | Open. Best handled inside the token-domain separation slice. | `SECURITY_RUNTIME_ROADMAP.md` |
+| L1 non-constant-time HMAC comparison | Resolved by #145 through the HMAC library verifier. | `BPANE-00145_TOKEN_DOMAIN_SEPARATION_PLAN.md` |
 | L2 tar symlink/hardlink import risk | Open. Best handled inside the browser-context import safety slice. | `SECURITY_RUNTIME_ROADMAP.md` |
 | L4 legacy singleton status/MCP routes authorize any principal | Low and legacy-scope. Keep behind compatibility gating and avoid treating as production multi-tenant surface. | `SECURITY_RUNTIME_ROADMAP.md`, `ADMIN_NEW_API_COVERAGE.md` |
-| N4 log injection through unsanitized request path | Open. Best handled with transport log redaction/sanitization. | `SECURITY_RUNTIME_ROADMAP.md` |
+| N4 log injection through unsanitized request path | Resolved by #145 through path-only, control-character-free, length-capped transport diagnostics. | `BPANE-00145_TOKEN_DOMAIN_SEPARATION_PLAN.md` |
 | N5 worker writes live automation token to `context.json` with default perms | Open low-severity worker hygiene. | `SECURITY_RUNTIME_ROADMAP.md` |
 | N6 `RwLock` poison cascade in session hub | Open low-severity resilience hardening. | `SECURITY_RUNTIME_ROADMAP.md` |
 
-Security conclusion: the most severe old review findings for workflow source
-and bridge-local control are now covered by the current baseline, but the token
-and browser-auth findings remain confirmed-open and should outrank lower
-confidence cleanup if only one production-hardening slice is selected.
+Security conclusion: the most severe old review findings for workflow source,
+bridge-local control, and token-domain/credential transport are covered by the
+current baseline. Admin browser auth and web security are now the highest
+remaining confirmed-open security slice.
 
 ## Performance Findings
 
@@ -157,14 +157,13 @@ effort-adjusted production gaps; larger enterprise features remain backlog.
 ## Recommended Roadmap Adjustment
 
 The current code/docs baseline makes the old review C1/N1/N2 findings mostly
-superseded, but it leaves several confirmed-open security items. The next
+superseded and resolves N3/M3/L1/N4 through #145. The next
 production-hardening priority should be:
 
-1. token domain separation, log redaction, and admin-event credential cleanup,
-2. admin browser auth and web security hardening,
-3. webhook SSRF controls,
-4. browser-context import safety,
-5. gateway graceful shutdown plus health/readiness.
+1. admin browser auth and web security hardening,
+2. webhook SSRF controls,
+3. browser-context import safety,
+4. gateway graceful shutdown plus health/readiness.
 
 Recording artifact finalization remains a valid cleanup item from the older
 plan set, but the review did not find the already-exposed recording
@@ -174,14 +173,11 @@ next security-driven slice.
 
 ## Validation Additions
 
-Future implementation slices derived from this reconciliation should include:
+Validation evidence completed by #145 includes token cross-purpose rejection,
+library-backed HMAC verification, transport log redaction, and query-free admin
+event authentication/reconnect smokes. Future implementation slices derived
+from this reconciliation should include:
 
-- token cross-purpose rejection tests,
-- HMAC constant-time verification tests or library-backed validation,
-- transport log redaction tests for `token`, `access_token`, and
-  `session_ticket`,
-- admin event auth tests proving owner bearers are not placed in WebSocket
-  query strings,
 - OIDC nonce and ID-token verification tests in the shared admin auth module,
 - CSP/security-header checks in nginx/build output,
 - webhook private-IP/redirect rejection tests,
