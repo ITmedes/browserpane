@@ -84,6 +84,9 @@ specifications and still require a bounded slice plan before coding.
   follow-up for reducing hosted compose feedback time while preserving the
   complete local and hosted scenario set; measured cold Docker build
   acceleration remains isolated in GitHub issue `#185`.
+- `BPANE-00185_CI_RUST_BUILDER_PLAN.md`: deterministic GHCR Rust builder,
+  trusted publication, digest-based compose consumption, cold fallback, and
+  timing evidence for the measured #184 image-build bottleneck.
 - `BPANE-00171_WORKFLOW_TEACH_MODE_PLAN.md`: Phase N Teach Mode contract,
   semantic demonstration capture, candidate generation, replay, immutable
   publication, controlled repair, and smoke sequence.
