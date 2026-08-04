@@ -1,6 +1,7 @@
 use super::*;
 
 mod automation_tasks;
+mod contracts;
 mod projects;
 mod recordings;
 mod runtime_assignments;
