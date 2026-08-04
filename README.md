@@ -1162,6 +1162,32 @@ summaries. Validate repository documents and workflow policy locally with:
 node scripts/check-repository-documents.mjs
 ```
 
+Compose CI maintains a content-keyed Linux `amd64` Rust builder at
+`ghcr.io/itmedes/browserpane-ci-rust`. The package contains the pinned
+toolchain, native headers, and locked third-party release build output, but no
+BrowserPane implementation source or credentials. Trusted jobs authenticate
+with their short-lived `GITHUB_TOKEN`, validate the package metadata, and pass
+the pulled image to Docker by immutable digest. A missing package or registry
+failure is reported and uses the pinned Ubuntu cold-build path instead.
+
+Normal local compose commands remain independent of GHCR. On an `amd64` Docker
+host, a developer may opt into the matching warm builder after authenticating
+Docker to GHCR:
+
+```bash
+BPANE_RUST_BUILDER_IMAGE="$(node scripts/ci/ci-rust-builder-ref.mjs)" \
+docker compose -f deploy/compose.yml build host gateway
+```
+
+The maintained package intentionally targets GitHub's Linux `amd64` runners.
+Arm-based development hosts, including Apple Silicon, should keep the default
+cold fallback unless the entire compose build is explicitly targeting
+`linux/amd64` under emulation.
+
+The dedicated `.github/workflows/ci-rust-builder.yml` workflow validates image
+changes on pull requests and publishes immutable content tags only from trusted
+`main` runs or an explicit workflow dispatch.
+
 `Compose / Representative compose smoke` runs after pushes to `main`, on its
 weekday schedule, or by manual dispatch. It is intentionally not a pull-request
 merge check yet. The job runs the nine-stage compose profile with a 60-minute

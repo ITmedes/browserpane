@@ -10,7 +10,7 @@
     "test": "tsx --test test/*.test.ts"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.12.1",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@playwright/mcp": "^0.0.68"
   },
   "devDependencies": {

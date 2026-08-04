@@ -1,0 +1,75 @@
+# syntax=docker/dockerfile:1.7
+
+FROM ubuntu:24.04@sha256:561618e2c15bf2397621dd04f96926663a3b5616c189cf7e38db7e82f5c538ea
+
+ENV CARGO_HOME=/opt/cargo \
+    RUSTUP_HOME=/opt/rustup \
+    PATH=/opt/cargo/bin:${PATH} \
+    CARGO_INCREMENTAL=0
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    ca-certificates \
+    cmake \
+    curl \
+    git \
+    libavcodec-dev \
+    libavutil-dev \
+    libdrm-dev \
+    libevdev-dev \
+    libopus-dev \
+    libpipewire-0.3-dev \
+    libva-dev \
+    libx11-dev \
+    libxcb1-dev \
+    libxdamage-dev \
+    libxfixes-dev \
+    libxrandr-dev \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY deploy/install-rust-toolchain.sh rust-toolchain.toml /tmp/
+RUN rust_toolchain="$(awk -F '"' '/^[[:space:]]*channel[[:space:]]*=/{print $2}' /tmp/rust-toolchain.toml)" \
+    && /tmp/install-rust-toolchain.sh "${rust_toolchain}" \
+    && rm /tmp/install-rust-toolchain.sh /tmp/rust-toolchain.toml \
+    && cargo --version \
+    && rustc --version
+
+WORKDIR /build
+
+# Only dependency-contract inputs enter this image. BrowserPane implementation
+# source is replaced by stubs so later source changes reuse third-party output.
+COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
+COPY code/shared/bpane-protocol/Cargo.toml code/shared/bpane-protocol/Cargo.toml
+COPY code/apps/bpane-host/Cargo.toml code/apps/bpane-host/Cargo.toml
+COPY code/apps/bpane-gateway/Cargo.toml code/apps/bpane-gateway/Cargo.toml
+
+RUN mkdir -p \
+      code/shared/bpane-protocol/src \
+      code/apps/bpane-host/src \
+      code/apps/bpane-gateway/src \
+    && printf '%s\n' 'pub fn dependency_seed() {}' \
+      > code/shared/bpane-protocol/src/lib.rs \
+    && printf '%s\n' 'fn main() {}' > code/apps/bpane-host/src/main.rs \
+    && printf '%s\n' 'fn main() {}' > code/apps/bpane-gateway/src/main.rs
+
+RUN cargo build --workspace --release --locked
+
+# Remove only local workspace artifacts. This forces real BrowserPane source to
+# rebuild while preserving the expensive third-party dependency graph.
+RUN cargo clean --release \
+      -p bpane-protocol -p bpane-host -p bpane-gateway \
+    && rm -rf Cargo.toml Cargo.lock rust-toolchain.toml code
+
+# Keep commit-specific metadata after the expensive dependency layers so a new
+# source revision does not invalidate the shared compiler cache.
+ARG BPANE_BUILDER_REVISION=unknown
+ARG BPANE_BUILDER_VERSION=local
+LABEL org.opencontainers.image.title="BrowserPane CI Rust builder" \
+      org.opencontainers.image.description="Pinned Rust and native dependency builder for BrowserPane CI" \
+      org.opencontainers.image.source="https://github.com/ITmedes/browserpane" \
+      org.opencontainers.image.revision="${BPANE_BUILDER_REVISION}" \
+      org.opencontainers.image.version="${BPANE_BUILDER_VERSION}" \
+      org.opencontainers.image.licenses="AGPL-3.0-only"
+
+CMD ["cargo", "test", "--workspace", "--locked"]
