@@ -5,7 +5,8 @@ use super::policy::{
     SessionTransportPolicy,
 };
 use super::request::{
-    extract_token, validate_request_path, RequestValidationError, ValidatedConnectRequest,
+    extract_token, sanitized_request_path_for_log, validate_request_path, RequestValidationError,
+    ValidatedConnectRequest,
 };
 use crate::auth::{AuthError, AuthValidator};
 use crate::session_control::SessionCapabilities;

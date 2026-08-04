@@ -19,7 +19,9 @@ mod tasks;
 /// Maximum number of concurrent WebTransport sessions.
 const MAX_CONCURRENT_SESSIONS: u64 = 100;
 
-use self::request::{validate_request_path, RequestValidationError};
+use self::request::{
+    sanitized_request_path_for_log, validate_request_path, RequestValidationError,
+};
 use self::session_task::handle_session;
 use crate::auth::AuthValidator;
 use crate::recording_lifecycle::RecordingLifecycleManager;
@@ -105,6 +107,7 @@ impl TransportServer {
             }
 
             let path = session_request.path().to_string();
+            let safe_path = sanitized_request_path_for_log(&path);
             let validated_request = match validate_request_path(
                 &path,
                 &self.auth_validator,
@@ -125,22 +128,22 @@ impl TransportServer {
                     continue;
                 }
                 Err(RequestValidationError::MissingCredential) => {
-                    warn!("no credential in request path: {path}");
+                    warn!("no credential in request path: {safe_path}");
                     session_request.not_found().await;
                     continue;
                 }
                 Err(RequestValidationError::MissingSessionId) => {
-                    warn!("session_id missing from bearer connect path: {path}");
+                    warn!("session_id missing from bearer connect path: {safe_path}");
                     session_request.not_found().await;
                     continue;
                 }
                 Err(RequestValidationError::SessionNotVisible) => {
-                    warn!("session not visible or not connectable for path: {path}");
+                    warn!("session not visible or not connectable for path: {safe_path}");
                     session_request.not_found().await;
                     continue;
                 }
                 Err(RequestValidationError::SessionLookupFailed) => {
-                    warn!("session lookup failed for path: {path}");
+                    warn!("session lookup failed for path: {safe_path}");
                     session_request.not_found().await;
                     continue;
                 }
