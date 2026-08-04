@@ -11,6 +11,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use tokio::fs;
+use tokio::process::Command;
 use tokio::sync::{Mutex, Notify};
 use tracing::warn;
 use uuid::Uuid;
@@ -140,6 +141,23 @@ impl DockerRuntimeManager {
             credential_provider: Mutex::new(None),
             workspace_file_store: Mutex::new(None),
         })
+    }
+
+    pub(super) async fn check_readiness(&self) -> Result<(), RuntimeManagerError> {
+        let output = Command::new(&self.config.docker_bin)
+            .args(["info", "--format", "{{.ServerVersion}}"])
+            .kill_on_drop(true)
+            .output()
+            .await
+            .map_err(|_| {
+                RuntimeManagerError::Unavailable("docker runtime is unavailable".to_string())
+            })?;
+        if !output.status.success() {
+            return Err(RuntimeManagerError::Unavailable(
+                "docker runtime is unavailable".to_string(),
+            ));
+        }
+        Ok(())
     }
 
     pub(super) async fn attach_session_store(&self, store: SessionStore) {

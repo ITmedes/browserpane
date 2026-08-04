@@ -50,6 +50,7 @@ mod browser_contexts;
 mod credential_bindings;
 mod extensions;
 mod file_workspaces;
+mod health;
 mod identity;
 mod identity_mappings;
 mod mcp_bridge_control;

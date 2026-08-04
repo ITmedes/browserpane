@@ -503,9 +503,12 @@ impl ComposeHarness {
             || {
                 let harness = self.clone();
                 async move {
-                    match harness.get_json("/api/v1/sessions").await {
-                        Ok(value) => Ok(Some(value)),
-                        Err(_) => Ok(None),
+                    match harness
+                        .get_json_outcome_without_bearer("/readyz", HeaderMap::new())
+                        .await
+                    {
+                        Ok(outcome) if outcome.status == StatusCode::OK => Ok(Some(outcome.body)),
+                        Ok(_) | Err(_) => Ok(None),
                     }
                 }
             },

@@ -554,6 +554,25 @@ Current #147 evidence:
   images, including successful signed delivery to the fixed explicitly allowed
   receiver.
 
+Current #150 evidence:
+
+- focused gateway lifecycle and readiness tests cover monotonic/idempotent
+  transitions, dependency composition, timeout/failure behavior, sanitized
+  response schemas, and operational timeout validation,
+- the compose API test verifies public probe schemas, Postgres loss producing
+  `/readyz` 503 while `/healthz` remains 200, and readiness recovery after
+  Postgres restart,
+- a real gateway-container SIGTERM smoke observed readiness withdrawal before
+  HTTP listener closure, bounded WebTransport task drain, clean process exit,
+  and successful gateway restart,
+- `node scripts/validate.mjs --profile full` passed all 46 stages: dependency
+  policy, formatting, workspace Clippy/tests/coverage, all maintained Node
+  checks/tests/coverage/builds, 17 default compose API surfaces, 4 docker-pool
+  lifecycle/capacity surfaces, and auth, admin-new, compatibility admin, CLI,
+  MCP, recording, and workflow browser smokes,
+- the dedicated admin-event reconnect smoke also passed across a real gateway
+  restart with fresh scoped authentication and realtime session-list recovery.
+
 Webhook, import, and lifecycle:
 
 - webhook target validation must reject loopback, link-local, private,
@@ -561,8 +580,9 @@ Webhook, import, and lifecycle:
 - browser-context import tests must cover body/profile limits, ZIP entry count,
   symlink/hardlink tar entries, duplicate profile archives, and manifest
   errors,
-- graceful shutdown tests should prove SIGINT/SIGTERM stops new work, drains
-  bounded in-flight work, and exposes readiness/lifecycle state.
+- gateway lifecycle regressions must continue to prove SIGINT/SIGTERM stops new
+  work, drains owned in-flight work within the bound, and exposes sanitized
+  readiness/lifecycle state.
 
 Scalability and performance:
 

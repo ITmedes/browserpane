@@ -224,6 +224,14 @@ WebTransport relay, shared-session coordinator, and owner-scoped control-plane
 service.
 
 - **WebTransport server** (wtransport crate, QUIC + TLS on port 4433)
+- **Lifecycle coordinator** (`lifecycle.rs`): monotonic
+  `starting -> running -> draining` state shared by the HTTP and WebTransport
+  listeners; the first SIGINT/SIGTERM starts bounded drain and a second signal
+  forces termination
+- **Readiness aggregation** (`readiness.rs`): concurrent, individually bounded
+  checks for the configured session store, runtime manager, credential
+  provider, and recording/workspace artifact stores; logs only readiness
+  transitions
 - **Session hub** (`session_hub.rs`): one host agent, N browser clients
   - Broadcast: host -> all clients (tokio broadcast channel, capacity 1024)
   - Merge: all clients -> host (mpsc channel)
@@ -266,6 +274,8 @@ service.
 - **Identity/access review** (`api/identity.rs`, `api/service_principals.rs`, `api/identity_mappings.rs`): bearer-principal summary, bounded safe OIDC group/claim normalization, owner-scoped service-principal registry metadata, explicit identity-to-project mappings, effective user/service-principal/group/claim mapping evaluation, unmapped-principal signals, sanitized resource counts, project usage, and delegated automation-principal summaries
 - **Heartbeat**: disconnects after 15s without CONTROL ping
 - **HTTP API** (`api.rs`, :8932):
+  - `GET /healthz` — unauthenticated process liveness without resource data
+  - `GET /readyz` — unauthenticated lifecycle and sanitized dependency readiness; returns 503 while starting, draining, or degraded
   - canonical frozen v1 contract: `openapi/bpane-control-v1.yaml`
   - `GET /api/v1/identity/me` — normalized current bearer principal, classified as user, service principal, or legacy dev token
   - `GET /api/v1/identity/access-review` — sanitized owner-scoped access review with service-principal registry metadata, identity-to-project mappings, safe group/claim mapping evaluation, unmapped-principal signals, project usage, resource counts, and automation delegations

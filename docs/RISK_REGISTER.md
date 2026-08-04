@@ -18,7 +18,7 @@ Last reviewed: 2026-08-04
 | R-002 | Open critical/high dependency advisories affect build or runtime dependencies. | High | Critical | #151 / #75 | Upgrade, reachability review, bounded exception with owner/expiry, recurring scan. | Foundation |
 | R-003 | Different token purposes share signing material and credentials appear in URL/query paths. | High | Critical | #145 | Purpose-separated credentials, constant-time/library verification, redaction tests. | Foundation |
 | R-004 | Shared admin authentication/browser security is insufficient for promotion. | High | Critical | #146 / #72 | CSP/origin/auth lifecycle/CSRF/frame policies and negative tests. | Foundation |
-| R-005 | Webhook delivery can reach unsafe destinations or redirect targets. | Low | Critical | #147 | Implemented on the review branch: URL/DNS/IP validation, pinned delivery, no redirects/proxies, exact-origin exceptions, negative and compose tests; close after merge. | Foundation |
+| R-005 | Webhook delivery can reach unsafe destinations or redirect targets. | Low | Critical | #147 | Mitigated and merged through PR #191: URL/DNS/IP validation, pinned delivery, no redirects/proxies, exact-origin exceptions, negative and compose tests. | Foundation |
 | R-006 | Public OpenAPI can drift from code or break clients silently. | High | High | #179 | Lint, conformance, examples, breaking-diff policy and CI gate. | Foundation |
 | R-007 | Protocol version is not enforced and compatibility is undocumented. | Medium | Critical | #175 | Version negotiation, shared vectors, fuzzing, compatibility matrix. | Production |
 | R-008 | In-memory and Postgres behavior can diverge. | Medium | High | #152 | Shared store contract suite and compose verification. | Foundation |
@@ -26,7 +26,7 @@ Last reviewed: 2026-08-04
 | R-010 | Platform failures and saturation are not observable through standard telemetry/SLOs. | High | High | #178 | OTel/metrics contract, alerts, runbooks, load evidence. | Phase 1 / Production |
 | R-011 | Organization/project mappings are descriptive rather than a complete enforced authorization model. | High | Critical | #176 | Role/grant matrix, enforcement, migration, denial/audit tests. | Phase N |
 | R-012 | Deprovisioned identities or emergency access lack deterministic lifecycle controls. | Medium | Critical | #177 | Lifecycle API/SCIM path, stale review, break-glass controls. | Phase N |
-| R-013 | Compose prototype is described beyond its supported deployment/capacity envelope. | High | High | #66 / #150 / #178 | Named profiles, readiness, load evidence, explicit limits. | Phase 0 / Production |
+| R-013 | Compose prototype is described beyond its supported deployment/capacity envelope. | High | High | #66 / #150 / #178 | #150 adds dependency readiness and bounded gateway drain; named deployment profiles, load evidence, telemetry, and explicit supported limits remain. | Phase 0 / Production |
 | R-014 | AGPL root license conflicts with package metadata and contributor/IP policy is undefined. | High | Critical | #180 | Reviewed license decision, aligned metadata, contribution/security policy. | Phase 0 / Production |
 | R-015 | Investor/product claims drift ahead of implementation maturity. | Medium | High | #173 and investment claim register | Claim maturity/evidence links and publication review. | Every external release |
 | R-016 | A Phase 0 Pilot expands into an undefined enterprise platform commitment. | High | High | #174 | Qualification, explicit non-goals, bounded agreement, Stop/Operate/Phase 1 gate. | Phase 0 |

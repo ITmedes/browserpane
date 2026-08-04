@@ -43,6 +43,8 @@ impl RecordingArtifactStoreError {
 
 #[async_trait]
 pub trait RecordingArtifactStoreBackend: Send + Sync {
+    async fn check_readiness(&self) -> Result<(), RecordingArtifactStoreError>;
+
     async fn finalize(
         &self,
         request: FinalizeRecordingArtifactRequest,
@@ -65,6 +67,10 @@ impl RecordingArtifactStore {
 
     pub fn local_fs(root: PathBuf) -> Self {
         Self::new(Arc::new(LocalFsRecordingArtifactStore { root }))
+    }
+
+    pub async fn check_readiness(&self) -> Result<(), RecordingArtifactStoreError> {
+        self.backend.check_readiness().await
     }
 
     pub async fn finalize(
@@ -90,6 +96,10 @@ pub struct LocalFsRecordingArtifactStore {
 
 #[async_trait]
 impl RecordingArtifactStoreBackend for LocalFsRecordingArtifactStore {
+    async fn check_readiness(&self) -> Result<(), RecordingArtifactStoreError> {
+        check_local_store_root(&self.root).await
+    }
+
     async fn finalize(
         &self,
         request: FinalizeRecordingArtifactRequest,
@@ -133,6 +143,19 @@ impl RecordingArtifactStoreBackend for LocalFsRecordingArtifactStore {
             Err(error) => Err(error.into()),
         }
     }
+}
+
+async fn check_local_store_root(root: &Path) -> Result<(), RecordingArtifactStoreError> {
+    fs::create_dir_all(root).await?;
+    let probe_path = root.join(format!(".bpane-readiness-{}", Uuid::now_v7()));
+    let file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&probe_path)
+        .await?;
+    drop(file);
+    fs::remove_file(probe_path).await?;
+    Ok(())
 }
 
 impl LocalFsRecordingArtifactStore {
@@ -250,6 +273,18 @@ mod tests {
             error,
             RecordingArtifactStoreError::InvalidReference(_)
         ));
+    }
+
+    #[tokio::test]
+    async fn local_fs_store_readiness_creates_and_cleans_probe() {
+        let temp_dir = tempdir().unwrap();
+        let root = temp_dir.path().join("recording-artifacts");
+        let store = RecordingArtifactStore::local_fs(root.clone());
+
+        store.check_readiness().await.unwrap();
+
+        assert!(root.exists());
+        assert_eq!(std::fs::read_dir(root).unwrap().count(), 0);
     }
 
     #[cfg(unix)]
