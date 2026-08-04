@@ -150,7 +150,7 @@ Validation:
 
 Tier: P0/P1.
 
-Status: implemented and validated by #147; under review.
+Status: implemented and validated by #147; merged through PR #191.
 
 Why here:
 
@@ -233,6 +233,9 @@ Validation:
 
 Tier: P1.
 
+Status: implemented on `feature/BPANE-00150`; broad validation and review are
+in progress.
+
 Why here:
 
 - It is the highest effort-adjusted operational gap from the review.
@@ -250,9 +253,12 @@ Scope:
 
 Validation:
 
-- readiness composition tests,
-- graceful shutdown integration test where feasible,
-- compose smoke for `/healthz` and `/readyz`.
+- focused lifecycle/readiness and timeout tests,
+- compose dependency-loss/recovery smoke for `/healthz` and `/readyz`,
+- real SIGTERM smoke proving readiness withdrawal before bounded listener
+  shutdown,
+- affected session, MCP, workflow, and recording regression smokes before
+  review.
 
 ### 7. Minimal CI, Dependency Safety, And Validation Ratchet
 

@@ -80,7 +80,7 @@ impl GatewayReadiness {
     pub(crate) async fn snapshot(&self) -> GatewayReadinessSnapshot {
         let lifecycle = self.lifecycle.state();
         if lifecycle != GatewayLifecycleState::Running {
-            self.record_transition(false, &[]);
+            self.record_lifecycle_withdrawal(lifecycle);
             return GatewayReadinessSnapshot {
                 status: ReadinessStatus::NotReady,
                 lifecycle,
@@ -154,6 +154,18 @@ impl GatewayReadiness {
             .map(|check| check.name)
             .collect::<Vec<_>>();
         warn!(failed_dependencies = ?failed, "gateway is not ready");
+    }
+
+    fn record_lifecycle_withdrawal(&self, lifecycle: GatewayLifecycleState) {
+        let previous = self
+            .last_observation
+            .swap(READINESS_NOT_READY, Ordering::AcqRel);
+        if previous != READINESS_NOT_READY {
+            info!(
+                ?lifecycle,
+                "gateway readiness withdrawn for lifecycle transition"
+            );
+        }
     }
 }
 

@@ -276,37 +276,30 @@ Validation:
 
 Priority: medium/high for deployability.
 
-Risk:
+Status: implemented on `feature/BPANE-00150`; broad regression validation and
+review remain.
 
-- gateway has limited deployable readiness/lifecycle behavior,
-- abrupt shutdown can disrupt sessions, recordings, and workflow workers.
+Implemented boundary:
 
-Required implementation:
+1. SIGINT/SIGTERM drives one shared monotonic lifecycle coordinator.
+2. HTTP and WebTransport stop admitting new work during drain and retain owned
+   work until completion or the configured global timeout.
+3. `/healthz` remains a resource-free process-liveness probe.
+4. `/readyz` fails closed while starting, draining, or when Postgres, the
+   runtime manager, configured Vault, or either local artifact store fails its
+   bounded check.
+5. Compose and the compose e2e preflight consume `/readyz`.
+6. External workflow and recording worker jobs are not claimed as drained by
+   the gateway process; their persisted assignment/reconciliation contracts
+   remain the recovery boundary.
 
-1. Add SIGINT/SIGTERM handling.
-2. Add graceful shutdown to the API server.
-3. Define WebTransport drain behavior:
-   - stop accepting new connections,
-   - allow bounded grace period,
-   - finalize recordings/workflows where possible,
-   - emit clear lifecycle logs.
-4. Add `/healthz` for process liveness.
-5. Add `/readyz` for dependency readiness:
-   - Postgres when configured,
-   - Docker/runtime manager,
-   - Vault when credential provider is configured,
-   - artifact stores.
-6. Treat graceful shutdown as single-node reliability, not only HA:
-   - handle SIGINT/SIGTERM,
-   - stop accepting new browser/admin/API work,
-   - drain active writes for a bounded period,
-   - make dropped sessions/workers visible in lifecycle logs.
+Validation evidence:
 
-Validation:
-
-- readiness status composition tests,
-- integration test for graceful shutdown path where feasible,
-- compose smoke for `/healthz` and `/readyz`.
+- lifecycle/readiness state, timeout, and response composition tests,
+- compose Postgres loss/recovery test with liveness remaining available,
+- real container SIGTERM smoke with observable 503 readiness withdrawal before
+  listener closure and successful restart,
+- broad gateway and affected browser regressions required before review.
 
 ### Admin And Session Catalog Scalability
 
