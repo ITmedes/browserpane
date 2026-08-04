@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
@@ -25,6 +26,15 @@ test('gateway compose wrapper documents stack-only preparation', () => {
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /default\|docker-pool\|all\|stack/);
   assert.match(result.stdout, /stack prepares the runtime/);
+  assert.match(result.stdout, /session-control parity against the compose Postgres database/);
+});
+
+test('gateway compose wrapper runs the persisted session-store contract', () => {
+  const source = fs.readFileSync(wrapper, 'utf8');
+
+  assert.match(source, /BPANE_SESSION_STORE_CONTRACT_POSTGRES_URL/);
+  assert.match(source, /session_store_contract_postgres/);
+  assert.match(source, /if \[\[ "\$SUITE" != "stack" \]\]/);
 });
 
 test('gateway compose wrapper rejects missing and unknown suite values', () => {

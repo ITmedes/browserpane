@@ -43,9 +43,9 @@ Foundation prerequisite from the 2026-07-31 delivery audit:
 - #146 is merged through PR #190 with shared admin OIDC and browser-security
   controls,
 - #147 merged through PR #191,
-- #150 lifecycle, health, dependency readiness, and bounded drain are
-  implemented and fully validated on `feature/BPANE-00150`; review/merge before
-  #152 unless a reviewed Foundation/Pilot gate changes the order.
+- #150 lifecycle, health, dependency readiness, and bounded drain merged
+  through PR #192; #152 has completed local contract-parity implementation and
+  validation and is awaiting review.
 
 Review reconciliation update:
 

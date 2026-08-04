@@ -16,6 +16,7 @@ Runs the bpane-gateway compose-backed API e2e suites with stack preflight:
 - refreshes local dev certs
 - brings up the local compose stack
 - waits for Keycloak, gateway, and mcp-bridge readiness
+- verifies session-control parity against the compose Postgres database
 - runs the selected ignored Rust integration test target(s), unless stack-only
 
 Options:
@@ -126,6 +127,16 @@ run_default_suite() {
 run_docker_pool_suite() {
   cargo test -p bpane-gateway --test compose_api_surface_docker_pool -- --ignored --test-threads=1
 }
+
+run_session_store_contract() {
+  local database_url="${BPANE_SESSION_STORE_CONTRACT_POSTGRES_URL:-postgresql://browserpane:browserpane-dev@localhost:5433/browserpane}"
+  BPANE_SESSION_STORE_CONTRACT_POSTGRES_URL="$database_url" \
+    cargo test -p bpane-gateway session_store_contract_postgres -- --ignored --test-threads=1
+}
+
+if [[ "$SUITE" != "stack" ]]; then
+  run_session_store_contract
+fi
 
 case "$SUITE" in
   stack)
