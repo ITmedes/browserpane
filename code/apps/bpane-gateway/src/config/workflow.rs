@@ -109,6 +109,11 @@ pub struct WorkflowConfig {
     )]
     pub workflow_event_delivery_base_backoff_secs: u64,
 
+    /// Exact webhook origins allowed to use HTTP or non-public addresses.
+    /// Repeat the flag for each controlled local or internal receiver.
+    #[arg(long = "workflow-event-delivery-allowed-origin")]
+    pub workflow_event_delivery_allowed_origins: Vec<String>,
+
     /// How often the gateway scans for completed workflow runs whose retained logs or outputs have expired.
     /// Set to 0 to disable workflow retention cleanup.
     #[arg(

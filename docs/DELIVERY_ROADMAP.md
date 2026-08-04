@@ -59,21 +59,23 @@ or capacity decision.
 | --- | --- | --- | --- | --- |
 | 0 | #151 | Done | #173 governance baseline | Required CI, dependency, coverage, and validation checks. |
 | 1 | #145 | Done | #151 required checks | Separate credential domains and remove bearer credentials from URLs/logs. |
-| 2 | #146 | Implementation complete; ready for PR | #145 secure credential contract | Harden shared admin auth, CSP, and browser security. |
+| 2 | #146 | Done | #145 secure credential contract | Harden shared admin auth, CSP, and browser security. |
+| 3 | #147 | Review | #145 credential/log baseline | Add callback and webhook SSRF controls. |
 
 ### Next Three Product Slices
 
 | Order | Issue | State | Dependency | Outcome |
 | --- | --- | --- | --- | --- |
-| 1 | #145 | Done | #151 required checks | Separate credential domains and remove bearer credentials from URLs/logs. |
-| 2 | #146 | Implementation complete; ready for PR | #145 secure credential contract | Harden shared admin auth, CSP, origin, and browser security. |
-| 3 | #147 | Qualified | #145 credential/log baseline | Add callback and webhook SSRF controls. |
+| 1 | #146 | Done | #145 secure credential contract | Harden shared admin auth, CSP, origin, and browser security. |
+| 2 | #147 | Review | #145 credential/log baseline | Add callback and webhook SSRF controls. |
+| 3 | #150 | Qualified | #147 callback boundary | Add lifecycle, dependency readiness, and bounded drain. |
 
 #151, #184, and #185 established and accelerated the required validation
 baseline. #145 is merged through
-`docs/BPANE-00145_TOKEN_DOMAIN_SEPARATION_PLAN.md`; #146 is implemented and
-validated through `docs/BPANE-00146_ADMIN_AUTH_SECURITY_PLAN.md`. #147 becomes
-the next Foundation product slice after #146 merges.
+`docs/BPANE-00145_TOKEN_DOMAIN_SEPARATION_PLAN.md`; #146 is merged through PR
+#190 and documented in `docs/BPANE-00146_ADMIN_AUTH_SECURITY_PLAN.md`. #147 is
+implemented and validated on `feature/BPANE-00147`; #150 is the next Foundation
+slice after #147 review and merge.
 
 ## Foundation Gate Sequence
 

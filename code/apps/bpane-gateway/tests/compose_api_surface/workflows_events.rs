@@ -15,7 +15,7 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
             "/api/v1/workflow-event-subscriptions",
             json!({
                 "name": harness.unique_name("compose-e2e-workflow-events"),
-                "target_url": "http://127.0.0.1:1/workflow-events",
+                "target_url": "http://web:8080/test/workflow-events",
                 "event_types": [
                     "workflow_run.created",
                     "workflow_run.running",
@@ -318,7 +318,11 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
                 ))
                 .await?;
             let deliveries = json_array(&response, "deliveries")?;
-            if deliveries.is_empty() {
+            if deliveries.is_empty()
+                || deliveries
+                    .iter()
+                    .any(|delivery| delivery["state"] != json!("delivered"))
+            {
                 return Ok(None);
             }
             Ok(Some(response))
@@ -328,6 +332,14 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
     let deliveries = json_array(&deliveries, "deliveries")?;
     if deliveries.is_empty() {
         return Err(anyhow!("workflow event deliveries endpoint remained empty"));
+    }
+    if deliveries
+        .iter()
+        .any(|delivery| delivery["state"] != json!("delivered"))
+    {
+        return Err(anyhow!(
+            "workflow event delivery did not reach the explicitly allowed receiver: {deliveries:?}"
+        ));
     }
 
     let workflow_operations = harness.get_json("/api/v1/workflow/operations").await?;

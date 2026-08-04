@@ -219,6 +219,12 @@ Validation:
 
 Priority: high/medium.
 
+Current state: implemented and validated on `feature/BPANE-00147`. New and
+persisted destinations are parsed, resolved, classified, and pinned before
+delivery; redirects and implicit proxies are disabled. Exact-origin exceptions
+are startup-validated deployment configuration. Evidence is in
+`BPANE-00147_WORKFLOW_WEBHOOK_SSRF_PLAN.md`.
+
 Risk:
 
 - workflow event subscription delivery can target internal services if URLs are
@@ -229,14 +235,16 @@ Required implementation:
 1. Parse `target_url` with URL semantics.
 2. Disable redirects by default.
 3. Deny loopback, link-local, private, multicast, and unspecified IP ranges.
-4. Add optional allowlist configuration for enterprise webhook domains.
-5. Resolve hostnames with IP pinning where feasible to reduce DNS rebinding.
+4. Add repeatable exact-origin configuration for controlled receivers.
+5. Resolve hostnames and pin the approved answers into the delivery client.
 
 Validation:
 
-- URL parser and IP-range unit tests,
-- redirect/internal target rejection tests,
-- API validation tests for bad subscription URLs.
+- URL parser, alternate IP notation, IP-range, DNS timeout/mixed-answer, and
+  exact-origin unit tests,
+- redirect/internal target rejection and DNS-pinned delivery tests,
+- API validation, canonical persistence, persisted-target revalidation, and
+  live compose delivery tests.
 
 ### Browser Context Import Safety
 

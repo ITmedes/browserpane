@@ -35,6 +35,9 @@ async fn scopes_session_resources_to_the_authenticated_owner() {
         recording_lifecycle: Arc::new(RecordingLifecycleManager::disabled()),
         workflow_lifecycle: Arc::new(WorkflowLifecycleManager::disabled()),
         workflow_observability: Arc::new(WorkflowObservability::default()),
+        workflow_event_destination_policy: Arc::new(
+            crate::workflow_event_delivery::WorkflowEventDestinationPolicy::default(),
+        ),
         workflow_log_retention: None,
         workflow_output_retention: None,
         idle_stop_timeout: Duration::from_secs(300),
@@ -111,6 +114,9 @@ async fn rejects_session_scoped_runtime_routes_for_unknown_or_foreign_sessions_b
         recording_lifecycle: Arc::new(RecordingLifecycleManager::disabled()),
         workflow_lifecycle: Arc::new(WorkflowLifecycleManager::disabled()),
         workflow_observability: Arc::new(WorkflowObservability::default()),
+        workflow_event_destination_policy: Arc::new(
+            crate::workflow_event_delivery::WorkflowEventDestinationPolicy::default(),
+        ),
         workflow_log_retention: None,
         workflow_output_retention: None,
         idle_stop_timeout: Duration::from_secs(300),

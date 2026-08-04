@@ -1,6 +1,6 @@
 # Admin-New Transition Roadmap
 
-Revalidated: 2026-07-31
+Revalidated: 2026-08-04
 
 This document preserves the admin-new transition sequence from the redesign
 requirements and security/runtime cleanup roadmap.
@@ -40,9 +40,11 @@ Foundation prerequisite from the 2026-07-31 delivery audit:
   checks, and required branch checks before Slice A,
 - #145 then implemented and validated the token-domain and URL/log credential
   cleanup,
-- #146 now implements and validates shared admin OIDC and browser-security
-  controls; continue with #147 after #146 review and merge unless a reviewed
-  Foundation/Pilot gate changes the order.
+- #146 is merged through PR #190 with shared admin OIDC and browser-security
+  controls,
+- #147 is implemented and validated on `feature/BPANE-00147`; continue with
+  #150 after #147 review and merge unless a reviewed Foundation/Pilot gate
+  changes the order.
 
 Review reconciliation update:
 
@@ -50,8 +52,8 @@ Review reconciliation update:
   from `review/` are treated as superseded by the current baseline,
 - token-domain separation, raw credential URL/log cleanup, and admin-event
   query auth are implemented by #145; browser admin auth/CSP is implemented by
-  #146; webhook SSRF, browser-context import limits, and graceful shutdown
-  remain confirmed-open,
+  #146; webhook SSRF controls are implemented by #147; browser-context import
+  limits and graceful shutdown remain confirmed-open,
 - recording artifact finalization remains a valid cleanup item, but it should
   not displace confirmed-open token/auth/webhook/import/lifecycle findings when
   choosing the next security-driven slice.
