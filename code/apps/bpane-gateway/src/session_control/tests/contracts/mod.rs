@@ -1,4 +1,5 @@
 mod postgres;
+mod resources;
 
 use anyhow::{ensure, Context};
 
@@ -9,7 +10,7 @@ const POSTGRES_URL_ENV: &str = "BPANE_SESSION_STORE_CONTRACT_POSTGRES_URL";
 
 #[tokio::test]
 async fn session_store_contract_in_memory() {
-    run_session_visibility_contract(&SessionStore::in_memory())
+    run_contracts(&SessionStore::in_memory())
         .await
         .expect("in-memory session-store contract should pass");
 }
@@ -22,11 +23,16 @@ async fn session_store_contract_postgres() {
     let fixture = postgres::PostgresContractFixture::create(&database_url)
         .await
         .expect("Postgres contract fixture should initialize");
-    let contract_result = run_session_visibility_contract(fixture.store()).await;
+    let contract_result = run_contracts(fixture.store()).await;
     let cleanup_result = fixture.cleanup().await;
 
     contract_result.expect("Postgres session-store contract should pass");
     cleanup_result.expect("Postgres contract fixture should clean up");
+}
+
+async fn run_contracts(store: &SessionStore) -> anyhow::Result<()> {
+    resources::run_resource_contracts(store).await?;
+    run_session_visibility_contract(store).await
 }
 
 async fn run_session_visibility_contract(store: &SessionStore) -> anyhow::Result<()> {
