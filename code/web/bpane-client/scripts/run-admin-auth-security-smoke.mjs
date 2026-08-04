@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import process from 'node:process';
 import { chromium } from 'playwright-core';
-import { ensureAdminLoggedIn } from './admin-smoke-lib.mjs';
+import { ensureAdminLoggedIn, getAdminAccessToken } from './admin-smoke-lib.mjs';
 import {
   DEFAULTS,
   createLogger,
@@ -48,21 +48,17 @@ async function run() {
         await assertSecurityHeaders(pageUrl);
         await ensureAdminLoggedIn(page, routeOptions);
         await assertDocumentCsp(page);
-        await assertPersistedTokens(page);
+        await assertMemoryOnlyTokens(page);
+        assert.ok(await getAdminAccessToken(page), 'expected in-memory bearer use after login');
 
         await page.reload({ waitUntil: 'domcontentloaded' });
         await ensureAdminLoggedIn(page, routeOptions);
-        await assertPersistedTokens(page);
-
-        await corruptStoredIdToken(page);
-        await page.reload({ waitUntil: 'domcontentloaded' });
-        await ensureAdminLoggedIn(page, routeOptions);
-        await assertPersistedTokens(page);
-        assert.notEqual(await storedIdToken(page), 'invalid-id-token');
+        await assertMemoryOnlyTokens(page);
+        assert.ok(await getAdminAccessToken(page), 'expected in-memory bearer use after SSO reload');
 
         await page.getByTestId(route.logoutTestId).click();
         await ensureAdminLoggedIn(page, routeOptions);
-        await assertPersistedTokens(page);
+        await assertMemoryOnlyTokens(page);
         assert.deepEqual(policyErrors, [], `CSP violations at ${route.path}`);
         summaries.push({ route: route.path, authenticated: true, recovery: true, headers: true });
       } catch (error) {
@@ -103,33 +99,23 @@ async function assertDocumentCsp(page) {
   assert.ok(policy?.includes("object-src 'none'"));
 }
 
-async function assertPersistedTokens(page) {
+async function assertMemoryOnlyTokens(page) {
   const state = await page.evaluate(({ tokenKey, legacyTokenKey }) => ({
     current: window.sessionStorage.getItem(tokenKey),
     legacy: window.sessionStorage.getItem(legacyTokenKey),
+    tokenKeys: Object.keys(window.sessionStorage).filter((key) => key.includes('auth.tokens')),
+    tokenValues: Object.values(window.sessionStorage).filter((value) => (
+      value.includes('access-token')
+      || value.includes('refresh-token')
+      || value.includes('id_token')
+      || value.includes('access_token')
+      || value.includes('refresh_token')
+    )),
   }), { tokenKey: TOKEN_KEY, legacyTokenKey: LEGACY_TOKEN_KEY });
+  assert.equal(state.current, null);
   assert.equal(state.legacy, null);
-  assert.ok(state.current, 'expected persisted admin token state');
-  const tokens = JSON.parse(state.current);
-  assert.equal(typeof tokens.access_token, 'string');
-  assert.equal(typeof tokens.id_token, 'string');
-  assert.equal(Object.hasOwn(tokens, 'refresh_token'), false);
-}
-
-async function corruptStoredIdToken(page) {
-  await page.evaluate((tokenKey) => {
-    const raw = window.sessionStorage.getItem(tokenKey);
-    if (!raw) throw new Error('admin token state is unavailable');
-    const tokens = JSON.parse(raw);
-    window.sessionStorage.setItem(tokenKey, JSON.stringify({ ...tokens, id_token: 'invalid-id-token' }));
-  }, TOKEN_KEY);
-}
-
-async function storedIdToken(page) {
-  return await page.evaluate((tokenKey) => {
-    const raw = window.sessionStorage.getItem(tokenKey);
-    return raw ? JSON.parse(raw).id_token : null;
-  }, TOKEN_KEY);
+  assert.deepEqual(state.tokenKeys, []);
+  assert.deepEqual(state.tokenValues, []);
 }
 
 async function redactedPageDiagnostics(page, browserErrors) {

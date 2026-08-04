@@ -141,7 +141,14 @@ The complete evidence is recorded in
 
 Priority: high before default admin promotion.
 
-Risk:
+Current state: implemented and validated on `feature/BPANE-00146`. Both admin
+apps consume one shared adapter backed by the OpenID-certified `oauth4webapi`
+protocol core; all tokens remain in memory, bounded PKCE transaction state is
+the only auth state stored per tab, verified claims drive identity display, and
+both routes receive the shared CSP/security-header contract. Evidence is in
+`BPANE-00146_ADMIN_AUTH_SECURITY_PLAN.md`.
+
+Resolved baseline risk:
 
 - both admin apps persist OIDC token sets in browser storage,
 - login requests lack nonce replay defense,
@@ -149,7 +156,7 @@ Risk:
 - the nginx/static layer lacks CSP and standard browser hardening headers,
 - old and unified admin currently duplicate security-sensitive auth code.
 
-Required implementation:
+Implemented controls:
 
 1. Extract or share the admin auth implementation before deep hardening where
    practical.

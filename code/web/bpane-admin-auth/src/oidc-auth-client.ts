@@ -1,10 +1,8 @@
 import type { AuthConfig } from './auth-config';
 import { BrowserTokenStore } from './browser-token-store';
 import { OidcEndpointClient } from './oidc-endpoint-client';
-import { OidcIdTokenVerifier } from './oidc-id-token-verifier';
 import { OidcLoginTransaction } from './oidc-login-transaction';
-import type { AuthSnapshot, OidcClaims, OidcTokenSet } from './oidc-types';
-import { OidcWireMapper } from './oidc-wire-mapper';
+import type { AuthSnapshot, OidcClaims, OidcExchangeResult, OidcTokenSet } from './oidc-types';
 import { PkceCodec } from './pkce-codec';
 
 const TOKEN_REFRESH_SKEW_MS = 60_000;
@@ -18,9 +16,7 @@ export type OidcAuthClientDependencies = {
   readonly config: AuthConfig;
   readonly tokenStore: BrowserTokenStore;
   readonly endpoints: OidcEndpointClient;
-  readonly verifier: OidcIdTokenVerifier;
   readonly loginTransaction: OidcLoginTransaction;
-  readonly cryptoImpl: Crypto;
   readonly nowMs: () => number;
 };
 
@@ -28,37 +24,21 @@ export class OidcAuthClient {
   readonly #config: AuthConfig;
   readonly #tokenStore: BrowserTokenStore;
   readonly #endpoints: OidcEndpointClient;
-  readonly #verifier: OidcIdTokenVerifier;
   readonly #loginTransaction: OidcLoginTransaction;
-  readonly #cryptoImpl: Crypto;
   readonly #nowMs: () => number;
-  #tokens: OidcTokenSet | null;
+  #tokens: OidcTokenSet | null = null;
   #claims: OidcClaims | null = null;
 
   constructor(dependencies: OidcAuthClientDependencies) {
     this.#config = dependencies.config;
     this.#tokenStore = dependencies.tokenStore;
     this.#endpoints = dependencies.endpoints;
-    this.#verifier = dependencies.verifier;
     this.#loginTransaction = dependencies.loginTransaction;
-    this.#cryptoImpl = dependencies.cryptoImpl;
     this.#nowMs = dependencies.nowMs;
-    this.#tokens = this.#tokenStore.loadTokens();
   }
 
   async initialize(): Promise<void> {
-    if (this.#claims) {
-      return;
-    }
-    if (!this.#tokens?.id_token || this.#nowMs() >= this.#tokens.expiresAtMs) {
-      this.clear();
-      return;
-    }
-    try {
-      this.#claims = await this.#verifier.verify(this.#tokens.id_token);
-    } catch {
-      this.clear();
-    }
+    this.#tokenStore.clearTokens();
   }
 
   getSnapshot(): AuthSnapshot {
@@ -78,35 +58,20 @@ export class OidcAuthClient {
 
   async buildLoginUrl(currentUrl: URL): Promise<string> {
     this.#assertConfigured();
-    const metadata = await this.#endpoints.fetchMetadata();
     const pkce = this.#loginTransaction.create(currentUrl);
-    const url = new URL(metadata.authorization_endpoint);
-    url.searchParams.set('client_id', this.#endpoints.clientId());
-    url.searchParams.set('redirect_uri', pkce.redirectUri);
-    url.searchParams.set('response_type', 'code');
-    url.searchParams.set('scope', this.#scope());
-    url.searchParams.set('state', pkce.state);
-    url.searchParams.set('nonce', pkce.nonce);
-    url.searchParams.set('code_challenge', await PkceCodec.sha256Base64Url(this.#cryptoImpl, pkce.verifier));
-    url.searchParams.set('code_challenge_method', 'S256');
-    return url.toString();
+    return await this.#endpoints.buildAuthorizationUrl(pkce, this.#scope());
   }
 
   async completeLoginIfNeeded(currentUrl: URL): Promise<LoginCompletion> {
     this.#assertConfigured();
     const cleanUrl = PkceCodec.buildRedirectUri(currentUrl);
-    if (currentUrl.searchParams.has('error')) {
-      this.clear();
-      throw new Error('OIDC authorization failed');
-    }
     const code = currentUrl.searchParams.get('code');
-    if (!code) {
+    if (!code && !currentUrl.searchParams.has('error')) {
       return { completed: false, cleanUrl };
     }
-    const pkce = this.#loginTransaction.consume(currentUrl.searchParams.get('state'));
+    const pkce = this.#loginTransaction.consume();
     try {
-      const response = await this.#endpoints.exchangeAuthorizationCode(code, pkce);
-      await this.#saveTokenResponse(response, pkce.nonce);
+      this.#saveExchange(await this.#endpoints.exchangeAuthorizationCode(currentUrl, pkce));
       return { completed: true, cleanUrl };
     } catch (error) {
       this.clear();
@@ -147,12 +112,7 @@ export class OidcAuthClient {
       return null;
     }
     try {
-      const response = await this.#endpoints.refreshAccessToken(refreshToken);
-      if (!response) {
-        this.clear();
-        return null;
-      }
-      await this.#saveTokenResponse(response, undefined, previous);
+      this.#saveExchange(await this.#endpoints.refreshAccessToken(refreshToken, previous), this.#claims);
       return this.#tokens?.access_token ?? null;
     } catch {
       this.clear();
@@ -160,15 +120,13 @@ export class OidcAuthClient {
     }
   }
 
-  async #saveTokenResponse(payload: unknown, nonce?: string, previous?: OidcTokenSet): Promise<void> {
-    const tokens = OidcWireMapper.toTokenSet(payload, this.#nowMs(), previous);
-    if (!tokens.id_token) {
-      throw new Error('OIDC ID token is required');
+  #saveExchange(result: OidcExchangeResult, fallbackClaims?: OidcClaims | null): void {
+    const claims = result.claims ?? fallbackClaims;
+    if (!claims) {
+      throw new Error('OIDC ID token claims are required');
     }
-    const claims = await this.#verifier.verify(tokens.id_token, nonce);
-    this.#tokens = tokens;
+    this.#tokens = result.tokens;
     this.#claims = claims;
-    this.#tokenStore.saveTokens(tokens);
   }
 
   #scope(): string {

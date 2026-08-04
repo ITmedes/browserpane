@@ -1,6 +1,7 @@
 import { cleanupWorkflowSmokeSessions, fetchAuthConfig, fetchJson, poll } from './workflow-smoke-lib.mjs';
 
 export async function ensureAdminLoggedIn(page, options) {
+  await installBearerCapture(page);
   await page.goto(options.pageUrl, { waitUntil: 'domcontentloaded' });
   const authConfig = await fetchAuthConfig(options);
   if (!authConfig || authConfig.mode !== 'oidc') {
@@ -237,13 +238,32 @@ async function cleanupAdminSession(page) {
 }
 
 export async function getAdminAccessToken(page) {
-  return await page.evaluate(() => {
-    const raw = window.sessionStorage.getItem('bpane.admin.auth.tokens.v2');
-    if (!raw) {
-      return '';
+  const handle = await page.waitForFunction(
+    () => typeof window.__bpaneSmokeAccessToken === 'string' && window.__bpaneSmokeAccessToken.length > 0
+      ? window.__bpaneSmokeAccessToken
+      : false,
+    undefined,
+    { timeout: 5_000 },
+  ).catch(() => null);
+  return handle ? await handle.jsonValue() : '';
+}
+
+async function installBearerCapture(page) {
+  await page.addInitScript(() => {
+    if (window.__bpaneSmokeBearerCaptureInstalled) {
+      return;
     }
-    const tokens = JSON.parse(raw);
-    return typeof tokens.access_token === 'string' ? tokens.access_token : '';
+    window.__bpaneSmokeBearerCaptureInstalled = true;
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = async (input, init) => {
+      const headers = new Headers(input instanceof Request ? input.headers : undefined);
+      new Headers(init?.headers).forEach((value, name) => headers.set(name, value));
+      const authorization = headers.get('authorization');
+      if (authorization?.startsWith('Bearer ')) {
+        window.__bpaneSmokeAccessToken = authorization.slice('Bearer '.length);
+      }
+      return await originalFetch(input, init);
+    };
   });
 }
 
