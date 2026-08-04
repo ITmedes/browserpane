@@ -58,20 +58,22 @@ or capacity decision.
 | Order | Issue | State | Dependency | Outcome |
 | --- | --- | --- | --- | --- |
 | 0 | #151 | Done | #173 governance baseline | Required CI, dependency, coverage, and validation checks. |
-| 1 | #145 | Implemented and validated; review pending | #151 required checks | Separate credential domains and remove bearer credentials from URLs/logs. |
+| 1 | #145 | Done | #151 required checks | Separate credential domains and remove bearer credentials from URLs/logs. |
+| 2 | #146 | In Progress; current product slice | #145 secure credential contract | Harden shared admin auth, CSP, and browser security. |
 
 ### Next Three Product Slices
 
 | Order | Issue | State | Dependency | Outcome |
 | --- | --- | --- | --- | --- |
-| 1 | #145 | Implemented and validated; review pending | #151 required checks | Separate credential domains and remove bearer credentials from URLs/logs. |
-| 2 | #146 | Qualified | #145 secure credential contract | Harden shared admin auth, CSP, origin, and browser security. |
+| 1 | #145 | Done | #151 required checks | Separate credential domains and remove bearer credentials from URLs/logs. |
+| 2 | #146 | In Progress; current product slice | #145 secure credential contract | Harden shared admin auth, CSP, origin, and browser security. |
 | 3 | #147 | Qualified | #145 credential/log baseline | Add callback and webhook SSRF controls. |
 
 #151, #184, and #185 established and accelerated the required validation
-baseline. #145 is implemented and validated through
-`docs/BPANE-00145_TOKEN_DOMAIN_SEPARATION_PLAN.md`; #146 is the next qualified
-Foundation product slice after #145 review and merge.
+baseline. #145 is merged through
+`docs/BPANE-00145_TOKEN_DOMAIN_SEPARATION_PLAN.md`; #146 is decomposed in
+`docs/BPANE-00146_ADMIN_AUTH_SECURITY_PLAN.md` and is the current Foundation
+product slice.
 
 ## Foundation Gate Sequence
 
