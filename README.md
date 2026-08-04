@@ -1021,12 +1021,14 @@ bpane-gateway \
   --workflow-event-delivery-allowed-origin https://hooks.example.com:8443
 ```
 
-Local compose sets `BPANE_WORKFLOW_EVENT_DELIVERY_ALLOWED_ORIGIN` to
-`http://web:8080` by default for its fixed POST-only workflow-event smoke
-receiver. Override or remove that exception when testing production-like public
-HTTPS delivery. Explicit webhook proxy support is not part of the current
-contract because an independently resolving proxy would bypass destination
-pinning.
+Local compose defaults `BPANE_WORKFLOW_EVENT_DELIVERY_ALLOWED_ORIGIN` to
+`http://web:8080` for its fixed POST-only compose receiver and
+`BPANE_WORKFLOW_EVENT_DELIVERY_SMOKE_ALLOWED_ORIGIN` to
+`http://bpane-workflow-webhook-smoke:9107` for the isolated signature/order
+smoke container. Override or remove those exceptions when testing
+production-like public HTTPS delivery. Explicit webhook proxy support is not
+part of the current contract because an independently resolving proxy would
+bypass destination pinning.
 
 Automation task routes used by workflow executors and lower-level automation
 integrations:

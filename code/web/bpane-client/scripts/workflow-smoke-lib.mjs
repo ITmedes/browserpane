@@ -415,6 +415,7 @@ export function buildWorkflowWorkerImage() {
 export async function startWorkflowWebhookReceiver({
   containerNamePrefix = 'bpane-workflow-webhook',
   network = 'deploy_bpane-internal',
+  networkAlias = 'bpane-workflow-webhook-smoke',
   port = 9107,
   statuses = [200],
 } = {}) {
@@ -470,6 +471,8 @@ server.serve_forever()
       containerName,
       '--network',
       network,
+      '--network-alias',
+      networkAlias,
       '-e',
       `BPANE_WEBHOOK_STATUSES=${statuses.join(',')}`,
       '-v',
@@ -485,7 +488,7 @@ server.serve_forever()
   );
 
   return {
-    targetUrl: `http://${containerName}:${port}/events`,
+    targetUrl: `http://${networkAlias}:${port}/events`,
     async readRequests() {
       try {
         const content = await fs.readFile(requestsPath, 'utf8');
