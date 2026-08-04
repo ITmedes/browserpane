@@ -138,6 +138,7 @@ pub async fn run_api_server(config: ApiServerConfig) -> anyhow::Result<()> {
     let state = Arc::new(ApiState {
         registry: config.registry,
         auth_validator: config.auth_validator,
+        admin_event_access_token_manager: config.admin_event_access_token_manager,
         connect_ticket_manager: config.connect_ticket_manager,
         automation_access_token_manager: config.automation_access_token_manager,
         session_store: config.session_store,

@@ -6,7 +6,9 @@ use tracing::info;
 
 use crate::auth::{AuthValidator, OidcConfig};
 use crate::config::Config;
-use crate::session_access::{SessionAutomationAccessTokenManager, SessionConnectTicketManager};
+use crate::session_access::{
+    AdminEventAccessTokenManager, SessionAutomationAccessTokenManager, SessionConnectTicketManager,
+};
 
 use super::AuthServices;
 
@@ -15,6 +17,10 @@ impl AuthServices {
         let shared_secret = load_or_generate_shared_secret(config)?;
         let auth_validator = Arc::new(build_auth_validator(config, &shared_secret).await?);
         Ok(Self {
+            admin_event_access_token_manager: Arc::new(AdminEventAccessTokenManager::new(
+                shared_secret.clone(),
+                Duration::from_secs(config.auth.admin_event_token_ttl_secs),
+            )),
             connect_ticket_manager: Arc::new(SessionConnectTicketManager::new(
                 shared_secret.clone(),
                 Duration::from_secs(config.auth.session_ticket_ttl_secs),
