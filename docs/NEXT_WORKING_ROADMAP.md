@@ -44,8 +44,8 @@ Foundation prerequisite from the 2026-07-31 delivery audit:
   controls,
 - #147 merged through PR #191,
 - #150 lifecycle, health, dependency readiness, and bounded drain are
-  implemented on `feature/BPANE-00150`; finish validation/review before #152
-  unless a reviewed Foundation/Pilot gate changes the order.
+  implemented and fully validated on `feature/BPANE-00150`; review/merge before
+  #152 unless a reviewed Foundation/Pilot gate changes the order.
 
 Review reconciliation update:
 

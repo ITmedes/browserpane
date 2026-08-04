@@ -61,22 +61,22 @@ or capacity decision.
 | 1 | #145 | Done | #151 required checks | Separate credential domains and remove bearer credentials from URLs/logs. |
 | 2 | #146 | Done | #145 secure credential contract | Harden shared admin auth, CSP, and browser security. |
 | 3 | #147 | Done | #145 credential/log baseline | Callback and webhook SSRF controls merged through PR #191. |
-| 4 | #150 | In Progress | #147 callback boundary | Add lifecycle, dependency readiness, and bounded drain. |
+| 4 | #150 | Review | #147 callback boundary | Lifecycle, dependency readiness, and bounded drain implemented and fully validated. |
 
 ### Next Three Product Slices
 
 | Order | Issue | State | Dependency | Outcome |
 | --- | --- | --- | --- | --- |
 | 1 | #147 | Done | #145 credential/log baseline | Add callback and webhook SSRF controls. |
-| 2 | #150 | In Progress | #147 callback boundary | Add lifecycle, dependency readiness, and bounded drain. |
+| 2 | #150 | Review | #147 callback boundary | Add lifecycle, dependency readiness, and bounded drain. |
 | 3 | #152 | Qualified | #150 stable readiness contract | Add shared in-memory/Postgres store contract tests. |
 
 #151, #184, and #185 established and accelerated the required validation
 baseline. #145 is merged through
 `docs/BPANE-00145_TOKEN_DOMAIN_SEPARATION_PLAN.md`; #146 is merged through PR
 #190 and documented in `docs/BPANE-00146_ADMIN_AUTH_SECURITY_PLAN.md`. #147
-merged through PR #191. #150 is now implemented on
-`feature/BPANE-00150`; broad validation and review are the remaining steps
+merged through PR #191. #150 is implemented and has passed the canonical full
+46-stage validation profile on `feature/BPANE-00150`; review/merge remains
 before #152 becomes the next Foundation slice.
 
 ## Foundation Gate Sequence

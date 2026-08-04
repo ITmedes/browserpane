@@ -212,5 +212,18 @@ Implemented on `feature/BPANE-00150`:
 - focused tests plus compose Postgres loss/recovery and real SIGTERM/restart
   smoke evidence.
 
-The broad gateway/workspace and affected browser regression results remain to
-be recorded before review.
+Final validation on 2026-08-04:
+
+- `node scripts/validate.mjs --profile full` passed all 46 stages,
+- Rust formatting, workspace Clippy, workspace tests, dependency policy, and
+  the Rust coverage ratchet passed,
+- 393 gateway tests passed within the workspace suite,
+- all maintained Node packages passed their configured checks, tests,
+  coverage ratchets, and builds,
+- 17 default compose API surfaces and 4 docker-pool lifecycle/capacity surfaces
+  passed,
+- auth/security, admin-new dashboard/projects/sessions, compatibility admin,
+  CLI, MCP multi-session, recording artifact/playback, and workflow-admission
+  browser smokes passed,
+- the restored local stack reports `/healthz` 200, `/readyz` 200, and a healthy
+  gateway container.

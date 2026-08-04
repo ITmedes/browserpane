@@ -233,8 +233,7 @@ Validation:
 
 Tier: P1.
 
-Status: implemented on `feature/BPANE-00150`; broad validation and review are
-in progress.
+Status: implemented and fully validated on `feature/BPANE-00150`; under review.
 
 Why here:
 
