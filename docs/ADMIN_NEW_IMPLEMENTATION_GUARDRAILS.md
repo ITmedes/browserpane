@@ -148,14 +148,17 @@ Admin events:
 - `admin-event-client`,
 - `admin-event-mapper`,
 - `admin-event-snapshots`,
+- `admin-event-stream-access`,
 - `AdminEventClient`,
+- `AdminEventStreamAccessMapper`,
 - `AdminEventConnectionStatus`,
 - `AdminSessionsSnapshotEvent`,
 - `AdminSessionFilesSnapshotEvent`,
 - `AdminRecordingsSnapshotEvent`,
 - `AdminWorkflowRunsSnapshotEvent`,
 - `AdminMcpDelegationSnapshotEvent`,
-- URL construction through `buildAdminEventUrl`.
+- scoped token response validation and query-free URL construction through
+  `AdminEventStreamAccessMapper`.
 
 Other API boundaries:
 
