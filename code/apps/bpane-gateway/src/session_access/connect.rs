@@ -1,16 +1,13 @@
 use std::time::Duration;
 
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use base64::Engine;
 use chrono::{DateTime, Utc};
-use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
-use sha2::Sha256;
 use uuid::Uuid;
 
 use crate::auth::AuthenticatedPrincipal;
-
-type TicketHmacSha256 = Hmac<Sha256>;
+use crate::session_access::token_codec::{
+    PurposeBoundTokenCodec, PurposeBoundTokenError, TokenPurpose,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SessionConnectTicketClaims {
@@ -30,13 +27,14 @@ pub struct IssuedSessionConnectTicket {
 
 #[derive(Debug, Clone)]
 pub struct SessionConnectTicketManager {
-    secret: Vec<u8>,
+    codec: PurposeBoundTokenCodec,
     ttl: Duration,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SessionConnectTicketError {
     Malformed,
+    WrongPurpose,
     InvalidSignature,
     Expired,
     InvalidPayload,
@@ -46,6 +44,7 @@ impl std::fmt::Display for SessionConnectTicketError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Malformed => write!(f, "malformed session connect ticket"),
+            Self::WrongPurpose => write!(f, "wrong session connect ticket purpose"),
             Self::InvalidSignature => write!(f, "invalid session connect ticket signature"),
             Self::Expired => write!(f, "session connect ticket expired"),
             Self::InvalidPayload => write!(f, "invalid session connect ticket payload"),
@@ -57,7 +56,10 @@ impl std::error::Error for SessionConnectTicketError {}
 
 impl SessionConnectTicketManager {
     pub fn new(secret: Vec<u8>, ttl: Duration) -> Self {
-        Self { secret, ttl }
+        Self {
+            codec: PurposeBoundTokenCodec::new(&secret, TokenPurpose::SessionConnect),
+            ttl,
+        }
     }
 
     pub fn issue_ticket(
@@ -75,12 +77,8 @@ impl SessionConnectTicketManager {
             client_id: principal.client_id.clone(),
             expires_at_unix: expires_at.timestamp(),
         };
-        let payload =
-            serde_json::to_vec(&claims).map_err(|_| SessionConnectTicketError::InvalidPayload)?;
-        let payload_encoded = URL_SAFE_NO_PAD.encode(&payload);
-        let signature_encoded = URL_SAFE_NO_PAD.encode(self.sign(&payload)?);
         Ok(IssuedSessionConnectTicket {
-            token: format!("v1.{payload_encoded}.{signature_encoded}"),
+            token: self.codec.encode(&claims).map_err(map_codec_error)?,
             expires_at,
             claims,
         })
@@ -90,38 +88,21 @@ impl SessionConnectTicketManager {
         &self,
         token: &str,
     ) -> Result<SessionConnectTicketClaims, SessionConnectTicketError> {
-        let mut parts = token.split('.');
-        let version = parts.next().ok_or(SessionConnectTicketError::Malformed)?;
-        let payload_encoded = parts.next().ok_or(SessionConnectTicketError::Malformed)?;
-        let signature_encoded = parts.next().ok_or(SessionConnectTicketError::Malformed)?;
-        if parts.next().is_some() || version != "v1" {
-            return Err(SessionConnectTicketError::Malformed);
-        }
-
-        let payload = URL_SAFE_NO_PAD
-            .decode(payload_encoded)
-            .map_err(|_| SessionConnectTicketError::Malformed)?;
-        let signature = URL_SAFE_NO_PAD
-            .decode(signature_encoded)
-            .map_err(|_| SessionConnectTicketError::Malformed)?;
-        let expected_signature = self.sign(&payload)?;
-        if signature != expected_signature {
-            return Err(SessionConnectTicketError::InvalidSignature);
-        }
-
-        let claims: SessionConnectTicketClaims = serde_json::from_slice(&payload)
-            .map_err(|_| SessionConnectTicketError::InvalidPayload)?;
+        let claims: SessionConnectTicketClaims =
+            self.codec.decode(token).map_err(map_codec_error)?;
         if Utc::now().timestamp() > claims.expires_at_unix {
             return Err(SessionConnectTicketError::Expired);
         }
         Ok(claims)
     }
+}
 
-    fn sign(&self, payload: &[u8]) -> Result<Vec<u8>, SessionConnectTicketError> {
-        let mut mac = TicketHmacSha256::new_from_slice(&self.secret)
-            .map_err(|_| SessionConnectTicketError::InvalidPayload)?;
-        mac.update(payload);
-        Ok(mac.finalize().into_bytes().to_vec())
+fn map_codec_error(error: PurposeBoundTokenError) -> SessionConnectTicketError {
+    match error {
+        PurposeBoundTokenError::Malformed => SessionConnectTicketError::Malformed,
+        PurposeBoundTokenError::WrongPurpose => SessionConnectTicketError::WrongPurpose,
+        PurposeBoundTokenError::InvalidSignature => SessionConnectTicketError::InvalidSignature,
+        PurposeBoundTokenError::InvalidPayload => SessionConnectTicketError::InvalidPayload,
     }
 }
 
@@ -174,10 +155,7 @@ mod tests {
             .unwrap();
         let mut claims = manager.validate_ticket(&issued.token).unwrap();
         claims.expires_at_unix = Utc::now().timestamp() - 1;
-        let payload = serde_json::to_vec(&claims).unwrap();
-        let payload_encoded = URL_SAFE_NO_PAD.encode(&payload);
-        let signature_encoded = URL_SAFE_NO_PAD.encode(manager.sign(&payload).unwrap());
-        let expired = format!("v1.{payload_encoded}.{signature_encoded}");
+        let expired = manager.codec.encode(&claims).unwrap();
         assert_eq!(
             manager.validate_ticket(&expired),
             Err(SessionConnectTicketError::Expired)
