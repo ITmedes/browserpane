@@ -52,9 +52,9 @@ superseded by the current code baseline.
 | N3 token cryptographic confusion | Resolved by #145 with purpose-bound tokens and independent derived signing keys. |
 | M3 bearer credentials in URLs/logs | Resolved by #145 with scoped first-frame event authentication and redacted transport targets. |
 | H1 webhook SSRF | Open as a focused security/runtime cleanup slice. |
-| H2/H3 admin token storage, nonce, ID-token verification | Open and promoted to Slice B. |
+| H2/H3 admin token storage, nonce, ID-token verification | Resolved by #146 with memory-only tokens and certified OIDC validation. |
 | M1 browser-context import decompression | Open as browser-context import safety. |
-| M2 missing CSP/security headers | Open and promoted to Slice B. |
+| M2 missing CSP/security headers | Resolved by #146 with shared static and live-validated controls. |
 | M4 dev HMAC fallback and token logging | Retained as local-dev caveat plus safer-defaults/documentation work. |
 | L1 non-constant-time HMAC | Resolved by #145 through library-backed HMAC verification. |
 | L2 tar symlink/hardlink import | Folded into browser-context import safety. |

@@ -20,6 +20,7 @@
     "smoke:browser-policy": "node scripts/run-browser-policy-smoke.mjs",
     "smoke:bpane-cli": "node scripts/run-bpane-cli-smoke.mjs",
     "smoke:admin-session": "node scripts/run-admin-session-smoke.mjs",
+    "smoke:admin-auth-security": "node scripts/run-admin-auth-security-smoke.mjs",
     "smoke:admin-browser-contexts": "node scripts/run-admin-browser-contexts-smoke.mjs",
     "smoke:admin-egress-profiles": "node scripts/run-admin-egress-profiles-smoke.mjs",
     "smoke:admin-unified-browser-contexts": "node scripts/run-admin-unified-browser-contexts-smoke.mjs",

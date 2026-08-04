@@ -22,6 +22,7 @@ dev/egress-mitmproxy/
 node_modules/
 dist/
 code/web/bpane-client/coverage/
+code/web/bpane-admin-auth/coverage/
 code/web/bpane-admin-unified/coverage/
 code/web/bpane-admin/.svelte-kit/
 code/web/bpane-admin/build/

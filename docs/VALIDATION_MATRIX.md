@@ -530,6 +530,15 @@ Admin browser auth and web security:
 - nginx/static serving tests or smoke checks must verify CSP and security
   headers.
 
+Current #146 evidence:
+
+- shared auth: 4 files/30 tests, coverage ratchet, clean production dependency
+  audit,
+- compatibility admin: 45 files/200 tests, typecheck, and production build,
+- admin-new: 101 files/278 tests, typecheck, and production build,
+- rebuilt compose web image plus live auth/security, dashboard, admin-new
+  session, and compatibility session smokes.
+
 Webhook, import, and lifecycle:
 
 - webhook target validation must reject loopback, link-local, private,

@@ -1,0 +1,234 @@
+# BPANE-00146 Admin Auth And Browser Security Plan
+
+## Metadata
+
+- Issue: [#146](https://github.com/ITmedes/browserpane/issues/146)
+- State: Implementation Complete
+- Owner: `thebackplane`
+- Lane: Foundation
+- Target gate: Foundation Gate
+- Branch: `feature/BPANE-00146`
+- Depends on: #145 token-domain and URL credential cleanup
+- Last verified: 2026-08-04 on `feature/BPANE-00146`
+
+## Business Outcome
+
+Give `/admin/` and `/admin-new/` one standards-based browser authentication
+contract so the new admin can become the default without retaining two
+independent security implementations. Reject replayed or untrusted OIDC
+callbacks before identity data is displayed, reduce persisted credential
+exposure, and add browser response headers that limit script injection,
+embedding, referrer leakage, and unintended browser capabilities.
+
+## Example Use Case
+
+An operator opens `/admin-new/`, signs in through Keycloak, leaves the console
+open until an access token needs refresh, and later reloads the page. The app
+accepts only an authorization response matching its state and nonce, verifies
+the ID token against the issuer JWKS, displays only verified identity claims,
+and redirects consistently when authentication can no longer be recovered. A
+copied callback, wrong-audience token, unsigned token, or embedded admin page is
+rejected without exposing token details.
+
+## Pre-Implementation Evidence
+
+- Both admin packages contain duplicate production auth modules.
+- Authorization Code with PKCE and state is implemented, but nonce is absent.
+- ID-token and access-token payloads are decoded without signature, issuer, or
+  audience verification and can currently drive account display data.
+- The complete token response, including refresh token, is persisted in
+  `sessionStorage`.
+- The static nginx routes set cache headers but no CSP, content-type, referrer,
+  frame, or permissions policy.
+- Existing browser smokes cover successful Keycloak login indirectly, but not
+  callback rejection, storage policy, logout, or response headers explicitly.
+
+## Scope
+
+1. Add a framework-neutral `@browserpane/admin-auth` package consumed by both
+   admin applications; keep route/UI composition in each app.
+2. Use the OpenID-certified, provider-neutral `oauth4webapi` library for OIDC
+   discovery, PKCE, authorization-response validation, token grants, ID-token
+   signature/claim validation, and signing-key rotation.
+3. Validate discovery issuer, token issuer, audience/authorized party, expiry,
+   nonce, and bounded PKCE transaction age.
+4. Keep access, ID, and refresh tokens in memory only; persist only the bounded
+   PKCE transaction and use the provider SSO redirect after a page reload.
+5. Make invalid callback, stale transaction, failed refresh, logout, and
+   API authentication failure clear local state consistently.
+6. Apply CSP and standard browser security headers to `/admin/` and
+   `/admin-new/` without blocking Keycloak, API, WebTransport, WebSocket,
+   microphone, camera, media, worker, or popup session-preview flows.
+7. Add focused unit/integration tests and dedicated browser/header smokes for
+   both admin routes.
+
+## Non-Goals
+
+- A backend-for-frontend, HttpOnly token cookie, reverse-proxy OIDC module, or
+  Keycloak topology redesign. Those require a separate deployment contract.
+- Removing the compatibility admin in this slice.
+- Changing gateway bearer validation, roles, permissions, or owner semantics.
+- Restricting dynamic external connect destinations beyond the current
+  configurable IdP, gateway, WebTransport, and MCP integration requirements.
+- Treating local demo credentials as a production deployment pattern.
+
+## Security Contract
+
+### OIDC Transaction
+
+- Generate independent PKCE verifier, state, and nonce values with Web Crypto.
+- Store only the short-lived transaction in `sessionStorage` with a creation
+  timestamp and a ten-minute maximum age.
+- Clear the transaction before code exchange completion so a callback cannot
+  be replayed in the same tab.
+- Require the returned state and verified ID-token nonce to match.
+
+### Protocol And Identity Verification
+
+- Delegate discovery, PKCE, authorization-response, token-endpoint response,
+  ID-token signature/claim validation, and JWKS rotation to `oauth4webapi`.
+- Require the processed response to contain a validated ID token and map only
+  validated string identity claims into the admin snapshot.
+- Keep BrowserPane code focused on transaction ownership, token lifetime,
+  application snapshots, redirects, and failure recovery.
+
+### Browser Token Storage
+
+- Access, ID, and refresh tokens remain in memory and are never written to web
+  storage.
+- A page reload performs a normal OIDC authorization redirect; an existing IdP
+  session normally completes that round trip without another credential prompt.
+- Only the short-lived PKCE state, nonce, verifier, redirect URI, and creation
+  time are written to per-tab `sessionStorage`.
+- Removing all JavaScript-readable bearer material requires a future BFF and
+  is not implied by this slice.
+
+### Response Headers
+
+- Admin routes receive a CSP with self-only scripts, no objects, no framing,
+  constrained base/form/media/worker sources, and network schemes required by
+  configured browser integrations.
+- Add `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options`, and a
+  permissions policy compatible with BrowserPane camera/microphone use.
+- Do not emit HSTS from the local HTTP-only web container; deployment ingress
+  owns HSTS after TLS termination.
+
+## Implementation Slices
+
+### Slice 1: Shared Auth Core
+
+- Add the package and replace duplicated app modules with narrow re-exports.
+- Add provider-neutral OIDC protocol integration, nonce-aware transaction
+  state, validated-claim mapping, and memory-only token policy.
+- Add package-level tests for positive and negative security cases.
+
+### Slice 2: Admin Integration And Recovery
+
+- Initialize both shells asynchronously and recover page reloads through the
+  normal OIDC SSO redirect instead of restoring bearer material.
+- Align automatic login, invalid-auth recovery, refresh failure, and logout.
+- Keep route-specific account presentation and API clients unchanged.
+
+### Slice 3: Browser Security Headers
+
+- Add reusable nginx header directives to both admin locations.
+- Add static contract tests and live response-header checks.
+- Verify production bundles run under the CSP without browser console errors.
+
+### Slice 4: Documentation And Evidence
+
+- Update README, ARCH, AGENTS, security roadmap, validation matrix, and delivery
+  state when behavior or commands change.
+- Record exact unit, coverage, build, compose, and smoke evidence.
+
+## Test Strategy
+
+### Unit
+
+- PKCE URL contains S256 challenge, state, and nonce.
+- Missing, mismatched, expired, or malformed transaction state is rejected.
+- Valid asymmetric ID token passes library-owned signature, issuer, audience,
+  expiry, nonce, and authorized-party checks.
+- Unsigned, wrong-key, wrong-issuer, wrong-audience, wrong-nonce, expired, and
+  symmetric-algorithm tokens fail.
+- Web storage contains no access, ID, or refresh token and malformed
+  transaction storage is cleared.
+- Refresh rotation remains available in memory and failure clears auth state.
+
+### Integration
+
+- Both apps compile and execute against the same auth package.
+- Successful login exposes only verified identity claims.
+- Reloaded routes complete an OIDC SSO round trip before protected content
+  renders.
+- Invalid authentication triggers one bounded redirect instead of a loop.
+- nginx contract tests prove both admin locations carry the same headers.
+
+### Smoke And E2E
+
+- Complete Keycloak login for `/admin/` and `/admin-new/`.
+- Confirm web storage contains no access, ID, or refresh token.
+- Exercise logout and automatic SSO login recovery.
+- Exercise expired/invalid local auth recovery without an infinite redirect.
+- Check live CSP, content-type, referrer, frame, and permissions headers.
+- Run representative compatibility-admin and admin-new session/dashboard
+  smokes to catch blocked network, media, popup, and WebTransport behavior.
+
+## Rollback
+
+- Revert the shared package, app re-exports, shell initialization, and nginx
+  headers together.
+- No database or gateway rollback is required.
+- Existing per-tab token state can be cleared; operators authenticate again.
+- Keep old and new admin builds on one shared auth version in every image.
+
+## Definition Of Done
+
+- Both admin apps use one production auth implementation.
+- Identity display never consumes unverified JWT payloads.
+- State, nonce, issuer, audience, expiry, signature, and transaction age have
+  positive and negative coverage.
+- Web storage contains no admin access, ID, or refresh token.
+- Both routes recover consistently from expiry and invalid authentication.
+- Both routes deliver the agreed browser security headers.
+- Unit, integration, coverage, build, compose, and browser smoke checks pass.
+- Issue #146 and security/delivery documentation agree with the implementation.
+
+## Post-Implementation Smoke Sequence
+
+1. Run shared auth package typecheck, tests, coverage, and build.
+2. Run compatibility-admin and admin-new check, tests, coverage where
+   configured, and production builds.
+3. Build and start the compose web/gateway/Keycloak stack.
+4. Fetch `/admin/` and `/admin-new/` and assert the complete security-header
+   contract.
+5. Sign in to both routes through Keycloak and confirm authenticated content.
+6. Inspect per-tab storage and confirm no access, ID, or refresh token is
+   persisted.
+7. Log out, sign in again through existing SSO, and exercise invalid/expired
+   local state recovery.
+8. Run compatibility admin session and admin-new dashboard/session smokes.
+9. Inspect browser console and nginx logs for CSP violations, redirect loops,
+   token values, or authentication errors.
+
+## Evidence Record
+
+- Plan and issue alignment: #146 is the canonical foundation slice; commits
+  `e0979ea`, `d2c5b04`, and the current certified-core implementation follow
+  this plan.
+- Library audit: `oidc-client-ts` and `keycloak-js` were rejected as the core
+  abstraction because the former does not verify ID-token signatures in its
+  current browser response validator and the latter is provider-specific.
+  `oauth4webapi` owns the standards-sensitive protocol implementation; local
+  code owns BrowserPane integration and memory-only state.
+- Shared auth validation: 4 files and 30 tests pass; production dependency
+  audit reports zero vulnerabilities; coverage remains above the package
+  ratchet.
+- Admin integration validation: compatibility admin 45 files/200 tests and
+  admin-new 101 files/278 tests pass, with typechecks and production builds.
+- Header contract validation: static nginx contract, CSP-aware production
+  bundles, and live response checks pass for both admin routes.
+- Compose/browser smoke evidence: the rebuilt `deploy-web` image passes real
+  Keycloak login, memory-only storage, SSO reload, logout/relogin, admin-new
+  dashboard/session/MCP/preview/restart, and compatibility admin
+  connect/disconnect/reconnect/stop flows.

@@ -116,6 +116,11 @@ Current product shape:
   - `file-transfer.ts`, `input-controller.ts`, `session-stats.ts`: browser interaction and telemetry.
 - `code/web/bpane-client`
   - TypeScript package. There is no meaningful Rust browser client crate in the current repo.
+- `code/web/bpane-admin-auth`
+  - Shared framework-neutral browser auth package for both SvelteKit admin apps.
+  - Delegates standards-sensitive OIDC/OAuth behavior to `oauth4webapi`; local
+    code owns runtime config, bounded PKCE transaction state, memory-only token
+    lifetime, auth snapshots, redirects, and app recovery.
 - `code/web/bpane-admin`
   - Stable/default SvelteKit admin console served at `/admin/`.
   - Owns the current operations overlay, route-backed inspection surfaces, and
@@ -229,6 +234,7 @@ Run these in `code/web/bpane-client`:
 - `npm run test:coverage`
 
 Run these where applicable:
+- `cd code/web/bpane-admin-auth && npm run test:coverage`
 - `cd code/web/bpane-admin-unified && npm run test:coverage`
 - `cd code/integrations/mcp-bridge && npm run build`
 - `cd code/integrations/recording-worker && npm run build`
