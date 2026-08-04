@@ -133,6 +133,7 @@ services:
       --mcp-bridge-control-token ${BPANE_MCP_BRIDGE_CONTROL_TOKEN:-browserpane-dev-mcp-bridge-control-token}
       --readiness-check-timeout-secs ${BPANE_GATEWAY_READINESS_CHECK_TIMEOUT_SECS:-3}
       --shutdown-drain-timeout-secs ${BPANE_GATEWAY_SHUTDOWN_DRAIN_TIMEOUT_SECS:-15}
+      --shutdown-readiness-grace-secs ${BPANE_GATEWAY_SHUTDOWN_READINESS_GRACE_SECS:-2}
       --cert /certs/cert.pem
       --key /certs/cert.key
       --workflow-worker-docker-bin ${BPANE_WORKFLOW_WORKER_DOCKER_BIN:-docker}

@@ -60,4 +60,8 @@ pub struct GatewayConfig {
     /// Maximum duration allowed for active work to drain during shutdown.
     #[arg(long = "shutdown-drain-timeout-secs", default_value_t = 15)]
     pub shutdown_drain_timeout_secs: u64,
+
+    /// Time to advertise not-ready before closing the HTTP listener.
+    #[arg(long = "shutdown-readiness-grace-secs", default_value_t = 2)]
+    pub shutdown_readiness_grace_secs: u64,
 }

@@ -55,7 +55,8 @@ Use one shared gateway lifecycle coordinator with explicit `starting`,
 - The first SIGINT/SIGTERM transition is idempotent and starts drain. A second
   signal forces immediate termination.
 - API middleware rejects new non-health requests with 503 after drain starts,
-  while Axum drains requests already in flight.
+  while health probes remain available for a short configurable readiness
+  withdrawal grace and Axum then drains requests already in flight.
 - WebTransport stops accepting handshakes when drain starts. Existing session
   tasks may finish naturally until the configured deadline, after which the
   endpoint and remaining tasks are closed.
@@ -90,7 +91,8 @@ available.
 - Add a focused lifecycle module with typed state, signal handling, transition
   notification, and bounded drain configuration.
 - Add CLI options for readiness timeout and shutdown drain timeout with
-  conservative defaults.
+  conservative defaults, plus a shorter readiness-withdrawal grace before the
+  HTTP listener closes.
 - Add state-machine and configuration tests.
 
 ### Slice 2: Dependency Readiness Boundary
