@@ -199,6 +199,8 @@ Current product shape:
 - Rust coverage ratchet: `node scripts/run-rust-coverage.mjs`
 - Full Rust test suite: `cargo test --workspace`
 - Gateway tests: `cargo test -p bpane-gateway`
+- Gateway in-memory session-store contract: `cargo test -p bpane-gateway session_store_contract_in_memory`
+- Gateway Postgres session-store contract: `BPANE_SESSION_STORE_CONTRACT_POSTGRES_URL=postgresql://browserpane:browserpane-dev@localhost:5433/browserpane cargo test -p bpane-gateway session_store_contract_postgres -- --ignored --test-threads=1`
 - Gateway compose e2e API suite: `cargo test -p bpane-gateway --test compose_api_surface -- --ignored --test-threads=1`
 - Gateway docker-pool compose e2e suite: `cargo test -p bpane-gateway --test compose_api_surface_docker_pool -- --ignored --test-threads=1`
 - Gateway compose e2e wrapper: `scripts/run-gateway-compose-e2e.sh --suite all`

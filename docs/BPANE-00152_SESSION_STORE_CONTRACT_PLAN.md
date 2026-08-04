@@ -9,7 +9,7 @@
 - Target gate: Foundation Gate
 - Depends on: #150 gateway lifecycle and dependency readiness
 - Branch: `feature/BPANE-00152`
-- Last verified: 2026-08-04 on `main` at `693dc3a`
+- Last verified: 2026-08-04 on `feature/BPANE-00152` at `bbb8e71`
 
 ## Business Outcome
 
@@ -233,7 +233,18 @@ unit tests while failing against the Postgres-backed local or deployed stack.
 
 - Branch: `feature/BPANE-00152`
 - PR: pending
-- Contract results: pending
+- Contract implementation:
+  - `208bbbf` adds the backend-neutral harness and isolated Postgres fixture,
+  - `dddfa8b` covers core resources and tenant boundaries,
+  - `6ac0b0b` corrects persisted session lifecycle parity,
+  - `a7ff52b` covers workflow/run and recording behavior,
+  - `0ac522c` preserves fixture cleanup on contract failures,
+  - `bbb8e71` integrates the Postgres suite into Compose validation.
+- Contract results:
+  - in-memory contract: passed,
+  - Postgres contract: passed repeatedly against local Compose Postgres,
+  - isolated schema cleanup: passed; no prefixed schema remained,
+  - compose-wrapper shell and Node contract tests: 5 passed.
 - Full validation: pending
 - Reviewed risks: isolated schema cleanup, credential redaction, owner/project
   isolation, and backend error classification.
