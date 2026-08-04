@@ -1,7 +1,6 @@
 mod postgres;
 mod resources;
-
-use anyhow::{ensure, Context};
+mod sessions;
 
 use super::support::principal;
 use super::*;
@@ -32,39 +31,5 @@ async fn session_store_contract_postgres() {
 
 async fn run_contracts(store: &SessionStore) -> anyhow::Result<()> {
     resources::run_resource_contracts(store).await?;
-    run_session_visibility_contract(store).await
-}
-
-async fn run_session_visibility_contract(store: &SessionStore) -> anyhow::Result<()> {
-    let owner = principal(&format!("contract-owner-{}", Uuid::now_v7()));
-    let other_owner = principal(&format!("contract-other-{}", Uuid::now_v7()));
-    let created = store
-        .create_session(
-            &owner,
-            CreateSessionRequest {
-                labels: HashMap::from([("contract".to_string(), "visibility".to_string())]),
-                ..CreateSessionRequest::default()
-            },
-            SessionOwnerMode::Collaborative,
-        )
-        .await
-        .context("create contract session")?;
-
-    let visible = store
-        .list_sessions_for_owner(&owner)
-        .await
-        .context("list owner sessions")?;
-    ensure!(
-        visible.iter().any(|session| session.id == created.id),
-        "owner session catalog omitted the created session"
-    );
-    ensure!(
-        store
-            .get_session_for_owner(&other_owner, created.id)
-            .await
-            .context("read session as another owner")?
-            .is_none(),
-        "session was visible to another owner"
-    );
-    Ok(())
+    sessions::run_session_contracts(store).await
 }
