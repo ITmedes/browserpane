@@ -135,6 +135,15 @@ async fn session_template_contract(
     ensure!(created.version == 1, "new template version was not one");
     ensure!(
         store
+            .list_session_templates_for_owner(owner)
+            .await
+            .context("list owner session templates")?
+            .iter()
+            .any(|template| template.id == created.id),
+        "session template was missing from the owner catalog"
+    );
+    ensure!(
+        store
             .get_session_template_for_owner(other_owner, created.id)
             .await
             .context("read template as another owner")?
@@ -201,6 +210,15 @@ async fn browser_context_contract(
             .context("read context as another owner")?
             .is_none(),
         "browser context was visible to another owner"
+    );
+    ensure!(
+        store
+            .list_browser_contexts_for_owner(owner)
+            .await
+            .context("list owner browser contexts")?
+            .iter()
+            .any(|context| context.id == created.id),
+        "browser context was missing from the owner catalog"
     );
     ensure!(
         store
@@ -284,6 +302,15 @@ async fn egress_profile_contract(
             .is_none(),
         "egress profile was visible to another owner"
     );
+    ensure!(
+        store
+            .list_egress_profiles_for_owner(owner)
+            .await
+            .context("list owner egress profiles")?
+            .iter()
+            .any(|profile| profile.id == created.id),
+        "egress profile was missing from the owner catalog"
+    );
     let updated = store
         .update_egress_profile_for_owner(
             owner,
@@ -365,6 +392,15 @@ async fn identity_contract(
             .is_none(),
         "service principal was visible to another owner"
     );
+    ensure!(
+        store
+            .list_service_principals_for_owner(owner)
+            .await
+            .context("list owner service principals")?
+            .iter()
+            .any(|item| item.id == service_principal.id),
+        "service principal was missing from the owner catalog"
+    );
     let duplicate_error = store
         .create_service_principal(
             owner,
@@ -433,6 +469,15 @@ async fn identity_contract(
             .is_none(),
         "identity mapping was visible to another owner"
     );
+    ensure!(
+        store
+            .list_identity_mappings_for_owner(owner)
+            .await
+            .context("list owner identity mappings")?
+            .iter()
+            .any(|item| item.id == mapping.id),
+        "identity mapping was missing from the owner catalog"
+    );
     let duplicate_mapping_error = store
         .create_identity_mapping(owner, mapping_request())
         .await
@@ -440,6 +485,23 @@ async fn identity_contract(
     ensure!(
         matches!(duplicate_mapping_error, SessionStoreError::Conflict(_)),
         "duplicate identity mapping returned the wrong error class"
+    );
+    let updated_mapping = store
+        .update_identity_mapping_for_owner(
+            owner,
+            mapping.id,
+            PersistIdentityMappingRequest {
+                name: "Disabled contract identity mapping".to_string(),
+                state: IdentityMappingState::Disabled,
+                ..mapping_request()
+            },
+        )
+        .await
+        .context("update contract identity mapping")?
+        .context("updated identity mapping disappeared")?;
+    ensure!(
+        updated_mapping.state == IdentityMappingState::Disabled,
+        "identity mapping state was not updated"
     );
     let foreign_project_error = store
         .create_identity_mapping(

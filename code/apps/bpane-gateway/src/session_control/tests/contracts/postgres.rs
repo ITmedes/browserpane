@@ -92,16 +92,6 @@ fn contract_schema_name() -> String {
     )
 }
 
-fn contract_runtime_profile() -> SessionManagerProfile {
-    SessionManagerProfile {
-        runtime_binding: "legacy_single_session".to_string(),
-        compatibility_mode: "legacy_single_runtime".to_string(),
-        max_runtime_sessions: 1,
-        supports_legacy_global_routes: true,
-        supports_session_extensions: false,
-    }
-}
-
 fn database_url_with_schema(database_url: &str, schema: &str) -> anyhow::Result<String> {
     if !schema.starts_with(SCHEMA_PREFIX)
         || !schema
