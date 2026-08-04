@@ -135,17 +135,19 @@ pub(super) async fn run_workflow_contracts(store: &SessionStore) -> anyhow::Resu
         !duplicate.created && duplicate.run.id == first.run.id,
         "workflow run idempotency contract diverged"
     );
-    let conflict_error = store
-        .create_workflow_run(
-            &owner,
-            PersistWorkflowRunRequest {
-                create_request_fingerprint: Some(format!("different-{suffix}")),
-                source_reference: Some(format!("different-source-{suffix}")),
-                ..request()
-            },
-        )
-        .await
-        .expect_err("conflicting workflow request id should be rejected");
+    let conflict_error = expected_store_error(
+        store
+            .create_workflow_run(
+                &owner,
+                PersistWorkflowRunRequest {
+                    create_request_fingerprint: Some(format!("different-{suffix}")),
+                    source_reference: Some(format!("different-source-{suffix}")),
+                    ..request()
+                },
+            )
+            .await,
+        "conflicting workflow request id should be rejected",
+    )?;
     ensure!(
         matches!(conflict_error, SessionStoreError::Conflict(_)),
         "workflow idempotency conflict returned the wrong error class"

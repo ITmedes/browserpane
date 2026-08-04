@@ -247,22 +247,24 @@ async fn browser_context_contract(
         "browser context delete was not persisted"
     );
 
-    let foreign_project_error = store
-        .create_browser_context(
-            other_owner,
-            PersistBrowserContextRequest {
-                id: None,
-                project_id: Some(project_id),
-                name: format!("foreign-context-{suffix}"),
-                description: None,
-                labels: HashMap::new(),
-                persistence_mode: BrowserContextPersistenceMode::Reusable,
-                retention_sec: None,
-                max_profile_storage_bytes: None,
-            },
-        )
-        .await
-        .expect_err("foreign project context should be rejected");
+    let foreign_project_error = expected_store_error(
+        store
+            .create_browser_context(
+                other_owner,
+                PersistBrowserContextRequest {
+                    id: None,
+                    project_id: Some(project_id),
+                    name: format!("foreign-context-{suffix}"),
+                    description: None,
+                    labels: HashMap::new(),
+                    persistence_mode: BrowserContextPersistenceMode::Reusable,
+                    retention_sec: None,
+                    max_profile_storage_bytes: None,
+                },
+            )
+            .await,
+        "foreign project context should be rejected",
+    )?;
     ensure!(
         matches!(foreign_project_error, SessionStoreError::NotFound(_)),
         "foreign project context returned the wrong error class"
@@ -335,23 +337,25 @@ async fn egress_profile_contract(
         "egress state was not updated"
     );
 
-    let foreign_project_error = store
-        .create_egress_profile(
-            other_owner,
-            PersistEgressProfileRequest {
-                project_id: Some(project_id),
-                name: format!("foreign-egress-{suffix}"),
-                description: None,
-                labels: HashMap::new(),
-                proxy: None,
-                bypass_rules: Vec::new(),
-                custom_ca: None,
-                traffic_observation: EgressTrafficObservationConfig::default(),
-                state: EgressProfileState::Ready,
-            },
-        )
-        .await
-        .expect_err("foreign project egress profile should be rejected");
+    let foreign_project_error = expected_store_error(
+        store
+            .create_egress_profile(
+                other_owner,
+                PersistEgressProfileRequest {
+                    project_id: Some(project_id),
+                    name: format!("foreign-egress-{suffix}"),
+                    description: None,
+                    labels: HashMap::new(),
+                    proxy: None,
+                    bypass_rules: Vec::new(),
+                    custom_ca: None,
+                    traffic_observation: EgressTrafficObservationConfig::default(),
+                    state: EgressProfileState::Ready,
+                },
+            )
+            .await,
+        "foreign project egress profile should be rejected",
+    )?;
     ensure!(
         matches!(foreign_project_error, SessionStoreError::NotFound(_)),
         "foreign project egress profile returned the wrong error class"
@@ -401,22 +405,24 @@ async fn identity_contract(
             .any(|item| item.id == service_principal.id),
         "service principal was missing from the owner catalog"
     );
-    let duplicate_error = store
-        .create_service_principal(
-            owner,
-            PersistServicePrincipalRequest {
-                name: "Duplicate contract service principal".to_string(),
-                description: None,
-                client_id: client_id.clone(),
-                issuer: issuer.clone(),
-                labels: HashMap::new(),
-                scopes: Vec::new(),
-                allowed_project_ids: Vec::new(),
-                state: ServicePrincipalState::Active,
-            },
-        )
-        .await
-        .expect_err("duplicate service principal should be rejected");
+    let duplicate_error = expected_store_error(
+        store
+            .create_service_principal(
+                owner,
+                PersistServicePrincipalRequest {
+                    name: "Duplicate contract service principal".to_string(),
+                    description: None,
+                    client_id: client_id.clone(),
+                    issuer: issuer.clone(),
+                    labels: HashMap::new(),
+                    scopes: Vec::new(),
+                    allowed_project_ids: Vec::new(),
+                    state: ServicePrincipalState::Active,
+                },
+            )
+            .await,
+        "duplicate service principal should be rejected",
+    )?;
     ensure!(
         matches!(duplicate_error, SessionStoreError::Conflict(_)),
         "duplicate service principal returned the wrong error class"
@@ -478,10 +484,12 @@ async fn identity_contract(
             .any(|item| item.id == mapping.id),
         "identity mapping was missing from the owner catalog"
     );
-    let duplicate_mapping_error = store
-        .create_identity_mapping(owner, mapping_request())
-        .await
-        .expect_err("duplicate identity mapping should be rejected");
+    let duplicate_mapping_error = expected_store_error(
+        store
+            .create_identity_mapping(owner, mapping_request())
+            .await,
+        "duplicate identity mapping should be rejected",
+    )?;
     ensure!(
         matches!(duplicate_mapping_error, SessionStoreError::Conflict(_)),
         "duplicate identity mapping returned the wrong error class"
@@ -503,25 +511,27 @@ async fn identity_contract(
         updated_mapping.state == IdentityMappingState::Disabled,
         "identity mapping state was not updated"
     );
-    let foreign_project_error = store
-        .create_identity_mapping(
-            other_owner,
-            PersistIdentityMappingRequest {
-                name: "Foreign project mapping".to_string(),
-                description: None,
-                kind: IdentityMappingKind::User,
-                issuer: other_owner.issuer.clone(),
-                external_id: other_owner.subject.clone(),
-                claim_name: None,
-                service_principal_id: None,
-                project_id,
-                labels: HashMap::new(),
-                scopes: Vec::new(),
-                state: IdentityMappingState::Active,
-            },
-        )
-        .await
-        .expect_err("foreign project identity mapping should be rejected");
+    let foreign_project_error = expected_store_error(
+        store
+            .create_identity_mapping(
+                other_owner,
+                PersistIdentityMappingRequest {
+                    name: "Foreign project mapping".to_string(),
+                    description: None,
+                    kind: IdentityMappingKind::User,
+                    issuer: other_owner.issuer.clone(),
+                    external_id: other_owner.subject.clone(),
+                    claim_name: None,
+                    service_principal_id: None,
+                    project_id,
+                    labels: HashMap::new(),
+                    scopes: Vec::new(),
+                    state: IdentityMappingState::Active,
+                },
+            )
+            .await,
+        "foreign project identity mapping should be rejected",
+    )?;
     ensure!(
         matches!(foreign_project_error, SessionStoreError::NotFound(_)),
         "foreign project identity mapping returned the wrong error class"

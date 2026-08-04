@@ -40,6 +40,13 @@ async fn run_contracts(store: &SessionStore) -> anyhow::Result<()> {
     recordings::run_recording_contracts(store).await
 }
 
+fn expected_store_error<T>(
+    result: Result<T, SessionStoreError>,
+    expectation: &'static str,
+) -> anyhow::Result<SessionStoreError> {
+    result.err().ok_or_else(|| anyhow::anyhow!(expectation))
+}
+
 fn contract_runtime_profile() -> SessionManagerProfile {
     SessionManagerProfile {
         runtime_binding: "contract_runtime_pool".to_string(),
