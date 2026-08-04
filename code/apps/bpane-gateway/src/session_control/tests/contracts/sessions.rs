@@ -73,14 +73,16 @@ pub(super) async fn run_session_contracts(store: &SessionStore) -> anyhow::Resul
         "another owner released the session runtime"
     );
 
-    let foreign_project_error = store
-        .create_session(
-            &other_owner,
-            session_request(project.id),
-            SessionOwnerMode::Collaborative,
-        )
-        .await
-        .expect_err("foreign project session should be rejected");
+    let foreign_project_error = expected_store_error(
+        store
+            .create_session(
+                &other_owner,
+                session_request(project.id),
+                SessionOwnerMode::Collaborative,
+            )
+            .await,
+        "foreign project session should be rejected",
+    )?;
     ensure!(
         matches!(foreign_project_error, SessionStoreError::NotFound(_)),
         "foreign project session returned the wrong error class"
@@ -133,10 +135,12 @@ pub(super) async fn run_session_contracts(store: &SessionStore) -> anyhow::Resul
         stopped.state == SessionLifecycleState::Stopped && stopped.stopped_at.is_some(),
         "session stop state was not persisted"
     );
-    let stopped_release_error = store
-        .release_session_runtime_for_owner(&owner, created.id)
-        .await
-        .expect_err("stopped session release should conflict");
+    let stopped_release_error = expected_store_error(
+        store
+            .release_session_runtime_for_owner(&owner, created.id)
+            .await,
+        "stopped session release should conflict",
+    )?;
     ensure!(
         matches!(stopped_release_error, SessionStoreError::Conflict(_)),
         "stopped session release returned the wrong error class"
