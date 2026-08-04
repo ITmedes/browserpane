@@ -272,3 +272,7 @@ smokes. Host-side Cargo caches do not feed the isolated Docker builders.
   builder before the attested push.
 - Corrective publication PR:
   [#188](https://github.com/ITmedes/browserpane/pull/188)
+- Corrective hosted builder validation:
+  [30895052526](https://github.com/ITmedes/browserpane/actions/runs/30895052526)
+  passed in 5 minutes 4 seconds, including Buildx builder bootstrap, the full
+  Linux `amd64` image build, image contract inspection, and cleanup.
