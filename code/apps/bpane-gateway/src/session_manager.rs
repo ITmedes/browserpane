@@ -56,6 +56,10 @@ impl SessionManager {
         self.inner.reconcile_persisted_state().await
     }
 
+    pub async fn check_readiness(&self) -> Result<(), SessionManagerError> {
+        self.inner.check_readiness().await
+    }
+
     pub fn describe_session_runtime(&self, session_id: Uuid) -> SessionRuntimeAccess {
         self.inner.describe_session_runtime(session_id)
     }
@@ -139,6 +143,8 @@ impl SessionManager {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
     use std::time::Duration;
 
     use super::*;
@@ -218,5 +224,41 @@ mod tests {
         .unwrap();
 
         manager.reconcile_persisted_state().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn static_runtime_readiness_requires_agent_socket() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let socket_path = temp_dir.path().join("agent.sock");
+        let manager = SessionManager::new(SessionManagerConfig::StaticSingle {
+            agent_socket_path: socket_path.to_string_lossy().into_owned(),
+            cdp_endpoint: None,
+            idle_timeout: Duration::from_secs(300),
+        })
+        .unwrap();
+
+        assert!(manager.check_readiness().await.is_err());
+        let _listener = tokio::net::UnixListener::bind(&socket_path).unwrap();
+        manager.check_readiness().await.unwrap();
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn docker_runtime_readiness_uses_daemon_probe() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let docker_bin = temp_dir.path().join("docker");
+        std::fs::write(
+            &docker_bin,
+            "#!/bin/sh\n[ \"$1\" = info ] && printf 'test-version' && exit 0\nexit 1\n",
+        )
+        .unwrap();
+        let mut permissions = std::fs::metadata(&docker_bin).unwrap().permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(&docker_bin, permissions).unwrap();
+        let mut config = docker_config();
+        config.docker_bin = docker_bin.to_string_lossy().into_owned();
+        let manager = SessionManager::new(SessionManagerConfig::DockerPool(config)).unwrap();
+
+        manager.check_readiness().await.unwrap();
     }
 }

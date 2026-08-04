@@ -3,6 +3,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
+use tokio::task::JoinSet;
 use tracing::{error, info, warn};
 use wtransport::{Endpoint, Identity, ServerConfig};
 
@@ -24,6 +25,7 @@ use self::request::{
 };
 use self::session_task::handle_session;
 use crate::auth::AuthValidator;
+use crate::lifecycle::GatewayLifecycle;
 use crate::recording_lifecycle::RecordingLifecycleManager;
 use crate::session_access::SessionConnectTicketManager;
 use crate::session_control::SessionStore;
@@ -43,6 +45,7 @@ pub struct TransportServerConfig {
     pub idle_stop_timeout: Duration,
     pub heartbeat_timeout: Duration,
     pub registry: Arc<SessionRegistry>,
+    pub lifecycle: Arc<GatewayLifecycle>,
 }
 
 pub struct TransportServer {
@@ -57,6 +60,7 @@ pub struct TransportServer {
     idle_stop_timeout: Duration,
     heartbeat_timeout: Duration,
     registry: Arc<SessionRegistry>,
+    lifecycle: Arc<GatewayLifecycle>,
 }
 
 impl TransportServer {
@@ -73,6 +77,7 @@ impl TransportServer {
             idle_stop_timeout: config.idle_stop_timeout,
             heartbeat_timeout: config.heartbeat_timeout,
             registry: config.registry,
+            lifecycle: config.lifecycle,
         }
     }
 
@@ -88,16 +93,32 @@ impl TransportServer {
 
         let mut session_counter: u64 = 0;
         let active_sessions = Arc::new(AtomicU64::new(0));
+        let mut session_tasks = JoinSet::new();
 
         loop {
-            let incoming = endpoint.accept().await;
-            let session_request = match incoming.await {
+            let incoming = tokio::select! {
+                _ = self.lifecycle.wait_for_draining() => break,
+                completed = session_tasks.join_next(), if !session_tasks.is_empty() => {
+                    log_completed_session_task(completed);
+                    continue;
+                }
+                incoming = endpoint.accept() => incoming,
+            };
+            let session_request = match tokio::select! {
+                _ = self.lifecycle.wait_for_draining() => break,
+                request = incoming => request,
+            } {
                 Ok(req) => req,
                 Err(e) => {
                     warn!("failed to accept incoming connection: {e}");
                     continue;
                 }
             };
+
+            if !self.lifecycle.accepts_new_work() {
+                session_request.not_found().await;
+                break;
+            }
 
             // Enforce session limit
             if active_sessions.load(Ordering::Relaxed) >= MAX_CONCURRENT_SESSIONS {
@@ -205,7 +226,7 @@ impl TransportServer {
                 "new WebTransport session accepted"
             );
 
-            tokio::spawn(async move {
+            session_tasks.spawn(async move {
                 if let Err(e) = handle_session(session_task::SessionTaskContext {
                     connection,
                     session_id,
@@ -226,6 +247,28 @@ impl TransportServer {
                 active_sessions_clone.fetch_sub(1, Ordering::Relaxed);
                 info!(session_id, "session ended");
             });
+        }
+
+        info!(
+            active = active_sessions.load(Ordering::Relaxed),
+            "WebTransport listener stopped accepting new sessions"
+        );
+        while let Some(completed) = session_tasks.join_next().await {
+            log_completed_session_task(Some(completed));
+        }
+        endpoint.close(wtransport::VarInt::from_u32(0), b"gateway shutdown");
+        endpoint.wait_idle().await;
+        info!("WebTransport sessions drained");
+        Ok(())
+    }
+}
+
+fn log_completed_session_task(completed: Option<Result<(), tokio::task::JoinError>>) {
+    if let Some(Err(error)) = completed {
+        if error.is_cancelled() {
+            warn!("WebTransport session task cancelled during shutdown");
+        } else {
+            error!("WebTransport session task failed: {error}");
         }
     }
 }

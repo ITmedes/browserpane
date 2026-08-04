@@ -29,6 +29,8 @@ use crate::extensions::{
     ExtensionVersionResource, PersistExtensionDefinitionRequest, PersistExtensionVersionRequest,
 };
 use crate::idle_stop::schedule_idle_session_stop;
+use crate::lifecycle::GatewayLifecycle;
+use crate::readiness::GatewayReadiness;
 use crate::recording::{
     prepare_session_recording_playback, FinalizeRecordingArtifactRequest,
     PreparedSessionRecordingPlayback, RecordingObservabilitySnapshot,
@@ -101,6 +103,7 @@ mod egress_profiles;
 mod errors;
 mod extensions;
 mod file_workspaces;
+mod health;
 mod http_helpers;
 mod identity;
 mod identity_mappings;
@@ -126,14 +129,20 @@ use authz::*;
 use errors::*;
 use http_helpers::*;
 use resources::*;
+#[cfg(test)]
 use router::build_api_router;
+use router::build_gateway_api_router;
 use runtime_access::*;
 use session_bindings::*;
 use types::*;
 pub(crate) use types::{ApiServerConfig, McpBridgeControlConfig};
 
 /// Runs the HTTP API server for MCP bridge communication.
-pub async fn run_api_server(config: ApiServerConfig) -> anyhow::Result<()> {
+pub async fn run_api_server(
+    config: ApiServerConfig,
+    lifecycle: Arc<GatewayLifecycle>,
+    readiness: Arc<GatewayReadiness>,
+) -> anyhow::Result<()> {
     let bind_addr = config.bind_addr;
     let state = Arc::new(ApiState {
         registry: config.registry,
@@ -160,12 +169,17 @@ pub async fn run_api_server(config: ApiServerConfig) -> anyhow::Result<()> {
         mcp_bridge_control: config.mcp_bridge_control,
     });
 
-    let app = build_api_router(state);
+    let app = build_gateway_api_router(state, lifecycle.clone(), readiness);
 
     let listener = tokio::net::TcpListener::bind(bind_addr).await?;
     info!("HTTP API listening on {bind_addr}");
 
-    axum::serve(listener, app).await?;
+    axum::serve(listener, app)
+        .with_graceful_shutdown(async move {
+            lifecycle.wait_for_draining().await;
+            info!("HTTP API listener stopped accepting new connections");
+        })
+        .await?;
 
     Ok(())
 }

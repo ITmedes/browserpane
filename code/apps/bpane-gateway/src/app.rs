@@ -1,8 +1,13 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use anyhow::{anyhow, bail};
+use tracing::{info, warn};
+
 use crate::api::{self, ApiServerConfig, McpBridgeControlConfig};
 use crate::config::Config;
+use crate::lifecycle::GatewayLifecycle;
+use crate::readiness::GatewayReadiness;
 use crate::transport::{TransportServer, TransportServerConfig};
 use crate::workspaces::WorkspaceFileStore;
 
@@ -17,10 +22,15 @@ use builders::{
 pub(crate) struct GatewayApp {
     transport_server: TransportServer,
     api_server_config: ApiServerConfig,
+    lifecycle: Arc<GatewayLifecycle>,
+    readiness: Arc<GatewayReadiness>,
+    shutdown_drain_timeout: Duration,
 }
 
 impl GatewayApp {
     pub(crate) async fn build(config: Config) -> anyhow::Result<Self> {
+        validate_operational_timeouts(&config)?;
+        let lifecycle = Arc::new(GatewayLifecycle::new());
         let auth_services = AuthServices::build(&config).await?;
         let runtime_services = RuntimeServices::build(&config).await?;
         let workspace_file_store = Arc::new(WorkspaceFileStore::local_fs(
@@ -92,7 +102,18 @@ impl GatewayApp {
             idle_stop_timeout: Duration::from_secs(config.runtime.idle_timeout_secs),
             heartbeat_timeout: Duration::from_secs(config.gateway.heartbeat_timeout_secs),
             registry: registry.clone(),
+            lifecycle: lifecycle.clone(),
         });
+
+        let readiness = Arc::new(GatewayReadiness::new(
+            lifecycle.clone(),
+            session_store.clone(),
+            session_manager.clone(),
+            credential_provider.clone(),
+            recording_services.artifact_store.clone(),
+            workspace_file_store.clone(),
+            Duration::from_secs(config.gateway.readiness_check_timeout_secs),
+        ));
 
         let api_server_config = ApiServerConfig {
             bind_addr: api_bind_addr,
@@ -123,6 +144,9 @@ impl GatewayApp {
         Ok(Self {
             transport_server,
             api_server_config,
+            lifecycle,
+            readiness,
+            shutdown_drain_timeout: Duration::from_secs(config.gateway.shutdown_drain_timeout_secs),
         })
     }
 
@@ -130,13 +154,120 @@ impl GatewayApp {
         let Self {
             transport_server,
             api_server_config,
+            lifecycle,
+            readiness,
+            shutdown_drain_timeout,
         } = self;
 
+        lifecycle.mark_running();
+        let mut transport_task = tokio::spawn(transport_server.run());
+        let transport_abort = transport_task.abort_handle();
+        let api_lifecycle = lifecycle.clone();
+        let mut api_task = tokio::spawn(api::run_api_server(
+            api_server_config,
+            api_lifecycle,
+            readiness,
+        ));
+        let api_abort = api_task.abort_handle();
+
+        let mut transport_complete = false;
+        let mut api_complete = false;
+        let mut server_error = None;
         tokio::select! {
-            result = transport_server.run() => result,
-            result = api::run_api_server(api_server_config) => result,
+            signal = wait_for_shutdown_signal() => {
+                info!(signal = signal?, "gateway shutdown signal received");
+            }
+            result = &mut transport_task => {
+                transport_complete = true;
+                server_error = joined_server_error("WebTransport", result);
+            }
+            result = &mut api_task => {
+                api_complete = true;
+                server_error = joined_server_error("HTTP API", result);
+            }
         }
+
+        if lifecycle.begin_draining() {
+            info!(
+                drain_timeout_secs = shutdown_drain_timeout.as_secs(),
+                "gateway drain started"
+            );
+        }
+
+        let drain = async {
+            let mut drain_error = None;
+            if !transport_complete {
+                let result = (&mut transport_task).await;
+                drain_error = joined_server_error("WebTransport", result);
+            }
+            if !api_complete {
+                let result = (&mut api_task).await;
+                drain_error = drain_error.or_else(|| joined_server_error("HTTP API", result));
+            }
+            drain_error
+        };
+        tokio::pin!(drain);
+
+        tokio::select! {
+            drain_result = &mut drain => {
+                server_error = server_error.or(drain_result);
+                info!("gateway drain completed");
+            }
+            signal = wait_for_shutdown_signal() => {
+                warn!(signal = signal?, "second shutdown signal forced gateway termination");
+                transport_abort.abort();
+                api_abort.abort();
+            }
+            () = tokio::time::sleep(shutdown_drain_timeout) => {
+                warn!("gateway drain deadline reached; terminating remaining work");
+                transport_abort.abort();
+                api_abort.abort();
+            }
+        }
+
+        server_error.map_or(Ok(()), Err)
     }
+}
+
+fn validate_operational_timeouts(config: &Config) -> anyhow::Result<()> {
+    if config.gateway.readiness_check_timeout_secs == 0 {
+        bail!("--readiness-check-timeout-secs must be greater than zero");
+    }
+    if config.gateway.shutdown_drain_timeout_secs == 0 {
+        bail!("--shutdown-drain-timeout-secs must be greater than zero");
+    }
+    Ok(())
+}
+
+fn joined_server_error(
+    name: &str,
+    result: Result<anyhow::Result<()>, tokio::task::JoinError>,
+) -> Option<anyhow::Error> {
+    match result {
+        Ok(Ok(())) => None,
+        Ok(Err(error)) => Some(error.context(format!("{name} server failed"))),
+        Err(error) => Some(anyhow!("{name} server task failed: {error}")),
+    }
+}
+
+#[cfg(unix)]
+async fn wait_for_shutdown_signal() -> anyhow::Result<&'static str> {
+    use tokio::signal::unix::{signal, SignalKind};
+
+    let mut terminate = signal(SignalKind::terminate())?;
+    tokio::select! {
+        result = tokio::signal::ctrl_c() => {
+            result?;
+            Ok("SIGINT")
+        }
+        _ = terminate.recv() => Ok("SIGTERM"),
+    }
+}
+
+#[cfg(not(unix))]
+async fn wait_for_shutdown_signal() -> anyhow::Result<&'static str> {
+    tokio::signal::ctrl_c().await?;
+    Ok("SIGINT")
 }
 
 fn mcp_bridge_control_config(config: &Config) -> Option<McpBridgeControlConfig> {
