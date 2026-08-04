@@ -549,6 +549,7 @@ Current #147 evidence:
 - changed code is Clippy-clean; the unsuppressed crate command remains blocked
   only by pre-existing lint categories outside #147,
 - dependency safety passes for Cargo and seven npm lockfiles,
+- Rust workspace line coverage is 56.57% against the enforced 54.80% floor,
 - all 16 authenticated default compose API surfaces pass against rebuilt
   images, including successful signed delivery to the fixed explicitly allowed
   receiver.
