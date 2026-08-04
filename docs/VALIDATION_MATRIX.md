@@ -565,8 +565,11 @@ Current #150 evidence:
 - a real gateway-container SIGTERM smoke observed readiness withdrawal before
   HTTP listener closure, bounded WebTransport task drain, clean process exit,
   and successful gateway restart,
-- full gateway/workspace and affected browser regression results must be added
-  before #150 moves to review.
+- `node scripts/validate.mjs --profile full` passed all 46 stages: dependency
+  policy, formatting, workspace Clippy/tests/coverage, all maintained Node
+  checks/tests/coverage/builds, 17 default compose API surfaces, 4 docker-pool
+  lifecycle/capacity surfaces, and auth, admin-new, compatibility admin, CLI,
+  MCP, recording, and workflow browser smokes.
 
 Webhook, import, and lifecycle:
 

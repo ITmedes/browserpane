@@ -276,8 +276,8 @@ Validation:
 
 Priority: medium/high for deployability.
 
-Status: implemented on `feature/BPANE-00150`; broad regression validation and
-review remain.
+Status: implemented and fully validated on `feature/BPANE-00150`; review/merge
+remain.
 
 Implemented boundary:
 
@@ -299,7 +299,9 @@ Validation evidence:
 - compose Postgres loss/recovery test with liveness remaining available,
 - real container SIGTERM smoke with observable 503 readiness withdrawal before
   listener closure and successful restart,
-- broad gateway and affected browser regressions required before review.
+- canonical full validation passed all 46 stages, including workspace tests and
+  coverage, 21 compose API surfaces, both admin paths, CLI, MCP, recording, and
+  workflow browser smokes.
 
 ### Admin And Session Catalog Scalability
 
