@@ -8,7 +8,7 @@
 - Lane: Foundation
 - Target gate: Foundation Gate
 - Depends on: #184 compose-validation lane sharding
-- Last verified: 2026-08-04 on `feature/BPANE-00185`
+- Last verified: 2026-08-04 on `fix/BPANE-00185-ci-rust-builder-publish`
 
 ## Business Outcome
 
@@ -263,3 +263,16 @@ smokes. Host-side Cargo caches do not feed the isolated Docker builders.
 - First-pull run: pending
 - Warm run: pending
 - Implementation PR: [#187](https://github.com/ITmedes/browserpane/pull/187)
+- The first trusted publication run
+  [30894372465](https://github.com/ITmedes/browserpane/actions/runs/30894372465)
+  failed before the image build because the default Buildx `docker` driver does
+  not support the requested SBOM and provenance attestations. The corrective
+  workflow explicitly bootstraps a `docker-container` builder in both the PR
+  validation and trusted publication jobs, and its contract test requires that
+  builder before the attested push.
+- Corrective publication PR:
+  [#188](https://github.com/ITmedes/browserpane/pull/188)
+- Corrective hosted builder validation:
+  [30895052526](https://github.com/ITmedes/browserpane/actions/runs/30895052526)
+  passed in 5 minutes 4 seconds, including Buildx builder bootstrap, the full
+  Linux `amd64` image build, image contract inspection, and cleanup.
