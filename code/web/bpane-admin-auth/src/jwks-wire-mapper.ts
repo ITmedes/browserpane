@@ -9,7 +9,30 @@ export class JwksWireMapper {
     if (!Array.isArray(object.keys) || object.keys.length === 0 || object.keys.length > 100) {
       throw new Error('OIDC JWKS keys must be a bounded non-empty array');
     }
-    return { keys: object.keys.map((value) => this.#toPublicKey(value)) };
+    const keys = object.keys
+      .filter((value) => this.#isSignatureCandidate(value))
+      .map((value) => this.#toPublicKey(value));
+    if (keys.length === 0) {
+      throw new Error('OIDC JWKS must contain a supported signing key');
+    }
+    return { keys };
+  }
+
+  static #isSignatureCandidate(value: unknown): boolean {
+    const object = expectRecord(value, 'OIDC JWK');
+    if (object.use !== undefined && object.use !== 'sig' && object.use !== 'enc') {
+      throw new Error('OIDC JWK use must be sig or enc');
+    }
+    if (object.use === 'enc') {
+      return false;
+    }
+    if (object.key_ops === undefined) {
+      return true;
+    }
+    if (!Array.isArray(object.key_ops) || !object.key_ops.every((entry) => typeof entry === 'string')) {
+      throw new Error('OIDC JWK key_ops must be a string array');
+    }
+    return object.key_ops.includes('verify');
   }
 
   static #toPublicKey(value: unknown): JWK {
