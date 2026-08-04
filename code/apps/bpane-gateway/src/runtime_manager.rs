@@ -92,6 +92,7 @@ pub enum RuntimeManagerError {
         active_session_id: Uuid,
     },
     InvalidConfiguration(String),
+    Unavailable(String),
     StartupFailed(String),
     PersistenceFailed(String),
 }
@@ -131,6 +132,7 @@ impl fmt::Display for RuntimeManagerError {
                 "browser context {browser_context_id} is already used by active session {active_session_id}"
             ),
             Self::InvalidConfiguration(message) => write!(f, "{message}"),
+            Self::Unavailable(message) => write!(f, "{message}"),
             Self::StartupFailed(message) => write!(f, "{message}"),
             Self::PersistenceFailed(message) => write!(f, "{message}"),
         }
@@ -276,6 +278,13 @@ impl SessionRuntimeManager {
         match &self.backend {
             RuntimeBackend::StaticSingle(_) => Ok(()),
             RuntimeBackend::Docker(manager) => manager.reconcile_persisted_state().await,
+        }
+    }
+
+    pub async fn check_readiness(&self) -> Result<(), RuntimeManagerError> {
+        match &self.backend {
+            RuntimeBackend::StaticSingle(manager) => manager.check_readiness().await,
+            RuntimeBackend::Docker(manager) => manager.check_readiness().await,
         }
     }
 

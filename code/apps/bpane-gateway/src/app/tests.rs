@@ -144,3 +144,20 @@ fn default_owner_mode_tracks_exclusive_flag() {
         SessionOwnerMode::ExclusiveBrowserOwner
     );
 }
+
+#[test]
+fn operational_timeouts_must_be_nonzero() {
+    let mut config = test_config();
+    config.gateway.readiness_check_timeout_secs = 0;
+    assert!(super::validate_operational_timeouts(&config)
+        .unwrap_err()
+        .to_string()
+        .contains("--readiness-check-timeout-secs"));
+
+    config.gateway.readiness_check_timeout_secs = 1;
+    config.gateway.shutdown_drain_timeout_secs = 0;
+    assert!(super::validate_operational_timeouts(&config)
+        .unwrap_err()
+        .to_string()
+        .contains("--shutdown-drain-timeout-secs"));
+}

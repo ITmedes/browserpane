@@ -11,6 +11,10 @@ struct TestCredentialProviderBackend {
 
 #[async_trait]
 impl CredentialProviderBackend for TestCredentialProviderBackend {
+    async fn check_readiness(&self) -> Result<(), CredentialProviderError> {
+        Ok(())
+    }
+
     async fn store_secret(
         &self,
         request: StoreCredentialSecretRequest,

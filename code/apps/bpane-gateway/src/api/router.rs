@@ -1,3 +1,6 @@
+use axum::extract::State;
+use axum::middleware::{self, Next};
+use axum::response::IntoResponse;
 use axum::routing::get;
 
 use super::*;
@@ -42,4 +45,33 @@ pub(crate) fn build_api_router(state: Arc<ApiState>) -> Router {
         .route("/api/v1/workflow/operations", get(get_workflow_operations))
         .merge(sessions::legacy_session_routes())
         .with_state(state)
+}
+
+pub(crate) fn build_gateway_api_router(
+    state: Arc<ApiState>,
+    lifecycle: Arc<GatewayLifecycle>,
+    readiness: Arc<GatewayReadiness>,
+) -> Router {
+    let protected = build_api_router(state).route_layer(middleware::from_fn_with_state(
+        lifecycle.clone(),
+        reject_during_drain,
+    ));
+    health::health_routes(lifecycle, readiness).merge(protected)
+}
+
+async fn reject_during_drain(
+    State(lifecycle): State<Arc<GatewayLifecycle>>,
+    request: axum::extract::Request,
+    next: Next,
+) -> axum::response::Response {
+    if lifecycle.accepts_new_work() {
+        return next.run(request).await;
+    }
+    (
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(ErrorResponse {
+            error: "gateway is not accepting new work".to_string(),
+        }),
+    )
+        .into_response()
 }

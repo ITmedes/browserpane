@@ -36,6 +36,25 @@ impl StaticSingleRuntimeManager {
         }
     }
 
+    pub(super) async fn check_readiness(&self) -> Result<(), RuntimeManagerError> {
+        let metadata = tokio::fs::metadata(&self.agent_socket_path)
+            .await
+            .map_err(|_| {
+                RuntimeManagerError::Unavailable("runtime agent socket is unavailable".to_string())
+            })?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::FileTypeExt;
+
+            if !metadata.file_type().is_socket() {
+                return Err(RuntimeManagerError::Unavailable(
+                    "runtime agent path is not a socket".to_string(),
+                ));
+            }
+        }
+        Ok(())
+    }
+
     pub(super) async fn describe_assignment_status(
         &self,
         session_id: Uuid,
