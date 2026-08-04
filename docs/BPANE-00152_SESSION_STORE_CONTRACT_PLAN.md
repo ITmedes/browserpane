@@ -3,13 +3,13 @@
 ## Metadata
 
 - Issue: [#152](https://github.com/ITmedes/browserpane/issues/152)
-- State: In Progress
+- State: Review
 - Owner: `thebackplane`
 - Lane: Foundation
 - Target gate: Foundation Gate
 - Depends on: #150 gateway lifecycle and dependency readiness
 - Branch: `feature/BPANE-00152`
-- Last verified: 2026-08-04 on `feature/BPANE-00152` at `bbb8e71`
+- Last verified: 2026-08-04 on `feature/BPANE-00152` at `dabf59e`
 
 ## Business Outcome
 
@@ -201,7 +201,7 @@ unit tests while failing against the Postgres-backed local or deployed stack.
 
 ## Documentation And Claim Impact
 
-- Mark #150 Done and #152 In Progress in the canonical roadmap.
+- Mark #150 Done and #152 Review in the canonical roadmap.
 - Record the exact Postgres contract command in `VALIDATION_MATRIX.md` and
   contributor guidance if it becomes a maintained command.
 - Do not change external product or production-readiness claims; this slice
@@ -239,12 +239,45 @@ unit tests while failing against the Postgres-backed local or deployed stack.
   - `6ac0b0b` corrects persisted session lifecycle parity,
   - `a7ff52b` covers workflow/run and recording behavior,
   - `0ac522c` preserves fixture cleanup on contract failures,
-  - `bbb8e71` integrates the Postgres suite into Compose validation.
+  - `bbb8e71` integrates the Postgres suite into Compose validation,
+  - `17cd550` removes an unnecessary OIDC reload from the impacted workflow
+    responsive smoke,
+  - `7532888` preserves the full session contract during stale runtime
+    assignment recovery and adds the recovery path to both store contracts,
+  - `dabf59e` makes the project-quota workflow dispatch test wait for worker
+    capture content instead of racing shell file creation under coverage.
 - Contract results:
   - in-memory contract: passed,
   - Postgres contract: passed repeatedly against local Compose Postgres,
   - isolated schema cleanup: passed; no prefixed schema remained,
   - compose-wrapper shell and Node contract tests: 5 passed.
-- Full validation: pending
+- Gateway and workspace results:
+  - gateway: 396 passed, one intentionally ignored Postgres contract,
+  - workspace: gateway, host, protocol, integration, property, wire-fixture,
+    and documentation tests passed,
+  - Clippy: passed with 15 pre-existing gateway warnings.
+- Compose and admin-new results:
+  - persisted-store contract passed inside the maintained Compose wrapper,
+  - default API E2E: 17 passed,
+  - docker-pool E2E: 4 passed,
+  - an injected stale runtime assignment was cleared on gateway restart while
+    the project-scoped session remained ready,
+  - admin-new projects, sessions, workflows, workflow runs, and recording
+    smokes passed,
+  - recording smoke finalized and downloaded two valid WebM segments plus the
+    playback export.
+- Full validation:
+  - canonical fast profile: all 36 stages passed,
+  - canonical compose profile: all 10 stages passed in one uninterrupted run,
+  - together these cover the same 46-stage catalog as the full profile,
+  - Rust workspace line coverage: 56.88%, floor 54.80%,
+  - admin-new: 278 tests and all coverage floors passed,
+  - browser client: 661 tests and all coverage floors passed.
+- Runtime cleanup and health:
+  - gateway `/healthz` and `/readyz` returned healthy/ready after validation,
+  - no `bpane_store_contract_*` schema remained.
+- Documentation impact: contributor validation guidance and this matrix were
+  updated. README, ARCH, OpenAPI, CLI, and runtime manifests require no change
+  because the public product and deployment contracts are unchanged.
 - Reviewed risks: isolated schema cleanup, credential redaction, owner/project
-  isolation, and backend error classification.
+  isolation, backend error classification, and stateful smoke cleanup.

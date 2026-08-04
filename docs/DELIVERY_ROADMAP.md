@@ -62,14 +62,14 @@ or capacity decision.
 | 2 | #146 | Done | #145 secure credential contract | Harden shared admin auth, CSP, and browser security. |
 | 3 | #147 | Done | #145 credential/log baseline | Callback and webhook SSRF controls merged through PR #191. |
 | 4 | #150 | Done | #147 callback boundary | Lifecycle, dependency readiness, and bounded drain merged through PR #192. |
-| 5 | #152 | In Progress | #150 stable readiness contract | Shared in-memory/Postgres store contract parity. |
+| 5 | #152 | Review | #150 stable readiness contract | Shared in-memory/Postgres store contract parity implemented and validated. |
 
 ### Next Three Product Slices
 
 | Order | Issue | State | Dependency | Outcome |
 | --- | --- | --- | --- | --- |
 | 1 | #150 | Done | #147 callback boundary | Lifecycle, dependency readiness, and bounded drain merged through PR #192. |
-| 2 | #152 | In Progress | #150 stable readiness contract | Add shared in-memory/Postgres store contract tests. |
+| 2 | #152 | Review | #150 stable readiness contract | Shared in-memory/Postgres store contracts await review and merge. |
 | 3 | #179 | Qualified | #152 persistent behavior baseline | Add control API conformance and compatibility governance. |
 
 #151, #184, and #185 established and accelerated the required validation
@@ -77,7 +77,9 @@ baseline. #145 is merged through
 `docs/BPANE-00145_TOKEN_DOMAIN_SEPARATION_PLAN.md`; #146 is merged through PR
 #190 and documented in `docs/BPANE-00146_ADMIN_AUTH_SECURITY_PLAN.md`. #147
 merged through PR #191. #150 merged through PR #192 after passing the canonical
-full 46-stage validation profile. #152 is now the active Foundation slice.
+full 46-stage validation profile. #152 has completed local implementation and
+validation; #179 remains the next qualified Foundation slice after review and
+merge.
 
 ## Foundation Gate Sequence
 
