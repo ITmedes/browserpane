@@ -4,6 +4,7 @@ name: CI Rust builder
   pull_request:
     paths:
       - deploy/Dockerfile.ci-rust
+      - deploy/install-rust-toolchain.sh
       - rust-toolchain.toml
       - Cargo.lock
       - Cargo.toml
@@ -11,6 +12,7 @@ name: CI Rust builder
       - code/apps/bpane-host/Cargo.toml
       - code/apps/bpane-gateway/Cargo.toml
       - scripts/ci/ci-rust-builder-ref.mjs
+      - scripts/ci/inspect-ci-rust-builder.sh
       - scripts/ci/ci-rust-builder-workflow-contract.test.mjs
       - .github/workflows/ci-rust-builder.yml
   push:
@@ -18,6 +20,7 @@ name: CI Rust builder
       - main
     paths:
       - deploy/Dockerfile.ci-rust
+      - deploy/install-rust-toolchain.sh
       - rust-toolchain.toml
       - Cargo.lock
       - Cargo.toml
@@ -25,6 +28,7 @@ name: CI Rust builder
       - code/apps/bpane-host/Cargo.toml
       - code/apps/bpane-gateway/Cargo.toml
       - scripts/ci/ci-rust-builder-ref.mjs
+      - scripts/ci/inspect-ci-rust-builder.sh
       - scripts/ci/ci-rust-builder-workflow-contract.test.mjs
       - .github/workflows/ci-rust-builder.yml
   workflow_dispatch:
@@ -118,6 +122,12 @@ jobs:
           .
       - name: Verify published manifest
         run: docker buildx imagetools inspect "${{ steps.image.outputs.image }}"
+      - name: Verify published image contract
+        run: |
+          docker pull "${{ steps.image.outputs.image }}"
+          scripts/ci/inspect-ci-rust-builder.sh \
+            "${{ steps.image.outputs.image }}" \
+            "${{ steps.image.outputs.tag }}"
       - name: Log out of GitHub Container Registry
         if: always()
         run: docker logout ghcr.io

@@ -64,3 +64,23 @@ test('every compose lane retains failure diagnostics and unconditional cleanup',
     assert.equal(cleanup.if, 'always()', `${jobId} cleanup`);
   }
 });
+
+test('every compose lane resolves a read-only builder digest with cold fallback', () => {
+  for (const [jobId, job] of Object.entries(workflow.jobs)) {
+    assert.deepEqual(
+      job.permissions,
+      { contents: 'read', packages: 'read' },
+      `${jobId} package permissions`
+    );
+    assert.match(
+      stepByName(job, 'Authenticate to GitHub Container Registry').run,
+      /github\.token/
+    );
+    assert.match(
+      stepByName(job, 'Resolve CI Rust builder').run,
+      /ci-rust-builder-resolver\.mjs --github-env/
+    );
+    assert.equal(stepByName(job, 'Log out of GitHub Container Registry').if, 'always()');
+    assert.doesNotMatch(JSON.stringify(job), /secrets\./);
+  }
+});

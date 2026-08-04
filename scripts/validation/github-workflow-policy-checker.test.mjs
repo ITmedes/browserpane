@@ -75,3 +75,23 @@ test('workflow policy permits only guarded main-branch package publication', () 
   const errors = new GitHubWorkflowPolicyChecker().check('builder.yml', publish);
   assert.ok(errors.some((error) => error.includes('root permissions must be exactly')));
 });
+
+test('workflow policy permits read-only package consumers', () => {
+  const workflow = {
+    on: { workflow_dispatch: {} },
+    permissions: { contents: 'read' },
+    jobs: {
+      consume: {
+        permissions: { contents: 'read', packages: 'read' },
+        'runs-on': 'ubuntu-24.04',
+        'timeout-minutes': 20,
+        steps: [],
+      },
+    },
+  };
+  assert.deepEqual(new GitHubWorkflowPolicyChecker().check('compose.yml', workflow), []);
+
+  workflow.jobs.consume.permissions.contents = 'write';
+  const errors = new GitHubWorkflowPolicyChecker().check('compose.yml', workflow);
+  assert.ok(errors.some((error) => error.includes('package consumer permissions')));
+});

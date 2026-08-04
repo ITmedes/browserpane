@@ -56,6 +56,11 @@ export class GitHubWorkflowPolicyChecker {
           || job.permissions.packages !== 'write') {
           errors.push(`${prefix} package publisher permissions must be contents: read and packages: write`);
         }
+      } else if (job.permissions?.packages === 'read') {
+        const keys = Object.keys(job.permissions);
+        if (keys.length !== 2 || job.permissions.contents !== 'read') {
+          errors.push(`${prefix} package consumer permissions must be contents: read and packages: read`);
+        }
       } else {
         this.#checkPermissions(prefix, job.permissions, errors);
       }

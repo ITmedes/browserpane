@@ -76,6 +76,8 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile.host
+      args:
+        BPANE_RUST_BUILDER_IMAGE: ${BPANE_RUST_BUILDER_IMAGE:-ubuntu:24.04@sha256:561618e2c15bf2397621dd04f96926663a3b5616c189cf7e38db7e82f5c538ea}
     security_opt:
       # Allow Chromium sandbox namespace setup inside the container.
       - seccomp=unconfined
@@ -99,6 +101,8 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile.gateway
+      args:
+        BPANE_RUST_BUILDER_IMAGE: ${BPANE_RUST_BUILDER_IMAGE:-ubuntu:24.04@sha256:561618e2c15bf2397621dd04f96926663a3b5616c189cf7e38db7e82f5c538ea}
     command: >
       /usr/local/bin/bpane-gateway
       --agent-socket ${BPANE_GATEWAY_AGENT_SOCKET:-/run/bpane/agent.sock}

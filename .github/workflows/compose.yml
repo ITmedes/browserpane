@@ -20,6 +20,9 @@ jobs:
     name: Gateway API (${{ matrix.suite }})
     runs-on: ubuntu-24.04
     timeout-minutes: 40
+    permissions:
+      contents: read
+      packages: read
     strategy:
       fail-fast: false
       matrix:
@@ -31,6 +34,12 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+      - name: Authenticate to GitHub Container Registry
+        run: >-
+          echo "${{ github.token }}" |
+          docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+      - name: Resolve CI Rust builder
+        run: node scripts/ci/ci-rust-builder-resolver.mjs --github-env "${GITHUB_ENV}"
       - name: Install native build dependencies
         run: >-
           sudo apt-get update && sudo apt-get install -y
@@ -65,16 +74,28 @@ jobs:
       - name: Clean compose resources
         if: always()
         run: scripts/ci/cleanup-compose.sh
+      - name: Log out of GitHub Container Registry
+        if: always()
+        run: docker logout ghcr.io
 
   browser-integrations:
     name: Browser and integration smokes
     runs-on: ubuntu-24.04
     timeout-minutes: 35
+    permissions:
+      contents: read
+      packages: read
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+      - name: Authenticate to GitHub Container Registry
+        run: >-
+          echo "${{ github.token }}" |
+          docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+      - name: Resolve CI Rust builder
+        run: node scripts/ci/ci-rust-builder-resolver.mjs --github-env "${GITHUB_ENV}"
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
@@ -120,3 +141,6 @@ jobs:
       - name: Clean compose resources
         if: always()
         run: scripts/ci/cleanup-compose.sh
+      - name: Log out of GitHub Container Registry
+        if: always()
+        run: docker logout ghcr.io
