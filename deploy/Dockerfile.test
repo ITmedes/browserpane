@@ -4,32 +4,30 @@
 # Usage: docker build -f deploy/Dockerfile.test -t bpane-test ..
 #        docker run --rm bpane-test
 
-FROM ubuntu:24.04
+ARG BPANE_RUST_BUILDER_IMAGE=ubuntu:24.04@sha256:561618e2c15bf2397621dd04f96926663a3b5616c189cf7e38db7e82f5c538ea
+FROM ${BPANE_RUST_BUILDER_IMAGE}
 
-# Install build dependencies + test tools
-RUN apt-get update && apt-get install -y \
-    curl \
-    build-essential \
-    pkg-config \
-    cmake \
-    libdrm-dev \
-    libevdev-dev \
-    libx11-dev \
-    libxdamage-dev \
-    libxfixes-dev \
-    libxrandr-dev \
-    libavcodec-dev \
-    libavutil-dev \
-    libva-dev \
-    libpipewire-0.3-dev \
-    && rm -rf /var/lib/apt/lists/*
+ENV CARGO_HOME=/opt/cargo \
+    RUSTUP_HOME=/opt/rustup \
+    PATH=/opt/cargo/bin:${PATH} \
+    CARGO_INCREMENTAL=0
 
-# Install Rust
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-ENV PATH="/root/.cargo/bin:${PATH}"
+COPY deploy/install-rust-toolchain.sh rust-toolchain.toml /tmp/
+RUN if ! command -v cargo >/dev/null 2>&1; then \
+      apt-get update \
+      && apt-get install -y --no-install-recommends \
+        build-essential ca-certificates cmake curl pkg-config \
+        libavcodec-dev libavutil-dev libdrm-dev libevdev-dev libopus-dev \
+        libpipewire-0.3-dev libva-dev libx11-dev libxcb1-dev libxdamage-dev \
+        libxfixes-dev libxrandr-dev \
+      && rm -rf /var/lib/apt/lists/* \
+      && rust_toolchain="$(awk -F '"' '/^[[:space:]]*channel[[:space:]]*=/{print $2}' /tmp/rust-toolchain.toml)" \
+      && /tmp/install-rust-toolchain.sh "${rust_toolchain}"; \
+    fi \
+    && rm /tmp/install-rust-toolchain.sh /tmp/rust-toolchain.toml
 
 WORKDIR /build
 COPY . .
 
 # Run all tests
-CMD ["cargo", "test", "--workspace", "--", "--test-threads=4"]
+CMD ["cargo", "test", "--workspace", "--locked", "--", "--test-threads=4"]

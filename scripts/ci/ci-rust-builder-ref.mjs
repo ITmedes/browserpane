@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 export const DEFAULT_REGISTRY = 'ghcr.io/itmedes/browserpane-ci-rust';
 export const MATERIAL_INPUTS = Object.freeze([
   'deploy/Dockerfile.ci-rust',
+  'deploy/install-rust-toolchain.sh',
   'rust-toolchain.toml',
   'Cargo.lock',
   'Cargo.toml',

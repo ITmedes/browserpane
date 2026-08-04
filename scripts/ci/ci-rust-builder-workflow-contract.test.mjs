@@ -20,6 +20,10 @@ test('builder workflow watches every material image input', () => {
     for (const input of MATERIAL_INPUTS) {
       assert.ok(paths.includes(input), `${trigger} is missing ${input}`);
     }
+    assert.ok(
+      paths.includes('scripts/ci/inspect-ci-rust-builder.sh'),
+      `${trigger} is missing the image inspection contract`
+    );
   }
   assert.deepEqual(workflow.on.push.branches, ['main']);
   assert.ok(workflow.on.workflow_dispatch !== undefined);
@@ -47,4 +51,7 @@ test('trusted publisher uses bounded package permission and immutable content ta
   assert.match(publish.run, /--provenance=mode=max/);
   assert.match(publish.run, /--sbom=true/);
   assert.match(publish.run, /--push/);
+  const inspection = step(job, 'Verify published image contract');
+  assert.match(inspection.run, /docker pull/);
+  assert.match(inspection.run, /inspect-ci-rust-builder\.sh/);
 });

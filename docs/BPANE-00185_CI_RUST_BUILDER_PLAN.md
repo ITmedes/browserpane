@@ -40,8 +40,9 @@ smokes. Host-side Cargo caches do not feed the isolated Docker builders.
 ## Scope
 
 - Add one Linux `amd64` Rust builder image for gateway and host release builds.
-- Pin Ubuntu, Rust, native build dependencies, and build profile in the image
-  contract.
+- Pin the Ubuntu base digest and Rust toolchain, declare the native build
+  dependency set, and freeze the resulting build environment behind the first
+  immutable content-tag publication.
 - Pre-fetch Cargo inputs and precompile the locked third-party release
   dependency graph using source-independent local crate stubs.
 - Publish the image to `ghcr.io/itmedes/browserpane-ci-rust` under a
@@ -98,8 +99,9 @@ smokes. Host-side Cargo caches do not feed the isolated Docker builders.
 - Resolve tags to digests before use and report cache misses explicitly.
 - Inspect the published filesystem and image history for BrowserPane source,
   credentials, certificates, and unexpected build context.
-- A missing, denied, stale, or architecture-incompatible image must cause a
-  visible cold fallback, never a skipped test.
+- A missing or denied image must cause a visible cold fallback, never a skipped
+  test. A pulled image with invalid labels, digest metadata, or platform must
+  fail closed instead of being trusted or silently replaced.
 
 ## Contract Changes
 
@@ -144,7 +146,8 @@ smokes. Host-side Cargo caches do not feed the isolated Docker builders.
 - Add a resolver that authenticates read-only, pulls the expected content tag,
   resolves it to a digest, and exports that digest for later compose steps.
 - On package miss or registry outage, emit a warning and leave the argument on
-  the cold fallback.
+  the cold fallback; reject any successfully pulled image that fails its trust
+  or platform contract.
 - Apply the resolver to all three #184 lanes.
 
 ### Slice 4: Verification And Timing
@@ -233,7 +236,22 @@ smokes. Host-side Cargo caches do not feed the isolated Docker builders.
 ## Evidence Record
 
 - Baseline hosted run: `30843583746` (20 minutes 50 seconds)
-- Builder package: pending
+- Local `linux/amd64` image contract: passed for
+  `linux-amd64-rust-1.93.1-292cde4b8093ade4da38d88d`
+- Local image size: 2.94 GB uncompressed; 1.08 GB through a Docker-save gzip
+  transfer approximation. Hosted GHCR pull size and duration remain pending.
+- Local image build under Apple-Silicon emulation: 4 minutes 0 seconds.
+- Commit-metadata-only cache probe: 1.6 seconds with every expensive layer
+  reused.
+- Warm real-source builder stages under emulation: gateway 55 seconds; host 34
+  seconds.
+- Native Apple-Silicon cold fallback stages: gateway 2 minutes 10 seconds; host
+  1 minute 25 seconds. These are portability checks, not hosted-run comparison
+  measurements.
+- Final runtime contracts: gateway and host executables present; Cargo,
+  `/opt/cargo`, and `/build` absent.
+- Containerized test contract: `bpane-protocol` passed 124 unit, integration,
+  property, wire-fixture, and doc tests through `deploy/Dockerfile.test`.
 - Published content tag and digest: pending
 - Cold/fallback run: pending
 - First-pull run: pending
