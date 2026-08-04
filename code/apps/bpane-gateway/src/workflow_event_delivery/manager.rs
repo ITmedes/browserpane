@@ -2,7 +2,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use reqwest::Client;
 use tokio::time::sleep;
 use tracing::warn;
 
@@ -17,6 +16,7 @@ use super::model::{
     RecordWorkflowEventDeliveryAttemptRequest, StoredWorkflowEventDelivery,
     WorkflowEventDeliveryState,
 };
+use super::WorkflowEventDestinationPolicy;
 
 #[derive(Debug, Clone)]
 pub struct WorkflowEventDeliveryConfig {
@@ -31,7 +31,7 @@ pub struct WorkflowEventDeliveryConfig {
 pub struct WorkflowEventDeliveryManager {
     session_store: SessionStore,
     observability: Arc<WorkflowObservability>,
-    client: Client,
+    destination_policy: Arc<WorkflowEventDestinationPolicy>,
     config: WorkflowEventDeliveryConfig,
 }
 
@@ -40,19 +40,12 @@ impl WorkflowEventDeliveryManager {
         session_store: SessionStore,
         observability: Arc<WorkflowObservability>,
         config: WorkflowEventDeliveryConfig,
+        destination_policy: Arc<WorkflowEventDestinationPolicy>,
     ) -> Result<Self, SessionStoreError> {
-        let client = Client::builder()
-            .timeout(config.request_timeout)
-            .build()
-            .map_err(|error| {
-                SessionStoreError::Backend(format!(
-                    "failed to build workflow event delivery HTTP client: {error}"
-                ))
-            })?;
         Ok(Self {
             session_store,
             observability,
-            client,
+            destination_policy,
             config,
         })
     }
@@ -102,9 +95,43 @@ impl WorkflowEventDeliveryManager {
 
         self.observability.record_event_delivery_attempt();
 
-        let result = self
-            .client
-            .post(&delivery.target_url)
+        let destination = match self
+            .destination_policy
+            .authorize(&delivery.target_url)
+            .await
+        {
+            Ok(destination) => destination,
+            Err(error) => {
+                self.record_failure(
+                    delivery,
+                    attempt_number,
+                    Utc::now(),
+                    None,
+                    Some(error.to_string()),
+                    false,
+                )
+                .await?;
+                return Ok(());
+            }
+        };
+        let client = match destination.build_client(self.config.request_timeout) {
+            Ok(client) => client,
+            Err(error) => {
+                self.record_failure(
+                    delivery,
+                    attempt_number,
+                    Utc::now(),
+                    None,
+                    Some(error.to_string()),
+                    false,
+                )
+                .await?;
+                return Ok(());
+            }
+        };
+
+        let result = client
+            .post(destination.canonical_url())
             .header("content-type", "application/json")
             .header("x-bpane-event-id", delivery.event_id.to_string())
             .header("x-bpane-event-type", delivery.event_type.as_str())
@@ -153,6 +180,13 @@ impl WorkflowEventDeliveryManager {
                 .await?;
             }
             Err(error) => {
+                let error = if error.is_timeout() {
+                    "workflow event delivery request timed out"
+                } else if error.is_connect() {
+                    "workflow event delivery connection failed"
+                } else {
+                    "workflow event delivery request failed"
+                };
                 self.record_failure(
                     delivery,
                     attempt_number,

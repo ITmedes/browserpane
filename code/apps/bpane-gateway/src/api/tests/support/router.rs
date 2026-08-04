@@ -47,6 +47,9 @@ impl CredentialProviderBackend for TestCredentialProviderBackend {
 fn base_api_state(
     auth_validator: Arc<AuthValidator>,
     mcp_bridge_control: Option<McpBridgeControlConfig>,
+    workflow_event_destination_policy: Arc<
+        crate::workflow_event_delivery::WorkflowEventDestinationPolicy,
+    >,
 ) -> Arc<ApiState> {
     Arc::new(ApiState {
         registry: Arc::new(SessionRegistry::new(10, false)),
@@ -77,6 +80,7 @@ fn base_api_state(
         recording_lifecycle: Arc::new(RecordingLifecycleManager::disabled()),
         workflow_lifecycle: Arc::new(WorkflowLifecycleManager::disabled()),
         workflow_observability: Arc::new(WorkflowObservability::default()),
+        workflow_event_destination_policy,
         workflow_log_retention: None,
         workflow_output_retention: None,
         idle_stop_timeout: Duration::from_secs(300),
@@ -91,7 +95,11 @@ pub(crate) fn test_router_with_state() -> (Router, String, Arc<ApiState>) {
     let token = auth_validator
         .generate_token()
         .expect("hmac auth validator should generate dev token");
-    let state = base_api_state(auth_validator, None);
+    let state = base_api_state(
+        auth_validator,
+        None,
+        Arc::new(crate::workflow_event_delivery::WorkflowEventDestinationPolicy::default()),
+    );
     (build_api_router(state.clone()), token, state)
 }
 
@@ -102,7 +110,24 @@ pub(crate) fn test_router_with_mcp_bridge_control(
     let token = auth_validator
         .generate_token()
         .expect("hmac auth validator should generate dev token");
-    let state = base_api_state(auth_validator, Some(mcp_bridge_control));
+    let state = base_api_state(
+        auth_validator,
+        Some(mcp_bridge_control),
+        Arc::new(crate::workflow_event_delivery::WorkflowEventDestinationPolicy::default()),
+    );
+    (build_api_router(state.clone()), token, state)
+}
+
+pub(crate) fn test_router_with_workflow_event_destination_policy(
+    workflow_event_destination_policy: Arc<
+        crate::workflow_event_delivery::WorkflowEventDestinationPolicy,
+    >,
+) -> (Router, String, Arc<ApiState>) {
+    let auth_validator = Arc::new(AuthValidator::from_hmac_secret(vec![7; 32]));
+    let token = auth_validator
+        .generate_token()
+        .expect("hmac auth validator should generate dev token");
+    let state = base_api_state(auth_validator, None, workflow_event_destination_policy);
     (build_api_router(state.clone()), token, state)
 }
 
@@ -181,6 +206,9 @@ pub(crate) fn test_router_with_recording_lifecycle(
         recording_lifecycle,
         workflow_lifecycle: Arc::new(WorkflowLifecycleManager::disabled()),
         workflow_observability: Arc::new(WorkflowObservability::default()),
+        workflow_event_destination_policy: Arc::new(
+            crate::workflow_event_delivery::WorkflowEventDestinationPolicy::default(),
+        ),
         workflow_log_retention: None,
         workflow_output_retention: None,
         idle_stop_timeout: Duration::from_secs(300),
@@ -248,6 +276,9 @@ pub(crate) fn test_router_with_workflow_lifecycle(
         recording_lifecycle: Arc::new(RecordingLifecycleManager::disabled()),
         workflow_lifecycle,
         workflow_observability: Arc::new(WorkflowObservability::default()),
+        workflow_event_destination_policy: Arc::new(
+            crate::workflow_event_delivery::WorkflowEventDestinationPolicy::default(),
+        ),
         workflow_log_retention: None,
         workflow_output_retention: None,
         idle_stop_timeout: Duration::from_secs(300),
@@ -299,6 +330,9 @@ pub(crate) async fn test_router_with_live_agent_state(
         recording_lifecycle: Arc::new(RecordingLifecycleManager::disabled()),
         workflow_lifecycle: Arc::new(WorkflowLifecycleManager::disabled()),
         workflow_observability: Arc::new(WorkflowObservability::default()),
+        workflow_event_destination_policy: Arc::new(
+            crate::workflow_event_delivery::WorkflowEventDestinationPolicy::default(),
+        ),
         workflow_log_retention: None,
         workflow_output_retention: None,
         idle_stop_timeout: Duration::from_secs(300),
@@ -367,6 +401,9 @@ pub(crate) async fn test_router_with_docker_pool() -> (Router, String) {
         recording_lifecycle: Arc::new(RecordingLifecycleManager::disabled()),
         workflow_lifecycle: Arc::new(WorkflowLifecycleManager::disabled()),
         workflow_observability: Arc::new(WorkflowObservability::default()),
+        workflow_event_destination_policy: Arc::new(
+            crate::workflow_event_delivery::WorkflowEventDestinationPolicy::default(),
+        ),
         workflow_log_retention: None,
         workflow_output_retention: None,
         idle_stop_timeout: Duration::from_secs(300),

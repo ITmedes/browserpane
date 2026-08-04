@@ -43,17 +43,24 @@ async fn create_workflow_event_subscription(
     let principal = authorize_api_request(&headers, &state.auth_validator)
         .await
         .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let mut request = PersistWorkflowEventSubscriptionRequest {
+        name: request.name,
+        target_url: request.target_url,
+        event_types: request.event_types,
+        signing_secret: request.signing_secret,
+    };
+    validate_workflow_event_subscription_request(&request).map_err(map_session_store_error)?;
+    let destination = state
+        .workflow_event_destination_policy
+        .authorize(&request.target_url)
+        .await
+        .map_err(|error| {
+            map_session_store_error(SessionStoreError::InvalidRequest(error.to_string()))
+        })?;
+    request.target_url = destination.canonical_url().to_string();
     let subscription = state
         .session_store
-        .create_workflow_event_subscription(
-            &principal,
-            PersistWorkflowEventSubscriptionRequest {
-                name: request.name,
-                target_url: request.target_url,
-                event_types: request.event_types,
-                signing_secret: request.signing_secret,
-            },
-        )
+        .create_workflow_event_subscription(&principal, request)
         .await
         .map_err(map_session_store_error)?;
     Ok((StatusCode::CREATED, Json(subscription.to_resource())))

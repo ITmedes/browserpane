@@ -82,9 +82,9 @@ use crate::workflow::{
 };
 use crate::workflow::{WorkflowObservabilitySnapshot, WorkflowSourceArchive};
 use crate::workflow_event_delivery::{
-    group_attempts_by_delivery, PersistWorkflowEventSubscriptionRequest,
-    WorkflowEventDeliveryListResponse, WorkflowEventSubscriptionListResponse,
-    WorkflowEventSubscriptionResource,
+    group_attempts_by_delivery, validate_workflow_event_subscription_request,
+    PersistWorkflowEventSubscriptionRequest, WorkflowEventDeliveryListResponse,
+    WorkflowEventSubscriptionListResponse, WorkflowEventSubscriptionResource,
 };
 use crate::workspaces::{
     FileWorkspaceFileListResponse, FileWorkspaceFileResource, FileWorkspaceListResponse,
@@ -151,6 +151,7 @@ pub async fn run_api_server(config: ApiServerConfig) -> anyhow::Result<()> {
         recording_lifecycle: config.recording_lifecycle,
         workflow_lifecycle: config.workflow_lifecycle,
         workflow_observability: config.workflow_observability,
+        workflow_event_destination_policy: config.workflow_event_destination_policy,
         workflow_log_retention: config.workflow_log_retention,
         workflow_output_retention: config.workflow_output_retention,
         idle_stop_timeout: config.idle_stop_timeout,

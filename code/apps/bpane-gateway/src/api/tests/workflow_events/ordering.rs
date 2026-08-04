@@ -4,9 +4,18 @@ use super::super::*;
 
 #[tokio::test]
 async fn workflow_event_subscriptions_preserve_lifecycle_delivery_order() {
-    let (app, token, state) = test_router_with_state();
     let receiver =
         TestWebhookReceiver::start(vec![StatusCode::OK, StatusCode::OK, StatusCode::OK]).await;
+    let allowed_origin = reqwest::Url::parse(&receiver.url)
+        .unwrap()
+        .origin()
+        .ascii_serialization();
+    let destination_policy = Arc::new(
+        crate::workflow_event_delivery::WorkflowEventDestinationPolicy::new(&[allowed_origin])
+            .unwrap(),
+    );
+    let (app, token, state) =
+        test_router_with_workflow_event_destination_policy(destination_policy);
 
     let subscription = response_json(
         app.clone()
@@ -174,6 +183,7 @@ async fn workflow_event_subscriptions_preserve_lifecycle_delivery_order() {
             batch_size: 8,
             base_backoff: Duration::from_millis(5),
         },
+        state.workflow_event_destination_policy.clone(),
     )
     .unwrap();
     manager.reconcile_persisted_state().await.unwrap();

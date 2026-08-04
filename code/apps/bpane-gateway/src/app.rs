@@ -111,6 +111,7 @@ impl GatewayApp {
             recording_lifecycle: recording_services.lifecycle,
             workflow_lifecycle: workflow_services.lifecycle,
             workflow_observability: workflow_services.observability,
+            workflow_event_destination_policy: workflow_services.event_destination_policy,
             workflow_log_retention: workflow_services.log_retention,
             workflow_output_retention: workflow_services.output_retention,
             idle_stop_timeout: Duration::from_secs(config.runtime.idle_timeout_secs),
