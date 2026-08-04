@@ -15,7 +15,7 @@ export async function ensureAdminLoggedIn(page, options) {
   }
 
   if (state.login) {
-    await page.getByTestId('admin-login').click();
+    await page.getByTestId('admin-login').click({ timeout: 1_000 }).catch(() => {});
   }
   await fillKeycloakLogin(page, authConfig, options);
   await page.waitForURL(urlPatternFor(options.pageUrl), { timeout: options.connectTimeoutMs });
@@ -238,7 +238,7 @@ async function cleanupAdminSession(page) {
 
 export async function getAdminAccessToken(page) {
   return await page.evaluate(() => {
-    const raw = window.sessionStorage.getItem('bpane.admin.auth.tokens.v1');
+    const raw = window.sessionStorage.getItem('bpane.admin.auth.tokens.v2');
     if (!raw) {
       return '';
     }

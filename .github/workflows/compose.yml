@@ -119,6 +119,7 @@ jobs:
       - name: Run browser-facing compose validation
         run: >-
           node scripts/validate.mjs
+          --stage compose-admin-auth-security
           --stage compose-admin-new-dashboard
           --stage compose-admin-new-projects
           --stage compose-admin-new-sessions
