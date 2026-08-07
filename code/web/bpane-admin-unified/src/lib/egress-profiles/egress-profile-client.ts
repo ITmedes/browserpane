@@ -270,7 +270,7 @@ function toEgressEffectiveStatus(value: unknown): EgressProfileEffectiveStatus {
   };
 }
 
-function toEgressDiagnosticsResource(value: unknown): EgressDiagnosticsResource {
+export function toEgressDiagnosticsResource(value: unknown): EgressDiagnosticsResource {
   const object = value === undefined || value === null
     ? {}
     : expectRecord(value, 'egress diagnostics');

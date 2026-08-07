@@ -374,6 +374,9 @@ Validation:
 
 Tier: P2 admin-new parity.
 
+Status: implemented and validated on `feature/BPANE-00155`; pending merge of
+PR #197.
+
 Why here:
 
 - Session detail is currently too broad.

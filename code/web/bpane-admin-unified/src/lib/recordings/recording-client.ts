@@ -12,8 +12,12 @@ import type {
   RecordingCatalogEntry,
   RecordingCatalogLoadFailure,
   SessionRecordingListResponse,
+  SessionRecordingPlaybackResource,
+  SessionRecordingPlaybackState,
   SessionRecordingResource,
 } from './recording-types';
+
+const PLAYBACK_STATES = ['empty', 'ready', 'partial'] satisfies readonly SessionRecordingPlaybackState[];
 
 export type { AccessTokenProvider, FetchLike } from '$lib/api/authenticated-api';
 export type RecordingCatalogErrorCode = AdminApiRequestErrorCode;
@@ -117,6 +121,17 @@ export class RecordingCatalogClient {
     return await response.blob();
   }
 
+  async getSessionRecordingPlayback(sessionId: string): Promise<SessionRecordingPlaybackResource> {
+    const response = await this.#request(
+      new URL(`/api/v1/sessions/${encodeURIComponent(sessionId)}/recording-playback`, this.#baseUrl),
+      {
+        method: 'GET',
+        headers: { accept: 'application/json' },
+      },
+    );
+    return toSessionRecordingPlaybackResource(await response.json());
+  }
+
   async downloadSessionPlaybackExport(sessionId: string): Promise<Blob> {
     const response = await this.#request(
       new URL(`/api/v1/sessions/${encodeURIComponent(sessionId)}/recording-playback/export`, this.#baseUrl),
@@ -162,6 +177,24 @@ export function toSessionRecordingResource(payload: unknown): SessionRecordingRe
   };
 }
 
+export function toSessionRecordingPlaybackResource(payload: unknown): SessionRecordingPlaybackResource {
+  const object = expectRecord(payload, 'session recording playback');
+  return {
+    session_id: expectString(object.session_id, 'session recording playback session_id'),
+    state: expectEnum(object.state, PLAYBACK_STATES, 'session recording playback state'),
+    segment_count: expectNonNegativeNumber(object.segment_count, 'session recording playback segment_count'),
+    included_segment_count: expectNonNegativeNumber(object.included_segment_count, 'session recording playback included_segment_count'),
+    failed_segment_count: expectNonNegativeNumber(object.failed_segment_count, 'session recording playback failed_segment_count'),
+    active_segment_count: expectNonNegativeNumber(object.active_segment_count, 'session recording playback active_segment_count'),
+    missing_artifact_segment_count: expectNonNegativeNumber(object.missing_artifact_segment_count, 'session recording playback missing_artifact_segment_count'),
+    included_bytes: expectNonNegativeNumber(object.included_bytes, 'session recording playback included_bytes'),
+    included_duration_ms: expectNonNegativeNumber(object.included_duration_ms, 'session recording playback included_duration_ms'),
+    manifest_path: expectString(object.manifest_path, 'session recording playback manifest_path'),
+    export_path: expectString(object.export_path, 'session recording playback export_path'),
+    generated_at: expectString(object.generated_at, 'session recording playback generated_at'),
+  };
+}
+
 function expectRecord(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new RecordingCatalogError(`${label} must be an object.`, 'invalid_payload');
@@ -201,6 +234,20 @@ function optionalNumber(value: unknown, label: string): number | undefined {
     throw new RecordingCatalogError(`${label} must be a finite number.`, 'invalid_payload');
   }
   return value;
+}
+
+function expectNonNegativeNumber(value: unknown, label: string): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+    throw new RecordingCatalogError(`${label} must be a non-negative number.`, 'invalid_payload');
+  }
+  return value;
+}
+
+function expectEnum<const T extends string>(value: unknown, values: readonly T[], label: string): T {
+  if (typeof value !== 'string' || !values.includes(value as T)) {
+    throw new RecordingCatalogError(`${label} is unsupported.`, 'invalid_payload');
+  }
+  return value as T;
 }
 
 function optionalBoolean(value: unknown, label: string): boolean | undefined {

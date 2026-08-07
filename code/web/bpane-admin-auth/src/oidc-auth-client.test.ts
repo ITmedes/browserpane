@@ -37,7 +37,9 @@ describe('OidcAuthClient', () => {
     const loginUrl = new URL(await client.buildLoginUrl(new URL('https://app.example.test/admin-new/projects')));
     tokenResponse = await validTokenResponse(fixture, loginUrl.searchParams.get('nonce'));
 
-    const completion = await client.completeLoginIfNeeded(callbackUrl(loginUrl));
+    const callback = callbackUrl(loginUrl);
+    callback.searchParams.set('iss', ISSUER);
+    const completion = await client.completeLoginIfNeeded(callback);
 
     expect(completion).toEqual({
       completed: true,

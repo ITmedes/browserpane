@@ -12,6 +12,7 @@
     sessionEndpointUrl,
   } from '$lib/mcp/mcp-delegation-view-model';
   import SessionInspector from '$lib/components/SessionInspector.svelte';
+  import SessionSubareaNavigation from '$lib/components/SessionSubareaNavigation.svelte';
   import { SessionCatalogClient } from '$lib/sessions/session-client';
   import type { SessionDetailLoadState } from '$lib/sessions/session-detail-view-model';
   import type { SessionActionState } from '$lib/sessions/session-overview-view-model';
@@ -28,6 +29,7 @@
   let mcpActionState = $state<SessionActionState>({ status: 'idle' });
   const mcpBridge = $derived(authContext.authConfig?.mcpBridge ?? null);
   const selectedSession = $derived(sessionState.status === 'ready' ? sessionState.session : null);
+  const routeSessionId = $derived(activeSessionId());
   const mcpViewModel = $derived(buildMcpDelegationViewModel({
     bridge: mcpBridge,
     session: selectedSession,
@@ -412,6 +414,10 @@
       <h1 class="m-0 mt-1 text-2xl font-semibold text-admin-ink">Session details</h1>
     </div>
   </header>
+
+  {#if routeSessionId}
+    <SessionSubareaNavigation sessionId={routeSessionId} activeId="overview" availableIds={['overview', 'live', 'files', 'recordings', 'network']} />
+  {/if}
 
   {#if sessionState.status === 'error'}
     <div data-testid="session-detail-error">

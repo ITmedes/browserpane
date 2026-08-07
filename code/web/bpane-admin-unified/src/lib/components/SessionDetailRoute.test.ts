@@ -43,6 +43,9 @@ describe('SessionDetailRoute', () => {
     await vi.waitFor(() => {
       expect(byTestId(target, 'session-detail-title').textContent).toContain('session-1');
     });
+    expect(byTestId(target, 'session-subarea-overview').getAttribute('aria-current')).toBe('page');
+    expect(byTestId(target, 'session-subarea-live').getAttribute('href'))
+      .toBe('/admin-new/sessions/session-1/live');
     expect(byTestId(target, 'session-detail-total-clients').textContent).toContain('1');
     byTestId(target, 'session-disconnect-all').click();
 

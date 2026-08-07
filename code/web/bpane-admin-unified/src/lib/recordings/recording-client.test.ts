@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { sessionResource } from '$lib/test-utils/session-fixtures';
+import { playbackPayload, recordingPayload } from '$lib/test-utils/recording-fixtures';
 import {
   RecordingCatalogClient,
   RecordingCatalogError,
+  toSessionRecordingPlaybackResource,
   toSessionRecordingListResponse,
 } from './recording-client';
 
@@ -105,8 +107,37 @@ describe('RecordingCatalogClient', () => {
     }
   });
 
+  it('loads a strict session playback summary through the authenticated API', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse(playbackPayload(), 200));
+    const client = new RecordingCatalogClient({
+      baseUrl: 'http://localhost:3000',
+      accessTokenProvider: async () => 'token',
+      fetchImpl,
+    });
+
+    const playback = await client.getSessionRecordingPlayback('session/one');
+
+    expect(playback).toMatchObject({
+      session_id: 'session/one',
+      state: 'partial',
+      segment_count: 3,
+      included_segment_count: 2,
+      failed_segment_count: 1,
+    });
+    expect(fetchImpl.mock.calls[0]?.[0]).toEqual(
+      new URL('http://localhost:3000/api/v1/sessions/session%2Fone/recording-playback'),
+    );
+  });
+
   it('reports invalid recording payloads', () => {
     expect(() => toSessionRecordingListResponse({ recordings: [{ id: '' }] })).toThrow(RecordingCatalogError);
+  });
+
+  it('rejects unsupported playback states and negative counters', () => {
+    expect(() => toSessionRecordingPlaybackResource(playbackPayload({ state: 'unknown' })))
+      .toThrow(RecordingCatalogError);
+    expect(() => toSessionRecordingPlaybackResource(playbackPayload({ included_segment_count: -1 })))
+      .toThrow(RecordingCatalogError);
   });
 });
 
@@ -115,37 +146,4 @@ function jsonResponse(payload: unknown, status: number): Response {
     status,
     headers: { 'content-type': 'application/json' },
   });
-}
-
-export function recordingPayload(
-  overrides: Partial<{
-    readonly id: string;
-    readonly sessionId: string;
-    readonly state: string;
-    readonly artifactAvailable: boolean;
-    readonly bytes: number | null;
-    readonly durationMs: number | null;
-    readonly error: string | null;
-  }> = {},
-): Record<string, unknown> {
-  const id = overrides.id ?? 'recording-1';
-  const sessionId = overrides.sessionId ?? 'session-1';
-  return {
-    id,
-    session_id: sessionId,
-    previous_recording_id: null,
-    state: overrides.state ?? 'ready',
-    format: 'webm',
-    mime_type: 'video/webm',
-    bytes: overrides.bytes ?? 12_345,
-    duration_ms: overrides.durationMs ?? 61_000,
-    error: overrides.error ?? null,
-    termination_reason: 'manual_stop',
-    artifact_available: overrides.artifactAvailable ?? true,
-    content_path: `/api/v1/sessions/${sessionId}/recordings/${id}/content`,
-    started_at: '2026-06-21T10:00:00.000Z',
-    completed_at: '2026-06-21T10:01:01.000Z',
-    created_at: '2026-06-21T10:00:00.000Z',
-    updated_at: '2026-06-21T10:01:01.000Z',
-  };
 }

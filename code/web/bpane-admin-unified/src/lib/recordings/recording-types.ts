@@ -25,6 +25,23 @@ export type SessionRecordingListResponse = {
   readonly recordings: readonly SessionRecordingResource[];
 };
 
+export type SessionRecordingPlaybackState = 'empty' | 'ready' | 'partial';
+
+export type SessionRecordingPlaybackResource = {
+  readonly session_id: string;
+  readonly state: SessionRecordingPlaybackState;
+  readonly segment_count: number;
+  readonly included_segment_count: number;
+  readonly failed_segment_count: number;
+  readonly active_segment_count: number;
+  readonly missing_artifact_segment_count: number;
+  readonly included_bytes: number;
+  readonly included_duration_ms: number;
+  readonly manifest_path: string;
+  readonly export_path: string;
+  readonly generated_at: string;
+};
+
 export type RecordingCatalogEntry = {
   readonly session: SessionResource;
   readonly recording: SessionRecordingResource;
