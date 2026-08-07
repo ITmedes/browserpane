@@ -356,19 +356,28 @@ async function assertPreviewResizeUsesIndependentHeight(popup, options) {
 
 async function waitForSessionDetailUrl(page, options, expectedSessionId = '') {
   const result = await poll(
-    'created unified session detail url',
+    'created unified session detail route',
     async () => {
       const url = new URL(page.url());
       const match = url.pathname.match(/\/admin-new\/sessions\/([^/]+)$/);
       const sessionId = match?.[1] ? decodeURIComponent(match[1]) : '';
       const error = await page.getByTestId('session-create-error').textContent().catch(() => '');
-      return { sessionId: sessionId && sessionId !== 'new' ? sessionId : '', error };
+      const detailVisible = await page.getByTestId('session-detail-route').isVisible().catch(() => false);
+      return {
+        sessionId: sessionId && sessionId !== 'new' ? sessionId : '',
+        detailVisible,
+        error,
+        url: url.toString(),
+      };
     },
-    (value) => Boolean(value.sessionId || value.error),
+    (value) => value.detailVisible || Boolean(value.error),
     options.connectTimeoutMs,
   );
   if (result.error) {
     throw new Error(`Session create form failed: ${result.error}`);
+  }
+  if (!result.sessionId) {
+    throw new Error(`Created session detail rendered at an unexpected URL: ${result.url}`);
   }
   if (expectedSessionId && result.sessionId !== expectedSessionId) {
     throw new Error(`Expected created session detail ${expectedSessionId}, got ${result.sessionId}`);
