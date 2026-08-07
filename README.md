@@ -486,10 +486,12 @@ updates:
 The browser mints a short-lived `admin_event_access_token` through the
 bearer-authenticated POST, opens the WebSocket without URL credentials, and
 sends the scoped token in its first message. Each reconnect mints a fresh
-token. The legacy `/admin/` console consumes this stream. `/admin-new/`
-currently loads route data through the HTTP clients; its route-backed
-observability/event surface remains part of
-[issue #156](https://github.com/ITmedes/browserpane/issues/156).
+token. Both admin consoles consume the same validated event contract and
+reconnect behavior. `/admin-new/sessions/{id}/observability` projects the
+owner-scoped snapshots into current session evidence and a bounded local
+timeline; it is operational context, not a durable audit log. The adjacent
+`/automation` and `/policy` routes expose session-bound MCP/workflow
+associations and effective restriction evidence.
 
 The same frozen API surface also includes session-scoped runtime routes:
 

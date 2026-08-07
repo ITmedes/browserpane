@@ -251,9 +251,9 @@ Required detail behavior:
 - route-backed subareas for live, files, recordings, network, automation,
   policy, and observability.
 
-Current status: catalog/create/detail/preview/MCP are implemented. Route-backed
-live, files, recordings, and network subareas are implemented; automation,
-policy, and observability remain issue #156.
+Current status: catalog/create/detail/preview are implemented. Route-backed
+live, automation, policy, files, recordings, network, and observability
+subareas are implemented for the #155/#156 scope.
 
 ### Session Preview And Live Browser
 

@@ -19,7 +19,7 @@ async function run() {
   const log = createLogger('admin-session-detail-smoke');
   const browser = await launchChrome(chromium, options);
   const context = await browser.newContext({ viewport: { width: 1440, height: 980 } });
-  const page = await context.newPage();
+  let page = await context.newPage();
   let sessionId = '';
 
   try {
@@ -38,7 +38,7 @@ async function run() {
 
     await verifySessionDetail(page, options, sessionId);
     await verifyListDeepLink(page, options, sessionId);
-    await verifyLiveWorkspaceDetailLink(page, options, sessionId);
+    page = await verifyLiveWorkspaceDetailLink(page, options, sessionId);
     await verifyDetailLifecycleDisabledWithLiveClient(page, options, sessionId);
     await emitSummary(page, options, sessionId, log);
   } finally {
@@ -97,22 +97,30 @@ async function verifyListDeepLink(page, options, sessionId) {
 }
 
 async function verifyLiveWorkspaceDetailLink(page, options, sessionId) {
-  await ensureAdminLoggedIn(page, options);
-  await openAdminTab(page, 'sessions');
-  const row = page.locator(`[data-testid="session-row"][data-session-id="${sessionId}"]`);
-  await row.waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
-  await row.click();
-  const detailLink = page.getByTestId('session-detail-link');
-  await detailLink.waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
-  const href = await poll(
-    'live workspace detail link selection',
-    async () => await detailLink.getAttribute('href'),
-    (value) => value?.includes(`/sessions/${sessionId}`),
-    options.connectTimeoutMs,
-    100,
-  );
-  if (!href?.includes(`/sessions/${sessionId}`)) {
-    throw new Error(`Expected live workspace detail link for ${sessionId}, got ${href}`);
+  const workspacePage = await page.context().newPage();
+  try {
+    await ensureAdminLoggedIn(workspacePage, options);
+    await openAdminTab(workspacePage, 'sessions');
+    const row = workspacePage.locator(`[data-testid="session-row"][data-session-id="${sessionId}"]`);
+    await row.waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
+    await row.click();
+    const detailLink = workspacePage.getByTestId('session-detail-link');
+    await detailLink.waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
+    const href = await poll(
+      'live workspace detail link selection',
+      async () => await detailLink.getAttribute('href'),
+      (value) => value?.includes(`/sessions/${sessionId}`),
+      options.connectTimeoutMs,
+      100,
+    );
+    if (!href?.includes(`/sessions/${sessionId}`)) {
+      throw new Error(`Expected live workspace detail link for ${sessionId}, got ${href}`);
+    }
+    await page.close();
+    return workspacePage;
+  } catch (error) {
+    await workspacePage.close().catch(() => {});
+    throw error;
   }
 }
 
@@ -126,7 +134,6 @@ async function verifyDetailLifecycleDisabledWithLiveClient(page, options, sessio
       timeout: options.connectTimeoutMs,
     });
 
-    await ensureAdminLoggedIn(page, options);
     await openAdminTab(page, 'sessions');
     const row = page.locator(`[data-testid="session-row"][data-session-id="${sessionId}"]`);
     await row.waitFor({ state: 'visible', timeout: options.connectTimeoutMs });

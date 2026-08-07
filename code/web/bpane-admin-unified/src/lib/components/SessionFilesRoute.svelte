@@ -147,7 +147,7 @@
     </button>
   </header>
 
-  <SessionSubareaNavigation sessionId={sessionId} activeId="files" availableIds={['overview', 'live', 'files', 'recordings', 'network']} />
+  <SessionSubareaNavigation sessionId={sessionId} activeId="files" availableIds={['overview', 'live', 'automation', 'policy', 'files', 'recordings', 'network', 'observability']} />
 
   <ActionFeedback
     state={actionState}

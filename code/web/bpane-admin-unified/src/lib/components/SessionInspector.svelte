@@ -6,11 +6,9 @@
     type SessionFact,
   } from '$lib/sessions/session-detail-view-model';
   import type { SessionActionState } from '$lib/sessions/session-overview-view-model';
-  import type { McpDelegationViewModel } from '$lib/mcp/mcp-delegation-view-model';
   import { projectToneClass } from '$lib/projects/project-ui';
   import AdminMessage from './AdminMessage.svelte';
   import ActionFeedback from './ActionFeedback.svelte';
-  import SessionMcpDelegationCard from './SessionMcpDelegationCard.svelte';
 
   type SessionInspectorProps = {
     readonly state: SessionDetailLoadState;
@@ -24,14 +22,6 @@
     readonly onRelease?: () => void | Promise<void>;
     readonly onStop?: () => void | Promise<void>;
     readonly onKill?: () => void | Promise<void>;
-    readonly mcpViewModel?: McpDelegationViewModel | null;
-    readonly mcpActionState?: SessionActionState;
-    readonly onMcpRefresh?: () => void | Promise<void>;
-    readonly onMcpAuthorize?: () => void | Promise<void>;
-    readonly onMcpRevoke?: () => void | Promise<void>;
-    readonly onMcpSetDefault?: () => void | Promise<void>;
-    readonly onMcpClearDefault?: () => void | Promise<void>;
-    readonly onMcpCopyEndpoint?: () => void | Promise<void>;
   };
 
   let {
@@ -46,14 +36,6 @@
     onRelease,
     onStop,
     onKill,
-    mcpViewModel = null,
-    mcpActionState = { status: 'idle' },
-    onMcpRefresh,
-    onMcpAuthorize,
-    onMcpRevoke,
-    onMcpSetDefault,
-    onMcpClearDefault,
-    onMcpCopyEndpoint,
   }: SessionInspectorProps = $props();
 
   const model = $derived(loadState.status === 'ready'
@@ -223,19 +205,6 @@
           <span>Kill</span>
         </button>
       </section>
-
-      {#if mcpViewModel}
-        <SessionMcpDelegationCard
-          viewModel={mcpViewModel}
-          actionState={mcpActionState}
-          onRefresh={onMcpRefresh}
-          onAuthorize={onMcpAuthorize}
-          onRevoke={onMcpRevoke}
-          onSetDefault={onMcpSetDefault}
-          onClearDefault={onMcpClearDefault}
-          onCopyEndpoint={onMcpCopyEndpoint}
-        />
-      {/if}
 
       {#each model.sections as section}
         <section class="rounded-md border border-admin-border bg-admin-soft/50 p-4" data-testid={section.testId}>

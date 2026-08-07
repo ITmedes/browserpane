@@ -99,6 +99,7 @@ async function verifyRecordingStateSurvivesOverlayToggle(page, options) {
   await ensureAdminOverlayOpen(page);
   await page.getByTestId('workspace-panel-recording').waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
   await waitForRecordingStarted(page, options);
+  await sleep(1200);
   await waitForEnabled(page.getByTestId('recording-stop'), options, 'recording stop after overlay toggle');
   await page.getByTestId('recording-stop').click();
   await waitForRecordingDownloadReady(page, options, 'recording stopped after overlay toggle');
