@@ -32,3 +32,19 @@ test('rejects an invalid response and reports the example name', async () => {
     /invalid-session-list:[\s\S]*required properties missing: sessions/
   );
 });
+
+test('rejects duplicate example names', async () => {
+  const paths = ContractPaths.fromModule(import.meta.url);
+  const openapi = await Enforcer(paths.contract, { hideWarnings: true });
+  const example = {
+    name: 'duplicate',
+    operationId: 'listSessions',
+    request: { method: 'GET', path: '/api/v1/sessions' },
+    response: { status: 200, body: { sessions: [] } }
+  };
+
+  assert.throws(
+    () => new ContractExampleValidator(openapi).validate([example, example]),
+    /duplicate: duplicate example name/
+  );
+});
