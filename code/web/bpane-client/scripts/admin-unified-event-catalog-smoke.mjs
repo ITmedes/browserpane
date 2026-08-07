@@ -4,7 +4,7 @@ import {
   assertNoBodyHorizontalOverflow,
   authJsonHeaders,
 } from './admin-unified-smoke-lib.mjs';
-import { apiOrigin, fetchJson, poll } from './workflow-smoke-lib.mjs';
+import { apiOrigin, deleteSession, fetchJson, poll } from './workflow-smoke-lib.mjs';
 
 export async function exerciseEventCatalog(page, options, accessToken, runLabel, signingSecret) {
   const name = `Catalog events ${runLabel}`;
@@ -35,18 +35,22 @@ export async function exerciseEventCatalog(page, options, accessToken, runLabel,
   const subscriptionId = new URL(page.url()).pathname.split('/').at(-1);
   assert.ok(subscriptionId, 'event subscription detail URL must contain an id');
   const run = await generateDeliveredEvents(accessToken, options, runLabel);
-  await poll(
-    'workflow event catalog deliveries',
-    async () =>
-      await fetchJson(
-        `${apiOrigin(options)}/api/v1/workflow-event-subscriptions/${subscriptionId}/deliveries`,
-        { headers: { Authorization: `Bearer ${accessToken}` } },
-      ),
-    (response) =>
-      response.deliveries?.length >= 3 &&
-      response.deliveries.every((delivery) => delivery.state === 'delivered'),
-    options.connectTimeoutMs,
-  );
+  try {
+    await poll(
+      'workflow event catalog deliveries',
+      async () =>
+        await fetchJson(
+          `${apiOrigin(options)}/api/v1/workflow-event-subscriptions/${subscriptionId}/deliveries`,
+          { headers: { Authorization: `Bearer ${accessToken}` } },
+        ),
+      (response) =>
+        response.deliveries?.length >= 3 &&
+        response.deliveries.every((delivery) => delivery.state === 'delivered'),
+      options.connectTimeoutMs,
+    );
+  } finally {
+    await deleteSession(accessToken, options, run.session_id);
+  }
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.getByTestId('workflow-events-metric-delivered').waitFor({ state: 'visible' });
   assert.match(
