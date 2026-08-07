@@ -108,6 +108,15 @@ export function resolveAdminShellRoute(pathname: string): AdminShellRoute | null
   if (route === '/identity') {
     return { activeId: 'identity', title: 'BrowserPane Identity And Access' };
   }
+  if (route === '/workflow-event-subscriptions') {
+    return { activeId: 'events', title: 'BrowserPane Workflow Event Subscriptions' };
+  }
+  if (route === '/workflow-event-subscriptions/new') {
+    return { activeId: 'events', title: 'BrowserPane New Workflow Event Subscription' };
+  }
+  if (route.startsWith('/workflow-event-subscriptions/')) {
+    return { activeId: 'events', title: 'BrowserPane Workflow Event Subscription Details' };
+  }
   if (route === '/api') {
     return { activeId: 'api', title: 'BrowserPane API Reference' };
   }

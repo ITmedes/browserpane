@@ -64,6 +64,7 @@ export const navGroups: NavGroup[] = [
     group: 'Govern',
     items: [
       { id: 'identity', label: 'Identity & access', route: '/admin-new/identity', icon: 'shield' },
+      { id: 'events', label: 'Event subscriptions', route: '/admin-new/workflow-event-subscriptions', icon: 'activity' },
       { id: 'api', label: 'API reference', route: '/admin-new/api', icon: 'key' },
     ],
   },
@@ -83,5 +84,5 @@ export const primaryNav: NavItem[] = allNavItems.filter((item) =>
 );
 
 export const secondaryNav: NavItem[] = allNavItems.filter((item) =>
-  ['identity', 'api', 'memo', 'coverage'].includes(item.id),
+  ['identity', 'events', 'api', 'memo', 'coverage'].includes(item.id),
 );
