@@ -52,3 +52,14 @@ export type CreateBrowserContextRequest = {
   readonly retention_sec?: number | null;
   readonly max_profile_storage_bytes?: number | null;
 };
+
+export type CloneBrowserContextRequest = Omit<CreateBrowserContextRequest, 'persistence_mode'>;
+
+export type ImportBrowserContextRequest = Omit<CreateBrowserContextRequest, 'persistence_mode'> & {
+  readonly archive: Blob;
+};
+
+export type BrowserContextExportArchive = {
+  readonly blob: Blob;
+  readonly filename: string;
+};
