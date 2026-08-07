@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { replaceState } from '$app/navigation';
   import { onDestroy, onMount } from 'svelte';
   import { LogOut, RefreshCw, Unplug } from '@lucide/svelte';
   import { AuthConfigClient, type AuthConfig } from '$lib/auth/auth-config';
@@ -104,7 +105,7 @@
     const currentUrl = new URL(window.location.href);
     const completion = await authClient?.completeLoginIfNeeded(currentUrl);
     if (completion?.completed) {
-      window.history.replaceState({}, document.title, completion.cleanUrl);
+      replaceState(completion.cleanUrl, {});
     }
   }
 
