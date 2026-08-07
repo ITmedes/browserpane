@@ -62,7 +62,7 @@ set -eu
 tar -C /bpane-profile -czf - .
 "#;
 
-const IMPORT_BROWSER_CONTEXT_PROFILE_SCRIPT: &str = r#"
+pub(in crate::runtime_manager) const IMPORT_BROWSER_CONTEXT_PROFILE_SCRIPT: &str = r#"
 set -eu
 archive="/tmp/bpane-browser-context-profile.tar.gz"
 cat > "$archive"
@@ -74,10 +74,27 @@ tar -tzf "$archive" | while IFS= read -r path; do
       ;;
   esac
 done
+tar -tvzf "$archive" | awk '
+  {
+    entry_type = substr($1, 1, 1)
+    if (entry_type != "-" && entry_type != "d") {
+      print "profile archive contains unsupported entry type" > "/dev/stderr"
+      exit 2
+    }
+  }
+'
 mkdir -p /bpane-target
 find /bpane-target -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
-tar -xzf "$archive" -C /bpane-target
-chown -R bpane:bpane /bpane-target
+tar -xzf "$archive" \
+  -C /bpane-target \
+  --no-same-owner \
+  --no-same-permissions \
+  --delay-directory-restore
+if find /bpane-target -xdev ! -type d ! -type f -print -quit | grep -q .; then
+  echo "profile archive materialized an unsupported entry type" >&2
+  exit 2
+fi
+chown -R --no-dereference bpane:bpane /bpane-target
 chmod 0770 /bpane-target
 "#;
 
@@ -346,6 +363,7 @@ impl DockerRuntimeManager {
             })?;
         let Some(mut stdin) = child.stdin.take() else {
             let _ = child.kill().await;
+            let _ = self.remove_browser_context_profile_volume(context_id).await;
             return Err(RuntimeManagerError::StartupFailed(format!(
                 "docker browser context profile import for {volume} did not expose stdin"
             )));
@@ -359,11 +377,15 @@ impl DockerRuntimeManager {
         }
         drop(stdin);
 
-        let output = child.wait_with_output().await.map_err(|error| {
-            RuntimeManagerError::StartupFailed(format!(
-                "failed to wait for docker browser context profile import for {volume}: {error}"
-            ))
-        })?;
+        let output = match child.wait_with_output().await {
+            Ok(output) => output,
+            Err(error) => {
+                let _ = self.remove_browser_context_profile_volume(context_id).await;
+                return Err(RuntimeManagerError::StartupFailed(format!(
+                    "failed to wait for docker browser context profile import for {volume}: {error}"
+                )));
+            }
+        };
         if output.status.success() {
             return Ok(());
         }
