@@ -5,6 +5,12 @@ import {
   getAdminAccessToken,
 } from './admin-smoke-lib.mjs';
 import {
+  adminRouteUrl,
+  assertEqual,
+  assertNoHorizontalOverflow,
+  authJsonHeaders,
+} from './admin-unified-smoke-lib.mjs';
+import {
   DEFAULTS,
   apiOrigin,
   createLogger,
@@ -444,16 +450,6 @@ async function deleteBrowserContext(accessToken, options, contextId, log) {
   });
 }
 
-async function assertNoHorizontalOverflow(page, testId, label) {
-  const size = await page.getByTestId(testId).evaluate((element) => ({
-    clientWidth: element.clientWidth,
-    scrollWidth: element.scrollWidth,
-  }));
-  if (size.scrollWidth > size.clientWidth + 1) {
-    throw new Error(`${label} overflows horizontally: ${JSON.stringify(size)}`);
-  }
-}
-
 async function assertInputValue(page, testId, expected) {
   const actual = await page.getByTestId(testId).inputValue();
   assertEqual(actual, expected, `${testId} value`);
@@ -469,23 +465,6 @@ async function assertPolicyOption(page, group, resourceId) {
   await option.waitFor({ state: 'visible' });
   const checked = await option.isChecked();
   assertEqual(checked, true, `${group} policy option ${resourceId} checked state`);
-}
-
-function adminRouteUrl(options, path) {
-  return new URL(`/admin-new/${path.replace(/^\/+/, '')}`, apiOrigin(options)).toString();
-}
-
-function authJsonHeaders(accessToken) {
-  return {
-    Authorization: `Bearer ${accessToken}`,
-    'content-type': 'application/json',
-  };
-}
-
-function assertEqual(actual, expected, label) {
-  if (actual !== expected) {
-    throw new Error(`Expected ${label} to be ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
-  }
 }
 
 function assertSameIds(actual, expected, label) {
