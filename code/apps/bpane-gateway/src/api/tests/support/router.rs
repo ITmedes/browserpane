@@ -1,3 +1,4 @@
+use crate::api::browser_context_archive::BrowserContextImportService;
 use crate::session_control::SessionStore;
 use crate::session_registry::SessionRegistry;
 
@@ -54,6 +55,7 @@ fn base_api_state(
     workflow_event_destination_policy: Arc<
         crate::workflow_event_delivery::WorkflowEventDestinationPolicy,
     >,
+    browser_context_import: BrowserContextImportService,
 ) -> Arc<ApiState> {
     Arc::new(ApiState {
         registry: Arc::new(SessionRegistry::new(10, false)),
@@ -90,6 +92,7 @@ fn base_api_state(
         idle_stop_timeout: Duration::from_secs(300),
         public_gateway_url: "https://localhost:4433".to_string(),
         default_owner_mode: SessionOwnerMode::Collaborative,
+        browser_context_import,
         mcp_bridge_control,
     })
 }
@@ -103,6 +106,7 @@ pub(crate) fn test_router_with_state() -> (Router, String, Arc<ApiState>) {
         auth_validator,
         None,
         Arc::new(crate::workflow_event_delivery::WorkflowEventDestinationPolicy::default()),
+        Default::default(),
     );
     (build_api_router(state.clone()), token, state)
 }
@@ -118,6 +122,7 @@ pub(crate) fn test_router_with_mcp_bridge_control(
         auth_validator,
         Some(mcp_bridge_control),
         Arc::new(crate::workflow_event_delivery::WorkflowEventDestinationPolicy::default()),
+        Default::default(),
     );
     (build_api_router(state.clone()), token, state)
 }
@@ -131,7 +136,28 @@ pub(crate) fn test_router_with_workflow_event_destination_policy(
     let token = auth_validator
         .generate_token()
         .expect("hmac auth validator should generate dev token");
-    let state = base_api_state(auth_validator, None, workflow_event_destination_policy);
+    let state = base_api_state(
+        auth_validator,
+        None,
+        workflow_event_destination_policy,
+        Default::default(),
+    );
+    (build_api_router(state.clone()), token, state)
+}
+
+pub(crate) fn test_router_with_browser_context_import(
+    browser_context_import: BrowserContextImportService,
+) -> (Router, String, Arc<ApiState>) {
+    let auth_validator = Arc::new(AuthValidator::from_hmac_secret(vec![7; 32]));
+    let token = auth_validator
+        .generate_token()
+        .expect("hmac auth validator should generate dev token");
+    let state = base_api_state(
+        auth_validator,
+        None,
+        Arc::new(crate::workflow_event_delivery::WorkflowEventDestinationPolicy::default()),
+        browser_context_import,
+    );
     (build_api_router(state.clone()), token, state)
 }
 
@@ -218,6 +244,7 @@ pub(crate) fn test_router_with_recording_lifecycle(
         idle_stop_timeout: Duration::from_secs(300),
         public_gateway_url: "https://localhost:4433".to_string(),
         default_owner_mode: SessionOwnerMode::Collaborative,
+        browser_context_import: Default::default(),
         mcp_bridge_control: None,
     });
     (build_api_router(state.clone()), token, state)
@@ -288,6 +315,7 @@ pub(crate) fn test_router_with_workflow_lifecycle(
         idle_stop_timeout: Duration::from_secs(300),
         public_gateway_url: "https://localhost:4433".to_string(),
         default_owner_mode: SessionOwnerMode::Collaborative,
+        browser_context_import: Default::default(),
         mcp_bridge_control: None,
     });
     (build_api_router(state.clone()), token, state)
@@ -342,6 +370,7 @@ pub(crate) async fn test_router_with_live_agent_state(
         idle_stop_timeout: Duration::from_secs(300),
         public_gateway_url: "https://localhost:4433".to_string(),
         default_owner_mode: SessionOwnerMode::Collaborative,
+        browser_context_import: Default::default(),
         mcp_bridge_control: None,
     });
     (build_api_router(state.clone()), token, state, agent_server)
@@ -413,6 +442,7 @@ pub(crate) async fn test_router_with_docker_pool() -> (Router, String) {
         idle_stop_timeout: Duration::from_secs(300),
         public_gateway_url: "https://localhost:4433".to_string(),
         default_owner_mode: SessionOwnerMode::Collaborative,
+        browser_context_import: Default::default(),
         mcp_bridge_control: None,
     });
     (build_api_router(state), token)

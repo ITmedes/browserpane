@@ -43,6 +43,7 @@ use crate::workflow_event_delivery::WorkflowEventDestinationPolicy;
 use crate::workflow_lifecycle::WorkflowLifecycleManager;
 use crate::workspaces::WorkspaceFileStore;
 
+use super::browser_context_archive::BrowserContextImportService;
 use super::errors::ErrorResponse;
 
 pub(crate) struct ApiServerConfig {
@@ -94,6 +95,7 @@ pub(super) struct ApiState {
     pub(super) idle_stop_timeout: std::time::Duration,
     pub(super) public_gateway_url: String,
     pub(super) default_owner_mode: SessionOwnerMode,
+    pub(super) browser_context_import: BrowserContextImportService,
     pub(super) mcp_bridge_control: Option<McpBridgeControlConfig>,
 }
 

@@ -43,7 +43,7 @@ fn rejects_outer_archive_over_limit() {
 
     let error = parse_browser_context_import_archive(&archive, limits).unwrap_err();
 
-    assert!(error.contains("compressed size limit"));
+    assert!(error.to_string().contains("compressed size limit"));
 }
 
 #[test]
@@ -58,7 +58,7 @@ fn rejects_compressed_profile_over_limit() {
 
     let error = parse_browser_context_import_archive(&archive, limits).unwrap_err();
 
-    assert!(error.contains("compressed size limit"));
+    assert!(error.to_string().contains("compressed size limit"));
 }
 
 #[test]
@@ -73,7 +73,7 @@ fn rejects_profile_expansion_over_limit() {
 
     let error = parse_browser_context_import_archive(&archive, limits).unwrap_err();
 
-    assert!(error.contains("uncompressed size limit"));
+    assert!(error.to_string().contains("uncompressed size limit"));
 }
 
 #[test]
@@ -88,7 +88,7 @@ fn rejects_profile_entry_count_over_limit() {
 
     let error = parse_browser_context_import_archive(&archive, limits).unwrap_err();
 
-    assert!(error.contains("too many entries"));
+    assert!(error.to_string().contains("too many entries"));
 }
 
 #[test]
@@ -99,7 +99,7 @@ fn rejects_profile_links() {
 
     let error = parse_browser_context_import_archive(&archive, test_limits()).unwrap_err();
 
-    assert!(error.contains("unsupported entry type"));
+    assert!(error.to_string().contains("unsupported entry type"));
 }
 
 #[test]
@@ -110,7 +110,7 @@ fn rejects_parent_directory_paths() {
 
     let error = parse_browser_context_import_archive(&archive, test_limits()).unwrap_err();
 
-    assert!(error.contains("unsafe path"));
+    assert!(error.to_string().contains("unsafe path"));
 }
 
 #[test]
@@ -125,7 +125,7 @@ fn rejects_profile_paths_over_limit() {
 
     let error = parse_browser_context_import_archive(&archive, limits).unwrap_err();
 
-    assert!(error.contains("path is too long"));
+    assert!(error.to_string().contains("path is too long"));
 }
 
 fn test_limits() -> BrowserContextImportArchiveLimits {

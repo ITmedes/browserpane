@@ -1,9 +1,12 @@
 use std::io::{self, Cursor, Read, Write};
+use std::num::NonZeroUsize;
 use std::path::Component;
+use std::sync::Arc;
 
 use flate2::read::GzDecoder;
 use serde::{Deserialize, Serialize};
 use tar::Archive;
+use tokio::sync::{OwnedSemaphorePermit, Semaphore, TryAcquireError};
 use zip::write::SimpleFileOptions;
 
 use crate::session_control::{
@@ -14,6 +17,22 @@ const BROWSER_CONTEXT_EXPORT_MANIFEST_PATH: &str = "manifest.json";
 pub(super) const BROWSER_CONTEXT_PROFILE_ARCHIVE_PATH: &str = "profile.tar.gz";
 const PROFILE_EXPANSION_LIMIT_ERROR: &str =
     "browser context profile archive exceeds the uncompressed size limit";
+
+#[derive(Debug, thiserror::Error)]
+pub(super) enum BrowserContextImportArchiveError {
+    #[error("{0}")]
+    Invalid(String),
+    #[error("{0}")]
+    LimitExceeded(String),
+}
+
+impl BrowserContextImportArchiveError {
+    pub(super) fn is_limit_exceeded(&self) -> bool {
+        matches!(self, Self::LimitExceeded(_))
+    }
+}
+
+type ImportArchiveResult<T> = Result<T, BrowserContextImportArchiveError>;
 
 #[derive(Debug, Clone, Copy)]
 pub(super) struct BrowserContextImportArchiveLimits {
@@ -35,6 +54,41 @@ impl Default for BrowserContextImportArchiveLimits {
             max_profile_entries: 100_000,
             max_profile_path_bytes: 4096,
         }
+    }
+}
+
+#[derive(Clone)]
+pub(super) struct BrowserContextImportService {
+    limits: BrowserContextImportArchiveLimits,
+    permits: Arc<Semaphore>,
+}
+
+impl BrowserContextImportService {
+    pub(super) fn new(
+        limits: BrowserContextImportArchiveLimits,
+        max_concurrent_imports: NonZeroUsize,
+    ) -> Self {
+        Self {
+            limits,
+            permits: Arc::new(Semaphore::new(max_concurrent_imports.get())),
+        }
+    }
+
+    pub(super) fn limits(&self) -> BrowserContextImportArchiveLimits {
+        self.limits
+    }
+
+    pub(super) fn try_acquire(&self) -> Result<OwnedSemaphorePermit, TryAcquireError> {
+        self.permits.clone().try_acquire_owned()
+    }
+}
+
+impl Default for BrowserContextImportService {
+    fn default() -> Self {
+        Self::new(
+            BrowserContextImportArchiveLimits::default(),
+            NonZeroUsize::new(2).expect("default browser context import capacity must be non-zero"),
+        )
     }
 }
 
@@ -81,17 +135,22 @@ pub(super) fn build_browser_context_export_archive(
 pub(super) fn parse_browser_context_import_archive(
     bytes: &[u8],
     limits: BrowserContextImportArchiveLimits,
-) -> Result<ParsedBrowserContextImportArchive, String> {
+) -> ImportArchiveResult<ParsedBrowserContextImportArchive> {
     validate_outer_archive_size(bytes, limits.max_archive_bytes)?;
-    let mut zip = zip::ZipArchive::new(Cursor::new(bytes))
-        .map_err(|error| format!("browser context import archive must be a valid zip: {error}"))?;
+    let mut zip = zip::ZipArchive::new(Cursor::new(bytes)).map_err(|error| {
+        invalid(format!(
+            "browser context import archive must be a valid zip: {error}"
+        ))
+    })?;
     let profile_count = validate_outer_archive_entries(&mut zip)?;
 
     let manifest_bytes = {
         let manifest_file = zip
             .by_name(BROWSER_CONTEXT_EXPORT_MANIFEST_PATH)
             .map_err(|error| {
-                format!("browser context import archive is missing manifest.json: {error}")
+                invalid(format!(
+                    "browser context import archive is missing manifest.json: {error}"
+                ))
             })?;
         read_limited(
             manifest_file,
@@ -100,14 +159,20 @@ pub(super) fn parse_browser_context_import_archive(
         )?
     };
     let manifest = serde_json::from_slice::<BrowserContextExportManifest>(&manifest_bytes)
-        .map_err(|error| format!("browser context import manifest is invalid JSON: {error}"))?;
+        .map_err(|error| {
+            invalid(format!(
+                "browser context import manifest is invalid JSON: {error}"
+            ))
+        })?;
     validate_browser_context_import_manifest(&manifest, profile_count > 0)?;
 
     let profile_archive = if manifest.profile_archive_path.is_some() {
         let profile_file = zip
             .by_name(BROWSER_CONTEXT_PROFILE_ARCHIVE_PATH)
             .map_err(|error| {
-                format!("browser context import archive is missing profile.tar.gz: {error}")
+                invalid(format!(
+                    "browser context import archive is missing profile.tar.gz: {error}"
+                ))
             })?;
         let profile_bytes = read_limited(
             profile_file,
@@ -115,7 +180,7 @@ pub(super) fn parse_browser_context_import_archive(
             "browser context profile archive exceeds the compressed size limit",
         )?;
         if profile_bytes.is_empty() {
-            return Err("browser context profile archive must not be empty".to_string());
+            return Err(invalid("browser context profile archive must not be empty"));
         }
         validate_profile_archive(&profile_bytes, limits)?;
         Some(profile_bytes)
@@ -129,63 +194,71 @@ pub(super) fn parse_browser_context_import_archive(
     })
 }
 
-fn validate_outer_archive_size(bytes: &[u8], max_bytes: u64) -> Result<(), String> {
+fn validate_outer_archive_size(bytes: &[u8], max_bytes: u64) -> ImportArchiveResult<()> {
     if bytes.is_empty() {
-        return Err("browser context import archive must not be empty".to_string());
+        return Err(invalid("browser context import archive must not be empty"));
     }
     if bytes.len() as u64 > max_bytes {
-        return Err("browser context import archive exceeds the compressed size limit".to_string());
+        return Err(limit(
+            "browser context import archive exceeds the compressed size limit",
+        ));
     }
     Ok(())
 }
 
 fn validate_outer_archive_entries<R: Read + io::Seek>(
     zip: &mut zip::ZipArchive<R>,
-) -> Result<u32, String> {
+) -> ImportArchiveResult<u32> {
     let mut manifest_count = 0_u32;
     let mut profile_count = 0_u32;
     for index in 0..zip.len() {
-        let file = zip
-            .by_index(index)
-            .map_err(|error| format!("failed to read browser context archive entry: {error}"))?;
+        let file = zip.by_index(index).map_err(|error| {
+            invalid(format!(
+                "failed to read browser context archive entry: {error}"
+            ))
+        })?;
         if file.is_dir() {
-            return Err(format!(
+            return Err(invalid(format!(
                 "browser context import archive contains unsupported directory entry {}",
                 file.name()
-            ));
+            )));
         }
         match file.name() {
             BROWSER_CONTEXT_EXPORT_MANIFEST_PATH => manifest_count += 1,
             BROWSER_CONTEXT_PROFILE_ARCHIVE_PATH => profile_count += 1,
             other => {
-                return Err(format!(
+                return Err(invalid(format!(
                     "browser context import archive contains unsupported entry {other}"
-                ));
+                )));
             }
         }
     }
     if manifest_count != 1 {
-        return Err(
-            "browser context import archive must contain exactly one manifest.json".to_string(),
-        );
+        return Err(invalid(
+            "browser context import archive must contain exactly one manifest.json",
+        ));
     }
     if profile_count > 1 {
-        return Err(
-            "browser context import archive must contain at most one profile.tar.gz".to_string(),
-        );
+        return Err(invalid(
+            "browser context import archive must contain at most one profile.tar.gz",
+        ));
     }
     Ok(profile_count)
 }
 
-fn read_limited(reader: impl Read, max_bytes: u64, limit_error: &str) -> Result<Vec<u8>, String> {
+fn read_limited(
+    reader: impl Read,
+    max_bytes: u64,
+    limit_error: &str,
+) -> ImportArchiveResult<Vec<u8>> {
     let read_limit = max_bytes.saturating_add(1);
     let mut bytes = Vec::new();
     reader
         .take(read_limit)
         .read_to_end(&mut bytes)
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| invalid(error.to_string()))?;
     if bytes.len() as u64 > max_bytes {
-        return Err(limit_error.to_string());
+        return Err(limit(limit_error));
     }
     Ok(bytes)
 }
@@ -193,7 +266,7 @@ fn read_limited(reader: impl Read, max_bytes: u64, limit_error: &str) -> Result<
 fn validate_profile_archive(
     bytes: &[u8],
     limits: BrowserContextImportArchiveLimits,
-) -> Result<(), String> {
+) -> ImportArchiveResult<()> {
     let decoder = GzDecoder::new(bytes);
     let limited_decoder = ByteLimitReader::new(decoder, limits.max_profile_uncompressed_bytes);
     let mut archive = Archive::new(limited_decoder);
@@ -203,7 +276,9 @@ fn validate_profile_archive(
     for entry in entries {
         entry_count = entry_count.saturating_add(1);
         if entry_count > limits.max_profile_entries {
-            return Err("browser context profile archive contains too many entries".to_string());
+            return Err(limit(
+                "browser context profile archive contains too many entries",
+            ));
         }
         let mut entry = entry.map_err(profile_archive_error)?;
         validate_profile_entry(&entry, limits.max_profile_path_bytes)?;
@@ -215,10 +290,12 @@ fn validate_profile_archive(
 fn validate_profile_entry<R: Read>(
     entry: &tar::Entry<'_, R>,
     max_path_bytes: usize,
-) -> Result<(), String> {
+) -> ImportArchiveResult<()> {
     let path = entry.path().map_err(profile_archive_error)?;
     if path.as_os_str().as_encoded_bytes().len() > max_path_bytes {
-        return Err("browser context profile archive entry path is too long".to_string());
+        return Err(limit(
+            "browser context profile archive entry path is too long",
+        ));
     }
     if path.components().any(|component| {
         matches!(
@@ -226,18 +303,18 @@ fn validate_profile_entry<R: Read>(
             Component::ParentDir | Component::RootDir | Component::Prefix(_)
         )
     }) {
-        return Err(format!(
+        return Err(invalid(format!(
             "browser context profile archive contains unsafe path {}",
             path.display()
-        ));
+        )));
     }
 
     let entry_type = entry.header().entry_type();
     if !entry_type.is_file() && !entry_type.is_dir() {
-        return Err(format!(
+        return Err(invalid(format!(
             "browser context profile archive contains unsupported entry type for {}",
             path.display()
-        ));
+        )));
     }
     Ok(())
 }
@@ -245,48 +322,56 @@ fn validate_profile_entry<R: Read>(
 fn validate_browser_context_import_manifest(
     manifest: &BrowserContextExportManifest,
     archive_contains_profile: bool,
-) -> Result<(), String> {
+) -> ImportArchiveResult<()> {
     if manifest.format_version != 1 {
-        return Err(format!(
+        return Err(invalid(format!(
             "unsupported browser context export format version {}",
             manifest.format_version
-        ));
+        )));
     }
     if manifest.archive_type != "browser_context_export" {
-        return Err(format!(
+        return Err(invalid(format!(
             "unsupported browser context archive type {}",
             manifest.archive_type
-        ));
+        )));
     }
     if manifest.source_context.persistence_mode != BrowserContextPersistenceMode::Reusable {
-        return Err("browser context import source must be reusable".to_string());
+        return Err(invalid("browser context import source must be reusable"));
     }
     if manifest.source_context.state != BrowserContextState::Ready {
-        return Err("browser context import source must be ready".to_string());
+        return Err(invalid("browser context import source must be ready"));
     }
     match manifest.profile_archive_path.as_deref() {
         Some(BROWSER_CONTEXT_PROFILE_ARCHIVE_PATH) if archive_contains_profile => Ok(()),
-        Some(BROWSER_CONTEXT_PROFILE_ARCHIVE_PATH) => Err(
+        Some(BROWSER_CONTEXT_PROFILE_ARCHIVE_PATH) => Err(invalid(
             "browser context import manifest references profile.tar.gz but the archive is missing it"
-                .to_string(),
-        ),
-        Some(path) => Err(format!(
-            "unsupported browser context profile archive path {path}"
         )),
-        None if archive_contains_profile => Err(
+        Some(path) => Err(invalid(format!(
+            "unsupported browser context profile archive path {path}"
+        ))),
+        None if archive_contains_profile => Err(invalid(
             "browser context import archive contains profile.tar.gz but the manifest does not reference it"
-                .to_string(),
-        ),
+        )),
         None => Ok(()),
     }
 }
 
-fn profile_archive_error(error: io::Error) -> String {
+fn profile_archive_error(error: io::Error) -> BrowserContextImportArchiveError {
     if error.to_string().contains(PROFILE_EXPANSION_LIMIT_ERROR) {
-        PROFILE_EXPANSION_LIMIT_ERROR.to_string()
+        limit(PROFILE_EXPANSION_LIMIT_ERROR)
     } else {
-        format!("browser context profile archive is invalid: {error}")
+        invalid(format!(
+            "browser context profile archive is invalid: {error}"
+        ))
     }
+}
+
+fn invalid(message: impl Into<String>) -> BrowserContextImportArchiveError {
+    BrowserContextImportArchiveError::Invalid(message.into())
+}
+
+fn limit(message: impl Into<String>) -> BrowserContextImportArchiveError {
+    BrowserContextImportArchiveError::LimitExceeded(message.into())
 }
 
 struct ByteLimitReader<R> {

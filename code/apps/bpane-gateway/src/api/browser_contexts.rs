@@ -1,11 +1,12 @@
 use std::collections::{HashMap, HashSet};
 
-use axum::extract::DefaultBodyLimit;
+use axum::body::to_bytes;
+use axum::extract::Request;
 use axum::routing::{get, post};
 
 use super::browser_context_archive::{
     build_browser_context_export_archive, parse_browser_context_import_archive,
-    BrowserContextExportManifest, BrowserContextImportArchiveLimits,
+    BrowserContextExportManifest, BrowserContextImportArchiveError,
     BROWSER_CONTEXT_PROFILE_ARCHIVE_PATH,
 };
 use super::*;
@@ -19,7 +20,7 @@ pub(super) fn browser_context_routes() -> Router<Arc<ApiState>> {
         )
         .route(
             "/api/v1/browser-contexts/import",
-            post(import_browser_context).layer(DefaultBodyLimit::disable()),
+            post(import_browser_context),
         )
         .route(
             "/api/v1/browser-contexts/{context_id}/clone",
@@ -83,21 +84,38 @@ async fn create_browser_context(
 }
 
 async fn import_browser_context(
-    headers: HeaderMap,
     State(state): State<Arc<ApiState>>,
-    body: Bytes,
+    request: Request,
 ) -> Result<(StatusCode, Json<BrowserContextResource>), (StatusCode, Json<ErrorResponse>)> {
-    let principal = authorize_api_request(&headers, &state.auth_validator)
+    let principal = authorize_api_request(request.headers(), &state.auth_validator)
         .await
         .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
-    let archive = parse_browser_context_import_archive(
-        body.as_ref(),
-        BrowserContextImportArchiveLimits::default(),
-    )
-    .map_err(bad_request)?;
+    let _import_permit = state
+        .browser_context_import
+        .try_acquire()
+        .map_err(|_| browser_context_import_capacity_error())?;
+    let limits = state.browser_context_import.limits();
+    let (parts, body) = request.into_parts();
+    let max_body_bytes = usize::try_from(limits.max_archive_bytes).unwrap_or(usize::MAX);
+    let body = to_bytes(body, max_body_bytes)
+        .await
+        .map_err(|_| browser_context_import_body_limit_error(limits.max_archive_bytes))?;
+    let archive = tokio::task::spawn_blocking(move || {
+        parse_browser_context_import_archive(body.as_ref(), limits)
+    })
+    .await
+    .map_err(|error| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: format!("browser context import validation task failed: {error}"),
+            }),
+        )
+    })?
+    .map_err(map_browser_context_import_archive_error)?;
     let target_context_id = Uuid::now_v7();
     let target_request = browser_context_import_request_from_headers(
-        &headers,
+        &parts.headers,
         target_context_id,
         &archive.manifest,
     )?;
@@ -139,6 +157,44 @@ async fn import_browser_context(
         StatusCode::CREATED,
         Json(browser_context_resource_with_usage(&state, &principal, context).await?),
     ))
+}
+
+fn browser_context_import_capacity_error() -> (StatusCode, Json<ErrorResponse>) {
+    (
+        StatusCode::TOO_MANY_REQUESTS,
+        Json(ErrorResponse {
+            error: "browser context import capacity is currently occupied; retry later".to_string(),
+        }),
+    )
+}
+
+fn browser_context_import_body_limit_error(
+    max_archive_bytes: u64,
+) -> (StatusCode, Json<ErrorResponse>) {
+    (
+        StatusCode::PAYLOAD_TOO_LARGE,
+        Json(ErrorResponse {
+            error: format!(
+                "browser context import archive exceeds the {max_archive_bytes}-byte request limit"
+            ),
+        }),
+    )
+}
+
+fn map_browser_context_import_archive_error(
+    error: BrowserContextImportArchiveError,
+) -> (StatusCode, Json<ErrorResponse>) {
+    let status = if error.is_limit_exceeded() {
+        StatusCode::PAYLOAD_TOO_LARGE
+    } else {
+        StatusCode::BAD_REQUEST
+    };
+    (
+        status,
+        Json(ErrorResponse {
+            error: error.to_string(),
+        }),
+    )
 }
 
 async fn clone_browser_context(
@@ -651,13 +707,6 @@ fn parse_optional_string_map_header(
         map.insert(key.clone(), value.to_string());
     }
     Ok(Some(map))
-}
-
-fn bad_request(message: String) -> (StatusCode, Json<ErrorResponse>) {
-    (
-        StatusCode::BAD_REQUEST,
-        Json(ErrorResponse { error: message }),
-    )
 }
 
 fn map_browser_context_import_runtime_error(
