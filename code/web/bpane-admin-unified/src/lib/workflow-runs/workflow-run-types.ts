@@ -2,6 +2,7 @@ import type {
   ProjectAdmissionDecision,
   SessionProjectResource,
 } from '$lib/sessions/session-types';
+import type { WorkflowSourceResource } from '$lib/workflows/workflow-types';
 
 export type WorkflowRunResource = {
   readonly id: string;
@@ -20,7 +21,13 @@ export type WorkflowRunResource = {
   readonly output?: unknown;
   readonly error?: string | null;
   readonly artifact_refs: readonly string[];
+  readonly source_snapshot: WorkflowRunSourceSnapshotResource | null;
+  readonly extensions: readonly WorkflowRunAppliedExtensionResource[];
+  readonly credential_bindings: readonly WorkflowRunCredentialBindingResource[];
+  readonly workspace_inputs: readonly WorkflowRunWorkspaceInputResource[];
   readonly produced_files: readonly WorkflowRunProducedFileResource[];
+  readonly recordings: readonly WorkflowRunRecordingResource[];
+  readonly retention: WorkflowRunRetentionResource;
   readonly project_admission?: ProjectAdmissionDecision | null;
   readonly admission?: WorkflowRunAdmissionResource | null;
   readonly intervention: WorkflowRunInterventionResource;
@@ -78,6 +85,7 @@ export type WorkflowRunAdmissionResource = {
 
 export type WorkflowRunInterventionResource = {
   readonly pending_request?: WorkflowRunInterventionRequestResource | null;
+  readonly last_resolution?: WorkflowRunInterventionResolutionResource | null;
 };
 
 export type WorkflowRunInterventionRequestResource = {
@@ -86,6 +94,18 @@ export type WorkflowRunInterventionRequestResource = {
   readonly prompt?: string | null;
   readonly details?: unknown;
   readonly requested_at: string;
+};
+
+export type WorkflowRunInterventionResolutionResource = {
+  readonly request_id?: string | null;
+  readonly action: string;
+  readonly input?: unknown;
+  readonly reason?: string | null;
+  readonly actor_subject: string;
+  readonly actor_issuer: string;
+  readonly actor_display_name?: string | null;
+  readonly details?: unknown;
+  readonly resolved_at: string;
 };
 
 export type WorkflowRunRuntimeResource = {
@@ -107,4 +127,118 @@ export type WorkflowRunProducedFileResource = {
   readonly provenance?: unknown;
   readonly content_path: string;
   readonly created_at: string;
+};
+
+export type WorkflowRunSourceSnapshotResource = {
+  readonly source: WorkflowSourceResource;
+  readonly entrypoint: string;
+  readonly workspace_id: string;
+  readonly file_id: string;
+  readonly file_name: string;
+  readonly media_type?: string | null;
+  readonly content_path: string;
+};
+
+export type WorkflowRunAppliedExtensionResource = {
+  readonly extension_id: string;
+  readonly extension_version_id: string;
+  readonly name: string;
+  readonly version: string;
+};
+
+export type WorkflowRunCredentialBindingResource = {
+  readonly id: string;
+  readonly project_id?: string | null;
+  readonly name: string;
+  readonly provider: string;
+  readonly namespace?: string | null;
+  readonly allowed_origins: readonly string[];
+  readonly injection_mode: string;
+  readonly totp?: unknown;
+  readonly resolve_path: string;
+};
+
+export type WorkflowRunWorkspaceInputResource = {
+  readonly id: string;
+  readonly workspace_id: string;
+  readonly file_id: string;
+  readonly file_name: string;
+  readonly media_type?: string | null;
+  readonly byte_count: number;
+  readonly sha256_hex: string;
+  readonly provenance?: unknown;
+  readonly mount_path: string;
+  readonly content_path: string;
+};
+
+export type WorkflowRunRecordingResource = {
+  readonly id: string;
+  readonly session_id: string;
+  readonly state: string;
+  readonly format: string;
+  readonly mime_type?: string | null;
+  readonly bytes?: number | null;
+  readonly duration_ms?: number | null;
+  readonly error?: string | null;
+  readonly termination_reason?: string | null;
+  readonly previous_recording_id?: string | null;
+  readonly started_at: string;
+  readonly completed_at?: string | null;
+  readonly content_path: string;
+  readonly created_at: string;
+  readonly updated_at: string;
+};
+
+export type WorkflowRunRetentionResource = {
+  readonly logs_expire_at?: string | null;
+  readonly output_expire_at?: string | null;
+};
+
+export type WorkflowRunEventResource = {
+  readonly id: string;
+  readonly run_id: string;
+  readonly source: string;
+  readonly automation_task_id?: string | null;
+  readonly event_type: string;
+  readonly message: string;
+  readonly data?: unknown;
+  readonly created_at: string;
+};
+
+export type WorkflowRunEventListResponse = {
+  readonly events: readonly WorkflowRunEventResource[];
+};
+
+export type WorkflowRunLogResource = {
+  readonly id: string;
+  readonly run_id: string;
+  readonly source: string;
+  readonly automation_task_id?: string | null;
+  readonly stream: string;
+  readonly message: string;
+  readonly created_at: string;
+};
+
+export type WorkflowRunLogListResponse = {
+  readonly logs: readonly WorkflowRunLogResource[];
+};
+
+export type WorkflowRunProducedFileListResponse = {
+  readonly files: readonly WorkflowRunProducedFileResource[];
+};
+
+export type ResumeWorkflowRunRequest = {
+  readonly comment?: string | null;
+  readonly details?: unknown;
+};
+
+export type SubmitWorkflowRunInputRequest = {
+  readonly input: unknown;
+  readonly comment?: string | null;
+  readonly details?: unknown;
+};
+
+export type RejectWorkflowRunRequest = {
+  readonly reason: string;
+  readonly details?: unknown;
 };

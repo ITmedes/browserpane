@@ -8,6 +8,18 @@ export type ProjectAdmissionDecision = {
   readonly state: string;
   readonly reason_code: string;
   readonly message: string;
+  readonly project_id?: string | null;
+  readonly active_sessions?: number | null;
+  readonly max_active_sessions?: number | null;
+  readonly active_workflow_runs?: number | null;
+  readonly max_active_workflow_runs?: number | null;
+  readonly session_creations?: number | null;
+  readonly max_session_creations?: number | null;
+  readonly session_creations_in_window?: number | null;
+  readonly max_session_creations_per_window?: number | null;
+  readonly session_creation_window_sec?: number | null;
+  readonly runtime_usage_ms?: number | null;
+  readonly max_runtime_usage_ms?: number | null;
   readonly checked_at: string;
 };
 

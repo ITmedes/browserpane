@@ -331,6 +331,48 @@ function toProjectAdmission(payload: unknown): ProjectAdmissionDecision {
     state: expectString(object.state, 'project admission state'),
     reason_code: optionalString(object.reason_code, 'project admission reason_code') ?? 'unknown',
     message: optionalString(object.message, 'project admission message') ?? '',
+    project_id: optionalString(object.project_id, 'project admission project_id') ?? null,
+    active_sessions: optionalNumber(object.active_sessions, 'project admission active_sessions') ?? null,
+    max_active_sessions: optionalNumber(
+      object.max_active_sessions,
+      'project admission max_active_sessions',
+    ) ?? null,
+    active_workflow_runs: optionalNumber(
+      object.active_workflow_runs,
+      'project admission active_workflow_runs',
+    ) ?? null,
+    max_active_workflow_runs: optionalNumber(
+      object.max_active_workflow_runs,
+      'project admission max_active_workflow_runs',
+    ) ?? null,
+    session_creations: optionalNumber(
+      object.session_creations,
+      'project admission session_creations',
+    ) ?? null,
+    max_session_creations: optionalNumber(
+      object.max_session_creations,
+      'project admission max_session_creations',
+    ) ?? null,
+    session_creations_in_window: optionalNumber(
+      object.session_creations_in_window,
+      'project admission session_creations_in_window',
+    ) ?? null,
+    max_session_creations_per_window: optionalNumber(
+      object.max_session_creations_per_window,
+      'project admission max_session_creations_per_window',
+    ) ?? null,
+    session_creation_window_sec: optionalNumber(
+      object.session_creation_window_sec,
+      'project admission session_creation_window_sec',
+    ) ?? null,
+    runtime_usage_ms: optionalNumber(
+      object.runtime_usage_ms,
+      'project admission runtime_usage_ms',
+    ) ?? null,
+    max_runtime_usage_ms: optionalNumber(
+      object.max_runtime_usage_ms,
+      'project admission max_runtime_usage_ms',
+    ) ?? null,
     checked_at: optionalString(object.checked_at, 'project admission checked_at') ?? '',
   };
 }

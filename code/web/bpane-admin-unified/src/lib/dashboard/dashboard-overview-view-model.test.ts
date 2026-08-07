@@ -236,7 +236,13 @@ function workflowRun(
     output: null,
     error: null,
     artifact_refs: [],
+    source_snapshot: null,
+    extensions: [],
+    credential_bindings: [],
+    workspace_inputs: [],
     produced_files: [],
+    recordings: [],
+    retention: { logs_expire_at: null, output_expire_at: null },
     project_admission: null,
     admission: null,
     intervention: {
