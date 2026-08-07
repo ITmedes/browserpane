@@ -29,7 +29,8 @@ export class OpenApiContract {
         operations.push(this.#operation(routePath, method, operation));
       }
     }
-    return operations.sort((left, right) => left.operationId.localeCompare(right.operationId));
+    return operations.sort((left, right) => String(left.operationId ?? '')
+      .localeCompare(String(right.operationId ?? '')));
   }
 
   #operation(routePath, method, operation) {

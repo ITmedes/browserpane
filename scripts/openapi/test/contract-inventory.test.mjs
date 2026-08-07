@@ -66,3 +66,10 @@ test('rejects duplicate ids, missing tags, and unknown security classes', () => 
     new PolicyStub([['duplicate', 'internal-worker']])
   ).build(), /duplicate operationId[\s\S]*unsupported security class[\s\S]*has no tag/);
 });
+
+test('reports a missing operation id without failing during ordering', () => {
+  assert.throws(() => new ContractInventory(
+    new ContractStub([operation(undefined)]),
+    new PolicyStub([])
+  ).build(), /has no operationId/);
+});
