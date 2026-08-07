@@ -167,7 +167,11 @@ export function formatAdminApiRequestError(prefix: string, failure: AdminApiRequ
     return `${prefix} failed because the gateway could not be reached.`;
   }
   const message = `${prefix} failed with HTTP ${failure.status ?? 'unknown'}${failure.message ? `: ${failure.message}` : ''}`;
-  return hasTerminalPunctuation(message) ? message : `${message}.`;
+  const formatted = withTerminalPunctuation(message);
+  const recoveryHint = failure.recoveryHint?.trim();
+  return recoveryHint
+    ? `${formatted} Recovery: ${withTerminalPunctuation(recoveryHint)}`
+    : formatted;
 }
 
 function defaultErrorFactory(failure: AdminApiRequestFailure): Error {
@@ -189,6 +193,10 @@ function isAbortError(value: unknown): boolean {
 
 function hasTerminalPunctuation(value: string): boolean {
   return /[.!?]$/.test(value.trim());
+}
+
+function withTerminalPunctuation(value: string): string {
+  return hasTerminalPunctuation(value) ? value : `${value}.`;
 }
 
 async function safeResponseText(response: Response): Promise<string> {
