@@ -166,7 +166,8 @@ export function formatAdminApiRequestError(prefix: string, failure: AdminApiRequ
   if (failure.code === 'network_error') {
     return `${prefix} failed because the gateway could not be reached.`;
   }
-  return `${prefix} failed with HTTP ${failure.status ?? 'unknown'}${failure.message ? `: ${failure.message}` : ''}.`;
+  const message = `${prefix} failed with HTTP ${failure.status ?? 'unknown'}${failure.message ? `: ${failure.message}` : ''}`;
+  return hasTerminalPunctuation(message) ? message : `${message}.`;
 }
 
 function defaultErrorFactory(failure: AdminApiRequestFailure): Error {
@@ -180,7 +181,14 @@ function toAdminApiRequestError(error: Error, failure: AdminApiRequestFailure): 
 }
 
 function isAbortError(value: unknown): boolean {
-  return value instanceof DOMException && value.name === 'AbortError';
+  return typeof value === 'object'
+    && value !== null
+    && 'name' in value
+    && value.name === 'AbortError';
+}
+
+function hasTerminalPunctuation(value: string): boolean {
+  return /[.!?]$/.test(value.trim());
 }
 
 async function safeResponseText(response: Response): Promise<string> {

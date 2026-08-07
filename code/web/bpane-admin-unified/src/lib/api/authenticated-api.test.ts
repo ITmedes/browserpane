@@ -105,6 +105,27 @@ describe('AuthenticatedApiClient', () => {
     expect(onAuthenticationFailure.mock.calls[0]?.[0]).not.toHaveProperty('internal_trace');
   });
 
+  it.each([400, 403, 404, 409, 410, 429, 500, 503])(
+    'normalizes HTTP %i without treating it as an authentication failure',
+    async (status) => {
+      const onAuthenticationFailure = vi.fn();
+      const client = new AuthenticatedApiClient({
+        baseUrl: 'https://browserpane.test',
+        accessTokenProvider: () => 'token-1',
+        fetchImpl: async () => jsonResponse({ error: 'Request rejected.' }, status),
+        onAuthenticationFailure,
+      });
+
+      await expect(client.request('/api/v1/projects')).rejects.toMatchObject({
+        status,
+        code: 'http_error',
+        apiMessage: 'Request rejected.',
+        message: `Admin API request failed with HTTP ${status}: Request rejected.`,
+      });
+      expect(onAuthenticationFailure).not.toHaveBeenCalled();
+    },
+  );
+
   it('keeps the original request failure when auth recovery throws', async () => {
     const client = new AuthenticatedApiClient({
       baseUrl: 'https://browserpane.test',
@@ -139,6 +160,20 @@ describe('AuthenticatedApiClient', () => {
     await expect(client.request('/network')).rejects.toThrow('gateway could not be reached');
     await expect(client.request('/aborted')).rejects.toThrow('was cancelled');
     expect(failures.map((failure) => failure.code)).toEqual(['network_error', 'request_aborted']);
+  });
+
+  it('recognizes cross-realm-style abort errors by their standard name', async () => {
+    const abortError = new Error('cancelled');
+    abortError.name = 'AbortError';
+    const client = new AuthenticatedApiClient({
+      baseUrl: 'https://browserpane.test',
+      accessTokenProvider: () => 'token-1',
+      fetchImpl: async () => {
+        throw abortError;
+      },
+    });
+
+    await expect(client.request('/aborted')).rejects.toMatchObject({ code: 'request_aborted' });
   });
 
   it('uses a bounded plain-text fallback for non-JSON errors', async () => {

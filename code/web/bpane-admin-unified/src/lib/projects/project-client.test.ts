@@ -209,6 +209,30 @@ describe('ProjectCatalogClient', () => {
     expect(onAuthenticationFailure).toHaveBeenCalledOnce();
   });
 
+  it('keeps structured gateway conflict details on the domain error', async () => {
+    const client = new ProjectCatalogClient({
+      baseUrl: 'http://browserpane.test',
+      accessTokenProvider: () => 'token-1',
+      fetchImpl: async () => jsonResponse({
+        error: 'Project policy changed.',
+        code: 'project_policy_conflict',
+        category: 'conflict',
+        recovery_hint: 'Refresh the project before saving again.',
+      }, 409),
+    });
+
+    await expect(client.listProjects()).rejects.toMatchObject({
+      name: 'ProjectCatalogError',
+      code: 'http_error',
+      status: 409,
+      apiMessage: 'Project policy changed.',
+      apiCode: 'project_policy_conflict',
+      apiCategory: 'conflict',
+      recoveryHint: 'Refresh the project before saving again.',
+      message: 'Project catalog request failed with HTTP 409: Project policy changed.',
+    });
+  });
+
   it('rejects missing tokens without calling the API', async () => {
     const fetchImpl = vi.fn();
     const client = new ProjectCatalogClient({
@@ -247,8 +271,8 @@ function projectListPayload() {
   return { projects: [projectPayload()] };
 }
 
-function jsonResponse(payload: unknown): Response {
-  return new Response(JSON.stringify(payload), { status: 200 });
+function jsonResponse(payload: unknown, status = 200): Response {
+  return new Response(JSON.stringify(payload), { status });
 }
 
 function namedResource(id: string, name: string) {
