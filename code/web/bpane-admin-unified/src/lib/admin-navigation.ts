@@ -57,6 +57,7 @@ export const navGroups: NavGroup[] = [
       { id: 'egress', label: 'Egress profiles', route: '/admin-new/egress', icon: 'network' },
       { id: 'workspaces', label: 'File workspaces', route: '/admin-new/files/workspaces', icon: 'folder' },
       { id: 'extensions', label: 'Approved extensions', route: '/admin-new/extensions', icon: 'boxes' },
+      { id: 'credentials', label: 'Credential bindings', route: '/admin-new/credential-bindings', icon: 'key' },
     ],
   },
   {
@@ -78,7 +79,7 @@ export const navGroups: NavGroup[] = [
 export const allNavItems = navGroups.flatMap((group) => group.items);
 
 export const primaryNav: NavItem[] = allNavItems.filter((item) =>
-  ['dashboard', 'sessions', 'recordings', 'workflows', 'runs', 'projects', 'contexts', 'egress', 'workspaces', 'extensions'].includes(item.id),
+  ['dashboard', 'sessions', 'recordings', 'workflows', 'runs', 'projects', 'contexts', 'egress', 'workspaces', 'extensions', 'credentials'].includes(item.id),
 );
 
 export const secondaryNav: NavItem[] = allNavItems.filter((item) =>
