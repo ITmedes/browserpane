@@ -15,7 +15,10 @@ describe('credential binding view model', () => {
       binding({ id: 'project', project: true, mode: 'totp_fill' }),
     ]);
     expect(model.metrics.map((metric) => [metric.label, metric.value])).toEqual([
-      ['Bindings', '2'], ['Owner scoped', '1'], ['Project scoped', '1'], ['TOTP', '1'],
+      ['Bindings', '2'],
+      ['Owner scoped', '1'],
+      ['Project scoped', '1'],
+      ['TOTP', '1'],
     ]);
     expect(model.rows[1]).toMatchObject({ scope: 'Support', injectionMode: 'TOTP fill' });
     expect(credentialBindingMatchesSearch(model.rows[0]!, 'support.example')).toBe(true);
@@ -47,20 +50,31 @@ describe('credential binding view model', () => {
   it('supports opaque existing references and project scope', () => {
     const draft = createCredentialBindingDraft();
     Object.assign(draft, {
-      scope: 'project', projectId: 'project-1', name: 'Existing secret',
-      secretSource: 'external_ref', externalRef: 'secret/data/existing',
+      scope: 'project',
+      projectId: 'project-1',
+      name: 'Existing secret',
+      secretSource: 'external_ref',
+      externalRef: 'secret/data/existing',
     });
     const validation = validateCredentialBindingDraft(draft);
-    expect(validation.request).toMatchObject({ project_id: 'project-1', external_ref: 'secret/data/existing' });
+    expect(validation.request).toMatchObject({
+      project_id: 'project-1',
+      external_ref: 'secret/data/existing',
+    });
     expect(validation.request).not.toHaveProperty('secret_payload');
   });
 
   it('rejects malformed secrets, origins, labels, project scope, and TOTP metadata', () => {
     const draft = createCredentialBindingDraft();
     Object.assign(draft, {
-      scope: 'project', name: 'Broken', allowedOriginsText: 'not-a-url',
-      secretPayloadText: '[]', labelsText: 'broken', injectionMode: 'totp_fill',
-      totpPeriodSec: '0', totpDigits: 'nope',
+      scope: 'project',
+      name: 'Broken',
+      allowedOriginsText: 'not-a-url',
+      secretPayloadText: '[]',
+      labelsText: 'broken',
+      injectionMode: 'totp_fill',
+      totpPeriodSec: '0',
+      totpDigits: 'nope',
     });
     expect(validateCredentialBindingDraft(draft)).toMatchObject({
       valid: false,
@@ -76,7 +90,11 @@ describe('credential binding view model', () => {
   });
 });
 
-function binding(options: { readonly id: string; readonly project: boolean; readonly mode: CredentialBindingResource['injection_mode'] }): CredentialBindingResource {
+function binding(options: {
+  readonly id: string;
+  readonly project: boolean;
+  readonly mode: CredentialBindingResource['injection_mode'];
+}): CredentialBindingResource {
   return {
     id: options.id,
     project_id: options.project ? 'project-1' : null,

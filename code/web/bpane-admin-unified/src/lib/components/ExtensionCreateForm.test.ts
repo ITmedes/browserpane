@@ -1,7 +1,11 @@
 import { tick } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { byTestId, cleanupRenderedComponents, renderComponent } from '$lib/test-utils/svelte-component-test';
+import {
+  byTestId,
+  cleanupRenderedComponents,
+  renderComponent,
+} from '$lib/test-utils/svelte-component-test';
 import ExtensionCreateForm from './ExtensionCreateForm.svelte';
 
 afterEach(cleanupRenderedComponents);

@@ -30,7 +30,11 @@ export type ExtensionOverviewRow = {
 };
 
 export type ExtensionOverviewModel = {
-  readonly metrics: readonly { readonly label: string; readonly value: string; readonly testId: string }[];
+  readonly metrics: readonly {
+    readonly label: string;
+    readonly value: string;
+    readonly testId: string;
+  }[];
   readonly rows: readonly ExtensionOverviewRow[];
 };
 
@@ -59,7 +63,11 @@ export function buildExtensionOverviewModel(
       metric('total', 'Extensions', extensions.length),
       metric('enabled', 'Enabled', extensions.filter((extension) => extension.enabled).length),
       metric('disabled', 'Disabled', extensions.filter((extension) => !extension.enabled).length),
-      metric('versioned', 'Versioned', extensions.filter((extension) => extension.latest_version).length),
+      metric(
+        'versioned',
+        'Versioned',
+        extensions.filter((extension) => extension.latest_version).length,
+      ),
     ],
     rows: extensions.map(extensionOverviewRow),
   };
@@ -79,7 +87,10 @@ export function extensionOverviewRow(extension: ExtensionDefinitionResource): Ex
   };
 }
 
-export function extensionMatchesSearch(row: ExtensionOverviewRow, normalizedQuery: string): boolean {
+export function extensionMatchesSearch(
+  row: ExtensionOverviewRow,
+  normalizedQuery: string,
+): boolean {
   if (!normalizedQuery) {
     return true;
   }
@@ -119,9 +130,8 @@ export function validateExtensionDefinitionDraft(
   return {
     valid,
     fieldErrors,
-    request: valid && labels.ok
-      ? { name, description: description || null, labels: labels.value }
-      : null,
+    request:
+      valid && labels.ok ? { name, description: description || null, labels: labels.value } : null,
   };
 }
 
@@ -149,7 +159,9 @@ export function validateExtensionVersionDraft(
 
 export function labelSummary(labels: Readonly<Record<string, string>>): string {
   const entries = Object.entries(labels).sort(([left], [right]) => left.localeCompare(right));
-  return entries.length === 0 ? 'No labels' : entries.map(([key, value]) => `${key}=${value}`).join(', ');
+  return entries.length === 0
+    ? 'No labels'
+    : entries.map(([key, value]) => `${key}=${value}`).join(', ');
 }
 
 function metric(key: string, label: string, value: number) {

@@ -2,7 +2,11 @@ import { tick } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { ExtensionDefinitionResource } from '$lib/extensions/extension-types';
-import { byTestId, cleanupRenderedComponents, renderComponent } from '$lib/test-utils/svelte-component-test';
+import {
+  byTestId,
+  cleanupRenderedComponents,
+  renderComponent,
+} from '$lib/test-utils/svelte-component-test';
 import ExtensionInspector from './ExtensionInspector.svelte';
 
 afterEach(cleanupRenderedComponents);
@@ -33,7 +37,10 @@ describe('ExtensionInspector', () => {
     expect(byTestId(target, 'extension-version-path-error').textContent).toContain('absolute');
     await input(target, 'extension-version-path', '/opt/extensions/login');
     byTestId(target, 'extension-version-submit').click();
-    expect(onPublishVersion).toHaveBeenCalledWith({ version: '1.0.0', install_path: '/opt/extensions/login' });
+    expect(onPublishVersion).toHaveBeenCalledWith({
+      version: '1.0.0',
+      install_path: '/opt/extensions/login',
+    });
   });
 });
 

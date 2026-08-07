@@ -9,43 +9,304 @@
   import type { CreateCredentialBindingRequest } from '$lib/credential-bindings/credential-binding-types';
   import AdminMessage from './AdminMessage.svelte';
 
-  let { disabled = false, projectOptionsState = { status: 'idle' }, onSave }: { readonly disabled?: boolean; readonly projectOptionsState?: CredentialBindingProjectOptionsLoadState; readonly onSave?: (request: CreateCredentialBindingRequest) => void | Promise<void> } = $props();
+  let {
+    disabled = false,
+    projectOptionsState = { status: 'idle' },
+    onSave,
+  }: {
+    readonly disabled?: boolean;
+    readonly projectOptionsState?: CredentialBindingProjectOptionsLoadState;
+    readonly onSave?: (request: CreateCredentialBindingRequest) => void | Promise<void>;
+  } = $props();
   let draft = $state<CredentialBindingDraft>(createCredentialBindingDraft());
   const validation = $derived(validateCredentialBindingDraft(draft));
 </script>
 
-<section class="rounded-md border border-admin-border bg-admin-panel p-4 sm:p-5" data-testid="credential-binding-create-form">
-  <div class="border-b border-admin-border pb-4"><h2 class="m-0 text-base font-semibold text-admin-ink">Credential binding</h2><p class="m-0 mt-1 text-sm leading-6 text-admin-muted">Secret values are sent once to the configured provider and cannot be read back through BrowserPane.</p></div>
-  <form class="mt-5 grid gap-4" onsubmit={(event) => { event.preventDefault(); if (validation.request) void onSave?.(validation.request); }}>
+<section
+  class="rounded-md border border-admin-border bg-admin-panel p-4 sm:p-5"
+  data-testid="credential-binding-create-form"
+>
+  <div class="border-b border-admin-border pb-4">
+    <h2 class="m-0 text-base font-semibold text-admin-ink">Credential binding</h2>
+    <p class="m-0 mt-1 text-sm leading-6 text-admin-muted">
+      Secret values are sent once to the configured provider and cannot be read back through
+      BrowserPane.
+    </p>
+  </div>
+  <form
+    class="mt-5 grid gap-4"
+    onsubmit={(event) => {
+      event.preventDefault();
+      if (validation.request) void onSave?.(validation.request);
+    }}
+  >
     <section class="grid gap-4 rounded-md border border-admin-border bg-admin-soft/50 p-4">
-      <div><h3 class="m-0 text-sm font-semibold text-admin-ink">Identity and scope</h3><p class="m-0 mt-1 text-xs text-admin-muted">Project scope restricts which sessions and workflows may consume this binding.</p></div>
-      <label class="grid gap-1.5 text-sm"><span class="font-medium text-admin-ink">Name</span><input class="h-10 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink outline-none focus:border-admin-accent" type="text" bind:value={draft.name} disabled={disabled} data-testid="credential-binding-name" />{#if validation.fieldErrors.name}<AdminMessage tone="error" density="compact" items={validation.fieldErrors.name} testId="credential-binding-name-error" />{/if}</label>
-      <fieldset class="grid gap-2"><legend class="text-sm font-medium text-admin-ink">Scope</legend><div class="inline-flex w-fit rounded-md border border-admin-border bg-white p-1"><label class={`cursor-pointer rounded px-3 py-1.5 text-sm ${draft.scope === 'owner' ? 'bg-admin-accent text-white' : 'text-admin-muted'}`}><input class="sr-only" type="radio" name="binding-scope" value="owner" bind:group={draft.scope} disabled={disabled} data-testid="credential-binding-scope-owner" />Owner</label><label class={`cursor-pointer rounded px-3 py-1.5 text-sm ${draft.scope === 'project' ? 'bg-admin-accent text-white' : 'text-admin-muted'}`}><input class="sr-only" type="radio" name="binding-scope" value="project" bind:group={draft.scope} disabled={disabled} data-testid="credential-binding-scope-project" />Project</label></div></fieldset>
+      <div>
+        <h3 class="m-0 text-sm font-semibold text-admin-ink">Identity and scope</h3>
+        <p class="m-0 mt-1 text-xs text-admin-muted">
+          Project scope restricts which sessions and workflows may consume this binding.
+        </p>
+      </div>
+      <label class="grid gap-1.5 text-sm"
+        ><span class="font-medium text-admin-ink">Name</span><input
+          class="h-10 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink outline-none focus:border-admin-accent"
+          type="text"
+          bind:value={draft.name}
+          {disabled}
+          data-testid="credential-binding-name"
+        />{#if validation.fieldErrors.name}<AdminMessage
+            tone="error"
+            density="compact"
+            items={validation.fieldErrors.name}
+            testId="credential-binding-name-error"
+          />{/if}</label
+      >
+      <fieldset class="grid gap-2">
+        <legend class="text-sm font-medium text-admin-ink">Scope</legend>
+        <div class="inline-flex w-fit rounded-md border border-admin-border bg-white p-1">
+          <label
+            class={`cursor-pointer rounded px-3 py-1.5 text-sm ${draft.scope === 'owner' ? 'bg-admin-accent text-white' : 'text-admin-muted'}`}
+            ><input
+              class="sr-only"
+              type="radio"
+              name="binding-scope"
+              value="owner"
+              bind:group={draft.scope}
+              {disabled}
+              data-testid="credential-binding-scope-owner"
+            />Owner</label
+          ><label
+            class={`cursor-pointer rounded px-3 py-1.5 text-sm ${draft.scope === 'project' ? 'bg-admin-accent text-white' : 'text-admin-muted'}`}
+            ><input
+              class="sr-only"
+              type="radio"
+              name="binding-scope"
+              value="project"
+              bind:group={draft.scope}
+              {disabled}
+              data-testid="credential-binding-scope-project"
+            />Project</label
+          >
+        </div>
+      </fieldset>
       {#if draft.scope === 'project'}
-        <label class="grid gap-1.5 text-sm"><span class="font-medium text-admin-ink">Project</span><select class="h-10 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink" bind:value={draft.projectId} disabled={disabled || projectOptionsState.status !== 'ready'} data-testid="credential-binding-project"><option value="">Select project</option>{#if projectOptionsState.status === 'ready'}{#each projectOptionsState.projects.filter((project) => project.state === 'active') as project}<option value={project.id}>{project.name}</option>{/each}{/if}</select>{#if validation.fieldErrors.projectId}<AdminMessage tone="error" density="compact" items={validation.fieldErrors.projectId} testId="credential-binding-project-error" />{/if}{#if projectOptionsState.status === 'error'}<AdminMessage tone="error" density="compact" title="Project options unavailable" message={projectOptionsState.message} testId="credential-binding-projects-error" />{/if}</label>
+        <label class="grid gap-1.5 text-sm"
+          ><span class="font-medium text-admin-ink">Project</span><select
+            class="h-10 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink"
+            bind:value={draft.projectId}
+            disabled={disabled || projectOptionsState.status !== 'ready'}
+            data-testid="credential-binding-project"
+            ><option value="">Select project</option
+            >{#if projectOptionsState.status === 'ready'}{#each projectOptionsState.projects.filter((project) => project.state === 'active') as project}<option
+                  value={project.id}>{project.name}</option
+                >{/each}{/if}</select
+          >{#if validation.fieldErrors.projectId}<AdminMessage
+              tone="error"
+              density="compact"
+              items={validation.fieldErrors.projectId}
+              testId="credential-binding-project-error"
+            />{/if}{#if projectOptionsState.status === 'error'}<AdminMessage
+              tone="error"
+              density="compact"
+              title="Project options unavailable"
+              message={projectOptionsState.message}
+              testId="credential-binding-projects-error"
+            />{/if}</label
+        >
       {/if}
-      <label class="grid gap-1.5 text-sm"><span class="font-medium text-admin-ink">Namespace</span><input class="h-10 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink" type="text" bind:value={draft.namespace} disabled={disabled} placeholder="Optional provider namespace" data-testid="credential-binding-namespace" /></label>
-      <label class="grid gap-1.5 text-sm"><span class="font-medium text-admin-ink">Labels</span><textarea class="min-h-20 rounded-md border border-admin-border bg-white px-3 py-2 font-mono text-xs text-admin-ink" bind:value={draft.labelsText} disabled={disabled} placeholder="team=support" data-testid="credential-binding-labels"></textarea>{#if validation.fieldErrors.labels}<AdminMessage tone="error" density="compact" items={validation.fieldErrors.labels} testId="credential-binding-labels-error" />{/if}</label>
+      <label class="grid gap-1.5 text-sm"
+        ><span class="font-medium text-admin-ink">Namespace</span><input
+          class="h-10 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink"
+          type="text"
+          bind:value={draft.namespace}
+          {disabled}
+          placeholder="Optional provider namespace"
+          data-testid="credential-binding-namespace"
+        /></label
+      >
+      <label class="grid gap-1.5 text-sm"
+        ><span class="font-medium text-admin-ink">Labels</span><textarea
+          class="min-h-20 rounded-md border border-admin-border bg-white px-3 py-2 font-mono text-xs text-admin-ink"
+          bind:value={draft.labelsText}
+          {disabled}
+          placeholder="team=support"
+          data-testid="credential-binding-labels"
+        ></textarea>{#if validation.fieldErrors.labels}<AdminMessage
+            tone="error"
+            density="compact"
+            items={validation.fieldErrors.labels}
+            testId="credential-binding-labels-error"
+          />{/if}</label
+      >
     </section>
 
     <section class="grid gap-4 rounded-md border border-admin-border bg-admin-soft/50 p-4">
-      <div><h3 class="m-0 text-sm font-semibold text-admin-ink">Injection policy</h3><p class="m-0 mt-1 text-xs text-admin-muted">Origins constrain where the worker may resolve and apply this credential.</p></div>
-      <label class="grid gap-1.5 text-sm"><span class="font-medium text-admin-ink">Injection mode</span><select class="h-10 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink" bind:value={draft.injectionMode} disabled={disabled} data-testid="credential-binding-injection-mode">{#each CREDENTIAL_INJECTION_MODE_OPTIONS as option}<option value={option.value}>{option.label}</option>{/each}</select><span class="text-xs text-admin-muted">{CREDENTIAL_INJECTION_MODE_OPTIONS.find((option) => option.value === draft.injectionMode)?.description}</span></label>
-      <label class="grid gap-1.5 text-sm"><span class="font-medium text-admin-ink">Allowed origins</span><textarea class="min-h-20 rounded-md border border-admin-border bg-white px-3 py-2 font-mono text-xs text-admin-ink" bind:value={draft.allowedOriginsText} disabled={disabled} placeholder="https://portal.example" data-testid="credential-binding-origins"></textarea><span class="text-xs text-admin-muted">One exact HTTP or HTTPS origin per line.</span>{#if validation.fieldErrors.allowedOrigins}<AdminMessage tone="error" density="compact" items={validation.fieldErrors.allowedOrigins} testId="credential-binding-origins-error" />{/if}</label>
+      <div>
+        <h3 class="m-0 text-sm font-semibold text-admin-ink">Injection policy</h3>
+        <p class="m-0 mt-1 text-xs text-admin-muted">
+          Origins constrain where the worker may resolve and apply this credential.
+        </p>
+      </div>
+      <label class="grid gap-1.5 text-sm"
+        ><span class="font-medium text-admin-ink">Injection mode</span><select
+          class="h-10 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink"
+          bind:value={draft.injectionMode}
+          {disabled}
+          data-testid="credential-binding-injection-mode"
+          >{#each CREDENTIAL_INJECTION_MODE_OPTIONS as option}<option value={option.value}
+              >{option.label}</option
+            >{/each}</select
+        ><span class="text-xs text-admin-muted"
+          >{CREDENTIAL_INJECTION_MODE_OPTIONS.find((option) => option.value === draft.injectionMode)
+            ?.description}</span
+        ></label
+      >
+      <label class="grid gap-1.5 text-sm"
+        ><span class="font-medium text-admin-ink">Allowed origins</span><textarea
+          class="min-h-20 rounded-md border border-admin-border bg-white px-3 py-2 font-mono text-xs text-admin-ink"
+          bind:value={draft.allowedOriginsText}
+          {disabled}
+          placeholder="https://portal.example"
+          data-testid="credential-binding-origins"
+        ></textarea><span class="text-xs text-admin-muted"
+          >One exact HTTP or HTTPS origin per line.</span
+        >{#if validation.fieldErrors.allowedOrigins}<AdminMessage
+            tone="error"
+            density="compact"
+            items={validation.fieldErrors.allowedOrigins}
+            testId="credential-binding-origins-error"
+          />{/if}</label
+      >
       {#if draft.injectionMode === 'totp_fill'}
-        <div class="grid gap-4 md:grid-cols-2" data-testid="credential-binding-totp-fields"><label class="grid gap-1.5 text-sm"><span class="font-medium text-admin-ink">Issuer</span><input class="h-10 rounded-md border border-admin-border bg-white px-3 text-sm" bind:value={draft.totpIssuer} disabled={disabled} data-testid="credential-binding-totp-issuer" /></label><label class="grid gap-1.5 text-sm"><span class="font-medium text-admin-ink">Account name</span><input class="h-10 rounded-md border border-admin-border bg-white px-3 text-sm" bind:value={draft.totpAccountName} disabled={disabled} data-testid="credential-binding-totp-account" /></label><label class="grid gap-1.5 text-sm"><span class="font-medium text-admin-ink">Period seconds</span><input class="h-10 rounded-md border border-admin-border bg-white px-3 text-sm" type="number" min="1" bind:value={draft.totpPeriodSec} disabled={disabled} data-testid="credential-binding-totp-period" />{#if validation.fieldErrors.totpPeriodSec}<AdminMessage tone="error" density="compact" items={validation.fieldErrors.totpPeriodSec} testId="credential-binding-totp-period-error" />{/if}</label><label class="grid gap-1.5 text-sm"><span class="font-medium text-admin-ink">Digits</span><input class="h-10 rounded-md border border-admin-border bg-white px-3 text-sm" type="number" min="1" bind:value={draft.totpDigits} disabled={disabled} data-testid="credential-binding-totp-digits" />{#if validation.fieldErrors.totpDigits}<AdminMessage tone="error" density="compact" items={validation.fieldErrors.totpDigits} testId="credential-binding-totp-digits-error" />{/if}</label></div>
+        <div class="grid gap-4 md:grid-cols-2" data-testid="credential-binding-totp-fields">
+          <label class="grid gap-1.5 text-sm"
+            ><span class="font-medium text-admin-ink">Issuer</span><input
+              class="h-10 rounded-md border border-admin-border bg-white px-3 text-sm"
+              bind:value={draft.totpIssuer}
+              {disabled}
+              data-testid="credential-binding-totp-issuer"
+            /></label
+          ><label class="grid gap-1.5 text-sm"
+            ><span class="font-medium text-admin-ink">Account name</span><input
+              class="h-10 rounded-md border border-admin-border bg-white px-3 text-sm"
+              bind:value={draft.totpAccountName}
+              {disabled}
+              data-testid="credential-binding-totp-account"
+            /></label
+          ><label class="grid gap-1.5 text-sm"
+            ><span class="font-medium text-admin-ink">Period seconds</span><input
+              class="h-10 rounded-md border border-admin-border bg-white px-3 text-sm"
+              type="number"
+              min="1"
+              bind:value={draft.totpPeriodSec}
+              {disabled}
+              data-testid="credential-binding-totp-period"
+            />{#if validation.fieldErrors.totpPeriodSec}<AdminMessage
+                tone="error"
+                density="compact"
+                items={validation.fieldErrors.totpPeriodSec}
+                testId="credential-binding-totp-period-error"
+              />{/if}</label
+          ><label class="grid gap-1.5 text-sm"
+            ><span class="font-medium text-admin-ink">Digits</span><input
+              class="h-10 rounded-md border border-admin-border bg-white px-3 text-sm"
+              type="number"
+              min="1"
+              bind:value={draft.totpDigits}
+              {disabled}
+              data-testid="credential-binding-totp-digits"
+            />{#if validation.fieldErrors.totpDigits}<AdminMessage
+                tone="error"
+                density="compact"
+                items={validation.fieldErrors.totpDigits}
+                testId="credential-binding-totp-digits-error"
+              />{/if}</label
+          >
+        </div>
       {/if}
     </section>
 
     <section class="grid gap-4 rounded-md border border-admin-border bg-admin-soft/50 p-4">
-      <div><h3 class="m-0 text-sm font-semibold text-admin-ink">Write-only secret source</h3><p class="m-0 mt-1 text-xs text-admin-muted">Provide either a new JSON payload or an opaque reference that already exists in Vault.</p></div>
-      <fieldset class="grid gap-2"><legend class="text-sm font-medium text-admin-ink">Source</legend><div class="inline-flex w-fit rounded-md border border-admin-border bg-white p-1"><label class={`cursor-pointer rounded px-3 py-1.5 text-sm ${draft.secretSource === 'payload' ? 'bg-admin-accent text-white' : 'text-admin-muted'}`}><input class="sr-only" type="radio" name="secret-source" value="payload" bind:group={draft.secretSource} disabled={disabled} data-testid="credential-binding-secret-payload-mode" />New payload</label><label class={`cursor-pointer rounded px-3 py-1.5 text-sm ${draft.secretSource === 'external_ref' ? 'bg-admin-accent text-white' : 'text-admin-muted'}`}><input class="sr-only" type="radio" name="secret-source" value="external_ref" bind:group={draft.secretSource} disabled={disabled} data-testid="credential-binding-secret-reference-mode" />Existing reference</label></div></fieldset>
+      <div>
+        <h3 class="m-0 text-sm font-semibold text-admin-ink">Write-only secret source</h3>
+        <p class="m-0 mt-1 text-xs text-admin-muted">
+          Provide either a new JSON payload or an opaque reference that already exists in Vault.
+        </p>
+      </div>
+      <fieldset class="grid gap-2">
+        <legend class="text-sm font-medium text-admin-ink">Source</legend>
+        <div class="inline-flex w-fit rounded-md border border-admin-border bg-white p-1">
+          <label
+            class={`cursor-pointer rounded px-3 py-1.5 text-sm ${draft.secretSource === 'payload' ? 'bg-admin-accent text-white' : 'text-admin-muted'}`}
+            ><input
+              class="sr-only"
+              type="radio"
+              name="secret-source"
+              value="payload"
+              bind:group={draft.secretSource}
+              {disabled}
+              data-testid="credential-binding-secret-payload-mode"
+            />New payload</label
+          ><label
+            class={`cursor-pointer rounded px-3 py-1.5 text-sm ${draft.secretSource === 'external_ref' ? 'bg-admin-accent text-white' : 'text-admin-muted'}`}
+            ><input
+              class="sr-only"
+              type="radio"
+              name="secret-source"
+              value="external_ref"
+              bind:group={draft.secretSource}
+              {disabled}
+              data-testid="credential-binding-secret-reference-mode"
+            />Existing reference</label
+          >
+        </div>
+      </fieldset>
       {#if draft.secretSource === 'payload'}
-        <label class="grid gap-1.5 text-sm"><span class="font-medium text-admin-ink">Secret JSON payload</span><textarea class="min-h-44 rounded-md border border-admin-border bg-white px-3 py-2 font-mono text-xs leading-5 text-admin-ink" bind:value={draft.secretPayloadText} disabled={disabled} spellcheck="false" autocomplete="off" data-testid="credential-binding-secret-payload"></textarea><AdminMessage tone="warning" density="compact" title="Write-only value" message="BrowserPane sends this value to Vault during creation. It will not appear in catalog or detail responses." />{#if validation.fieldErrors.secretPayload}<AdminMessage tone="error" density="compact" items={validation.fieldErrors.secretPayload} testId="credential-binding-secret-payload-error" />{/if}</label>
+        <label class="grid gap-1.5 text-sm"
+          ><span class="font-medium text-admin-ink">Secret JSON payload</span><textarea
+            class="min-h-44 rounded-md border border-admin-border bg-white px-3 py-2 font-mono text-xs leading-5 text-admin-ink"
+            bind:value={draft.secretPayloadText}
+            {disabled}
+            spellcheck="false"
+            autocomplete="off"
+            data-testid="credential-binding-secret-payload"
+          ></textarea><AdminMessage
+            tone="warning"
+            density="compact"
+            title="Write-only value"
+            message="BrowserPane sends this value to Vault during creation. It will not appear in catalog or detail responses."
+          />{#if validation.fieldErrors.secretPayload}<AdminMessage
+              tone="error"
+              density="compact"
+              items={validation.fieldErrors.secretPayload}
+              testId="credential-binding-secret-payload-error"
+            />{/if}</label
+        >
       {:else}
-        <label class="grid gap-1.5 text-sm"><span class="font-medium text-admin-ink">Existing provider reference</span><input class="h-10 rounded-md border border-admin-border bg-white px-3 font-mono text-xs text-admin-ink" type="text" bind:value={draft.externalRef} disabled={disabled} autocomplete="off" data-testid="credential-binding-external-ref" />{#if validation.fieldErrors.externalRef}<AdminMessage tone="error" density="compact" items={validation.fieldErrors.externalRef} testId="credential-binding-external-ref-error" />{/if}</label>
+        <label class="grid gap-1.5 text-sm"
+          ><span class="font-medium text-admin-ink">Existing provider reference</span><input
+            class="h-10 rounded-md border border-admin-border bg-white px-3 font-mono text-xs text-admin-ink"
+            type="text"
+            bind:value={draft.externalRef}
+            {disabled}
+            autocomplete="off"
+            data-testid="credential-binding-external-ref"
+          />{#if validation.fieldErrors.externalRef}<AdminMessage
+              tone="error"
+              density="compact"
+              items={validation.fieldErrors.externalRef}
+              testId="credential-binding-external-ref-error"
+            />{/if}</label
+        >
       {/if}
     </section>
-    <div class="flex justify-end border-t border-admin-border pt-4"><button class="inline-flex h-10 items-center justify-center rounded-md border border-admin-accent bg-admin-accent px-3 text-sm font-semibold text-white disabled:opacity-60" type="submit" disabled={disabled || !validation.valid} data-testid="credential-binding-create-submit">Create binding</button></div>
+    <div class="flex justify-end border-t border-admin-border pt-4">
+      <button
+        class="inline-flex h-10 items-center justify-center rounded-md border border-admin-accent bg-admin-accent px-3 text-sm font-semibold text-white disabled:opacity-60"
+        type="submit"
+        disabled={disabled || !validation.valid}
+        data-testid="credential-binding-create-submit">Create binding</button
+      >
+    </div>
   </form>
 </section>

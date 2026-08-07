@@ -20,10 +20,14 @@ export function parseKeyValueLabels(value: string): ParsedKeyValueLabels {
 }
 
 export function splitFormEntries(value: string): readonly string[] {
-  return [...new Set(value
-    .split(/[\n,]/)
-    .map((entry) => entry.trim())
-    .filter(Boolean))];
+  return [
+    ...new Set(
+      value
+        .split(/[\n,]/)
+        .map((entry) => entry.trim())
+        .filter(Boolean),
+    ),
+  ];
 }
 
 export function labelsToFormText(labels: Readonly<Record<string, string>>): string {

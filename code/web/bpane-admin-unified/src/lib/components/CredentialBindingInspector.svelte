@@ -1,26 +1,194 @@
 <script lang="ts">
   import { Copy, RefreshCw } from '@lucide/svelte';
   import type { AdminActionState } from '$lib/application/admin-async-state';
-  import { credentialBindingOverviewRow, labelSummary, type CredentialBindingDetailLoadState } from '$lib/credential-bindings/credential-binding-view-model';
+  import {
+    credentialBindingOverviewRow,
+    labelSummary,
+    type CredentialBindingDetailLoadState,
+  } from '$lib/credential-bindings/credential-binding-view-model';
   import { formatDateTime } from '$lib/projects/project-formatters';
   import { projectToneClass } from '$lib/projects/project-ui';
   import ActionFeedback from './ActionFeedback.svelte';
   import AdminMessage from './AdminMessage.svelte';
 
-  let { state: loadState, actionState = { status: 'idle' }, onRefresh }: { readonly state: CredentialBindingDetailLoadState; readonly actionState?: AdminActionState; readonly onRefresh?: () => void | Promise<void> } = $props();
-  const row = $derived(loadState.status === 'ready' ? credentialBindingOverviewRow(loadState.binding) : null);
+  let {
+    state: loadState,
+    actionState = { status: 'idle' },
+    onRefresh,
+  }: {
+    readonly state: CredentialBindingDetailLoadState;
+    readonly actionState?: AdminActionState;
+    readonly onRefresh?: () => void | Promise<void>;
+  } = $props();
+  const row = $derived(
+    loadState.status === 'ready' ? credentialBindingOverviewRow(loadState.binding) : null,
+  );
 </script>
-<aside class="min-w-0 rounded-md border border-admin-border bg-admin-panel" data-testid="credential-binding-inspector">
-  {#if loadState.status === 'idle'}<div class="flex min-h-64 items-center justify-center p-6 text-sm text-admin-muted">Select a credential binding to inspect.</div>
-  {:else if loadState.status === 'loading'}<div class="flex min-h-64 items-center justify-center p-6 text-sm text-admin-muted" data-testid="credential-binding-inspector-loading">Loading credential binding...</div>
-  {:else if loadState.status === 'error'}<div class="p-4"><AdminMessage tone="error" title="Credential binding unavailable" message={loadState.message} testId="credential-binding-inspector-error" /></div>
+
+<aside
+  class="min-w-0 rounded-md border border-admin-border bg-admin-panel"
+  data-testid="credential-binding-inspector"
+>
+  {#if loadState.status === 'idle'}<div
+      class="flex min-h-64 items-center justify-center p-6 text-sm text-admin-muted"
+    >
+      Select a credential binding to inspect.
+    </div>
+  {:else if loadState.status === 'loading'}<div
+      class="flex min-h-64 items-center justify-center p-6 text-sm text-admin-muted"
+      data-testid="credential-binding-inspector-loading"
+    >
+      Loading credential binding...
+    </div>
+  {:else if loadState.status === 'error'}<div class="p-4">
+      <AdminMessage
+        tone="error"
+        title="Credential binding unavailable"
+        message={loadState.message}
+        testId="credential-binding-inspector-error"
+      />
+    </div>
   {:else if row}
-    <div class="border-b border-admin-border p-4"><div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between"><div class="min-w-0"><div class="flex flex-wrap items-center gap-2"><h2 class="m-0 text-xl font-semibold text-admin-ink" data-testid="credential-binding-detail-name">{loadState.binding.name}</h2><span class={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ${projectToneClass(row.scopeTone)}`}>{row.scope}</span></div><p class="m-0 mt-1 text-sm text-admin-muted">{row.injectionMode} through {row.provider}</p><p class="m-0 mt-2 truncate font-mono text-xs text-admin-muted">{loadState.binding.id}</p></div><div class="flex flex-wrap gap-2"><button class="inline-flex h-9 items-center gap-2 rounded-md border border-admin-border bg-admin-panel px-3 text-sm font-medium text-admin-ink hover:bg-admin-soft" type="button" onclick={() => void navigator.clipboard?.writeText(loadState.binding.id)} data-testid="credential-binding-copy-id"><Copy size={15} strokeWidth={1.8} /><span>Copy ID</span></button><button class="inline-flex h-9 items-center gap-2 rounded-md border border-admin-border bg-admin-panel px-3 text-sm font-medium text-admin-ink hover:bg-admin-soft disabled:opacity-60" type="button" onclick={() => void onRefresh?.()} disabled={actionState.status === 'running'} data-testid="credential-binding-refresh-detail"><RefreshCw size={15} strokeWidth={1.8} /><span>Refresh</span></button></div></div></div>
-    <div class="border-b border-admin-border p-4"><ActionFeedback state={actionState} successTitle="Credential action completed" errorTitle="Credential action failed" successTestId="credential-binding-action-success" errorTestId="credential-binding-action-error" runningTestId="credential-binding-action-running" /></div>
+    <div class="border-b border-admin-border p-4">
+      <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div class="min-w-0">
+          <div class="flex flex-wrap items-center gap-2">
+            <h2
+              class="m-0 text-xl font-semibold text-admin-ink"
+              data-testid="credential-binding-detail-name"
+            >
+              {loadState.binding.name}
+            </h2>
+            <span
+              class={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ${projectToneClass(row.scopeTone)}`}
+              >{row.scope}</span
+            >
+          </div>
+          <p class="m-0 mt-1 text-sm text-admin-muted">
+            {row.injectionMode} through {row.provider}
+          </p>
+          <p class="m-0 mt-2 truncate font-mono text-xs text-admin-muted">{loadState.binding.id}</p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button
+            class="inline-flex h-9 items-center gap-2 rounded-md border border-admin-border bg-admin-panel px-3 text-sm font-medium text-admin-ink hover:bg-admin-soft"
+            type="button"
+            onclick={() => void navigator.clipboard?.writeText(loadState.binding.id)}
+            data-testid="credential-binding-copy-id"
+            ><Copy size={15} strokeWidth={1.8} /><span>Copy ID</span></button
+          ><button
+            class="inline-flex h-9 items-center gap-2 rounded-md border border-admin-border bg-admin-panel px-3 text-sm font-medium text-admin-ink hover:bg-admin-soft disabled:opacity-60"
+            type="button"
+            onclick={() => void onRefresh?.()}
+            disabled={actionState.status === 'running'}
+            data-testid="credential-binding-refresh-detail"
+            ><RefreshCw size={15} strokeWidth={1.8} /><span>Refresh</span></button
+          >
+        </div>
+      </div>
+    </div>
+    <div class="border-b border-admin-border p-4">
+      <ActionFeedback
+        state={actionState}
+        successTitle="Credential action completed"
+        errorTitle="Credential action failed"
+        successTestId="credential-binding-action-success"
+        errorTestId="credential-binding-action-error"
+        runningTestId="credential-binding-action-running"
+      />
+    </div>
     <div class="grid gap-4 p-4">
-      <AdminMessage tone="info" title="Secret remains write-only" message="This view contains only provider metadata returned by the control API. Secret payloads cannot be retrieved, edited, or deleted through the current contract." testId="credential-binding-write-only" />
-      <section class="rounded-md border border-admin-border bg-admin-soft/50 p-4" data-testid="credential-binding-detail-metadata"><div class="border-b border-admin-border pb-3"><h3 class="m-0 text-sm font-semibold text-admin-ink">Binding metadata</h3></div><dl class="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3"><div class="rounded-md border border-admin-border bg-admin-panel p-3"><dt class="text-xs font-semibold uppercase text-admin-muted">Provider</dt><dd class="m-0 mt-1 text-sm text-admin-ink">{row.provider}</dd></div><div class="rounded-md border border-admin-border bg-admin-panel p-3"><dt class="text-xs font-semibold uppercase text-admin-muted">Injection mode</dt><dd class="m-0 mt-1 text-sm text-admin-ink">{row.injectionMode}</dd></div><div class="rounded-md border border-admin-border bg-admin-panel p-3"><dt class="text-xs font-semibold uppercase text-admin-muted">Namespace</dt><dd class="m-0 mt-1 text-sm text-admin-ink">{row.namespace}</dd></div><div class="rounded-md border border-admin-border bg-admin-panel p-3 md:col-span-2 xl:col-span-3"><dt class="text-xs font-semibold uppercase text-admin-muted">Opaque provider reference</dt><dd class="m-0 mt-1 break-all font-mono text-xs text-admin-ink" data-testid="credential-binding-detail-external-ref">{loadState.binding.external_ref}</dd></div><div class="rounded-md border border-admin-border bg-admin-panel p-3 md:col-span-2 xl:col-span-3"><dt class="text-xs font-semibold uppercase text-admin-muted">Allowed origins</dt><dd class="m-0 mt-1 break-words text-sm text-admin-ink">{row.origins}</dd></div><div class="rounded-md border border-admin-border bg-admin-panel p-3 md:col-span-2"><dt class="text-xs font-semibold uppercase text-admin-muted">Labels</dt><dd class="m-0 mt-1 text-sm text-admin-ink">{labelSummary(loadState.binding.labels)}</dd></div><div class="rounded-md border border-admin-border bg-admin-panel p-3"><dt class="text-xs font-semibold uppercase text-admin-muted">Updated</dt><dd class="m-0 mt-1 text-sm text-admin-ink">{formatDateTime(loadState.binding.updated_at)}</dd></div></dl></section>
-      {#if loadState.binding.totp}<section class="rounded-md border border-admin-border bg-admin-soft/50 p-4" data-testid="credential-binding-detail-totp"><h3 class="m-0 text-sm font-semibold text-admin-ink">TOTP metadata</h3><dl class="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><div><dt class="text-xs uppercase text-admin-muted">Issuer</dt><dd class="m-0 mt-1 text-sm text-admin-ink">{loadState.binding.totp.issuer ?? 'Not set'}</dd></div><div><dt class="text-xs uppercase text-admin-muted">Account</dt><dd class="m-0 mt-1 text-sm text-admin-ink">{loadState.binding.totp.account_name ?? 'Not set'}</dd></div><div><dt class="text-xs uppercase text-admin-muted">Period</dt><dd class="m-0 mt-1 text-sm text-admin-ink">{loadState.binding.totp.period_sec ?? 'Not set'}</dd></div><div><dt class="text-xs uppercase text-admin-muted">Digits</dt><dd class="m-0 mt-1 text-sm text-admin-ink">{loadState.binding.totp.digits ?? 'Not set'}</dd></div></dl></section>{/if}
+      <AdminMessage
+        tone="info"
+        title="Secret remains write-only"
+        message="This view contains only provider metadata returned by the control API. Secret payloads cannot be retrieved, edited, or deleted through the current contract."
+        testId="credential-binding-write-only"
+      />
+      <section
+        class="rounded-md border border-admin-border bg-admin-soft/50 p-4"
+        data-testid="credential-binding-detail-metadata"
+      >
+        <div class="border-b border-admin-border pb-3">
+          <h3 class="m-0 text-sm font-semibold text-admin-ink">Binding metadata</h3>
+        </div>
+        <dl class="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <div class="rounded-md border border-admin-border bg-admin-panel p-3">
+            <dt class="text-xs font-semibold uppercase text-admin-muted">Provider</dt>
+            <dd class="m-0 mt-1 text-sm text-admin-ink">{row.provider}</dd>
+          </div>
+          <div class="rounded-md border border-admin-border bg-admin-panel p-3">
+            <dt class="text-xs font-semibold uppercase text-admin-muted">Injection mode</dt>
+            <dd class="m-0 mt-1 text-sm text-admin-ink">{row.injectionMode}</dd>
+          </div>
+          <div class="rounded-md border border-admin-border bg-admin-panel p-3">
+            <dt class="text-xs font-semibold uppercase text-admin-muted">Namespace</dt>
+            <dd class="m-0 mt-1 text-sm text-admin-ink">{row.namespace}</dd>
+          </div>
+          <div
+            class="rounded-md border border-admin-border bg-admin-panel p-3 md:col-span-2 xl:col-span-3"
+          >
+            <dt class="text-xs font-semibold uppercase text-admin-muted">
+              Opaque provider reference
+            </dt>
+            <dd
+              class="m-0 mt-1 break-all font-mono text-xs text-admin-ink"
+              data-testid="credential-binding-detail-external-ref"
+            >
+              {loadState.binding.external_ref}
+            </dd>
+          </div>
+          <div
+            class="rounded-md border border-admin-border bg-admin-panel p-3 md:col-span-2 xl:col-span-3"
+          >
+            <dt class="text-xs font-semibold uppercase text-admin-muted">Allowed origins</dt>
+            <dd class="m-0 mt-1 break-words text-sm text-admin-ink">{row.origins}</dd>
+          </div>
+          <div class="rounded-md border border-admin-border bg-admin-panel p-3 md:col-span-2">
+            <dt class="text-xs font-semibold uppercase text-admin-muted">Labels</dt>
+            <dd class="m-0 mt-1 text-sm text-admin-ink">
+              {labelSummary(loadState.binding.labels)}
+            </dd>
+          </div>
+          <div class="rounded-md border border-admin-border bg-admin-panel p-3">
+            <dt class="text-xs font-semibold uppercase text-admin-muted">Updated</dt>
+            <dd class="m-0 mt-1 text-sm text-admin-ink">
+              {formatDateTime(loadState.binding.updated_at)}
+            </dd>
+          </div>
+        </dl>
+      </section>
+      {#if loadState.binding.totp}<section
+          class="rounded-md border border-admin-border bg-admin-soft/50 p-4"
+          data-testid="credential-binding-detail-totp"
+        >
+          <h3 class="m-0 text-sm font-semibold text-admin-ink">TOTP metadata</h3>
+          <dl class="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <dt class="text-xs uppercase text-admin-muted">Issuer</dt>
+              <dd class="m-0 mt-1 text-sm text-admin-ink">
+                {loadState.binding.totp.issuer ?? 'Not set'}
+              </dd>
+            </div>
+            <div>
+              <dt class="text-xs uppercase text-admin-muted">Account</dt>
+              <dd class="m-0 mt-1 text-sm text-admin-ink">
+                {loadState.binding.totp.account_name ?? 'Not set'}
+              </dd>
+            </div>
+            <div>
+              <dt class="text-xs uppercase text-admin-muted">Period</dt>
+              <dd class="m-0 mt-1 text-sm text-admin-ink">
+                {loadState.binding.totp.period_sec ?? 'Not set'}
+              </dd>
+            </div>
+            <div>
+              <dt class="text-xs uppercase text-admin-muted">Digits</dt>
+              <dd class="m-0 mt-1 text-sm text-admin-ink">
+                {loadState.binding.totp.digits ?? 'Not set'}
+              </dd>
+            </div>
+          </dl>
+        </section>{/if}
     </div>
   {/if}
 </aside>

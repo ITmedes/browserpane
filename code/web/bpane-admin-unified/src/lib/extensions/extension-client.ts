@@ -50,12 +50,13 @@ export class ExtensionCatalogClient {
       ...(options.onAuthenticationFailure === undefined
         ? {}
         : { onAuthenticationFailure: options.onAuthenticationFailure }),
-      errorFactory: (failure) => new ExtensionCatalogError(
-        formatAdminApiRequestError('Extension catalog request', failure),
-        failure.code,
-        failure.status,
-        failure,
-      ),
+      errorFactory: (failure) =>
+        new ExtensionCatalogError(
+          formatAdminApiRequestError('Extension catalog request', failure),
+          failure.code,
+          failure.status,
+          failure,
+        ),
     });
   }
 
@@ -97,7 +98,10 @@ export class ExtensionCatalogClient {
     return toExtensionVersionResource(await response.json());
   }
 
-  async setExtensionEnabled(extensionId: string, enabled: boolean): Promise<ExtensionDefinitionResource> {
+  async setExtensionEnabled(
+    extensionId: string,
+    enabled: boolean,
+  ): Promise<ExtensionDefinitionResource> {
     const transition = enabled ? 'enable' : 'disable';
     const response = await this.#request(
       `/api/v1/extensions/${encodeURIComponent(extensionId)}/${transition}`,
@@ -113,11 +117,14 @@ export class ExtensionCatalogClient {
   }
 }
 
-export function toExtensionDefinitionListResponse(payload: unknown): ExtensionDefinitionListResponse {
+export function toExtensionDefinitionListResponse(
+  payload: unknown,
+): ExtensionDefinitionListResponse {
   const object = expectRecord(payload, 'extension list response');
   return {
-    extensions: expectArray(object.extensions, 'extension list extensions')
-      .map(toExtensionDefinitionResource),
+    extensions: expectArray(object.extensions, 'extension list extensions').map(
+      toExtensionDefinitionResource,
+    ),
   };
 }
 

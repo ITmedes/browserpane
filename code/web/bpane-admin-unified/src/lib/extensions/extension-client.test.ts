@@ -9,7 +9,9 @@ import {
 
 describe('ExtensionCatalogClient', () => {
   it('loads the extension catalog through authenticated requests', async () => {
-    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse({ extensions: [extensionPayload()] }, 200));
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      jsonResponse({ extensions: [extensionPayload()] }, 200),
+    );
     const client = catalogClient(fetchImpl);
 
     const response = await client.listExtensions();
@@ -17,7 +19,9 @@ describe('ExtensionCatalogClient', () => {
     expect(response.extensions[0]).toMatchObject({ id: 'extension-1', name: 'Password helper' });
     const headers = fetchImpl.mock.calls[0]?.[1]?.headers as Headers;
     expect(headers.get('authorization')).toBe('Bearer token-1');
-    expect(fetchImpl.mock.calls[0]?.[0]).toEqual(new URL('http://browserpane.test/api/v1/extensions'));
+    expect(fetchImpl.mock.calls[0]?.[0]).toEqual(
+      new URL('http://browserpane.test/api/v1/extensions'),
+    );
   });
 
   it('creates, reads, versions, disables, and enables extensions', async () => {
@@ -74,11 +78,17 @@ describe('ExtensionCatalogClient', () => {
   });
 
   it('rejects malformed resource payloads', () => {
-    expect(() => toExtensionDefinitionListResponse({ extensions: {} })).toThrow(ExtensionCatalogError);
-    expect(() => toExtensionDefinitionListResponse({ extensions: [{ ...extensionPayload(), enabled: 'yes' }] }))
-      .toThrow('extension enabled must be a boolean');
-    expect(() => toExtensionVersionResource({ ...versionPayload(), install_path: null }))
-      .toThrow('extension version install_path must be a string');
+    expect(() => toExtensionDefinitionListResponse({ extensions: {} })).toThrow(
+      ExtensionCatalogError,
+    );
+    expect(() =>
+      toExtensionDefinitionListResponse({
+        extensions: [{ ...extensionPayload(), enabled: 'yes' }],
+      }),
+    ).toThrow('extension enabled must be a boolean');
+    expect(() => toExtensionVersionResource({ ...versionPayload(), install_path: null })).toThrow(
+      'extension version install_path must be a string',
+    );
   });
 });
 
