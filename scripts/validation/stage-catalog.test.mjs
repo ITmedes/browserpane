@@ -19,6 +19,10 @@ test('catalog exposes stable, unique fast and compose profiles', () => {
   assert.ok(fast.some((stage) => stage.id === 'admin-auth-test-coverage'));
   assert.ok(fast.some((stage) => stage.id === 'admin-new-test'));
   assert.ok(fast.some((stage) => stage.id === 'admin-new-test-coverage'));
+  assert.ok(fast.some((stage) => stage.id === 'openapi-install'));
+  assert.ok(fast.some((stage) => stage.id === 'openapi-test'));
+  assert.ok(fast.some((stage) => stage.id === 'openapi-check'));
+  assert.ok(fast.some((stage) => stage.id === 'openapi-compatibility'));
   assert.ok(compose.some((stage) => stage.id === 'compose-gateway-api'));
   assert.ok(compose.some((stage) => stage.id === 'compose-recording'));
 });

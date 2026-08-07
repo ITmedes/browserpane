@@ -251,6 +251,10 @@ Run these where applicable:
 - `cd code/integrations/workflow-worker && npm run build`
 - `node --test deploy/examples/egress-observer/egress-usage-reporter.test.mjs`
 - `node --check deploy/examples/egress-observer/egress-usage-reporter.mjs`
+- `npm ci --ignore-scripts --prefix scripts/openapi`
+- `npm test --prefix scripts/openapi`
+- `npm run check --prefix scripts/openapi`
+- `npm run compatibility --prefix scripts/openapi -- --base-ref origin/main`
 
 ## Local development flow
 

@@ -1187,14 +1187,30 @@ node scripts/validate.mjs --profile full
 
 `fast` runs the dependency and repository baselines, Rust checks and coverage,
 clean installs, maintained Node checks/tests/builds, browser-client and
-admin-new coverage ratchets, Markdown/YAML/workflow policy, and operational
-script checks. `compose` runs the bounded gateway API, admin, CLI, MCP,
+admin-new coverage ratchets, OpenAPI lint/inventory/example/compatibility
+contracts, Markdown/YAML/workflow policy, and operational script checks.
+`compose` runs the bounded gateway API, admin, CLI, MCP,
 recording, and workflow smoke set; it may build or start the local stack and
 leaves it running for inspection. `full` runs both profiles. Use `--list`,
 `--dry-run`, or repeatable `--stage <id>` selections for focused work. The
 runner stops at the first failing stage, preserves its exit code, prints the
 exact rerun command, and terminates the active child process on timeout or
 interrupt.
+
+Run only the frozen v1 control-contract checks with:
+
+```bash
+npm ci --ignore-scripts --prefix scripts/openapi
+npm test --prefix scripts/openapi
+npm run check --prefix scripts/openapi
+npm run compatibility --prefix scripts/openapi -- --base-ref origin/main
+```
+
+The generated operation inventory and representative request/response
+examples live beside `openapi/bpane-control-v1.yaml`. Compatibility compares
+the working contract with an explicit Git revision and rejects semantic
+breaking changes; CI uses the pull request base through the fetched
+`origin/main` history.
 
 GitHub Actions runs the fast floor on pull requests and pushes to `main`. The
 `Validation` workflow exposes these stable required-check contexts:
