@@ -511,8 +511,8 @@ Validation:
 
 Tier: P2/P3 resource lifecycle.
 
-Status: Implemented and locally validated on `feature/BPANE-00160`; hosted PR
-validation and merge remain.
+Status: Implemented and hosted-validated on `feature/BPANE-00160` under PR
+`#203`; merge remains.
 
 Why here:
 
