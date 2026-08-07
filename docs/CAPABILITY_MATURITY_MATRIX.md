@@ -30,7 +30,7 @@ capability.
 | Owner-scoped control API | Prototype | 131 governed OpenAPI operations, generated classification inventory, 19 executable examples, Axum route recognition, semantic diff, and contract-derived admin-new API/coverage/docs companions | #75 release compatibility; domain and production gates |
 | Projects and policy bindings | Prototype | API/store resources and admin-new project views | #161, #176, #79 |
 | Session templates | Implemented API; incomplete operator product | API/store and legacy coverage | #124 admin-new catalog |
-| Reusable browser contexts | Prototype | lifecycle, limits, clone/export/import backend paths | #148, #160 |
+| Reusable browser contexts | Prototype | lifecycle, limits, and clone/export/import paths covered through API, CLI, compatibility admin, and admin-new smokes | #160 until merge; #163 promotion gate |
 | File workspaces and session-file bindings | Prototype | local artifact provider, API/admin/CLI smokes | #21, #80 |
 | Egress profiles and sanitized usage | Prototype | proxy/TLS fixtures, diagnostics, policy bindings | #72, #76, #178 |
 | Credential bindings | Prototype | Vault KV v2 provider and workflow/egress integration | #159, #70, #76 |

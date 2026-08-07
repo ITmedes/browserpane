@@ -17,7 +17,7 @@ evidence, but default promotion remains a Phase 1 gate owned by #163. Use
 | --- | --- | --- | --- |
 | Shell | `/admin-new/` layout and dashboard | Implemented | Route-backed shell, grouped navigation, auth bootstrap, dashboard overview. |
 | Projects | `/admin-new/projects`, `/admin-new/projects/new`, `/admin-new/projects/[project_id]` | Implemented | Catalog, create, detail/edit, quotas, policy fields, selector catalogs. |
-| Browser contexts | `/admin-new/browser-contexts`, `/new`, `/[context_id]` | Implemented | Catalog, create, detail/edit. Follow-up actions like clone/import/export remain broader context-resource operations. |
+| Browser contexts | `/admin-new/browser-contexts`, `/new`, `/import`, `/[context_id]`, `/[context_id]/clone` | Implemented for #160 scope | Catalog, create, detail/edit/delete, clone, direct ZIP export, and bounded archive import are route-backed. Active-writer blockers, storage warnings, and retryable import errors remain visible to the operator. |
 | Egress profiles | `/admin-new/egress`, `/new`, `/[profile_id]` | Implemented | Catalog, create/edit, profile metadata, diagnostics-oriented fields. |
 | File workspaces | `/admin-new/files/workspaces`, `/new`, `/[workspace_id]` | Implemented | Catalog, create/edit/detail, file visibility and workspace flows. |
 | Sessions catalog | `/admin-new/sessions` | Implemented | List, selected-session metadata, lifecycle actions, connect flow, MCP delegation visibility. |
@@ -45,7 +45,7 @@ evidence, but default promotion remains a Phase 1 gate owned by #163. Use
 | Step 1: New app beside current admin | Scaffold and serve a static SvelteKit app at `/admin-new/` without changing `/admin/`, `/dist/`, auth config, cert metadata, or APIs. | Done | `bpane-admin-unified` exists and is served at `/admin-new/`. |
 | Step 1A: API coverage baseline | Classify every frozen API operation and expose owner, worker, evidence, and compatibility surfaces clearly. | Done | #179 enforces the 131-operation contract inventory and #158 exposes the generated operation, classification, example, and compatibility evidence through route-backed companion views. |
 | Step 2: Projects overview | Route-backed project catalog, create, detail/edit, quotas, policy gates, usage, and alerts. | Done | Projects catalog/create/detail/edit are implemented. |
-| Step 3: Resource foundation | Selector-grade browser context, egress profile, and file workspace catalogs/details. | Done for first pass | Core resource catalogs and detail/edit flows are implemented. |
+| Step 3: Resource foundation | Selector-grade browser context, egress profile, and file workspace catalogs/details. | Done for current scope | Core resource catalogs and detail/edit flows are implemented; browser-context clone/export/import lifecycle parity is implemented under #160. |
 | Step 4: Create session flow | Session creation form with project/template/context/network/egress/capabilities/recording/payload preview. | Done | Session creation is implemented with selectors and payload preview. |
 | Step 5: Sessions catalog | Focused list plus selected-session metadata and explicit connect/disconnect/reconnect behavior. | Done | Catalog and selected-session metadata exist. |
 | Step 6: Session detail overview | Route-backed overview preserving lifecycle actions, queue state, connections, disconnect controls, and evidence facts. | Implemented for current split | Overview/actions remain stable while live, automation, policy, files, recordings, network, and observability have dedicated routes. |
@@ -90,7 +90,7 @@ not ready to become default because:
 
 1. Session-template and operation-counter catalogs plus command-palette behavior
    are incomplete.
-2. Browser-context lifecycle and project-governance parity still require their
-   focused slices.
+2. Project-governance parity still requires its focused slice; browser-context
+   lifecycle parity is implemented under #160 and awaits promotion validation.
 3. The explicit promotion, regression, and fallback gate in #163 has not run.
 4. Some production security/operability slices remain outside admin parity.
