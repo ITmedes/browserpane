@@ -97,6 +97,7 @@ use crate::workspaces::{
 mod admin_events;
 mod authz;
 mod automation_tasks;
+mod browser_context_archive;
 mod browser_contexts;
 mod credential_bindings;
 mod egress_profiles;
