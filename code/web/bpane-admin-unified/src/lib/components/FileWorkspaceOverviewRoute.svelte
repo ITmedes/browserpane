@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { adminErrorMessage } from '$lib/application/admin-async-state';
   import type { UnifiedAdminContext } from '$lib/auth/unified-admin-context';
   import { FileWorkspaceCatalogClient } from '$lib/file-workspaces/file-workspace-client';
   import type {
@@ -41,7 +42,7 @@
     } catch (error) {
       workspaceState = {
         status: 'error',
-        message: error instanceof Error ? error.message : 'Unexpected file workspace catalog error.',
+        message: adminErrorMessage(error, 'Unexpected file workspace catalog error.'),
       };
     }
   }

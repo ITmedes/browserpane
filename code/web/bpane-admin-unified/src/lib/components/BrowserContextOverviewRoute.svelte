@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { adminErrorMessage } from '$lib/application/admin-async-state';
   import type { UnifiedAdminContext } from '$lib/auth/unified-admin-context';
   import { BrowserContextCatalogClient } from '$lib/browser-contexts/browser-context-client';
   import type { BrowserContextOverviewLoadState } from '$lib/browser-contexts/browser-context-overview-view-model';
@@ -35,7 +36,7 @@
     } catch (error) {
       contextState = {
         status: 'error',
-        message: error instanceof Error ? error.message : 'Unexpected browser context catalog error.',
+        message: adminErrorMessage(error, 'Unexpected browser context catalog error.'),
       };
     }
   }

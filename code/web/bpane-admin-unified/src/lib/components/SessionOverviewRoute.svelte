@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { adminErrorMessage } from '$lib/application/admin-async-state';
   import type { UnifiedAdminContext } from '$lib/auth/unified-admin-context';
   import SessionOverview from '$lib/components/SessionOverview.svelte';
   import { SessionCatalogClient } from '$lib/sessions/session-client';
@@ -36,7 +37,7 @@
     } catch (error) {
       sessionState = {
         status: 'error',
-        message: error instanceof Error ? error.message : 'Unexpected session catalog error.',
+        message: adminErrorMessage(error, 'Unexpected session catalog error.'),
       };
     }
   }
@@ -53,7 +54,7 @@
     } catch (error) {
       actionState = {
         status: 'error',
-        message: error instanceof Error ? error.message : 'Session refresh failed.',
+        message: adminErrorMessage(error, 'Session refresh failed.'),
       };
     }
   }

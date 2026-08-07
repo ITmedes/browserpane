@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { adminErrorMessage } from '$lib/application/admin-async-state';
   import type { UnifiedAdminContext } from '$lib/auth/unified-admin-context';
   import { WorkflowRunCatalogClient } from '$lib/workflow-runs/workflow-run-client';
   import type { WorkflowRunOverviewLoadState } from '$lib/workflow-runs/workflow-run-overview-view-model';
@@ -32,7 +33,7 @@
     } catch (error) {
       workflowRunState = {
         status: 'error',
-        message: error instanceof Error ? error.message : 'Unexpected workflow run catalog error.',
+        message: adminErrorMessage(error, 'Unexpected workflow run catalog error.'),
       };
     }
   }
