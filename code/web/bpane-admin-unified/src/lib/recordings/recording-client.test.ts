@@ -8,6 +8,23 @@ import {
 } from './recording-client';
 
 describe('RecordingCatalogClient', () => {
+  it('delegates authentication failures through the shared transport', async () => {
+    const onAuthenticationFailure = vi.fn();
+    const client = new RecordingCatalogClient({
+      baseUrl: 'http://browserpane.test',
+      accessTokenProvider: () => 'expired-token',
+      fetchImpl: async () => new Response('unauthorized', { status: 401 }),
+      onAuthenticationFailure,
+    });
+
+    await expect(client.listSessionRecordings('session-1')).rejects.toMatchObject({
+      name: 'RecordingCatalogError',
+      code: 'http_error',
+      status: 401,
+    });
+    expect(onAuthenticationFailure).toHaveBeenCalledOnce();
+  });
+
   it('loads session recordings through the authenticated control API', async () => {
     const fetchImpl = vi.fn<typeof fetch>(async () =>
       jsonResponse({ recordings: [recordingPayload()] }, 200));
