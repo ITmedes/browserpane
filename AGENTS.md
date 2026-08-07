@@ -221,6 +221,7 @@ Run these in `code/web/bpane-client`:
 - `npm run smoke:admin-unified-workflows -- --headless`
 - `npm run smoke:admin-unified-workflow-runs -- --headless`
 - `npm run smoke:admin-unified-identity -- --headless`
+- `npm run smoke:admin-unified-api-companion -- --headless`
 - `npm run smoke:admin-unified-file-workspaces -- --headless`
 - `npm run smoke:file-workspaces -- --headless`
 - `npm test`

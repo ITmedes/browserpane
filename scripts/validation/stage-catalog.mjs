@@ -113,6 +113,8 @@ export class ValidationStageCatalog {
         'smoke:admin-unified-projects'),
       this.#npmSmoke('compose-admin-new-sessions', 'Smoke admin-new sessions', client,
         'smoke:admin-unified-sessions', ['--connect-timeout-ms', '60000']),
+      this.#npmSmoke('compose-admin-new-api-companion', 'Smoke admin-new API companion', client,
+        'smoke:admin-unified-api-companion', ['--connect-timeout-ms', '60000']),
       this.#npmSmoke('compose-admin-compat', 'Smoke compatibility admin session', client,
         'smoke:admin-session'),
       this.#npmSmoke('compose-cli', 'Smoke BrowserPane CLI', client, 'smoke:bpane-cli'),
