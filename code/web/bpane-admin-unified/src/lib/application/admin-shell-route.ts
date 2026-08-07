@@ -72,6 +72,9 @@ export function resolveAdminShellRoute(pathname: string): AdminShellRoute | null
   if (/^\/sessions\/[^/]+\/live$/.test(route)) {
     return { activeId: 'sessions', title: 'BrowserPane Live Session' };
   }
+  if (/^\/sessions\/[^/]+\/files$/.test(route)) {
+    return { activeId: 'sessions', title: 'BrowserPane Session Files' };
+  }
   if (route.startsWith('/sessions/')) {
     return { activeId: 'sessions', title: 'BrowserPane Session Details' };
   }

@@ -153,7 +153,7 @@
   </header>
 
   {#if routeSessionId}
-    <SessionSubareaNavigation sessionId={routeSessionId} activeId="live" />
+    <SessionSubareaNavigation sessionId={routeSessionId} activeId="live" availableIds={['overview', 'live', 'files']} />
   {/if}
 
   {#if sessionState.status === 'idle' || sessionState.status === 'loading'}

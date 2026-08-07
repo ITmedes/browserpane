@@ -87,24 +87,26 @@ treated as complete.
 
 ## Live Browser
 
-1. Open a ready session live surface or preview popup.
-2. Attach and confirm the browser becomes visible.
-3. Resize the popup/window and confirm browser height derives from the live
+1. Open `/admin-new/sessions/{session_id}/live` directly and refresh it.
+2. Confirm runtime, connection, and resolution facts match the session status
+   API, then launch the standalone preview popup.
+3. Attach and confirm the browser becomes visible.
+4. Resize the popup/window and confirm browser height derives from the live
    container/canvas, not the outer window.
-4. Navigate away while attached and confirm the attach/follow state is clear.
-5. Return to live and confirm the same session is still attached when intended.
-6. Disconnect and confirm live state is cleaned up.
-7. Switch sessions and confirm the old canvas is not reused.
-8. Simulate a WebTransport opening-handshake failure and confirm the error
+5. Navigate away while attached and confirm the attach/follow state is clear.
+6. Return to live and confirm the same session is still attached when intended.
+7. Disconnect and confirm live state is cleaned up.
+8. Switch sessions and confirm the old canvas is not reused.
+9. Simulate a WebTransport opening-handshake failure and confirm the error
    mentions the gateway URL, local QUIC trust guidance, and SPKI fingerprint
    helper.
-9. Confirm upload, desktop audio, microphone, camera, clipboard, HiDPI,
+10. Confirm upload, desktop audio, microphone, camera, clipboard, HiDPI,
    scroll-copy, and render-backend controls respect capabilities and policy.
 
 ## Session Files
 
 1. Upload a small file through the live browser flow where policy allows it.
-2. Open the session files area.
+2. Open `/admin-new/sessions/{session_id}/files` directly and refresh it.
 3. Confirm the session file appears and can be downloaded.
 4. Bind a workspace file to a relative mount path.
 5. Try an absolute or parent-traversal mount path and confirm validation blocks
@@ -112,6 +114,10 @@ treated as complete.
 6. Bind files with `read_only`, `read_write`, and `scratch_output` where
    allowed, and confirm the resulting mode is visible.
 7. Refresh the route and confirm bindings remain visible.
+8. Disable project file bindings and confirm existing evidence remains visible
+   while create/remove controls are blocked with a policy message.
+9. Make either the binding or workspace catalog unavailable and confirm the
+   other section remains usable without a route-wide failure.
 
 ## Recordings
 

@@ -228,10 +228,11 @@ Use these development credentials:
 Then:
 
 1. Open `Sessions`, choose `New session`, configure the resource, and click `Create session`. Creation does not start a browser runtime.
-2. On the session detail page, choose `Connect` or `Start and connect`. The live browser opens in a separate popup window.
-3. Open the same session detail and preview from another signed-in browser window to test collaborative access.
-4. In `MCP Delegation`, choose `Authorize` and, for compatibility clients, `Set default` when the local `mcp-bridge` should drive that session.
-5. For external MCP clients, prefer the session-scoped URL shown in the MCP panel, for example `http://localhost:8931/sessions/{session_id}/mcp`.
+2. Open the session `Live` area to inspect runtime/connection state, then choose `Connect` or `Start and connect`. The browser opens in a separate popup window.
+3. Open the session `Files` area to inspect retained uploads/downloads and manage policy-approved workspace bindings.
+4. Open the same session detail and preview from another signed-in browser window to test collaborative access.
+5. In `MCP Delegation`, choose `Authorize` and, for compatibility clients, `Set default` when the local `mcp-bridge` should drive that session.
+6. For external MCP clients, prefer the session-scoped URL shown in the MCP panel, for example `http://localhost:8931/sessions/{session_id}/mcp`.
 
 If you explicitly want the older single-runtime compatibility stack, opt into it:
 
