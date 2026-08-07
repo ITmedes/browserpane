@@ -3,7 +3,7 @@
 ## Metadata
 
 - Issue: `#148`
-- State: In Progress
+- State: Implemented; hosted validation pending
 - Lane: Foundation
 - Target gate: Foundation Gate and prerequisite for `#160`
 - Depends on: merged browser-context clone/export/import API baseline
@@ -34,23 +34,25 @@ leave a context row or Docker profile volume behind.
 
 ## Current Evidence
 
-- `POST /api/v1/browser-contexts/import` currently disables Axum's default body
-  limit and extracts the complete request as `Bytes`.
-- Authorization occurs inside the handler after request extraction, so body
-  buffering is not an explicitly authenticated operation.
-- ZIP parsing and nested gzip/tar processing are not isolated from async request
-  execution.
-- The outer archive allows only `manifest.json` and optional
-  `profile.tar.gz`, and the manifest already has a 128 KiB declared-size check.
-- The nested profile archive has no compressed-size, uncompressed-size, entry-
-  count, or path-length cap.
-- Docker import validates tar path strings with `tar -tzf`, but does not reject
-  symlink, hardlink, device, or FIFO entry types before extracting as root.
-- Runtime import cleanup removes the target volume on extraction failure, and
-  the API removes imported data if metadata persistence fails. Rejection before
-  runtime import currently creates no context row or profile volume.
-- `#160` explicitly requires safe import behavior and is therefore dependent on
-  this issue.
+- `POST /api/v1/browser-contexts/import` authenticates before acquiring bounded
+  import capacity or reading the request body.
+- Configurable limits now bound the outer request, nested compressed profile,
+  expanded profile bytes, profile entry count, path length, and process-level
+  import concurrency.
+- ZIP and nested gzip/tar preflight runs through `spawn_blocking` and maps size
+  limits to `413`, exhausted capacity to `429`, and malformed structure to
+  `400` JSON responses.
+- Tar preflight rejects traversal, absolute paths, symlinks, hardlinks, devices,
+  FIFOs, and unsupported entry types before runtime materialization. Docker
+  extraction repeats type/path checks and cleans the target volume on failure.
+- BrowserPane export now includes only regular files and directories, excluding
+  Chromium's ephemeral profile symlinks and sockets so valid product-generated
+  exports remain compatible with the stricter importer.
+- Unit and API integration tests cover the policy boundaries. A real compose
+  export -> import -> session reuse run passes and verifies malformed/link-
+  bearing rejection without catalog residue.
+- `#160` remains the owner of admin-new clone/import/export controls and can
+  consume this bounded backend contract after this issue merges.
 
 ## Scope
 
@@ -287,9 +289,21 @@ leave a context row or Docker profile volume behind.
 ## Evidence Record
 
 - PR: pending
-- Commits: pending
-- Unit/integration results: pending
-- Compose smoke results: pending
-- Coverage/build results: pending
-- README decision: required
-- ARCH decision: required
+- Commits: `7b7d902`, `2ed29e3`, `226f1a2`, `c4f44ca`, `12f7282`,
+  `aae2186`, `cdc2f71`, `778bfbd`, `764a714`
+- Unit/integration results: `cargo test -p bpane-gateway` passed with 413
+  tests, zero failures, and one ignored opt-in Postgres contract test.
+- Compose smoke results: focused `compose_browser_contexts_api_surface` passed
+  in 166.70 seconds against the rebuilt docker-pool stack. The suite covers
+  real profile persistence, export/import/session reuse, unsafe archive
+  rejection, and residue checks.
+- CLI/admin regressions: `smoke:bpane-cli`,
+  `smoke:admin-unified-browser-contexts`, and
+  `smoke:admin-browser-contexts` passed against the running stack.
+- Coverage/build results: gateway package line coverage 60.34%; new archive
+  parser line coverage 80.91%. Formatting, strict clippy, compose config, and
+  OpenAPI generation/lint/examples/compatibility checks passed.
+- README decision: updated with deployment defaults and bounded response
+  behavior.
+- ARCH decision: updated with the authenticated, backpressured import boundary
+  and runtime extraction defense.
