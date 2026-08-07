@@ -24,6 +24,7 @@
   import { formatDateTime } from '$lib/projects/project-formatters';
   import { projectToneClass } from '$lib/projects/project-ui';
   import AdminMessage from './AdminMessage.svelte';
+  import ActionFeedback from './ActionFeedback.svelte';
   import WorkflowCodePreview from './WorkflowCodePreview.svelte';
   import WorkflowRunLauncher from './WorkflowRunLauncher.svelte';
   import WorkflowVersionSourceEditor from './WorkflowVersionSourceEditor.svelte';
@@ -186,19 +187,16 @@
       </div>
     </div>
 
-    {#if actionState.status === 'success'}
-      <div class="border-b border-admin-border p-4">
-        <AdminMessage tone="success" title="Workflow action completed" message={actionState.message} testId="workflow-definition-action-success" />
-      </div>
-    {:else if actionState.status === 'error'}
-      <div class="border-b border-admin-border p-4">
-        <AdminMessage tone="error" title="Workflow action failed" message={actionState.message} testId="workflow-definition-action-error" />
-      </div>
-    {:else if actionState.status === 'running'}
-      <div class="border-b border-admin-border p-4">
-        <AdminMessage tone="loading" title={actionState.label} testId="workflow-definition-action-running" />
-      </div>
-    {/if}
+    <div class="border-b border-admin-border p-4">
+      <ActionFeedback
+        state={actionState}
+        successTitle="Workflow action completed"
+        errorTitle="Workflow action failed"
+        successTestId="workflow-definition-action-success"
+        errorTestId="workflow-definition-action-error"
+        runningTestId="workflow-definition-action-running"
+      />
+    </div>
 
     <div class="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 p-4">
       <section class="min-w-0 rounded-md border border-admin-border bg-admin-soft/50 p-4" data-testid="workflow-definition-summary">
