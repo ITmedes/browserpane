@@ -416,8 +416,10 @@ Requirements:
 
 Current admin-new state:
 
-- backend and old-admin/CLI foundations exist,
-- `/admin-new/identity` route is missing.
+- `/admin-new/identity` implements sanitized review evidence,
+- service-principal and identity-mapping create/edit/disable/re-enable are
+  available through the route, API, and CLI,
+- delegation correlation and deep-link lifecycle are smoke-covered.
 
 Current identity mappings and service-principal scopes are access-review
 metadata, not complete RBAC enforcement. #176 owns organization/project roles

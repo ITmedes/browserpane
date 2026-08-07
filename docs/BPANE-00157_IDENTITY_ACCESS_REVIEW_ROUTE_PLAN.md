@@ -1,5 +1,7 @@
 # BPANE-00157 Identity And Access Review Route Plan
 
+Status: implemented and validated on 2026-08-07.
+
 ## Issue
 
 - Canonical issue: [#157 Add admin-new identity and access review route](https://github.com/ITmedes/browserpane/issues/157)
@@ -184,3 +186,20 @@ secrets, or unrestricted claims.
 - Deleting existing delegated sessions when a principal is disabled.
 - Rendering raw OIDC tokens, unrestricted claims, credentials, or secret
   material.
+
+## Delivered Evidence
+
+- Added refresh-safe `/admin-new/identity` review and lifecycle management.
+- Added strict identity API mappers/clients, independent view models, and
+  independently tested route/components.
+- Added `smoke:admin-unified-identity` with real Keycloak authentication,
+  validation/conflict cases, project/principal selectors, full lifecycle,
+  delegation correlation, deep-link refresh, redaction, responsive checks, and
+  cleanup.
+- Admin-new: 142 test files and 463 tests passed; check, build, and coverage
+  passed at 91.47% statements, 76.32% branches, 93.29% functions, and 89.06%
+  lines.
+- Gateway identity/service-principal unit filters and both focused compose API
+  tests passed.
+- Compatibility admin identity tests/check/build, operator CLI smoke, and
+  compatibility admin session smoke passed.

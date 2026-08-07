@@ -446,8 +446,11 @@ Required behavior:
 - access-review evidence for delegated sessions and project usage,
 - safe token claim rendering without raw token payload exposure.
 
-Current status: backend and prior admin functionality exist; unified admin route
-is missing despite navigation.
+Current status: implemented at `/admin-new/identity` for the current #157
+contract. The route exposes sanitized review evidence and full
+service-principal/identity-mapping create, edit, disable, and re-enable flows.
+Organization/project roles and enforced grants remain separate work under
+#176; the route does not present registry metadata as effective RBAC.
 
 ### API Companion And Coverage
 
