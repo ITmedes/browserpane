@@ -101,8 +101,11 @@ verify segment state and download from the session recording route.
 ### 4. Network Evidence
 
 1. Render requested and effective network identity separately.
-2. Show sanitized egress configuration, runtime launch evidence, observer
-   correlation metadata, byte totals, and diagnostics without secrets or URLs.
+2. Show sanitized egress configuration, runtime launch/assignment correlation,
+   and diagnostics without secrets or requested URLs. The existing
+   `POST /egress-usage` route is observer write input, not an operator read
+   contract; the UI must not fabricate per-session byte totals or submit
+   observer reports.
 3. Add an explicit active probe action only for already-ready runtimes; never
    start a stopped session as a diagnostic side effect.
 4. Represent no-egress, proxy, TLS-intercept, policy-blocked, stale, and failed

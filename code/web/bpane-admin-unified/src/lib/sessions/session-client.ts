@@ -7,9 +7,12 @@ import {
   type AdminApiRequestFailure,
   type FetchLike,
 } from '$lib/api/authenticated-api';
+import { toEgressDiagnosticsResource } from '$lib/egress-profiles/egress-profile-client';
+import type { EgressDiagnosticsResource } from '$lib/egress-profiles/egress-profile-types';
 import type {
   CreateSessionRequest,
   ProjectAdmissionDecision,
+  RunSessionEgressDiagnosticsProbeRequest,
   SessionAutomationDelegate,
   SessionAccessTokenResponse,
   SessionBrowserContext,
@@ -18,7 +21,6 @@ import type {
   SessionConnectionCounts,
   SessionConnectionInfo,
   SessionEffectiveEgress,
-  SessionEgressDiagnostics,
   SessionIdleStatus,
   SessionListResponse,
   SessionNetworkIdentity,
@@ -202,6 +204,35 @@ export class SessionCatalogClient {
     return toSessionResource(await response.json());
   }
 
+  async getSessionEgressDiagnostics(sessionId: string): Promise<EgressDiagnosticsResource> {
+    const response = await this.#request(
+      new URL(`/api/v1/sessions/${encodeURIComponent(sessionId)}/egress-diagnostics`, this.#baseUrl),
+      {
+        method: 'GET',
+        headers: { accept: 'application/json' },
+      },
+    );
+    return toEgressDiagnosticsResource(await response.json());
+  }
+
+  async runSessionEgressDiagnosticsProbe(
+    sessionId: string,
+    request: RunSessionEgressDiagnosticsProbeRequest = {},
+  ): Promise<EgressDiagnosticsResource> {
+    const response = await this.#request(
+      new URL(`/api/v1/sessions/${encodeURIComponent(sessionId)}/egress-diagnostics`, this.#baseUrl),
+      {
+        method: 'POST',
+        headers: {
+          accept: 'application/json',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify(request),
+      },
+    );
+    return toEgressDiagnosticsResource(await response.json());
+  }
+
   async #sessionMutation(sessionId: string, action: string): Promise<SessionResource> {
     const response = await this.#request(
       new URL(`/api/v1/sessions/${encodeURIComponent(sessionId)}/${action}`, this.#baseUrl),
@@ -243,7 +274,7 @@ export function toSessionResource(payload: unknown): SessionResource {
       : toSessionEffectiveEgress(object.effective_egress),
     egress_diagnostics: object.egress_diagnostics === null || object.egress_diagnostics === undefined
       ? null
-      : toSessionEgressDiagnostics(object.egress_diagnostics),
+      : toEgressDiagnosticsResource(object.egress_diagnostics),
     owner_mode: optionalString(object.owner_mode, 'session owner_mode') ?? 'shared',
     viewport: object.viewport === null || object.viewport === undefined ? null : toViewport(object.viewport),
     capabilities: toSessionCapabilities(object.capabilities ?? {}),
@@ -298,7 +329,7 @@ export function toSessionStatus(payload: unknown): SessionStatus {
       : toSessionEffectiveEgress(object.effective_egress),
     egress_diagnostics: object.egress_diagnostics === null || object.egress_diagnostics === undefined
       ? null
-      : toSessionEgressDiagnostics(object.egress_diagnostics),
+      : toEgressDiagnosticsResource(object.egress_diagnostics),
     recording: object.recording === null || object.recording === undefined
       ? null
       : toSessionRecordingStatus(object.recording),
@@ -431,21 +462,6 @@ function toSessionRecordingStatus(payload: unknown): SessionRecordingStatus {
     started_at: optionalString(object.started_at, 'session recording started_at') ?? null,
     bytes_written: optionalNumber(object.bytes_written, 'session recording bytes_written') ?? null,
     duration_ms: optionalNumber(object.duration_ms, 'session recording duration_ms') ?? null,
-  };
-}
-
-function toSessionEgressDiagnostics(payload: unknown): SessionEgressDiagnostics {
-  const object = expectRecord(payload, 'session egress_diagnostics');
-  return {
-    health: optionalString(object.health, 'session egress diagnostics health') ?? 'unknown',
-    proof_level: optionalString(object.proof_level, 'session egress diagnostics proof_level') ?? 'none',
-    observation_mode: optionalString(object.observation_mode, 'session egress diagnostics observation_mode') ?? 'metadata_only',
-    warnings: object.warnings === undefined || object.warnings === null
-      ? []
-      : expectArray(object.warnings, 'session egress diagnostics warnings').map((item) =>
-          expectString(item, 'session egress diagnostics warning'),
-        ),
-    observed_at: optionalString(object.observed_at, 'session egress diagnostics observed_at') ?? '',
   };
 }
 
