@@ -358,11 +358,14 @@ async function waitForSessionDetailUrl(page, options, expectedSessionId = '') {
   const result = await poll(
     'created unified session detail route',
     async () => {
-      const url = new URL(page.url());
+      const href = await page.evaluate(() => window.location.href);
+      const url = new URL(href);
       const match = url.pathname.match(/\/admin-new\/sessions\/([^/]+)$/);
       const sessionId = match?.[1] ? decodeURIComponent(match[1]) : '';
-      const error = await page.getByTestId('session-create-error').textContent().catch(() => '');
       const detailVisible = await page.getByTestId('session-detail-route').isVisible().catch(() => false);
+      const error = detailVisible
+        ? ''
+        : (await page.getByTestId('session-create-error').allTextContents()).join(' ');
       return {
         sessionId: sessionId && sessionId !== 'new' ? sessionId : '',
         detailVisible,
@@ -370,7 +373,7 @@ async function waitForSessionDetailUrl(page, options, expectedSessionId = '') {
         url: url.toString(),
       };
     },
-    (value) => value.detailVisible || Boolean(value.error),
+    (value) => Boolean(value.error || (value.detailVisible && value.sessionId)),
     options.connectTimeoutMs,
   );
   if (result.error) {
