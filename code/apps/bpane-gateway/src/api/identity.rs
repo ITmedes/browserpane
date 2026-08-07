@@ -663,7 +663,7 @@ mod tests {
     ) -> StoredIdentityMapping {
         let now = Utc::now();
         StoredIdentityMapping {
-            id: Uuid::from_u128(0x018f_0000_0000_7000_8000_000000000001),
+            id: Uuid::from_u128(0x018f_0000_0000_7000_8000_0000_0000_0001),
             owner_subject: "owner".to_string(),
             owner_issuer: "https://issuer.example".to_string(),
             name: "mapping".to_string(),
@@ -673,7 +673,7 @@ mod tests {
             external_id: external_id.to_string(),
             claim_name: claim_name.map(ToString::to_string),
             service_principal_id: None,
-            project_id: Uuid::from_u128(0x018f_0000_0000_7000_8000_000000000002),
+            project_id: Uuid::from_u128(0x018f_0000_0000_7000_8000_0000_0000_0002),
             labels: HashMap::new(),
             scopes: Vec::new(),
             state,
