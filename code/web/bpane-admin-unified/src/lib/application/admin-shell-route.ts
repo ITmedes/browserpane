@@ -56,6 +56,15 @@ export function resolveAdminShellRoute(pathname: string): AdminShellRoute | null
   if (route.startsWith('/extensions/')) {
     return { activeId: 'extensions', title: 'BrowserPane Extension Details' };
   }
+  if (route === '/credential-bindings') {
+    return { activeId: 'credentials', title: 'BrowserPane Credential Bindings' };
+  }
+  if (route === '/credential-bindings/new') {
+    return { activeId: 'credentials', title: 'BrowserPane New Credential Binding' };
+  }
+  if (route.startsWith('/credential-bindings/')) {
+    return { activeId: 'credentials', title: 'BrowserPane Credential Binding Details' };
+  }
   if (route === '/workflows') {
     return { activeId: 'workflows', title: 'BrowserPane Workflows' };
   }
