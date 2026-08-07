@@ -46,7 +46,7 @@ or capacity decision.
 | --- | --- | --- | --- |
 | Foundation | Trusted build, auth, contracts, storage, and lifecycle baseline. | Complete through #179 | Foundation Gate |
 | Pilot Value | One bounded reference workflow with accepted evidence and runbook. | #174 | Phase 0 Gate |
-| Operator Product | Complete and promote `/admin-new/` as the default operator console. | #153 | Phase 1 Gate |
+| Operator Product | Complete and promote `/admin-new/` as the default operator console. | #154 | Phase 1 Gate |
 | Production | Harden deployment, security, recovery, supply chain, and telemetry. | #72 / #66 / #178 | Production Baseline |
 | Enterprise | Organization controls, policy, residency, HA, and governed integrations. | #176 / #70 / #79 | Phase N Gate |
 | Innovation | Teach Mode and controlled repair after stable execution contracts. | #171 | Phase N capability gate |
@@ -70,8 +70,8 @@ or capacity decision.
 | Order | Issue | State | Dependency | Outcome |
 | --- | --- | --- | --- | --- |
 | 1 | #179 | Done | #152 persistent behavior baseline | Control API conformance and compatibility governance merged through PR #194. |
-| 2 | #153 | Review | #179 Foundation Gate | Consolidate admin-new patterns, API-client behavior, and feedback handling. |
-| 3 | #154 | Qualified | #153 shared admin-new patterns | Add route-backed workflow-run detail. |
+| 2 | #153 | Done | #179 Foundation Gate | Shared admin-new patterns merged through PR #195. |
+| 3 | #154 | In Progress | #153 shared admin-new patterns | Add route-backed workflow-run detail. |
 
 #151, #184, and #185 established and accelerated the required validation
 baseline. #145 is merged through
@@ -81,8 +81,8 @@ merged through PR #191. #150 merged through PR #192 after passing the canonical
 full 46-stage validation profile. #152 merged through PR #193 and the latest
 scheduled Compose run on that `main` commit passed. #179 merged through PR #194
 after all 40 fast and all 10 Compose validation stages passed. #153 has
-completed implementation and validation on its feature branch and is under
-review; #154 remains the next qualified Operator Product slice after merge.
+merged through PR #195 after all required checks passed. #154 is now the active
+bounded Operator Product slice.
 
 ## Foundation Gate Sequence
 
