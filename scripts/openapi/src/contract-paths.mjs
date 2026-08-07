@@ -24,4 +24,8 @@ export class ContractPaths {
   get inventory() {
     return path.join(this.rootDirectory, 'openapi/bpane-control-v1.operations.json');
   }
+
+  get examples() {
+    return path.join(this.rootDirectory, 'openapi/bpane-control-v1.examples.json');
+  }
 }
