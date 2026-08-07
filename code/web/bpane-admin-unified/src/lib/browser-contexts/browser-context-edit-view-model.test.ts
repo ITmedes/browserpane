@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  browserContextEditDraftFromResource,
   createNewBrowserContextEditDraft,
+  hasBrowserContextEditChanges,
   hasNewBrowserContextEditChanges,
   mergeProjectsWithSelected,
   validateBrowserContextEdit,
@@ -80,6 +82,25 @@ describe('browser context edit view model', () => {
       name: 'Missing project project-...',
       state: 'archived',
     }]);
+  });
+
+  it('creates a stable prefilled draft from an existing context', () => {
+    const initialDraft = browserContextEditDraftFromResource(context(), 'Support baseline copy');
+
+    expect(initialDraft).toEqual({
+      name: 'Support baseline copy',
+      description: '',
+      labelsText: '',
+      projectBinding: 'project',
+      projectId: 'project-1',
+      persistenceMode: 'reusable',
+      retentionEnabled: true,
+      retentionSec: '604800',
+      storageLimitEnabled: true,
+      maxProfileStorageBytes: '1024',
+    });
+    expect(hasBrowserContextEditChanges({ ...initialDraft }, initialDraft)).toBe(false);
+    expect(hasBrowserContextEditChanges({ ...initialDraft, name: 'Changed' }, initialDraft)).toBe(true);
   });
 
   it('builds a status summary with usage and storage posture', () => {
