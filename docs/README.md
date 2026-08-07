@@ -161,34 +161,31 @@ The unified admin app has meaningful route-backed coverage now:
 - session preview popup
 - recordings overview
 - workflows
-- workflow runs overview
-- MCP delegation controls in session detail
+- workflow-run overview/detail with logs, events, controls, inputs, and files
+- route-backed session live, files, recordings, network, automation, policy,
+  and observability areas
+- identity and access review
+- API companion, full operation coverage, and integration docs
 
 The unified admin app is not ready to replace `/admin/` yet. The important
 remaining admin-new gaps are:
 
-- route-backed workflow-run detail with logs, events, controls, input, and
-  produced files
-- route-backed session subareas for files, network, policy, automation, and
-  observability
-- identity/access review route
-- API companion and API coverage route
 - session template catalog management
 - extensions catalog
 - credential bindings catalog
 - workflow event subscriptions catalog
+- browser-context clone/import/export parity
+- project governance evidence and cross-resource policy UX
+- operator CLI resource parity
 - command palette
 - explicit promotion/cutover gate
 
 The cleanup/security plan also identifies hardening work that should happen
 before promotion is treated as production-ready:
 
-- token domain separation and URL credential redaction
-- admin browser auth and web-security hardening
-- admin event stream auth without owner bearer query parameters
-- webhook SSRF controls
 - browser context import safety
-- gateway lifecycle/readiness
+- recording artifact finalization hardening
+- production runtime launch boundaries
 - admin/session catalog scalability
 
 ## Second-Pass Audit Result

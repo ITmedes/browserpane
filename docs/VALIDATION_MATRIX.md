@@ -1,6 +1,6 @@
 # Consolidated Validation Matrix
 
-Revalidated against current package scripts: 2026-08-04
+Revalidated against current package scripts: 2026-08-07
 
 This matrix defines the available validation surfaces for product slices. Use
 `PRODUCT_PHASES_AND_RELEASE_GATES.md` to decide which evidence is required for
@@ -9,7 +9,7 @@ one important surface, but it is not the only delivery lane.
 
 ## Verified Baseline And Gaps
 
-The 2026-08-04 coverage ratchet records:
+The current coverage ratchet records:
 
 - all non-ignored Rust workspace tests passed under `cargo llvm-cov`, with
   54.88% line coverage on the canonical pinned Ubuntu runner and 56.88% on
@@ -17,8 +17,8 @@ The 2026-08-04 coverage ratchet records:
 - browser-client tests pass on pinned Node 22/Linux with 92.88% lines, 92.88%
   statements, 93.19% functions, and 87.57% branches across all maintained `js`
   sources; the cross-platform function floor is 92.9%,
-- admin-new's 278 tests pass with 88.33% lines, 90.39% statements, 92.72%
-  functions, and 74.86% branches across `src/lib`,
+- admin-new's 494 tests pass with 89.54% lines, 91.79% statements, 93.59%
+  functions, and 76.47% branches across `src/lib`,
 - MCP bridge has focused unit tests,
 - recording-worker and workflow-worker have build checks but no unit-test
   suites,
@@ -29,11 +29,8 @@ The 2026-08-04 coverage ratchet records:
 - Slice 2 of #151 provides one local validation runner. Slice 3 adds checked-in
   Rust, browser-client, and admin-new coverage floors plus pinned,
   least-privilege fast and bounded compose GitHub Actions workflows. Hosted
-  fast execution passes all nine BrowserPane jobs, and `main` requires them in
-  strict mode as GitHub Actions checks. The first post-merge hosted compose run
-  exposed fixture-ownership and asynchronous Docker-removal gaps. Both are
-  remediated locally; a hosted 9/9 rerun remains the final environment-specific
-  evidence for #151.
+  fast execution passes the required BrowserPane checks, and `main` requires
+  them in strict mode as GitHub Actions checks.
 
 This is meaningful Prototype evidence, not a Production gate. #151 owns the
 enforced baseline; #165 owns missing worker test/runtime hygiene.
@@ -60,11 +57,12 @@ local stack and leaves it running for inspection. Smokes that temporarily
 change gateway admission limits restore the normal compose configuration before
 returning.
 
-Verified on 2026-08-04:
+Verified catalog on 2026-08-07:
 
-- all 36 fast stages pass, including the Rust, browser-client, and admin-new
-  coverage ratchets,
-- all 10 compose stages pass in one uninterrupted run,
+- the fast profile contains 40 stages, including Rust, browser-client, and
+  admin-new coverage ratchets,
+- the compose profile contains 11 bounded stages, including the admin-new API
+  companion smoke,
 - the compose gateway stage passes 17 default API and four docker-pool cases,
 - representative admin-new, compatibility-admin, CLI, MCP, recording, and
   workflow admission journeys pass against the running stack.
@@ -78,7 +76,7 @@ in strict mode and binds them to the GitHub Actions app.
 
 `Compose / Representative compose smoke` runs on pushes to `main`, a weekday
 schedule, and manual dispatch. It is not a pull-request gate until hosted-runner
-reliability is demonstrated. The 60-minute job executes all 10 representative
+reliability is demonstrated. The 60-minute job executes all 11 representative
 compose stages, captures only selected control-plane status/log tails after a
 failure, redacts credential and identity material before upload, and always
 removes BrowserPane containers and compose volumes.
@@ -200,6 +198,8 @@ npm run smoke:admin-unified-file-workspaces -- --headless
 npm run smoke:admin-unified-sessions -- --headless --connect-timeout-ms 60000
 npm run smoke:admin-unified-workflows -- --headless
 npm run smoke:admin-unified-workflow-runs -- --headless
+npm run smoke:admin-unified-identity -- --headless
+npm run smoke:admin-unified-api-companion -- --headless --connect-timeout-ms 60000
 ```
 
 The unified sessions smoke opens and reloads the canonical overview, live,

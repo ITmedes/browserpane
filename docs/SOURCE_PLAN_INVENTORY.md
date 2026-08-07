@@ -186,9 +186,12 @@ Retained requirements:
 - expose high-risk schema families: lifecycle, content/export paths, egress
   diagnostics, observability counters, quotas, identity, automation refs.
 
-Current gap:
+Current state:
 
-- `/admin-new/api` and `/admin-new/coverage` are missing.
+- `/admin-new/api`, `/admin-new/coverage`, and `/admin-new/docs` consume
+  committed #179 evidence and are implemented for #158 scope.
+- Remaining gaps belong to domain route/catalog parity and promotion, not the
+  contract companion.
 
 ### Pattern Library And Selectors
 
@@ -425,14 +428,14 @@ Needed:
 
 ### Identity, API, Coverage, Docs Routes
 
-Status: Missing.
+Status: Implemented for #157/#158 scope.
 
-Needed:
+Delivered:
 
 - `/admin-new/identity`,
 - `/admin-new/api`,
 - `/admin-new/coverage`,
-- either implement or hide `/admin-new/docs`.
+- `/admin-new/docs`.
 
 ### Resource Catalogs Still Missing
 

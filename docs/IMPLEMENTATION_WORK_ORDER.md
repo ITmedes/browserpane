@@ -456,6 +456,11 @@ Validation:
 
 Tier: P2 completion.
 
+Status: implemented for #158 scope on 2026-08-07. The three route-backed
+surfaces consume checked contract artifacts, provide placeholder-only task
+commands, expose the full generated inventory, and separate non-v1
+compatibility surfaces. Promotion of admin-new remains #163.
+
 Why here:
 
 - Navigation advertises API, coverage, and docs.
@@ -466,8 +471,8 @@ Why here:
 Scope:
 
 - add `/admin-new/api`,
-- add `/admin-new/coverage` or hide it until implemented,
-- add `/admin-new/docs` or hide it until implemented,
+- add `/admin-new/coverage`,
+- add `/admin-new/docs`,
 - expose copyable examples for high-value owner API flows,
 - keep compatibility endpoints separated from frozen v1 API operations.
 

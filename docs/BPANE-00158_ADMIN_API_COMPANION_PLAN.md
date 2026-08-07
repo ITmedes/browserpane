@@ -5,6 +5,8 @@
 - Canonical issue: [#158 Add admin-new API companion, coverage, and docs routes](https://github.com/ITmedes/browserpane/issues/158)
 - Delivery lane: Operator Product
 - Dependency: #179 control API conformance and compatibility governance
+- Branch: `feature/BPANE-00158`
+- Status: implementation complete; PR validation pending
 
 ## Business Case
 
@@ -30,7 +32,7 @@ evidence-only UI, API-companion ownership, or worker-only ownership. In
 `/admin-new/docs`, they confirm the owner-bearer and session-automation token
 boundaries and download the exact OpenAPI contract used by CI.
 
-## Current State
+## Baseline At Slice Start
 
 - `openapi/bpane-control-v1.yaml` is the frozen owner-scoped v1 contract.
 - `openapi/bpane-control-v1.operations.json` contains all 131 recognized
@@ -136,6 +138,26 @@ boundaries and download the exact OpenAPI contract used by CI.
   delivery roadmaps, domain requirements, and issue context with delivered
   behavior.
 - Post exact validation evidence on #158 and close it through the PR.
+
+## Delivered Evidence
+
+- Published the OpenAPI YAML plus operation, classification, example, and
+  compatibility artifacts from the web image.
+- Added a checked 14-surface non-v1 compatibility manifest with frozen-path
+  collision detection.
+- Expanded schema-validated examples to 19 and retained 131 frozen operations.
+- Added strict artifact parsing, cross-artifact drift rejection, task-flow and
+  command generation, exact coverage projections, and independent tests.
+- Added route-backed `/admin-new/api`, `/admin-new/coverage`, and
+  `/admin-new/docs` surfaces with direct-refresh and responsive behavior.
+- Added the compose validation stage
+  `compose-admin-new-api-companion` and a Keycloak-backed smoke that executes
+  representative owner API operations, verifies unauthenticated failures, and
+  cleans up its session/project resources.
+- Local evidence on 2026-08-07: admin-new 494/494 tests and coverage ratchet,
+  browser client 661/661 tests and coverage ratchet, OpenAPI 27/27 governance
+  tests plus lint/examples/compatibility, package builds, workflow contracts,
+  and the live compose smoke all pass.
 
 ## Test Strategy
 
