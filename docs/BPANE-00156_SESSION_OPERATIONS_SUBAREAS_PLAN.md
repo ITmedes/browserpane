@@ -3,7 +3,7 @@
 ## Metadata
 
 - Issue: [#156](https://github.com/ITmedes/browserpane/issues/156)
-- State: In Progress
+- State: Implemented and validated; pending review
 - Owner: `thebackplane`
 - Lane: Operator Product
 - Target gate: Admin-new session operations parity
@@ -125,6 +125,24 @@ delegate, policy, workflow, or event state.
   browser viewports.
 - Update `README.md`, architecture documentation, the roadmap, and this plan
   only where behavior or status changed.
+
+Status: complete on `feature/BPANE-00156`.
+
+## Validation Evidence
+
+- Shared admin auth/event tests: 7 files, 41 tests; coverage baseline passed
+  at 91.18% statements, 84.27% branches, and 97.36% functions.
+- Compatibility admin: 45 files, 200 tests; type-check and production build
+  passed.
+- Admin-new: 130 files, 431 tests; type-check, production build, and coverage
+  baseline passed at 91.03% statements, 76.50% branches, and 93.22% functions.
+- `smoke:admin-unified-sessions` passed all eight route transitions, session
+  switching, live event projection, MCP actions, preview, resize, and restart.
+- Compatibility regression smokes passed for realtime snapshots, event-stream
+  reconnect, MCP delegation, browser policy, metrics, session detail, session
+  files, and recording.
+- Unified regression smokes passed for recordings, file workspaces, and
+  workflow runs.
 
 ## Acceptance Criteria
 

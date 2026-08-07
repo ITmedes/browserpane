@@ -203,9 +203,9 @@ Validation:
 
 Priority: admin-new parity.
 
-Status: phase 1 is implemented and validated on `feature/BPANE-00155`; the
-route contract and evidence are recorded in
-`BPANE-00155_SESSION_SUBAREAS_PLAN.md`. Phase 2 remains issue #156.
+Status: phase 1 is merged. Phase 2 is implemented and validated on
+`feature/BPANE-00156`; its decisions and evidence are recorded in
+`BPANE-00156_SESSION_OPERATIONS_SUBAREAS_PLAN.md` pending review.
 
 Why:
 

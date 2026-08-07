@@ -98,7 +98,8 @@ Risk:
 - connect tickets and automation tokens must not be interchangeable,
 - WebTransport request paths and admin-event URLs can expose bearer material in
   logs or browser-visible URLs,
-- admin event stream query auth uses raw owner bearer token,
+- the previous admin event stream query-auth design exposed the raw owner
+  bearer token and required replacement,
 - request paths can inject misleading log content if CR/LF or query material is
   not sanitized.
 

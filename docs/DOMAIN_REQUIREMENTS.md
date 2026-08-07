@@ -443,9 +443,11 @@ Current admin-new state:
 
 - component-level feedback patterns exist,
 - preview metrics drawer exists,
-- route-backed observability/logs/event-stream surface is missing.
+- `/admin-new/sessions/{id}/observability` exposes current selected-session
+  evidence, event-stream health, and a bounded local snapshot timeline.
 
 Issue #20 owns per-session inspection resources and #156 owns their admin-new
-surface. Issue #178 separately owns platform metrics/traces, SLOs, alerts,
+surface. The #156 route is not a durable log or audit system. Issue #178
+separately owns platform metrics/traces, SLOs, alerts,
 runbooks, and tested capacity envelopes. Admin-new should consume the common
 telemetry contract rather than define a UI-only metrics model.
