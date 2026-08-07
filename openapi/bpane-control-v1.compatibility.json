@@ -1,0 +1,132 @@
+{
+  "version": 1,
+  "contract": "bpane-control-v1",
+  "surfaces": [
+    {
+      "id": "web-auth-config",
+      "family": "Web tier",
+      "methods": ["GET"],
+      "path": "/auth-config.json",
+      "auth": "public-metadata",
+      "stability": "deployment-helper",
+      "purpose": "Publishes sanitized OIDC discovery metadata used by the admin shells."
+    },
+    {
+      "id": "oidc-discovery",
+      "family": "External identity provider",
+      "methods": ["GET"],
+      "path": "{configured_oidc_issuer}/.well-known/openid-configuration",
+      "auth": "public-metadata",
+      "stability": "external-dependency",
+      "purpose": "Discovers authorization, token, and logout endpoints from the configured identity provider."
+    },
+    {
+      "id": "mcp-health",
+      "family": "MCP bridge",
+      "methods": ["GET"],
+      "path": "/health",
+      "auth": "deployment-internal",
+      "stability": "compatibility",
+      "purpose": "Reports bridge-local health and sanitized delegated-session alignment."
+    },
+    {
+      "id": "mcp-control-session",
+      "family": "MCP bridge",
+      "methods": ["GET", "PUT", "DELETE"],
+      "path": "/control-session",
+      "auth": "internal-bearer",
+      "stability": "compatibility",
+      "purpose": "Maintains the bridge-global default delegated session for compatibility callers."
+    },
+    {
+      "id": "mcp-streamable-http",
+      "family": "MCP protocol",
+      "methods": ["GET", "POST", "DELETE"],
+      "path": "/mcp",
+      "auth": "mcp-protocol",
+      "stability": "protocol",
+      "purpose": "Exposes the bridge-global Streamable HTTP MCP transport."
+    },
+    {
+      "id": "mcp-session-streamable-http",
+      "family": "MCP protocol",
+      "methods": ["GET", "POST", "DELETE"],
+      "path": "/sessions/{session_id}/mcp",
+      "auth": "mcp-protocol",
+      "stability": "protocol",
+      "purpose": "Routes Streamable HTTP MCP traffic to one explicit BrowserPane session."
+    },
+    {
+      "id": "mcp-sse",
+      "family": "MCP protocol",
+      "methods": ["GET"],
+      "path": "/sse",
+      "auth": "mcp-protocol",
+      "stability": "legacy-protocol",
+      "purpose": "Exposes the bridge-global legacy SSE MCP transport."
+    },
+    {
+      "id": "mcp-session-sse",
+      "family": "MCP protocol",
+      "methods": ["GET"],
+      "path": "/sessions/{session_id}/sse",
+      "auth": "mcp-protocol",
+      "stability": "legacy-protocol",
+      "purpose": "Routes legacy SSE MCP traffic to one explicit BrowserPane session."
+    },
+    {
+      "id": "mcp-sse-messages",
+      "family": "MCP protocol",
+      "methods": ["POST"],
+      "path": "/messages?sessionId={mcp_session_id}",
+      "auth": "mcp-protocol",
+      "stability": "legacy-protocol",
+      "purpose": "Accepts client messages for an established legacy SSE transport."
+    },
+    {
+      "id": "mcp-register",
+      "family": "MCP bridge",
+      "methods": ["POST"],
+      "path": "/register",
+      "auth": "deployment-internal",
+      "stability": "compatibility",
+      "purpose": "Re-registers bridge ownership after a compatibility reconnect."
+    },
+    {
+      "id": "legacy-session-status",
+      "family": "Gateway legacy",
+      "methods": ["GET"],
+      "path": "/api/session/status",
+      "auth": "owner-bearer",
+      "stability": "legacy",
+      "purpose": "Preserves the pre-v1 global session-status contract during migration."
+    },
+    {
+      "id": "legacy-session-mcp-owner",
+      "family": "Gateway legacy",
+      "methods": ["GET", "POST", "DELETE"],
+      "path": "/api/session/mcp-owner",
+      "auth": "owner-bearer",
+      "stability": "legacy",
+      "purpose": "Preserves the pre-v1 global MCP-owner contract during migration."
+    },
+    {
+      "id": "certificate-fingerprint",
+      "family": "Local trust helper",
+      "methods": ["GET"],
+      "path": "/cert-fingerprint",
+      "auth": "public-metadata",
+      "stability": "development-helper",
+      "purpose": "Publishes the local WebTransport certificate SPKI fingerprint."
+    },
+    {
+      "id": "certificate-hash",
+      "family": "Local trust helper",
+      "methods": ["GET"],
+      "path": "/cert-hash",
+      "auth": "public-metadata",
+      "stability": "development-helper",
+      "purpose": "Publishes compatibility certificate hash metadata for local clients."
+    }
+  ]
+}

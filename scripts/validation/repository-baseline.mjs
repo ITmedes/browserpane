@@ -10,6 +10,7 @@ const DEFAULT_REQUIRED_PATHS = [
   '.nvmrc',
   'openapi/bpane-control-v1.yaml',
   'openapi/bpane-control-v1.classifications.json',
+  'openapi/bpane-control-v1.compatibility.json',
   'openapi/bpane-control-v1.examples.json',
   'openapi/bpane-control-v1.operations.json',
   'docs/BPANE-00151_MINIMAL_CI_VALIDATION_PLAN.md',

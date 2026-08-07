@@ -14,7 +14,7 @@ test('validates all representative request and response examples', async () => {
 
   new ContractExampleValidator(openapi).validate(examples);
 
-  assert.equal(examples.length, 14);
+  assert.equal(examples.length, 19);
 });
 
 test('rejects an invalid response and reports the example name', async () => {

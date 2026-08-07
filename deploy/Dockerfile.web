@@ -49,6 +49,11 @@ COPY dev/web-fixtures/benchmark-article.html /usr/share/nginx/html/benchmark-art
 COPY dev/web-fixtures/workflow-credential-fixture.html /usr/share/nginx/html/workflow-credential-fixture.html
 COPY dev/web-fixtures/workflow-extension-fixture.html /usr/share/nginx/html/workflow-extension-fixture.html
 COPY dev/web-fixtures/auth-config.template.json /usr/share/nginx/html/auth-config.template.json
+COPY openapi/bpane-control-v1.yaml /usr/share/nginx/html/openapi/bpane-control-v1.yaml
+COPY openapi/bpane-control-v1.operations.json /usr/share/nginx/html/openapi/bpane-control-v1.operations.json
+COPY openapi/bpane-control-v1.classifications.json /usr/share/nginx/html/openapi/bpane-control-v1.classifications.json
+COPY openapi/bpane-control-v1.examples.json /usr/share/nginx/html/openapi/bpane-control-v1.examples.json
+COPY openapi/bpane-control-v1.compatibility.json /usr/share/nginx/html/openapi/bpane-control-v1.compatibility.json
 COPY --from=build /app/dist/ /usr/share/nginx/html/dist/
 COPY --from=build-admin /admin/build/ /usr/share/nginx/html/admin/
 COPY --from=build-admin-unified /admin-unified/build/ /usr/share/nginx/html/admin-new/
