@@ -4,8 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "npm run lint && npm run inventory",
+    "check": "npm run lint && npm run inventory && npm run examples",
     "compatibility": "node src/check-compatibility.mjs",
+    "examples": "node src/check-examples.mjs",
     "generate": "node src/generate-contract.mjs",
     "inventory": "node src/check-contract.mjs",
     "lint": "redocly lint --config redocly.yaml ../../openapi/bpane-control-v1.yaml",
@@ -14,6 +15,7 @@
   "devDependencies": {
     "@redocly/cli": "2.45.0",
     "openapi-diff": "0.24.1",
+    "openapi-enforcer": "1.23.0",
     "yaml": "2.9.0"
   }
 }
