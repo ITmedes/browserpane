@@ -120,14 +120,20 @@ const TASK_FLOW_CONFIG = [
     title: 'Invoke a workflow run',
     description: 'Launch one immutable workflow version with source-system and idempotency correlation.',
     adminHref: '/admin-new/workflows',
-    examples: [{ name: 'companion-workflow-run-create', title: 'Create workflow run' }],
+    examples: [
+      { name: 'workflow-definitions-empty-list', title: 'List workflow definitions' },
+      { name: 'companion-workflow-run-create', title: 'Create workflow run' },
+    ],
   },
   {
     id: 'file-workspaces',
     title: 'Create a file workspace',
     description: 'Create a governed boundary for reusable workflow inputs and produced files.',
     adminHref: '/admin-new/files/workspaces',
-    examples: [{ name: 'companion-file-workspace-create', title: 'Create file workspace' }],
+    examples: [
+      { name: 'file-workspaces-empty-list', title: 'List file workspaces' },
+      { name: 'companion-file-workspace-create', title: 'Create file workspace' },
+    ],
   },
 ] as const;
 

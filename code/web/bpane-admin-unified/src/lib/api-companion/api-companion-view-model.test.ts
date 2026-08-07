@@ -17,7 +17,9 @@ const OPERATIONS: readonly ApiOperation[] = [
   operation('createSession', 'POST', '/api/v1/sessions', 'Sessions', 'owner-bearer', 'ui-primary', ['201', '401']),
   operation('issueSessionAccessToken', 'POST', '/api/v1/sessions/{session_id}/access-tokens', 'Session Runtime', 'owner-bearer', 'ui-evidence', ['200', '401']),
   operation('createWorkflowRun', 'POST', '/api/v1/workflow-runs', 'Workflows', 'owner-bearer', 'ui-primary', ['201', '401']),
+  operation('listWorkflowDefinitions', 'GET', '/api/v1/workflows', 'Workflows', 'owner-bearer', 'ui-primary', ['200', '401']),
   operation('createFileWorkspace', 'POST', '/api/v1/file-workspaces', 'File Workspaces', 'owner-bearer', 'ui-primary', ['201', '401']),
+  operation('listFileWorkspaces', 'GET', '/api/v1/file-workspaces', 'File Workspaces', 'owner-bearer', 'ui-primary', ['200', '401']),
   operation('appendWorkflowRunLog', 'POST', '/api/v1/workflow-runs/{run_id}/logs', 'Workflows', 'session-automation', 'internal-worker', ['200']),
   operation('openAdminEvents', 'GET', '/api/v1/admin/events', 'Admin Events', 'unauthenticated', 'ui-evidence', ['101']),
 ];
@@ -35,15 +37,17 @@ const EXAMPLES: readonly ApiExample[] = [
   example('companion-workflow-run-create', 'createWorkflowRun', '/api/v1/workflow-runs', {
     workflow_id: '33333333-3333-4333-8333-333333333333',
   }),
+  getExample('workflow-definitions-empty-list', 'listWorkflowDefinitions', '/api/v1/workflows'),
   example('companion-file-workspace-create', 'createFileWorkspace', '/api/v1/file-workspaces', {
     project_id: '11111111-1111-4111-8111-111111111111',
   }),
+  getExample('file-workspaces-empty-list', 'listFileWorkspaces', '/api/v1/file-workspaces'),
 ];
 
 const EVIDENCE: ApiContractEvidence = {
   operations: OPERATIONS,
   classifications: {
-    'ui-primary': ['createProject', 'createSession', 'createWorkflowRun', 'createFileWorkspace'],
+    'ui-primary': ['createProject', 'createSession', 'createWorkflowRun', 'listWorkflowDefinitions', 'createFileWorkspace', 'listFileWorkspaces'],
     'ui-evidence': ['issueSessionAccessToken', 'openAdminEvents'],
     'api-companion': [],
     'internal-worker': ['appendWorkflowRunLog'],
@@ -113,7 +117,7 @@ describe('API companion task flows', () => {
       request: { method: 'POST', path: '/api/v1/workflow-runs/run-1/logs', body: { line: 'safe' } },
       response: { status: 200 },
     };
-    const command = commandForExample(OPERATIONS[5]!, workerExample);
+    const command = commandForExample(OPERATIONS.find((item) => item.operationId === 'appendWorkflowRunLog')!, workerExample);
     expect(command).toContain('${BPANE_SESSION_AUTOMATION_TOKEN}');
     expect(command).not.toContain('${BPANE_OWNER_TOKEN}');
   });
@@ -130,13 +134,13 @@ describe('API coverage projections', () => {
       'Workflows',
     ]);
     expect(classificationSummaries(OPERATIONS).map(({ id, count }) => [id, count])).toEqual([
-      ['ui-primary', 4],
+      ['ui-primary', 6],
       ['ui-evidence', 2],
       ['api-companion', 0],
       ['internal-worker', 1],
     ]);
     expect(authSummaries(OPERATIONS).map(({ id, count }) => [id, count])).toEqual([
-      ['owner-bearer', 5],
+      ['owner-bearer', 7],
       ['session-automation', 1],
       ['unauthenticated', 1],
     ]);
@@ -148,7 +152,7 @@ describe('API coverage projections', () => {
       classification: 'all',
       auth: 'all',
       family: 'all',
-    }).map((item) => item.operationId)).toEqual(['createWorkflowRun', 'appendWorkflowRunLog']);
+    }).map((item) => item.operationId)).toEqual(['createWorkflowRun', 'appendWorkflowRunLog', 'listWorkflowDefinitions']);
     expect(filterApiOperations(OPERATIONS, {
       query: '',
       classification: 'internal-worker',
@@ -191,5 +195,14 @@ function example(name: string, operationId: string, path: string, body?: unknown
     operationId,
     request: { method: 'POST', path, ...(body === undefined ? {} : { body }) },
     response: { status: 401, body: { error: 'missing bearer token' } },
+  };
+}
+
+function getExample(name: string, operationId: string, path: string): ApiExample {
+  return {
+    name,
+    operationId,
+    request: { method: 'GET', path },
+    response: { status: 200 },
   };
 }

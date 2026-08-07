@@ -9,8 +9,8 @@ describe('ApiCoverageWorkspace', () => {
   it('renders exact inventory and filters without changing classifications', async () => {
     window.history.replaceState({}, '', '/admin-new/coverage');
     const target = renderComponent(ApiCoverageWorkspace, { evidence: apiContractEvidenceFixture() });
-    expect(target.querySelectorAll('[data-testid="api-operation-row"]')).toHaveLength(8);
-    expect(byTestId(target, 'api-coverage-integrity').textContent).toContain('8 operations');
+    expect(target.querySelectorAll('[data-testid="api-operation-row"]')).toHaveLength(10);
+    expect(byTestId(target, 'api-coverage-integrity').textContent).toContain('10 operations');
 
     const classification = byTestId(target, 'api-coverage-classification') as HTMLSelectElement;
     classification.value = 'internal-worker';
@@ -19,7 +19,7 @@ describe('ApiCoverageWorkspace', () => {
     expect(target.textContent).toContain('appendWorkflowRunLog');
 
     byTestId(target, 'api-coverage-clear').click();
-    await vi.waitFor(() => expect(target.querySelectorAll('[data-testid="api-operation-row"]')).toHaveLength(8));
+    await vi.waitFor(() => expect(target.querySelectorAll('[data-testid="api-operation-row"]')).toHaveLength(10));
   });
 
   it('reads operation deep-link search and renders the empty state', async () => {
