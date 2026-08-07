@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
   import { ArrowLeft } from '@lucide/svelte';
   import { onMount } from 'svelte';
   import { adminErrorMessage, type AdminActionState } from '$lib/application/admin-async-state';
@@ -84,7 +85,7 @@
   }
 
   function defaultNavigateToSession(session: SessionResource): void {
-    window.location.assign(`/admin-new/sessions/${encodeURIComponent(session.id)}`);
+    void goto(`/admin-new/sessions/${encodeURIComponent(session.id)}`);
   }
 </script>
 

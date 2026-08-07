@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
   import { ArrowLeft } from '@lucide/svelte';
   import { onMount } from 'svelte';
   import { adminErrorMessage } from '$lib/application/admin-async-state';
@@ -66,7 +67,7 @@
   }
 
   function defaultNavigateToWorkspace(workspace: FileWorkspaceResource): void {
-    window.location.assign(`/admin-new/files/workspaces/${encodeURIComponent(workspace.id)}`);
+    void goto(`/admin-new/files/workspaces/${encodeURIComponent(workspace.id)}`);
   }
 </script>
 

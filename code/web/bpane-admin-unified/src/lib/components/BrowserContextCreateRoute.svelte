@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
   import { ArrowLeft } from '@lucide/svelte';
   import { onMount } from 'svelte';
   import { adminErrorMessage } from '$lib/application/admin-async-state';
@@ -66,7 +67,7 @@
   }
 
   function defaultNavigateToContext(context: BrowserContextResource): void {
-    window.location.assign(`/admin-new/browser-contexts/${encodeURIComponent(context.id)}`);
+    void goto(`/admin-new/browser-contexts/${encodeURIComponent(context.id)}`);
   }
 </script>
 

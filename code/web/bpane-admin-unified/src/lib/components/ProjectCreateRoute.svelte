@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
   import { ArrowLeft } from '@lucide/svelte';
   import { onMount } from 'svelte';
   import { adminErrorMessage } from '$lib/application/admin-async-state';
@@ -66,7 +67,7 @@
   }
 
   function defaultNavigateToProject(project: ProjectResource): void {
-    window.location.assign(`/admin-new/projects/${encodeURIComponent(project.id)}`);
+    void goto(`/admin-new/projects/${encodeURIComponent(project.id)}`);
   }
 </script>
 
