@@ -5,9 +5,7 @@ import test from 'node:test';
 import { YamlDocumentParser } from '../validation/yaml-document-parser.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
-const workflow = new YamlDocumentParser().parse(
-  path.join(root, '.github/workflows/compose.yml')
-);
+const workflow = new YamlDocumentParser().parse(path.join(root, '.github/workflows/compose.yml'));
 
 function steps(job) {
   return job.steps ?? [];
@@ -25,7 +23,7 @@ test('compose workflow isolates both gateway API suites', () => {
   assert.deepEqual(job.strategy.matrix.suite, ['default', 'docker-pool']);
   assert.match(
     stepByName(job, 'Run gateway compose API suite').run,
-    /--suite \$\{\{ matrix\.suite \}\}/
+    /--suite \$\{\{ matrix\.suite \}\}/,
   );
 });
 
@@ -36,18 +34,19 @@ test('compose workflow preserves every browser-facing smoke stage', () => {
     'compose-admin-auth-security',
     'compose-admin-new-dashboard',
     'compose-admin-new-projects',
+    'compose-admin-new-resource-catalogs',
     'compose-admin-new-sessions',
     'compose-admin-new-api-companion',
     'compose-admin-compat',
     'compose-cli',
     'compose-mcp',
     'compose-recording',
-    'compose-workflow'
+    'compose-workflow',
   ];
 
   assert.equal(
     stepByName(job, 'Prepare compose runtime').run,
-    'scripts/run-gateway-compose-e2e.sh --suite stack'
+    'scripts/run-gateway-compose-e2e.sh --suite stack',
   );
   for (const stage of expectedStages) {
     assert.match(command, new RegExp(`--stage ${stage}(?:\\s|$)`));
@@ -72,15 +71,12 @@ test('every compose lane resolves a read-only builder digest with cold fallback'
     assert.deepEqual(
       job.permissions,
       { contents: 'read', packages: 'read' },
-      `${jobId} package permissions`
+      `${jobId} package permissions`,
     );
-    assert.match(
-      stepByName(job, 'Authenticate to GitHub Container Registry').run,
-      /github\.token/
-    );
+    assert.match(stepByName(job, 'Authenticate to GitHub Container Registry').run, /github\.token/);
     assert.match(
       stepByName(job, 'Resolve CI Rust builder').run,
-      /ci-rust-builder-resolver\.mjs --github-env/
+      /ci-rust-builder-resolver\.mjs --github-env/,
     );
     assert.equal(stepByName(job, 'Log out of GitHub Container Registry').if, 'always()');
     assert.doesNotMatch(JSON.stringify(job), /secrets\./);
