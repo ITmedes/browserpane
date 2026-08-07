@@ -344,6 +344,10 @@ impl WorkflowSourceFileListing {
 }
 
 impl StoredWorkflowRun {
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "workflow run assembly mirrors independent retained and runtime sections"
+    )]
     pub fn to_resource(
         &self,
         recordings: Vec<WorkflowRunRecordingResource>,

@@ -77,6 +77,10 @@ pub(super) async fn session_status_summary(
     })
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "session status assembly mirrors the independent API contract sections"
+)]
 pub(super) fn session_status_from_snapshot(
     state: SessionLifecycleState,
     project_id: Option<Uuid>,
