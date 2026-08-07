@@ -16,21 +16,37 @@ servers:
     description: Same-origin local web proxy
 tags:
   - name: Admin Events
+    description: Owner-scoped realtime administration snapshots and access credentials.
   - name: Identity
+    description: Authenticated principal, access-review, and identity mapping resources.
   - name: Sessions
+    description: Owner-scoped browser session catalog and lifecycle resources.
   - name: Session Templates
+    description: Reusable defaults for creating browser sessions.
   - name: Projects
+    description: Project policy, quota, and usage resources.
   - name: Egress Profiles
+    description: Sanitized outbound network identity and observation configuration.
   - name: Browser Contexts
+    description: Persisted reusable Chromium profile resources.
   - name: Session Runtime
+    description: Session connection, runtime, and diagnostics operations.
   - name: Session Recordings
+    description: Session recording segments, playback, and export resources.
   - name: Session Files
+    description: Session-visible files and reusable workspace bindings.
   - name: Session Automation
+    description: Session-scoped automation ownership and access operations.
   - name: Automation Tasks
+    description: Direct asynchronous automation task lifecycle and evidence.
   - name: Credential Bindings
+    description: Secret-provider-backed workflow and egress credential metadata.
   - name: Extensions
+    description: Owner-approved browser extension metadata and versions.
   - name: File Workspaces
+    description: Reusable file workspace and artifact resources.
   - name: Workflows
+    description: Workflow definitions, runs, events, files, and controls.
 security:
   - bearerAuth: []
 paths:
@@ -57,6 +73,8 @@ paths:
             initial authentication messages close the socket with policy code
             1008. After the authentication acknowledgement, text messages
             contain admin snapshot events or admin.error payloads.
+        '400':
+          $ref: '#/components/responses/BadRequest'
   /api/v1/admin/events/access-tokens:
     post:
       tags: [Admin Events]

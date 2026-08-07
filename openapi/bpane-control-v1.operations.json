@@ -1,0 +1,2167 @@
+{
+  "version": 1,
+  "contract": "bpane-control-v1",
+  "operations": [
+    {
+      "operationId": "appendAutomationTaskLog",
+      "method": "POST",
+      "path": "/api/v1/automation-tasks/{task_id}/logs",
+      "tags": [
+        "Automation Tasks"
+      ],
+      "auth": "session-automation",
+      "classification": "internal-worker",
+      "responses": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "appendWorkflowRunLog",
+      "method": "POST",
+      "path": "/api/v1/workflow-runs/{run_id}/logs",
+      "tags": [
+        "Workflows"
+      ],
+      "auth": "session-automation",
+      "classification": "internal-worker",
+      "responses": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "cancelAutomationTask",
+      "method": "POST",
+      "path": "/api/v1/automation-tasks/{task_id}/cancel",
+      "tags": [
+        "Automation Tasks"
+      ],
+      "auth": "owner-bearer",
+      "classification": "api-companion",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "409",
+        "503"
+      ]
+    },
+    {
+      "operationId": "cancelQueuedSession",
+      "method": "POST",
+      "path": "/api/v1/sessions/{session_id}/cancel",
+      "tags": [
+        "Sessions"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "409",
+        "503"
+      ]
+    },
+    {
+      "operationId": "cancelWorkflowRun",
+      "method": "POST",
+      "path": "/api/v1/workflow-runs/{run_id}/cancel",
+      "tags": [
+        "Workflows"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "409",
+        "503"
+      ]
+    },
+    {
+      "operationId": "clearAutomationOwner",
+      "method": "DELETE",
+      "path": "/api/v1/sessions/{session_id}/automation-owner",
+      "tags": [
+        "Session Automation"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "clearSessionMcpOwner",
+      "method": "DELETE",
+      "path": "/api/v1/sessions/{session_id}/mcp-owner",
+      "tags": [
+        "Session Automation"
+      ],
+      "auth": "session-automation",
+      "classification": "internal-worker",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "409",
+        "503"
+      ]
+    },
+    {
+      "operationId": "cloneBrowserContext",
+      "method": "POST",
+      "path": "/api/v1/browser-contexts/{context_id}/clone",
+      "tags": [
+        "Browser Contexts"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "201",
+        "400",
+        "401",
+        "404",
+        "409",
+        "503"
+      ]
+    },
+    {
+      "operationId": "completeSessionRecording",
+      "method": "POST",
+      "path": "/api/v1/sessions/{session_id}/recordings/{recording_id}/complete",
+      "tags": [
+        "Session Recordings"
+      ],
+      "auth": "owner-bearer",
+      "classification": "internal-worker",
+      "responses": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "409",
+        "503"
+      ]
+    },
+    {
+      "operationId": "createAutomationTask",
+      "method": "POST",
+      "path": "/api/v1/automation-tasks",
+      "tags": [
+        "Automation Tasks"
+      ],
+      "auth": "owner-bearer",
+      "classification": "api-companion",
+      "responses": [
+        "201",
+        "400",
+        "401",
+        "404",
+        "409",
+        "503"
+      ]
+    },
+    {
+      "operationId": "createBrowserContext",
+      "method": "POST",
+      "path": "/api/v1/browser-contexts",
+      "tags": [
+        "Browser Contexts"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "201",
+        "400",
+        "401",
+        "409",
+        "503"
+      ]
+    },
+    {
+      "operationId": "createCredentialBinding",
+      "method": "POST",
+      "path": "/api/v1/credential-bindings",
+      "tags": [
+        "Credential Bindings"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "201",
+        "400",
+        "401",
+        "503"
+      ]
+    },
+    {
+      "operationId": "createEgressProfile",
+      "method": "POST",
+      "path": "/api/v1/egress-profiles",
+      "tags": [
+        "Egress Profiles"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "201",
+        "400",
+        "401",
+        "409",
+        "503"
+      ]
+    },
+    {
+      "operationId": "createExtension",
+      "method": "POST",
+      "path": "/api/v1/extensions",
+      "tags": [
+        "Extensions"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "201",
+        "400",
+        "401",
+        "503"
+      ]
+    },
+    {
+      "operationId": "createExtensionVersion",
+      "method": "POST",
+      "path": "/api/v1/extensions/{extension_id}/versions",
+      "tags": [
+        "Extensions"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "201",
+        "400",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "createFileWorkspace",
+      "method": "POST",
+      "path": "/api/v1/file-workspaces",
+      "tags": [
+        "File Workspaces"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "201",
+        "400",
+        "401",
+        "503"
+      ]
+    },
+    {
+      "operationId": "createIdentityMapping",
+      "method": "POST",
+      "path": "/api/v1/identity-mappings",
+      "tags": [
+        "Identity"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "201",
+        "400",
+        "401",
+        "404",
+        "409",
+        "503"
+      ]
+    },
+    {
+      "operationId": "createProject",
+      "method": "POST",
+      "path": "/api/v1/projects",
+      "tags": [
+        "Projects"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "201",
+        "400",
+        "401",
+        "409",
+        "503"
+      ]
+    },
+    {
+      "operationId": "createServicePrincipal",
+      "method": "POST",
+      "path": "/api/v1/service-principals",
+      "tags": [
+        "Identity"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "201",
+        "400",
+        "401",
+        "409",
+        "503"
+      ]
+    },
+    {
+      "operationId": "createSession",
+      "method": "POST",
+      "path": "/api/v1/sessions",
+      "tags": [
+        "Sessions"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "201",
+        "400",
+        "401",
+        "404",
+        "409",
+        "503"
+      ]
+    },
+    {
+      "operationId": "createSessionFileBinding",
+      "method": "POST",
+      "path": "/api/v1/sessions/{session_id}/file-bindings",
+      "tags": [
+        "Session Files"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "201",
+        "400",
+        "401",
+        "404",
+        "409",
+        "503"
+      ]
+    },
+    {
+      "operationId": "createSessionRecording",
+      "method": "POST",
+      "path": "/api/v1/sessions/{session_id}/recordings",
+      "tags": [
+        "Session Recordings"
+      ],
+      "auth": "owner-bearer",
+      "classification": "api-companion",
+      "responses": [
+        "201",
+        "401",
+        "404",
+        "409",
+        "503"
+      ]
+    },
+    {
+      "operationId": "createSessionTemplate",
+      "method": "POST",
+      "path": "/api/v1/session-templates",
+      "tags": [
+        "Session Templates"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "201",
+        "400",
+        "401",
+        "409",
+        "503"
+      ]
+    },
+    {
+      "operationId": "createWorkflowDefinition",
+      "method": "POST",
+      "path": "/api/v1/workflows",
+      "tags": [
+        "Workflows"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "201",
+        "400",
+        "401",
+        "503"
+      ]
+    },
+    {
+      "operationId": "createWorkflowDefinitionVersion",
+      "method": "POST",
+      "path": "/api/v1/workflows/{workflow_id}/versions",
+      "tags": [
+        "Workflows"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "201",
+        "400",
+        "401",
+        "404",
+        "409",
+        "503"
+      ]
+    },
+    {
+      "operationId": "createWorkflowEventSubscription",
+      "method": "POST",
+      "path": "/api/v1/workflow-event-subscriptions",
+      "tags": [
+        "Workflows"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "201",
+        "400",
+        "401",
+        "503"
+      ]
+    },
+    {
+      "operationId": "createWorkflowRun",
+      "method": "POST",
+      "path": "/api/v1/workflow-runs",
+      "tags": [
+        "Workflows"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "201",
+        "400",
+        "401",
+        "404",
+        "409",
+        "503"
+      ]
+    },
+    {
+      "operationId": "deleteBrowserContext",
+      "method": "DELETE",
+      "path": "/api/v1/browser-contexts/{context_id}",
+      "tags": [
+        "Browser Contexts"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "409",
+        "503"
+      ]
+    },
+    {
+      "operationId": "deleteFileWorkspaceFile",
+      "method": "DELETE",
+      "path": "/api/v1/file-workspaces/{workspace_id}/files/{file_id}",
+      "tags": [
+        "File Workspaces"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "deleteSession",
+      "method": "DELETE",
+      "path": "/api/v1/sessions/{session_id}",
+      "tags": [
+        "Sessions"
+      ],
+      "auth": "owner-bearer",
+      "classification": "api-companion",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "409",
+        "503"
+      ]
+    },
+    {
+      "operationId": "deleteWorkflowEventSubscription",
+      "method": "DELETE",
+      "path": "/api/v1/workflow-event-subscriptions/{subscription_id}",
+      "tags": [
+        "Workflows"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "disableExtension",
+      "method": "POST",
+      "path": "/api/v1/extensions/{extension_id}/disable",
+      "tags": [
+        "Extensions"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "disconnectAllSessionConnections",
+      "method": "POST",
+      "path": "/api/v1/sessions/{session_id}/connections/disconnect-all",
+      "tags": [
+        "Sessions"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "disconnectSessionConnection",
+      "method": "POST",
+      "path": "/api/v1/sessions/{session_id}/connections/{connection_id}/disconnect",
+      "tags": [
+        "Sessions"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "enableExtension",
+      "method": "POST",
+      "path": "/api/v1/extensions/{extension_id}/enable",
+      "tags": [
+        "Extensions"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "exportBrowserContext",
+      "method": "GET",
+      "path": "/api/v1/browser-contexts/{context_id}/export",
+      "tags": [
+        "Browser Contexts"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "409",
+        "503"
+      ]
+    },
+    {
+      "operationId": "failSessionRecording",
+      "method": "POST",
+      "path": "/api/v1/sessions/{session_id}/recordings/{recording_id}/fail",
+      "tags": [
+        "Session Recordings"
+      ],
+      "auth": "owner-bearer",
+      "classification": "internal-worker",
+      "responses": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "409",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getAutomationTask",
+      "method": "GET",
+      "path": "/api/v1/automation-tasks/{task_id}",
+      "tags": [
+        "Automation Tasks"
+      ],
+      "auth": "session-automation",
+      "classification": "ui-evidence",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getAutomationTaskEvents",
+      "method": "GET",
+      "path": "/api/v1/automation-tasks/{task_id}/events",
+      "tags": [
+        "Automation Tasks"
+      ],
+      "auth": "session-automation",
+      "classification": "ui-evidence",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getAutomationTaskLogs",
+      "method": "GET",
+      "path": "/api/v1/automation-tasks/{task_id}/logs",
+      "tags": [
+        "Automation Tasks"
+      ],
+      "auth": "session-automation",
+      "classification": "ui-evidence",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getBrowserContext",
+      "method": "GET",
+      "path": "/api/v1/browser-contexts/{context_id}",
+      "tags": [
+        "Browser Contexts"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getCredentialBinding",
+      "method": "GET",
+      "path": "/api/v1/credential-bindings/{binding_id}",
+      "tags": [
+        "Credential Bindings"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getCurrentIdentity",
+      "method": "GET",
+      "path": "/api/v1/identity/me",
+      "tags": [
+        "Identity"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401"
+      ]
+    },
+    {
+      "operationId": "getEgressProfile",
+      "method": "GET",
+      "path": "/api/v1/egress-profiles/{profile_id}",
+      "tags": [
+        "Egress Profiles"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getEgressProfileDiagnostics",
+      "method": "GET",
+      "path": "/api/v1/egress-profiles/{profile_id}/diagnostics",
+      "tags": [
+        "Egress Profiles"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getExtension",
+      "method": "GET",
+      "path": "/api/v1/extensions/{extension_id}",
+      "tags": [
+        "Extensions"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getFileWorkspace",
+      "method": "GET",
+      "path": "/api/v1/file-workspaces/{workspace_id}",
+      "tags": [
+        "File Workspaces"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getFileWorkspaceFile",
+      "method": "GET",
+      "path": "/api/v1/file-workspaces/{workspace_id}/files/{file_id}",
+      "tags": [
+        "File Workspaces"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getFileWorkspaceFileContent",
+      "method": "GET",
+      "path": "/api/v1/file-workspaces/{workspace_id}/files/{file_id}/content",
+      "tags": [
+        "File Workspaces"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "410",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getIdentityAccessReview",
+      "method": "GET",
+      "path": "/api/v1/identity/access-review",
+      "tags": [
+        "Identity"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getIdentityMapping",
+      "method": "GET",
+      "path": "/api/v1/identity-mappings/{identity_mapping_id}",
+      "tags": [
+        "Identity"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getProject",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}",
+      "tags": [
+        "Projects"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getProjectUsage",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/usage",
+      "tags": [
+        "Projects"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getRecordingOperations",
+      "method": "GET",
+      "path": "/api/v1/recording/operations",
+      "tags": [
+        "Session Recordings"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-evidence",
+      "responses": [
+        "200",
+        "401",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getServicePrincipal",
+      "method": "GET",
+      "path": "/api/v1/service-principals/{service_principal_id}",
+      "tags": [
+        "Identity"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getSession",
+      "method": "GET",
+      "path": "/api/v1/sessions/{session_id}",
+      "tags": [
+        "Sessions"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "410",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getSessionEgressDiagnostics",
+      "method": "GET",
+      "path": "/api/v1/sessions/{session_id}/egress-diagnostics",
+      "tags": [
+        "Session Runtime"
+      ],
+      "auth": "session-automation",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getSessionFile",
+      "method": "GET",
+      "path": "/api/v1/sessions/{session_id}/files/{file_id}",
+      "tags": [
+        "Session Files"
+      ],
+      "auth": "session-automation",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getSessionFileBinding",
+      "method": "GET",
+      "path": "/api/v1/sessions/{session_id}/file-bindings/{binding_id}",
+      "tags": [
+        "Session Files"
+      ],
+      "auth": "session-automation",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getSessionFileBindingContent",
+      "method": "GET",
+      "path": "/api/v1/sessions/{session_id}/file-bindings/{binding_id}/content",
+      "tags": [
+        "Session Files"
+      ],
+      "auth": "session-automation",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "410",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getSessionFileContent",
+      "method": "GET",
+      "path": "/api/v1/sessions/{session_id}/files/{file_id}/content",
+      "tags": [
+        "Session Files"
+      ],
+      "auth": "session-automation",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "410",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getSessionRecording",
+      "method": "GET",
+      "path": "/api/v1/sessions/{session_id}/recordings/{recording_id}",
+      "tags": [
+        "Session Recordings"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getSessionRecordingContent",
+      "method": "GET",
+      "path": "/api/v1/sessions/{session_id}/recordings/{recording_id}/content",
+      "tags": [
+        "Session Recordings"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getSessionRecordingPlayback",
+      "method": "GET",
+      "path": "/api/v1/sessions/{session_id}/recording-playback",
+      "tags": [
+        "Session Recordings"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getSessionRecordingPlaybackExport",
+      "method": "GET",
+      "path": "/api/v1/sessions/{session_id}/recording-playback/export",
+      "tags": [
+        "Session Recordings"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "409",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getSessionRecordingPlaybackManifest",
+      "method": "GET",
+      "path": "/api/v1/sessions/{session_id}/recording-playback/manifest",
+      "tags": [
+        "Session Recordings"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getSessionStatus",
+      "method": "GET",
+      "path": "/api/v1/sessions/{session_id}/status",
+      "tags": [
+        "Session Runtime"
+      ],
+      "auth": "session-automation",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getSessionTemplate",
+      "method": "GET",
+      "path": "/api/v1/session-templates/{template_id}",
+      "tags": [
+        "Session Templates"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getWorkflowDefinition",
+      "method": "GET",
+      "path": "/api/v1/workflows/{workflow_id}",
+      "tags": [
+        "Workflows"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getWorkflowDefinitionSourcePreview",
+      "method": "GET",
+      "path": "/api/v1/workflows/{workflow_id}/versions/{version}/source-preview",
+      "tags": [
+        "Workflows"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "422",
+        "502",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getWorkflowDefinitionVersion",
+      "method": "GET",
+      "path": "/api/v1/workflows/{workflow_id}/versions/{version}",
+      "tags": [
+        "Workflows"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getWorkflowEventSubscription",
+      "method": "GET",
+      "path": "/api/v1/workflow-event-subscriptions/{subscription_id}",
+      "tags": [
+        "Workflows"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getWorkflowOperations",
+      "method": "GET",
+      "path": "/api/v1/workflow/operations",
+      "tags": [
+        "Workflows"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-evidence",
+      "responses": [
+        "200",
+        "401",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getWorkflowRun",
+      "method": "GET",
+      "path": "/api/v1/workflow-runs/{run_id}",
+      "tags": [
+        "Workflows"
+      ],
+      "auth": "session-automation",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getWorkflowRunCredentialBindingResolved",
+      "method": "GET",
+      "path": "/api/v1/workflow-runs/{run_id}/credential-bindings/{binding_id}/resolved",
+      "tags": [
+        "Workflows"
+      ],
+      "auth": "session-automation",
+      "classification": "internal-worker",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getWorkflowRunEvents",
+      "method": "GET",
+      "path": "/api/v1/workflow-runs/{run_id}/events",
+      "tags": [
+        "Workflows"
+      ],
+      "auth": "session-automation",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getWorkflowRunLogs",
+      "method": "GET",
+      "path": "/api/v1/workflow-runs/{run_id}/logs",
+      "tags": [
+        "Workflows"
+      ],
+      "auth": "session-automation",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getWorkflowRunProducedFileContent",
+      "method": "GET",
+      "path": "/api/v1/workflow-runs/{run_id}/produced-files/{file_id}/content",
+      "tags": [
+        "Workflows"
+      ],
+      "auth": "session-automation",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "410",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getWorkflowRunSourceSnapshotContent",
+      "method": "GET",
+      "path": "/api/v1/workflow-runs/{run_id}/source-snapshot/content",
+      "tags": [
+        "Workflows"
+      ],
+      "auth": "session-automation",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "410",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getWorkflowRunWorkspaceInputContent",
+      "method": "GET",
+      "path": "/api/v1/workflow-runs/{run_id}/workspace-inputs/{input_id}/content",
+      "tags": [
+        "Workflows"
+      ],
+      "auth": "session-automation",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "importBrowserContext",
+      "method": "POST",
+      "path": "/api/v1/browser-contexts/import",
+      "tags": [
+        "Browser Contexts"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "201",
+        "400",
+        "401",
+        "409",
+        "503"
+      ]
+    },
+    {
+      "operationId": "issueAdminEventAccessToken",
+      "method": "POST",
+      "path": "/api/v1/admin/events/access-tokens",
+      "tags": [
+        "Admin Events"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "503"
+      ]
+    },
+    {
+      "operationId": "issueSessionAccessToken",
+      "method": "POST",
+      "path": "/api/v1/sessions/{session_id}/access-tokens",
+      "tags": [
+        "Session Runtime"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "409",
+        "503"
+      ]
+    },
+    {
+      "operationId": "issueSessionAutomationAccess",
+      "method": "POST",
+      "path": "/api/v1/sessions/{session_id}/automation-access",
+      "tags": [
+        "Session Automation"
+      ],
+      "auth": "owner-bearer",
+      "classification": "internal-worker",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "409",
+        "503"
+      ]
+    },
+    {
+      "operationId": "killSession",
+      "method": "POST",
+      "path": "/api/v1/sessions/{session_id}/kill",
+      "tags": [
+        "Sessions"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "listAutomationTasks",
+      "method": "GET",
+      "path": "/api/v1/automation-tasks",
+      "tags": [
+        "Automation Tasks"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-evidence",
+      "responses": [
+        "200",
+        "401",
+        "503"
+      ]
+    },
+    {
+      "operationId": "listBrowserContexts",
+      "method": "GET",
+      "path": "/api/v1/browser-contexts",
+      "tags": [
+        "Browser Contexts"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "503"
+      ]
+    },
+    {
+      "operationId": "listCredentialBindings",
+      "method": "GET",
+      "path": "/api/v1/credential-bindings",
+      "tags": [
+        "Credential Bindings"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "503"
+      ]
+    },
+    {
+      "operationId": "listEgressProfiles",
+      "method": "GET",
+      "path": "/api/v1/egress-profiles",
+      "tags": [
+        "Egress Profiles"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "503"
+      ]
+    },
+    {
+      "operationId": "listExtensions",
+      "method": "GET",
+      "path": "/api/v1/extensions",
+      "tags": [
+        "Extensions"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "503"
+      ]
+    },
+    {
+      "operationId": "listFileWorkspaceFiles",
+      "method": "GET",
+      "path": "/api/v1/file-workspaces/{workspace_id}/files",
+      "tags": [
+        "File Workspaces"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "listFileWorkspaces",
+      "method": "GET",
+      "path": "/api/v1/file-workspaces",
+      "tags": [
+        "File Workspaces"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "503"
+      ]
+    },
+    {
+      "operationId": "listIdentityMappings",
+      "method": "GET",
+      "path": "/api/v1/identity-mappings",
+      "tags": [
+        "Identity"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "503"
+      ]
+    },
+    {
+      "operationId": "listProjects",
+      "method": "GET",
+      "path": "/api/v1/projects",
+      "tags": [
+        "Projects"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "503"
+      ]
+    },
+    {
+      "operationId": "listServicePrincipals",
+      "method": "GET",
+      "path": "/api/v1/service-principals",
+      "tags": [
+        "Identity"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "503"
+      ]
+    },
+    {
+      "operationId": "listSessionFileBindings",
+      "method": "GET",
+      "path": "/api/v1/sessions/{session_id}/file-bindings",
+      "tags": [
+        "Session Files"
+      ],
+      "auth": "session-automation",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "listSessionFiles",
+      "method": "GET",
+      "path": "/api/v1/sessions/{session_id}/files",
+      "tags": [
+        "Session Files"
+      ],
+      "auth": "session-automation",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "listSessionRecordings",
+      "method": "GET",
+      "path": "/api/v1/sessions/{session_id}/recordings",
+      "tags": [
+        "Session Recordings"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "listSessions",
+      "method": "GET",
+      "path": "/api/v1/sessions",
+      "tags": [
+        "Sessions"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "503"
+      ]
+    },
+    {
+      "operationId": "listSessionTemplates",
+      "method": "GET",
+      "path": "/api/v1/session-templates",
+      "tags": [
+        "Session Templates"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "503"
+      ]
+    },
+    {
+      "operationId": "listWorkflowDefinitions",
+      "method": "GET",
+      "path": "/api/v1/workflows",
+      "tags": [
+        "Workflows"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "503"
+      ]
+    },
+    {
+      "operationId": "listWorkflowDefinitionSourceFiles",
+      "method": "GET",
+      "path": "/api/v1/workflows/{workflow_id}/versions/{version}/source-files",
+      "tags": [
+        "Workflows"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "422",
+        "502",
+        "503"
+      ]
+    },
+    {
+      "operationId": "listWorkflowDefinitionVersions",
+      "method": "GET",
+      "path": "/api/v1/workflows/{workflow_id}/versions",
+      "tags": [
+        "Workflows"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "listWorkflowEventDeliveries",
+      "method": "GET",
+      "path": "/api/v1/workflow-event-subscriptions/{subscription_id}/deliveries",
+      "tags": [
+        "Workflows"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "listWorkflowEventSubscriptions",
+      "method": "GET",
+      "path": "/api/v1/workflow-event-subscriptions",
+      "tags": [
+        "Workflows"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "503"
+      ]
+    },
+    {
+      "operationId": "listWorkflowRunProducedFiles",
+      "method": "GET",
+      "path": "/api/v1/workflow-runs/{run_id}/produced-files",
+      "tags": [
+        "Workflows"
+      ],
+      "auth": "session-automation",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "listWorkflowRuns",
+      "method": "GET",
+      "path": "/api/v1/workflow-runs",
+      "tags": [
+        "Workflows"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "503"
+      ]
+    },
+    {
+      "operationId": "openAdminEvents",
+      "method": "GET",
+      "path": "/api/v1/admin/events",
+      "tags": [
+        "Admin Events"
+      ],
+      "auth": "unauthenticated",
+      "classification": "ui-primary",
+      "responses": [
+        "101",
+        "400"
+      ]
+    },
+    {
+      "operationId": "rejectWorkflowRun",
+      "method": "POST",
+      "path": "/api/v1/workflow-runs/{run_id}/reject",
+      "tags": [
+        "Workflows"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "409",
+        "503"
+      ]
+    },
+    {
+      "operationId": "releaseSessionRuntime",
+      "method": "POST",
+      "path": "/api/v1/sessions/{session_id}/release",
+      "tags": [
+        "Sessions"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "409",
+        "503"
+      ]
+    },
+    {
+      "operationId": "removeSessionFileBinding",
+      "method": "DELETE",
+      "path": "/api/v1/sessions/{session_id}/file-bindings/{binding_id}",
+      "tags": [
+        "Session Files"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "reportSessionEgressUsage",
+      "method": "POST",
+      "path": "/api/v1/sessions/{session_id}/egress-usage",
+      "tags": [
+        "Session Runtime"
+      ],
+      "auth": "session-automation",
+      "classification": "internal-worker",
+      "responses": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "resumeWorkflowRun",
+      "method": "POST",
+      "path": "/api/v1/workflow-runs/{run_id}/resume",
+      "tags": [
+        "Workflows"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "409",
+        "503"
+      ]
+    },
+    {
+      "operationId": "runEgressProfileReachabilityProbe",
+      "method": "POST",
+      "path": "/api/v1/egress-profiles/{profile_id}/diagnostics/probe",
+      "tags": [
+        "Egress Profiles"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "runSessionEgressDiagnosticsProbe",
+      "method": "POST",
+      "path": "/api/v1/sessions/{session_id}/egress-diagnostics",
+      "tags": [
+        "Session Runtime"
+      ],
+      "auth": "session-automation",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "409",
+        "503"
+      ]
+    },
+    {
+      "operationId": "setAutomationOwner",
+      "method": "POST",
+      "path": "/api/v1/sessions/{session_id}/automation-owner",
+      "tags": [
+        "Session Automation"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "setSessionMcpOwner",
+      "method": "POST",
+      "path": "/api/v1/sessions/{session_id}/mcp-owner",
+      "tags": [
+        "Session Automation"
+      ],
+      "auth": "session-automation",
+      "classification": "internal-worker",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "409",
+        "503"
+      ]
+    },
+    {
+      "operationId": "stopSession",
+      "method": "POST",
+      "path": "/api/v1/sessions/{session_id}/stop",
+      "tags": [
+        "Sessions"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "409",
+        "503"
+      ]
+    },
+    {
+      "operationId": "stopSessionRecording",
+      "method": "POST",
+      "path": "/api/v1/sessions/{session_id}/recordings/{recording_id}/stop",
+      "tags": [
+        "Session Recordings"
+      ],
+      "auth": "owner-bearer",
+      "classification": "api-companion",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "409",
+        "503"
+      ]
+    },
+    {
+      "operationId": "submitWorkflowRunInput",
+      "method": "POST",
+      "path": "/api/v1/workflow-runs/{run_id}/submit-input",
+      "tags": [
+        "Workflows"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "409",
+        "503"
+      ]
+    },
+    {
+      "operationId": "transitionAutomationTaskState",
+      "method": "POST",
+      "path": "/api/v1/automation-tasks/{task_id}/state",
+      "tags": [
+        "Automation Tasks"
+      ],
+      "auth": "session-automation",
+      "classification": "internal-worker",
+      "responses": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "409",
+        "503"
+      ]
+    },
+    {
+      "operationId": "transitionWorkflowRunState",
+      "method": "POST",
+      "path": "/api/v1/workflow-runs/{run_id}/state",
+      "tags": [
+        "Workflows"
+      ],
+      "auth": "session-automation",
+      "classification": "internal-worker",
+      "responses": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "409",
+        "503"
+      ]
+    },
+    {
+      "operationId": "updateEgressProfile",
+      "method": "PUT",
+      "path": "/api/v1/egress-profiles/{profile_id}",
+      "tags": [
+        "Egress Profiles"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "409",
+        "503"
+      ]
+    },
+    {
+      "operationId": "updateIdentityMapping",
+      "method": "PUT",
+      "path": "/api/v1/identity-mappings/{identity_mapping_id}",
+      "tags": [
+        "Identity"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "409",
+        "503"
+      ]
+    },
+    {
+      "operationId": "updateProject",
+      "method": "PUT",
+      "path": "/api/v1/projects/{project_id}",
+      "tags": [
+        "Projects"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "409",
+        "503"
+      ]
+    },
+    {
+      "operationId": "updateServicePrincipal",
+      "method": "PUT",
+      "path": "/api/v1/service-principals/{service_principal_id}",
+      "tags": [
+        "Identity"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "409",
+        "503"
+      ]
+    },
+    {
+      "operationId": "updateSessionRecordingPolicy",
+      "method": "PUT",
+      "path": "/api/v1/sessions/{session_id}/recording-policy",
+      "tags": [
+        "Session Recordings"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "409",
+        "503"
+      ]
+    },
+    {
+      "operationId": "updateSessionTemplate",
+      "method": "PUT",
+      "path": "/api/v1/session-templates/{template_id}",
+      "tags": [
+        "Session Templates"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "409",
+        "503"
+      ]
+    },
+    {
+      "operationId": "uploadFileWorkspaceFile",
+      "method": "POST",
+      "path": "/api/v1/file-workspaces/{workspace_id}/files",
+      "tags": [
+        "File Workspaces"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "201",
+        "400",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "uploadWorkflowRunProducedFile",
+      "method": "POST",
+      "path": "/api/v1/workflow-runs/{run_id}/produced-files",
+      "tags": [
+        "Workflows"
+      ],
+      "auth": "session-automation",
+      "classification": "internal-worker",
+      "responses": [
+        "201",
+        "400",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "validateWorkflowDefinitionSource",
+      "method": "POST",
+      "path": "/api/v1/workflows/{workflow_id}/source-validation",
+      "tags": [
+        "Workflows"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "422",
+        "502",
+        "503"
+      ]
+    }
+  ]
+}
