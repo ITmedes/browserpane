@@ -1,3 +1,6 @@
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import process from 'node:process';
 import { chromium } from 'playwright-core';
 import {
@@ -15,6 +18,7 @@ import {
   DEFAULTS,
   apiOrigin,
   createLogger,
+  deleteSession,
   fetchJson,
   launchChrome,
   parseSmokeArgs,
@@ -29,10 +33,14 @@ async function run() {
   const browser = await launchChrome(chromium, options);
   const context = await browser.newContext({ viewport: { width: 1440, height: 980 } });
   const page = await context.newPage();
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'bpane-admin-new-context-lifecycle-'));
   const runLabel = `admin-unified-contexts-smoke-${Date.now()}`;
   let accessToken = '';
   let project = null;
   let browserContext = null;
+  let clonedContext = null;
+  let importedContext = null;
+  let boundSession = null;
 
   try {
     log(`Opening ${options.pageUrl}`);
@@ -56,18 +64,43 @@ async function run() {
     verifyCreatedContext(browserContext, project, runLabel);
     await verifyCatalogSearch(page, options, browserContext.name, browserContext.id);
     await verifyResponsiveDetailLayout(page, options, browserContext.id);
+    const lifecycle = await verifyLifecycleThroughUi(
+      page,
+      accessToken,
+      options,
+      project,
+      browserContext,
+      runLabel,
+      tempDir,
+    );
+    clonedContext = lifecycle.clonedContext;
+    importedContext = lifecycle.importedContext;
+    boundSession = await createSession(accessToken, options, project.id, importedContext.id, runLabel);
+    assertEqual(boundSession.project_id, project.id, 'imported context session project binding');
+    assertEqual(boundSession.browser_context?.context_id, importedContext.id, 'imported context session binding');
     browserContext = await deleteContextThroughUi(page, accessToken, options, browserContext.id);
     assertEqual(browserContext.state, 'deleted', 'deleted browser context state');
 
     console.log(JSON.stringify({
       browserContextId: browserContext.id,
       browserContextName: browserContext.name,
+      clonedContextId: clonedContext.id,
+      importedContextId: importedContext.id,
+      boundSessionId: boundSession.id,
       projectId: project.id,
     }, null, 2));
   } finally {
-    if (accessToken && browserContext?.id && browserContext.state !== 'deleted') {
-      await deleteBrowserContext(accessToken, options, browserContext.id).catch((error) => {
-        log(`Browser context cleanup for ${browserContext.id} failed: ${error.message}`);
+    if (accessToken && boundSession?.id) {
+      await deleteSession(accessToken, options, boundSession.id).catch((error) => {
+        log(`Session cleanup for ${boundSession.id} failed: ${error.message}`);
+      });
+    }
+    for (const cleanupContext of [importedContext, clonedContext, browserContext]) {
+      if (!accessToken || !cleanupContext?.id || cleanupContext.state === 'deleted') {
+        continue;
+      }
+      await deleteBrowserContext(accessToken, options, cleanupContext.id).catch((error) => {
+        log(`Browser context cleanup for ${cleanupContext.id} failed: ${error.message}`);
       });
     }
     if (accessToken && project) {
@@ -75,8 +108,135 @@ async function run() {
         log(`Project cleanup for ${project.id} failed: ${error.message}`);
       });
     }
+    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
     await context.close();
     await browser.close();
+  }
+}
+
+async function verifyLifecycleThroughUi(page, accessToken, options, project, sourceContext, runLabel, tempDir) {
+  const cloneName = `Unified context clone ${runLabel}`;
+  await page.goto(adminRouteUrl(options, `browser-contexts/${sourceContext.id}`), {
+    waitUntil: 'domcontentloaded',
+  });
+  await page.getByTestId('browser-context-clone').waitFor({
+    state: 'visible',
+    timeout: options.connectTimeoutMs,
+  });
+  if (!await page.getByTestId('browser-context-export').isEnabled()) {
+    throw new Error('Expected export to be enabled for an inactive reusable context.');
+  }
+  await page.getByTestId('browser-context-clone').click();
+  await page.getByTestId('browser-context-clone-route').waitFor({
+    state: 'visible',
+    timeout: options.connectTimeoutMs,
+  });
+  await page.getByTestId('browser-context-edit-name').fill(cloneName);
+  await assertNoBodyHorizontalOverflow(page, 'unified browser-context clone route');
+  await assertNoHorizontalOverflow(page, 'browser-context-clone-route', 'unified browser-context clone route');
+  await verifyLifecycleFormMobileLayout(page, 'browser-context-clone-route', 'clone');
+  await page.getByTestId('browser-context-edit-save').click();
+  const clonedContextId = await waitForContextDetailNavigation(page, options);
+  const clonedContext = await fetchBrowserContext(accessToken, options, clonedContextId);
+  assertEqual(clonedContext.name, cloneName, 'cloned browser context name');
+  assertEqual(clonedContext.project_id, project.id, 'cloned browser context project id');
+  assertEqual(clonedContext.persistence_mode, 'reusable', 'cloned browser context persistence mode');
+
+  await page.goto(adminRouteUrl(options, `browser-contexts/${sourceContext.id}`), {
+    waitUntil: 'domcontentloaded',
+  });
+  await page.getByTestId('browser-context-export').waitFor({
+    state: 'visible',
+    timeout: options.connectTimeoutMs,
+  });
+  const downloadPromise = page.waitForEvent('download', { timeout: options.connectTimeoutMs });
+  await page.getByTestId('browser-context-export').click();
+  const download = await downloadPromise;
+  if (!download.suggestedFilename().endsWith('.zip')) {
+    throw new Error(`Expected browser-context zip export, got ${download.suggestedFilename()}`);
+  }
+  const exportPath = path.join(tempDir, download.suggestedFilename());
+  await download.saveAs(exportPath);
+  const exportStat = await fs.stat(exportPath);
+  if (exportStat.size === 0) {
+    throw new Error('Expected browser-context export archive to contain bytes.');
+  }
+  await page.getByTestId('browser-context-action-success').waitFor({
+    state: 'visible',
+    timeout: options.connectTimeoutMs,
+  });
+
+  const importName = `Unified context import ${runLabel}`;
+  await page.goto(adminRouteUrl(options, 'browser-contexts/import'), { waitUntil: 'domcontentloaded' });
+  await page.getByTestId('browser-context-import-route').waitFor({
+    state: 'visible',
+    timeout: options.connectTimeoutMs,
+  });
+  await page.getByTestId('browser-context-import-file').setInputFiles(exportPath);
+  await page.getByTestId('browser-context-edit-name').fill(importName);
+  await page.getByTestId('browser-context-edit-project-binding').selectOption('project');
+  await page.locator(`[data-testid="browser-context-edit-project-id"] option[value="${project.id}"]`).waitFor({
+    state: 'attached',
+    timeout: options.connectTimeoutMs,
+  });
+  await page.getByTestId('browser-context-edit-project-id').selectOption(project.id);
+  await assertNoBodyHorizontalOverflow(page, 'unified browser-context import route');
+  await assertNoHorizontalOverflow(page, 'browser-context-import-route', 'unified browser-context import route');
+  await verifyLifecycleFormMobileLayout(page, 'browser-context-import-route', 'import');
+  await page.getByTestId('browser-context-edit-save').click();
+  const importedContextId = await waitForContextDetailNavigation(page, options);
+  const importedContext = await fetchBrowserContext(accessToken, options, importedContextId);
+  assertEqual(importedContext.name, importName, 'imported browser context name');
+  assertEqual(importedContext.project_id, project.id, 'imported browser context project id');
+  assertEqual(importedContext.persistence_mode, 'reusable', 'imported browser context persistence mode');
+
+  await verifyMalformedImportRetry(page, options, tempDir, runLabel);
+  return { clonedContext, importedContext };
+}
+
+async function verifyLifecycleFormMobileLayout(page, routeTestId, label) {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await assertNoBodyHorizontalOverflow(page, `mobile unified browser-context ${label} route`);
+  await assertNoHorizontalOverflow(
+    page,
+    routeTestId,
+    `mobile unified browser-context ${label} route`,
+  );
+  await assertNoHorizontalOverflow(
+    page,
+    'browser-context-edit-form',
+    `mobile unified browser-context ${label} form`,
+  );
+  await page.setViewportSize({ width: 1440, height: 980 });
+}
+
+async function verifyMalformedImportRetry(page, options, tempDir, runLabel) {
+  const malformedPath = path.join(tempDir, 'malformed-context.zip');
+  const malformedName = `Malformed import ${runLabel}`;
+  await fs.writeFile(malformedPath, 'not-a-browserpane-archive', 'utf8');
+  await page.goto(adminRouteUrl(options, 'browser-contexts/import'), { waitUntil: 'domcontentloaded' });
+  await page.getByTestId('browser-context-import-route').waitFor({
+    state: 'visible',
+    timeout: options.connectTimeoutMs,
+  });
+  await page.getByTestId('browser-context-import-file').setInputFiles(malformedPath);
+  await page.getByTestId('browser-context-edit-name').fill(malformedName);
+  await page.getByTestId('browser-context-edit-save').click();
+  const message = page.getByTestId('browser-context-import-error');
+  await message.waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
+  if (!(await message.textContent())?.includes('HTTP 400')) {
+    throw new Error(`Expected malformed import HTTP 400 feedback, got ${await message.textContent()}`);
+  }
+  assertEqual(
+    await page.getByTestId('browser-context-edit-name').inputValue(),
+    malformedName,
+    'malformed import preserved name',
+  );
+  if (!(await page.getByTestId('browser-context-import-file-summary').textContent())?.includes('malformed-context.zip')) {
+    throw new Error('Expected malformed import archive selection to remain visible after rejection.');
+  }
+  if (!await page.getByTestId('browser-context-edit-save').isEnabled()) {
+    throw new Error('Expected malformed import to remain retryable after rejection.');
   }
 }
 
@@ -219,14 +379,36 @@ async function deleteContextThroughUi(page, accessToken, options, contextId) {
 
 async function waitForContextDetailNavigation(page, options) {
   await page.waitForURL((url) => {
-    const expectedPrefix = new URL('/admin-new/browser-contexts/', apiOrigin(options)).toString();
-    return url.toString().startsWith(expectedPrefix) && !url.pathname.endsWith('/new');
+    const expectedPrefix = '/admin-new/browser-contexts/';
+    if (!url.pathname.startsWith(expectedPrefix)) {
+      return false;
+    }
+    const suffix = url.pathname.slice(expectedPrefix.length).replace(/\/$/, '');
+    return suffix.length > 0 && !suffix.includes('/') && !['new', 'import'].includes(suffix);
   }, { timeout: options.connectTimeoutMs });
   const contextId = decodeURIComponent(new URL(page.url()).pathname.split('/').filter(Boolean).at(-1) ?? '');
-  if (!contextId || contextId === 'new') {
+  if (!contextId || ['new', 'import', 'clone'].includes(contextId)) {
     throw new Error(`Expected create flow to navigate to browser-context detail route, got ${page.url()}`);
   }
   return contextId;
+}
+
+async function createSession(accessToken, options, projectId, contextId, runLabel) {
+  return await fetchJson(`${apiOrigin(options)}/api/v1/sessions`, {
+    method: 'POST',
+    headers: authJsonHeaders(accessToken),
+    body: JSON.stringify({
+      project_id: projectId,
+      browser_context: {
+        mode: 'reusable',
+        context_id: contextId,
+      },
+      labels: {
+        suite: 'admin-unified-browser-contexts-smoke',
+        run: runLabel,
+      },
+    }),
+  });
 }
 
 async function createProject(accessToken, options, runLabel) {

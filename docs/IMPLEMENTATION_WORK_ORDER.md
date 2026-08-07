@@ -511,11 +511,15 @@ Validation:
 
 Tier: P2/P3 resource lifecycle.
 
+Status: Implemented and hosted-validated on `feature/BPANE-00160` under PR
+`#203`; merge remains.
+
 Why here:
 
-- Context catalog/create/detail/edit exists, but clone/import/export are still
+- Context catalog/create/detail/edit existed, but clone/import/export were
   lifecycle gaps.
-- Import safety should land before exposing import heavily in the UI.
+- Import safety landed through `#148` before archive upload was exposed in
+  admin-new.
 
 Scope:
 

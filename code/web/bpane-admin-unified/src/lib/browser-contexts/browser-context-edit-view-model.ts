@@ -68,8 +68,41 @@ export function createNewBrowserContextEditDraft(): BrowserContextEditDraft {
 }
 
 export function hasNewBrowserContextEditChanges(draft: BrowserContextEditDraft): boolean {
-  const initial = createNewBrowserContextEditDraft();
-  return JSON.stringify(normalizedDraft(draft)) !== JSON.stringify(normalizedDraft(initial));
+  return hasBrowserContextEditChanges(draft, createNewBrowserContextEditDraft());
+}
+
+export function hasBrowserContextEditChanges(
+  draft: BrowserContextEditDraft,
+  initialDraft: BrowserContextEditDraft,
+): boolean {
+  return JSON.stringify(normalizedDraft(draft)) !== JSON.stringify(normalizedDraft(initialDraft));
+}
+
+export function browserContextEditDraftFromResource(
+  context: BrowserContextResource,
+  name = context.name,
+): BrowserContextEditDraft {
+  return {
+    name,
+    description: context.description ?? '',
+    labelsText: Object.entries(context.labels)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, value]) => `${key}=${value}`)
+      .join('\n'),
+    projectBinding: context.project_id ? 'project' : 'owner',
+    projectId: context.project_id ?? '',
+    persistenceMode: context.persistence_mode,
+    retentionEnabled: context.retention_sec !== null && context.retention_sec !== undefined,
+    retentionSec: context.retention_sec === null || context.retention_sec === undefined
+      ? ''
+      : String(context.retention_sec),
+    storageLimitEnabled:
+      context.max_profile_storage_bytes !== null && context.max_profile_storage_bytes !== undefined,
+    maxProfileStorageBytes:
+      context.max_profile_storage_bytes === null || context.max_profile_storage_bytes === undefined
+        ? ''
+        : String(context.max_profile_storage_bytes),
+  };
 }
 
 export function validateBrowserContextEdit(draft: BrowserContextEditDraft): BrowserContextEditValidationResult {
