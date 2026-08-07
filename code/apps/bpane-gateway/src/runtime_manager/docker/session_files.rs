@@ -57,9 +57,11 @@ chown -R bpane:bpane /bpane-target
 chmod 0770 /bpane-target
 "#;
 
-const EXPORT_BROWSER_CONTEXT_PROFILE_SCRIPT: &str = r#"
+pub(in crate::runtime_manager) const EXPORT_BROWSER_CONTEXT_PROFILE_SCRIPT: &str = r#"
 set -eu
-tar -C /bpane-profile -czf - .
+cd /bpane-profile
+find . -xdev \( -type f -o -type d \) -print0 \
+  | tar --null --no-recursion --files-from=- -czf -
 "#;
 
 pub(in crate::runtime_manager) const IMPORT_BROWSER_CONTEXT_PROFILE_SCRIPT: &str = r#"
