@@ -1,7 +1,7 @@
 <script lang="ts">
   import { ArrowLeft } from '@lucide/svelte';
   import { onMount } from 'svelte';
-  import type { AdminActionState } from '$lib/application/admin-async-state';
+  import { adminErrorMessage, type AdminActionState } from '$lib/application/admin-async-state';
   import type { UnifiedAdminContext } from '$lib/auth/unified-admin-context';
   import { ProjectCatalogClient } from '$lib/projects/project-client';
   import { SessionCatalogClient } from '$lib/sessions/session-client';
@@ -64,7 +64,7 @@
     } catch (error) {
       optionsState = {
         status: 'error',
-        message: error instanceof Error ? error.message : 'Session option load failed.',
+        message: adminErrorMessage(error, 'Session option load failed.'),
       };
     }
   }
@@ -78,7 +78,7 @@
     } catch (error) {
       actionState = {
         status: 'error',
-        message: error instanceof Error ? error.message : 'Session creation failed.',
+        message: adminErrorMessage(error, 'Session creation failed.'),
       };
     }
   }

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { adminErrorMessage } from '$lib/application/admin-async-state';
   import type { UnifiedAdminContext } from '$lib/auth/unified-admin-context';
   import { RecordingCatalogClient } from '$lib/recordings/recording-client';
   import {
@@ -54,7 +55,7 @@
     } catch (error) {
       recordingState = {
         status: 'error',
-        message: error instanceof Error ? error.message : 'Unexpected recording catalog error.',
+        message: adminErrorMessage(error, 'Unexpected recording catalog error.'),
       };
     }
   }
@@ -71,7 +72,7 @@
     } catch (error) {
       actionState = {
         status: 'error',
-        message: error instanceof Error ? error.message : 'Recording download failed.',
+        message: adminErrorMessage(error, 'Recording download failed.'),
       };
     }
   }

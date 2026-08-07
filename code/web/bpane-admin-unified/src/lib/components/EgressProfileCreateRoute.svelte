@@ -1,6 +1,7 @@
 <script lang="ts">
   import { ArrowLeft } from '@lucide/svelte';
   import { onMount } from 'svelte';
+  import { adminErrorMessage } from '$lib/application/admin-async-state';
   import type { UnifiedAdminContext } from '$lib/auth/unified-admin-context';
   import { EgressProfileCatalogClient } from '$lib/egress-profiles/egress-profile-client';
   import type {
@@ -45,7 +46,7 @@
     } catch (error) {
       projectOptionsState = {
         status: 'error',
-        message: error instanceof Error ? error.message : 'Project options load failed.',
+        message: adminErrorMessage(error, 'Project options load failed.'),
       };
     }
   }
@@ -59,7 +60,7 @@
     } catch (error) {
       actionState = {
         status: 'error',
-        message: error instanceof Error ? error.message : 'Egress profile creation failed.',
+        message: adminErrorMessage(error, 'Egress profile creation failed.'),
       };
     }
   }

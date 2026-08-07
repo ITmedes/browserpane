@@ -1,6 +1,7 @@
 <script lang="ts">
   import { ArrowLeft } from '@lucide/svelte';
   import { onMount } from 'svelte';
+  import { adminErrorMessage } from '$lib/application/admin-async-state';
   import type { UnifiedAdminContext } from '$lib/auth/unified-admin-context';
   import { ProjectCatalogClient } from '$lib/projects/project-client';
   import type {
@@ -45,7 +46,7 @@
     } catch (error) {
       policyOptionsState = {
         status: 'error',
-        message: error instanceof Error ? error.message : 'Project resource selector load failed.',
+        message: adminErrorMessage(error, 'Project resource selector load failed.'),
       };
     }
   }
@@ -59,7 +60,7 @@
     } catch (error) {
       projectActionState = {
         status: 'error',
-        message: error instanceof Error ? error.message : 'Project creation failed.',
+        message: adminErrorMessage(error, 'Project creation failed.'),
       };
     }
   }
