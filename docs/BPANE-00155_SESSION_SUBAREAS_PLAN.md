@@ -148,9 +148,8 @@ Implementation status: complete.
 - Adjacent admin-new regressions: recording catalog/download, egress profile
   lifecycle, file-workspace upload, and workflow-run detail/session links
   passed.
-- GitHub validation for the feature checkpoint passed all 11 Rust, Node,
-  security, dependency, and repository-metadata checks. The final
-  smoke-stability commit must pass the same checks before review promotion.
+- GitHub validation for the final branch head passed all 11 Rust, Node,
+  security, dependency, and repository-metadata checks.
 
 ## Test Strategy
 
