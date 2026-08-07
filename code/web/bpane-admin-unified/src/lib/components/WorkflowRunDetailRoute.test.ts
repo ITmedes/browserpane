@@ -52,7 +52,7 @@ describe('WorkflowRunDetailRoute', () => {
         });
         return jsonResponse(run);
       }
-      return workflowRunFetch(() => run)(input, init);
+      return workflowRunFetch(() => run)(input);
     });
     vi.stubGlobal('fetch', fetchImpl);
     const target = renderComponent(WorkflowRunDetailRoute, { authContext: authContext() });
