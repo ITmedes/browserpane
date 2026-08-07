@@ -70,6 +70,9 @@ specifications and still require a bounded slice plan before coding.
 - `ADMIN_NEW_API_COVERAGE.md`: owner-scoped OpenAPI coverage, operation
   classification, compatibility endpoints, schema parity, and API companion
   requirements.
+- `CONTROL_API_COMPATIBILITY_POLICY.md`: frozen v1 baseline selection,
+  additive and breaking change rules, deprecation, support windows, and
+  emergency corrections.
 - `ADMIN_NEW_IMPLEMENTATION_GUARDRAILS.md`: side-by-side package topology,
   old-admin parity anchors, API extraction anchors, selector policy, pattern
   library guardrails, and prototype route corrections.
@@ -80,6 +83,9 @@ specifications and still require a bounded slice plan before coding.
 - `BPANE-00151_MINIMAL_CI_VALIDATION_PLAN.md`: implemented Foundation baseline
   for dependency remediation, reproducible validation, coverage ratchets,
   required GitHub checks, and bounded compose evidence.
+- `BPANE-00179_CONTROL_API_CONFORMANCE_PLAN.md`: pinned OpenAPI lint,
+  generated operation evidence, executable examples, Axum route conformance,
+  semantic compatibility, and CI integration.
 - `BPANE-00184_COMPOSE_VALIDATION_PERFORMANCE_PLAN.md`: focused Foundation
   follow-up for reducing hosted compose feedback time while preserving the
   complete local and hosted scenario set; measured cold Docker build
