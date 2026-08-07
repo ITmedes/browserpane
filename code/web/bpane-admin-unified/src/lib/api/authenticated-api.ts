@@ -5,7 +5,8 @@ export type AdminApiRequestErrorCode =
   | 'missing_token'
   | 'http_error'
   | 'network_error'
-  | 'request_aborted';
+  | 'request_aborted'
+  | 'invalid_payload';
 
 export type AdminApiErrorDetails = {
   readonly message: string;
@@ -154,6 +155,9 @@ export function parseAdminApiErrorBody(body: string): AdminApiErrorDetails {
 
 export function formatAdminApiRequestError(prefix: string, failure: AdminApiRequestFailure): string {
   if (failure.code === 'missing_token') {
+    return failure.message;
+  }
+  if (failure.code === 'invalid_payload') {
     return failure.message;
   }
   if (failure.code === 'request_aborted') {
