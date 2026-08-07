@@ -10,6 +10,7 @@ export const ADMIN_UNIFIED_ROUTE_MANIFEST = Object.freeze([
   Object.freeze({ name: 'workflow-runs', path: 'workflow-runs', readyTestId: 'workflow-runs-overview' }),
   Object.freeze({ name: 'sessions', path: 'sessions', readyTestId: 'sessions-overview' }),
   Object.freeze({ name: 'recordings', path: 'recordings', readyTestId: 'recordings-overview' }),
+  Object.freeze({ name: 'identity', path: 'identity', readyTestId: 'identity-access-workspace' }),
 ]);
 
 export function adminRouteUrl(options, routePath) {
