@@ -3,13 +3,13 @@
 ## Metadata
 
 - Issue: [#179](https://github.com/ITmedes/browserpane/issues/179)
-- State: In Progress
+- State: Review
 - Owner: `thebackplane`
 - Lane: Foundation
 - Target gate: Foundation Gate
 - Depends on: #152 persisted session-control behavior baseline
 - Branch: `feature/BPANE-00179`
-- Last verified: 2026-08-07 on `main` at `a0c67ea`
+- Last verified: 2026-08-07 on `feature/BPANE-00179` through `4671a8c`
 
 ## Business Outcome
 
@@ -30,17 +30,23 @@ optional field should pass without a manual exception.
 
 ## Current Evidence
 
-- The OpenAPI 3.0.3 document contains 126 operations and is the frozen
-  owner-scoped v1 contract.
-- The Axum router has the same audited count of `/api/v1` route-method pairs,
-  but no executable check currently protects that equality.
-- Repository validation proves only that the file is valid YAML.
-- Gateway API and Compose tests cover representative behavior, but they do not
-  derive route recognition or response validation from OpenAPI.
-- `ADMIN_NEW_API_COVERAGE.md` classifies all operations, but that inventory is
-  prose and can drift silently.
-- CI has no OpenAPI-specific lint, operation-coverage, example, or breaking
-  compatibility check.
+- The frozen OpenAPI 3.0.3 contract contains 131 operations. A generated,
+  deterministic inventory records every path, method, operation id, tag,
+  security class, and consumer classification.
+- A gateway test materializes every documented path and proves that the Axum
+  router recognizes both the path and its documented method.
+- Pinned Redocly lint, reference, operation-id, security, response, and example
+  checks run from a clean lockfile-backed package.
+- Fourteen representative success and shared-error request/response cases are
+  validated across sessions, projects, workflows, recordings, identity, file
+  workspaces, and egress.
+- The pinned semantic compatibility engine compares against an explicit git
+  baseline. Controlled tests prove additive operations pass and removed
+  operations fail.
+- Fast validation and CI contain named OpenAPI install, test, check, and
+  compatibility stages. Pull requests compare with the actual base SHA.
+- The compatibility and deprecation policy is published in
+  `CONTROL_API_COMPATIBILITY_POLICY.md`.
 
 ## Scope
 
@@ -240,6 +246,33 @@ optional field should pass without a manual exception.
 
 - Branch: `feature/BPANE-00179`
 - PR: pending
-- Implementation: pending
-- Validation: pending
-- Documentation impact: pending
+- Implementation:
+  - `7c35572` adds pinned contract tooling and generated operation evidence.
+  - `b1cd228` adds semantic baseline comparison and controlled compatibility
+    fixtures.
+  - `eb7c1f7` adds OpenAPI-derived Axum route recognition for all 131
+    operations.
+  - `764aece` adds 14 representative request/response schema cases.
+  - `e825a76` and `9efe1d6` add local/CI stages and exact workflow-base
+    selection.
+  - `4671a8c` completes governance failure-path coverage.
+- Validation on 2026-08-07:
+  - `node scripts/validate.mjs --profile fast`: all 40 stages passed.
+  - Rust workspace tests and coverage ratchet passed; the focused OpenAPI
+    gateway contract passed for all 131 operations.
+  - OpenAPI tooling: 19 unit/fixture tests, structural lint, deterministic
+    inventory, 14 examples, and semantic compatibility passed.
+  - `node scripts/validate.mjs --profile compose`: all 10 stages passed,
+    including 17 default-runtime and 4 docker-pool gateway API tests plus
+    admin-new, compatibility admin, CLI, MCP, recording, and workflow smokes.
+  - The recording smoke produced two non-empty WebM segments and a playback
+    export; workflow capacity and project-quota runs queued and completed.
+- Documentation impact:
+  - README, AGENTS, validation matrix, API coverage, risk register, delivery
+    roadmap, docs index, and the v1 compatibility policy are aligned.
+  - `ARCH.md` is intentionally unchanged because runtime ownership, topology,
+    persistence, protocol, and deployment behavior did not change.
+  - The standard semantic diff dependency currently emits Node's transitive
+    `DEP0169` deprecation warning; its clean audit and compatibility result are
+    unaffected. Treat an upstream replacement as dependency maintenance, not
+    a suppressed conformance result.
