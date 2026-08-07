@@ -47,7 +47,7 @@ or capacity decision.
 | --- | --- | --- | --- |
 | Foundation | Trusted build, auth, contracts, storage, and lifecycle baseline. | Complete through #179 | Foundation Gate |
 | Pilot Value | One bounded reference workflow with accepted evidence and runbook. | #174 | Phase 0 Gate |
-| Operator Product | Complete and promote `/admin-new/` as the default operator console. | #158 in review, then #159 | Phase 1 Gate |
+| Operator Product | Complete and promote `/admin-new/` as the default operator console. | #159 in review, then #160 | Phase 1 Gate |
 | Production | Harden deployment, security, recovery, supply chain, and telemetry. | #72 / #66 / #178 | Production Baseline |
 | Enterprise | Organization controls, policy, residency, HA, and governed integrations. | #176 / #70 / #79 | Phase N Gate |
 | Innovation | Teach Mode and controlled repair after stable execution contracts. | #171 | Phase N capability gate |
@@ -71,8 +71,8 @@ or capacity decision.
 | Order | Issue | State | Dependency | Outcome |
 | --- | --- | --- | --- | --- |
 | 1 | #157 | Done | #156 session operations parity | Identity/access review and registry lifecycle merged through PR #199. |
-| 2 | #158 | Review | #179 governed contract evidence | API, coverage, and docs companion routes are implemented and locally validated. |
-| 3 | #159 | Ready after #158 | #153 shared catalog patterns | Extensions, credential bindings, and workflow event-subscription catalogs. |
+| 2 | #158 | Done | #179 governed contract evidence | API, coverage, and docs companion routes merged through PR #200. |
+| 3 | #159 | Review | #153 shared catalog patterns | Extensions, credential bindings, and workflow event-subscription catalogs are implemented and under validation. |
 
 #151, #184, and #185 established and accelerated the required validation
 baseline. #145 is merged through
@@ -84,8 +84,8 @@ scheduled Compose run on that `main` commit passed. #179 merged through PR #194
 after all 40 fast and all 10 Compose validation stages passed. #153 has
 merged through PR #195 after all required checks passed. #154 merged through
 PR #196, #155 through PR #197, #156 through PR #198, and #157 through PR #199.
-#158 is implemented on `feature/BPANE-00158` and is the active Operator Product
-review slice; #159 is the next ordered resource-catalog slice after merge.
+#158 merged through PR #200. #159 is implemented on `feature/BPANE-00159` and
+is the active Operator Product review slice; #160 is next after merge.
 
 ## Foundation Gate Sequence
 
