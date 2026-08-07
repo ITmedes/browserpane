@@ -117,7 +117,13 @@ async function run() {
     const switchSession = await createSwitchSession(accessToken, options);
     createdSessionIds.push(switchSession.id);
     await verifySessionSwitch(page, options, createdSessionId, switchSession.id);
+    await verifyObservabilityLiveUpdate(page, options, createdSessionId, authConfig, accessToken);
     await verifyMcpDelegation(page, options, createdSessionId, authConfig, accessToken);
+    await page.goto(adminRouteUrl(options, `sessions/${createdSessionId}`), { waitUntil: 'domcontentloaded' });
+    await page.getByTestId('session-detail-route').waitFor({
+      state: 'visible',
+      timeout: options.connectTimeoutMs,
+    });
     await verifySessionPreviewPopup(page, options);
     await verifyStoppedSessionCanStartWithPreview(page, options);
 
@@ -126,6 +132,7 @@ async function run() {
       detailVisible: true,
       sessionSubareas: true,
       sessionSwitch: true,
+      observabilityLiveUpdate: true,
       mcpDelegation: true,
       previewPopup: true,
       stoppedSessionRestarted: true,
@@ -171,8 +178,11 @@ async function createSwitchSession(accessToken, options) {
 async function verifySessionSwitch(page, options, primarySessionId, switchSessionId) {
   const subareas = [
     ['live', 'session-live-route'],
+    ['automation', 'session-automation-route'],
+    ['policy', 'session-policy-route'],
     ['files', 'session-files-route'],
     ['recordings', 'session-recordings-route'],
+    ['observability', 'session-observability-route'],
     ['network', 'session-network-route'],
   ];
   for (const [subarea, routeTestId] of subareas) {
@@ -210,6 +220,24 @@ async function verifySessionSubareas(page, options, sessionId) {
       route: `sessions/${sessionId}/recordings`,
       routeTestId: 'session-recordings-route',
       readyTestId: 'session-recording-policy',
+    },
+    {
+      id: 'automation',
+      route: `sessions/${sessionId}/automation`,
+      routeTestId: 'session-automation-route',
+      readyTestId: 'session-workflow-associations',
+    },
+    {
+      id: 'policy',
+      route: `sessions/${sessionId}/policy`,
+      routeTestId: 'session-policy-route',
+      readyTestId: 'session-policy-summary',
+    },
+    {
+      id: 'observability',
+      route: `sessions/${sessionId}/observability`,
+      routeTestId: 'session-observability-route',
+      readyTestId: 'session-observability-current',
     },
     {
       id: 'network',
@@ -267,11 +295,59 @@ async function verifySessionSubareas(page, options, sessionId) {
   });
 }
 
+async function verifyObservabilityLiveUpdate(page, options, sessionId, authConfig, accessToken) {
+  const bridge = authConfig?.mcpBridge;
+  if (!bridge?.clientId || !bridge.issuer) {
+    throw new Error('Unified session smoke requires auth-config mcpBridge metadata.');
+  }
+  await page.goto(adminRouteUrl(options, `sessions/${sessionId}/observability`), {
+    waitUntil: 'domcontentloaded',
+  });
+  await page.getByTestId('session-observability-current').waitFor({
+    state: 'visible',
+    timeout: options.connectTimeoutMs,
+  });
+  await waitForContains(page, options, 'session-observability-stream-status', 'Live');
+
+  const automationOwnerUrl = `${apiOrigin(options)}/api/v1/sessions/${encodeURIComponent(sessionId)}/automation-owner`;
+  await fetchJson(automationOwnerUrl, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      client_id: bridge.clientId,
+      issuer: bridge.issuer,
+      display_name: bridge.displayName,
+    }),
+  });
+  await waitForContains(
+    page,
+    options,
+    'session-observability-timeline-list',
+    `Delegated to ${bridge.clientId}`,
+  );
+
+  await fetchJson(automationOwnerUrl, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  await waitForContains(page, options, 'session-observability-timeline-list', 'No automation delegate');
+}
+
 async function verifyMcpDelegation(page, options, sessionId, authConfig, accessToken) {
   const bridge = authConfig?.mcpBridge;
   if (!bridge?.controlUrl || !bridge.clientId) {
     throw new Error('Unified session smoke requires auth-config mcpBridge metadata.');
   }
+  await page.goto(adminRouteUrl(options, `sessions/${sessionId}/automation`), {
+    waitUntil: 'domcontentloaded',
+  });
+  await page.getByTestId('session-automation-route').waitFor({
+    state: 'visible',
+    timeout: options.connectTimeoutMs,
+  });
   await page.getByTestId('session-mcp-delegation').waitFor({
     state: 'visible',
     timeout: options.connectTimeoutMs,
@@ -347,9 +423,9 @@ async function verifySessionPreviewPopup(page, options, expectedActionLabel = 'C
       state: 'visible',
       timeout: options.connectTimeoutMs,
     });
+    await waitForPreviewConnected(popup, options);
     await assertNoBodyHorizontalOverflow(popup, 'unified session preview popup');
     await assertNoHorizontalOverflow(popup, 'session-preview-route', 'unified session preview route');
-    await waitForPreviewConnected(popup, options);
     await verifyPreviewMetrics(popup, options);
     await assertPreviewResizeUsesIndependentHeight(popup, options);
     await assertNoHorizontalOverflow(popup, 'session-preview-viewport', 'unified session preview viewport');

@@ -7,13 +7,13 @@ import {
   type AdminEventWebSocket,
   type AdminEventWebSocketFactory,
 } from '@browserpane/admin-auth';
-import { AdminEventMapper, type AdminEvent } from './admin-event-mapper';
 import {
-  sendAuthenticatedRequest,
+  AuthenticatedApiClient,
   type AccessTokenProvider,
   type AuthenticationFailureHandler,
   type FetchLike,
 } from './authenticated-api';
+import { toAdminEvent, type AdminEvent } from './admin-events';
 
 export type {
   AdminEventConnectionStatus,
@@ -38,21 +38,23 @@ export type AdminEventHandlers = {
 };
 
 export class AdminEventClient {
-  readonly #baseUrl: URL;
-  readonly #accessTokenProvider: AccessTokenProvider;
-  readonly #onAuthenticationFailure: AuthenticationFailureHandler | undefined;
-  readonly #fetchImpl: FetchLike;
+  readonly #api: AuthenticatedApiClient;
   readonly #stream: AdminEventStreamClient<AdminEvent>;
 
   constructor(options: AdminEventClientOptions) {
-    this.#baseUrl = new URL(options.baseUrl);
-    this.#accessTokenProvider = options.accessTokenProvider;
-    this.#onAuthenticationFailure = options.onAuthenticationFailure;
-    this.#fetchImpl = options.fetchImpl ?? fetch;
+    const baseUrl = new URL(options.baseUrl);
+    this.#api = new AuthenticatedApiClient({
+      baseUrl,
+      accessTokenProvider: options.accessTokenProvider,
+      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+      ...(options.onAuthenticationFailure === undefined
+        ? {}
+        : { onAuthenticationFailure: options.onAuthenticationFailure }),
+    });
     this.#stream = new AdminEventStreamClient({
-      baseUrl: this.#baseUrl,
+      baseUrl,
       issueAccessToken: () => this.#issueAccessToken(),
-      mapEvent: (payload) => AdminEventMapper.toEvent(payload),
+      mapEvent: toAdminEvent,
       probeAuthentication: () => this.#probeAuthentication(),
       ...(options.webSocketFactory === undefined
         ? {}
@@ -68,35 +70,24 @@ export class AdminEventClient {
   }
 
   async #issueAccessToken(): Promise<AdminEventStreamAccess> {
-    const response = await sendAuthenticatedRequest({
-      baseUrl: this.#baseUrl,
-      accessTokenProvider: this.#accessTokenProvider,
-      fetchImpl: this.#fetchImpl,
-      onAuthenticationFailure: this.#onAuthenticationFailure,
+    const response = await this.#api.request('/api/v1/admin/events/access-tokens', {
       method: 'POST',
-      path: '/api/v1/admin/events/access-tokens',
-      accept: 'application/json',
+      headers: { accept: 'application/json' },
+      cache: 'no-store',
     });
     return AdminEventStreamAccessMapper.fromResponse(await response.json());
   }
 
   async #probeAuthentication(): Promise<void> {
-    if (!this.#onAuthenticationFailure) {
-      return;
-    }
     try {
-      const response = await sendAuthenticatedRequest({
-        baseUrl: this.#baseUrl,
-        accessTokenProvider: this.#accessTokenProvider,
-        fetchImpl: this.#fetchImpl,
-        onAuthenticationFailure: this.#onAuthenticationFailure,
+      const response = await this.#api.request('/api/v1/sessions', {
         method: 'GET',
-        path: '/api/v1/sessions',
-        accept: 'application/json',
+        headers: { accept: 'application/json' },
+        cache: 'no-store',
       });
       await response.body?.cancel();
     } catch {
-      // The stream error remains visible; the probe only routes HTTP 401s
+      // The stream error remains visible; this request only routes HTTP 401s
       // through the shared authentication-failure handler.
     }
   }

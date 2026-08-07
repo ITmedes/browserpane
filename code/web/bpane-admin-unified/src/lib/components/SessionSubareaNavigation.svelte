@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Activity, Bot, Files, Gauge, Network, ShieldCheck, Video } from '@lucide/svelte';
+  import { Activity, Bot, ChartNoAxesCombined, Files, Gauge, Network, ShieldCheck, Video } from '@lucide/svelte';
   import {
     sessionSubareaHref,
     sessionSubareas,
@@ -44,6 +44,8 @@
           <Files size={15} strokeWidth={1.8} />
         {:else if subarea.id === 'recordings'}
           <Video size={15} strokeWidth={1.8} />
+        {:else if subarea.id === 'observability'}
+          <ChartNoAxesCombined size={15} strokeWidth={1.8} />
         {:else}
           <Network size={15} strokeWidth={1.8} />
         {/if}

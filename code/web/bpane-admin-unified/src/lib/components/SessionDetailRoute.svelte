@@ -256,7 +256,7 @@
   </header>
 
   {#if routeSessionId}
-    <SessionSubareaNavigation sessionId={routeSessionId} activeId="overview" availableIds={['overview', 'live', 'automation', 'policy', 'files', 'recordings', 'network']} />
+    <SessionSubareaNavigation sessionId={routeSessionId} activeId="overview" availableIds={['overview', 'live', 'automation', 'policy', 'files', 'recordings', 'network', 'observability']} />
   {/if}
 
   {#if sessionState.status === 'error'}

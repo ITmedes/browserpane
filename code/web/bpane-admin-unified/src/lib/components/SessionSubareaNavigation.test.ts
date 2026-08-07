@@ -83,4 +83,16 @@ describe('SessionSubareaNavigation', () => {
       .toBe('/admin-new/sessions/session-1/network');
     expect(byTestId(target, 'session-subarea-network').getAttribute('aria-current')).toBe('page');
   });
+
+  it('links the observability area after the full route set is enabled', () => {
+    const target = renderComponent(SessionSubareaNavigation, {
+      sessionId: 'session-1',
+      activeId: 'observability',
+      availableIds: ['overview', 'live', 'observability'],
+    });
+
+    expect(byTestId(target, 'session-subarea-observability').getAttribute('href'))
+      .toBe('/admin-new/sessions/session-1/observability');
+    expect(byTestId(target, 'session-subarea-observability').getAttribute('aria-current')).toBe('page');
+  });
 });

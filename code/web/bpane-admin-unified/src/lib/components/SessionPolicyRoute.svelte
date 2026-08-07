@@ -156,7 +156,7 @@
   <SessionSubareaNavigation
     {sessionId}
     activeId="policy"
-    availableIds={['overview', 'live', 'automation', 'policy', 'files', 'recordings', 'network']}
+    availableIds={['overview', 'live', 'automation', 'policy', 'files', 'recordings', 'network', 'observability']}
   />
 
   <ActionFeedback

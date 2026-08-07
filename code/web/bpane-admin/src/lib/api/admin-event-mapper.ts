@@ -1,71 +1,21 @@
-import { expectNumber, expectRecord, expectString } from './control-wire';
 import {
-  type AdminMcpDelegationSnapshotEvent,
-  type AdminRecordingsSnapshotEvent,
-  type AdminSessionFilesSnapshotEvent,
-  type AdminSessionsSnapshotEvent,
-  type AdminWorkflowRunsSnapshotEvent,
-  toMcpDelegationSnapshotEvent,
-  toRecordingsSnapshotEvent,
-  toSessionFilesSnapshotEvent,
-  toSessionsSnapshotEvent,
-  toWorkflowRunsSnapshotEvent,
-} from './admin-event-snapshots';
+  AdminEventMapper as SharedAdminEventMapper,
+  type AdminErrorEvent,
+  type AdminEvent as SharedAdminEvent,
+  type AdminEventType,
+} from '@browserpane/admin-auth';
+import { ControlSessionMapper } from './control-session-mapper';
+import type { SessionResource } from './control-types';
 
-export type AdminEventType =
-  | 'sessions.snapshot'
-  | 'workflow_runs.snapshot'
-  | 'session_files.snapshot'
-  | 'recordings.snapshot'
-  | 'mcp_delegation.snapshot'
-  | 'admin.error';
+export type { AdminErrorEvent, AdminEventType };
+export type AdminEvent = SharedAdminEvent<SessionResource>;
 
-export type AdminErrorEvent = {
-  readonly type: 'admin.error';
-  readonly sequence: number;
-  readonly createdAt: string;
-  readonly error: string;
-};
-
-export type AdminEvent =
-  | AdminSessionsSnapshotEvent
-  | AdminWorkflowRunsSnapshotEvent
-  | AdminSessionFilesSnapshotEvent
-  | AdminRecordingsSnapshotEvent
-  | AdminMcpDelegationSnapshotEvent
-  | AdminErrorEvent;
+const mapper = new SharedAdminEventMapper<SessionResource>((payload) =>
+  ControlSessionMapper.toSessionResource(payload),
+);
 
 export class AdminEventMapper {
   static toEvent(payload: unknown): AdminEvent {
-    const object = expectRecord(payload, 'admin event');
-    const eventType = expectString(object.event_type, 'admin event event_type');
-    if (eventType === 'sessions.snapshot') {
-      return toSessionsSnapshotEvent(object);
-    }
-    if (eventType === 'workflow_runs.snapshot') {
-      return toWorkflowRunsSnapshotEvent(object);
-    }
-    if (eventType === 'session_files.snapshot') {
-      return toSessionFilesSnapshotEvent(object);
-    }
-    if (eventType === 'recordings.snapshot') {
-      return toRecordingsSnapshotEvent(object);
-    }
-    if (eventType === 'mcp_delegation.snapshot') {
-      return toMcpDelegationSnapshotEvent(object);
-    }
-    if (eventType === 'admin.error') {
-      return toAdminErrorEvent(object);
-    }
-    throw new Error(`unsupported admin event type: ${eventType}`);
+    return mapper.toEvent(payload);
   }
-}
-
-function toAdminErrorEvent(object: Record<string, unknown>): AdminErrorEvent {
-  return {
-    type: 'admin.error',
-    sequence: expectNumber(object.sequence, 'admin.error event sequence'),
-    createdAt: expectString(object.created_at, 'admin.error event created_at'),
-    error: expectString(object.error, 'admin.error event error'),
-  };
 }

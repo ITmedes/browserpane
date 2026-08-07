@@ -16,6 +16,8 @@ describe('session subarea routes', () => {
       .toBe('/admin-new/sessions/session-1/automation');
     expect(sessionSubareaHref('session-1', 'policy'))
       .toBe('/admin-new/sessions/session-1/policy');
+    expect(sessionSubareaHref('session-1', 'observability'))
+      .toBe('/admin-new/sessions/session-1/observability');
     expect(sessionSubareaHref('session-1', 'network'))
       .toBe('/admin-new/sessions/session-1/network');
   });
@@ -38,6 +40,8 @@ describe('session subarea routes', () => {
       .toBe('automation');
     expect(resolveSessionSubareaRoute('/admin-new/sessions/session-1/policy')?.activeId)
       .toBe('policy');
+    expect(resolveSessionSubareaRoute('/admin-new/sessions/session-1/observability')?.activeId)
+      .toBe('observability');
   });
 
   it('rejects unrelated, nested, and malformed paths', () => {
@@ -55,6 +59,7 @@ describe('session subarea routes', () => {
       'files',
       'recordings',
       'network',
+      'observability',
     ]);
   });
 });
