@@ -254,7 +254,7 @@ recovering either secret from the UI.
 
 - PR: pending creation after final Compose validation
 - Commits: `419d4b1` through `43f1f53`
-- Unit/integration results: 184 admin-new test files and 570 tests passed;
+- Unit/integration results: 185 admin-new test files and 572 tests passed;
   focused extension, credential-binding, event-subscription, delivery-health,
   and MCP convergence tests passed.
 - Compose smoke results: the new
@@ -262,8 +262,8 @@ recovering either secret from the UI.
   egress, workflows, workflow events, workflow extension, workflow
   credentials, credential injection, API companion, and session/MCP
   regressions. The final GitHub Compose run is pending review.
-- Coverage/build results: admin-new coverage passed with 91.95% statements,
-  76.45% branches, 93.86% functions, and 90.05% lines; Svelte check and the
+- Coverage/build results: admin-new coverage passed with 91.96% statements,
+  76.46% branches, 93.87% functions, and 90.06% lines; Svelte check and the
   production build passed.
 - README decision: updated because the unified-admin capability summary names
   the resource catalogs.
