@@ -345,16 +345,19 @@ Validation:
 
 Tier: P2 admin-new parity.
 
+Status: implemented on `feature/BPANE-00154`; pending merge review.
+
 Why here:
 
-- `/admin-new/runs` currently has only an overview.
+- The previous `/admin-new/runs` surface had only an overview.
 - Operators need logs, events, produced files, run controls, errors, and
   session links before replacing old admin workflows.
 - This is a contained route slice after helper consolidation.
 
 Scope:
 
-- add `/admin-new/runs/[run_id]`,
+- add canonical `/admin-new/workflow-runs/[run_id]` and retain
+  `/admin-new/runs/[run_id]` as a compatibility alias,
 - show run metadata, state, timestamps, project/session/workflow references,
   logs, events, outputs, produced files, and errors,
 - add safe controls for cancel, resume, reject, and input submit where the API
