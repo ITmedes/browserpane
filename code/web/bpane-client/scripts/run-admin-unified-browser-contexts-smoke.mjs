@@ -134,6 +134,7 @@ async function verifyLifecycleThroughUi(page, accessToken, options, project, sou
   await page.getByTestId('browser-context-edit-name').fill(cloneName);
   await assertNoBodyHorizontalOverflow(page, 'unified browser-context clone route');
   await assertNoHorizontalOverflow(page, 'browser-context-clone-route', 'unified browser-context clone route');
+  await verifyLifecycleFormMobileLayout(page, 'browser-context-clone-route', 'clone');
   await page.getByTestId('browser-context-edit-save').click();
   const clonedContextId = await waitForContextDetailNavigation(page, options);
   const clonedContext = await fetchBrowserContext(accessToken, options, clonedContextId);
@@ -181,6 +182,7 @@ async function verifyLifecycleThroughUi(page, accessToken, options, project, sou
   await page.getByTestId('browser-context-edit-project-id').selectOption(project.id);
   await assertNoBodyHorizontalOverflow(page, 'unified browser-context import route');
   await assertNoHorizontalOverflow(page, 'browser-context-import-route', 'unified browser-context import route');
+  await verifyLifecycleFormMobileLayout(page, 'browser-context-import-route', 'import');
   await page.getByTestId('browser-context-edit-save').click();
   const importedContextId = await waitForContextDetailNavigation(page, options);
   const importedContext = await fetchBrowserContext(accessToken, options, importedContextId);
@@ -190,6 +192,22 @@ async function verifyLifecycleThroughUi(page, accessToken, options, project, sou
 
   await verifyMalformedImportRetry(page, options, tempDir, runLabel);
   return { clonedContext, importedContext };
+}
+
+async function verifyLifecycleFormMobileLayout(page, routeTestId, label) {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await assertNoBodyHorizontalOverflow(page, `mobile unified browser-context ${label} route`);
+  await assertNoHorizontalOverflow(
+    page,
+    routeTestId,
+    `mobile unified browser-context ${label} route`,
+  );
+  await assertNoHorizontalOverflow(
+    page,
+    'browser-context-edit-form',
+    `mobile unified browser-context ${label} form`,
+  );
+  await page.setViewportSize({ width: 1440, height: 980 });
 }
 
 async function verifyMalformedImportRetry(page, options, tempDir, runLabel) {
