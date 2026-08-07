@@ -1,11 +1,13 @@
 use std::collections::{HashMap, HashSet};
-use std::io::{Cursor, Read, Write};
 
 use axum::extract::DefaultBodyLimit;
 use axum::routing::{get, post};
-use serde::{Deserialize, Serialize};
-use zip::write::SimpleFileOptions;
 
+use super::browser_context_archive::{
+    build_browser_context_export_archive, parse_browser_context_import_archive,
+    BrowserContextExportManifest, BrowserContextImportArchiveLimits,
+    BROWSER_CONTEXT_PROFILE_ARCHIVE_PATH,
+};
 use super::*;
 use crate::session_control::{BrowserContextUsageResource, StoredBrowserContext};
 
@@ -88,7 +90,11 @@ async fn import_browser_context(
     let principal = authorize_api_request(&headers, &state.auth_validator)
         .await
         .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
-    let archive = parse_browser_context_import_archive(body.as_ref()).map_err(bad_request)?;
+    let archive = parse_browser_context_import_archive(
+        body.as_ref(),
+        BrowserContextImportArchiveLimits::default(),
+    )
+    .map_err(bad_request)?;
     let target_context_id = Uuid::now_v7();
     let target_request = browser_context_import_request_from_headers(
         &headers,
@@ -511,183 +517,6 @@ async fn browser_context_project_summary(
         .await
         .map_err(map_session_store_error)?
         .map(|project| project.to_session_project_resource()))
-}
-
-const BROWSER_CONTEXT_EXPORT_MANIFEST_PATH: &str = "manifest.json";
-const BROWSER_CONTEXT_PROFILE_ARCHIVE_PATH: &str = "profile.tar.gz";
-const MAX_BROWSER_CONTEXT_EXPORT_MANIFEST_BYTES: u64 = 128 * 1024;
-
-#[derive(Deserialize, Serialize)]
-struct BrowserContextExportManifest {
-    format_version: u32,
-    archive_type: String,
-    exported_at: chrono::DateTime<Utc>,
-    source_context: BrowserContextResource,
-    profile_archive_path: Option<String>,
-}
-
-struct ParsedBrowserContextImportArchive {
-    manifest: BrowserContextExportManifest,
-    profile_archive: Option<Vec<u8>>,
-}
-
-fn build_browser_context_export_archive(
-    manifest: &BrowserContextExportManifest,
-    profile_archive: Option<&[u8]>,
-) -> Result<Vec<u8>, String> {
-    let manifest_json = serde_json::to_vec_pretty(manifest).map_err(|error| error.to_string())?;
-    let cursor = Cursor::new(Vec::new());
-    let mut zip = zip::ZipWriter::new(cursor);
-    let file_options =
-        SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
-
-    zip.start_file(BROWSER_CONTEXT_EXPORT_MANIFEST_PATH, file_options)
-        .map_err(|error| error.to_string())?;
-    zip.write_all(&manifest_json)
-        .map_err(|error| error.to_string())?;
-    if let Some(profile_archive) = profile_archive {
-        zip.start_file(BROWSER_CONTEXT_PROFILE_ARCHIVE_PATH, file_options)
-            .map_err(|error| error.to_string())?;
-        zip.write_all(profile_archive)
-            .map_err(|error| error.to_string())?;
-    }
-
-    let cursor = zip.finish().map_err(|error| error.to_string())?;
-    Ok(cursor.into_inner())
-}
-
-fn parse_browser_context_import_archive(
-    bytes: &[u8],
-) -> Result<ParsedBrowserContextImportArchive, String> {
-    if bytes.is_empty() {
-        return Err("browser context import archive must not be empty".to_string());
-    }
-    let cursor = Cursor::new(bytes.to_vec());
-    let mut zip = zip::ZipArchive::new(cursor)
-        .map_err(|error| format!("browser context import archive must be a valid zip: {error}"))?;
-    let mut manifest_count = 0_u32;
-    let mut profile_count = 0_u32;
-    for index in 0..zip.len() {
-        let file = zip
-            .by_index(index)
-            .map_err(|error| format!("failed to read browser context archive entry: {error}"))?;
-        if file.is_dir() {
-            return Err(format!(
-                "browser context import archive contains unsupported directory entry {}",
-                file.name()
-            ));
-        }
-        match file.name() {
-            BROWSER_CONTEXT_EXPORT_MANIFEST_PATH => manifest_count += 1,
-            BROWSER_CONTEXT_PROFILE_ARCHIVE_PATH => profile_count += 1,
-            other => {
-                return Err(format!(
-                    "browser context import archive contains unsupported entry {other}"
-                ));
-            }
-        }
-    }
-    if manifest_count != 1 {
-        return Err(
-            "browser context import archive must contain exactly one manifest.json".to_string(),
-        );
-    }
-    if profile_count > 1 {
-        return Err(
-            "browser context import archive must contain at most one profile.tar.gz".to_string(),
-        );
-    }
-
-    let mut manifest_file = zip
-        .by_name(BROWSER_CONTEXT_EXPORT_MANIFEST_PATH)
-        .map_err(|error| {
-            format!("browser context import archive is missing manifest.json: {error}")
-        })?;
-    if manifest_file.size() > MAX_BROWSER_CONTEXT_EXPORT_MANIFEST_BYTES {
-        return Err("browser context import manifest is too large".to_string());
-    }
-    let mut manifest_bytes = Vec::new();
-    manifest_file
-        .read_to_end(&mut manifest_bytes)
-        .map_err(|error| format!("failed to read browser context import manifest: {error}"))?;
-    drop(manifest_file);
-    let manifest = serde_json::from_slice::<BrowserContextExportManifest>(&manifest_bytes)
-        .map_err(|error| format!("browser context import manifest is invalid JSON: {error}"))?;
-    validate_browser_context_import_manifest(&manifest, profile_count > 0)?;
-
-    let profile_archive = if manifest.profile_archive_path.as_deref().is_some() {
-        let mut profile_file =
-            zip.by_name(BROWSER_CONTEXT_PROFILE_ARCHIVE_PATH)
-                .map_err(|error| {
-                    format!("browser context import archive is missing profile.tar.gz: {error}")
-                })?;
-        if profile_file.size() == 0 {
-            return Err("browser context profile archive must not be empty".to_string());
-        }
-        let mut profile_bytes = Vec::new();
-        profile_file
-            .read_to_end(&mut profile_bytes)
-            .map_err(|error| format!("failed to read browser context profile archive: {error}"))?;
-        if profile_bytes.is_empty() {
-            return Err("browser context profile archive must not be empty".to_string());
-        }
-        Some(profile_bytes)
-    } else {
-        None
-    };
-
-    Ok(ParsedBrowserContextImportArchive {
-        manifest,
-        profile_archive,
-    })
-}
-
-fn validate_browser_context_import_manifest(
-    manifest: &BrowserContextExportManifest,
-    archive_contains_profile: bool,
-) -> Result<(), String> {
-    if manifest.format_version != 1 {
-        return Err(format!(
-            "unsupported browser context export format version {}",
-            manifest.format_version
-        ));
-    }
-    if manifest.archive_type != "browser_context_export" {
-        return Err(format!(
-            "unsupported browser context archive type {}",
-            manifest.archive_type
-        ));
-    }
-    if manifest.source_context.persistence_mode != BrowserContextPersistenceMode::Reusable {
-        return Err("browser context import source must be reusable".to_string());
-    }
-    if manifest.source_context.state != BrowserContextState::Ready {
-        return Err("browser context import source must be ready".to_string());
-    }
-    match manifest.profile_archive_path.as_deref() {
-        Some(BROWSER_CONTEXT_PROFILE_ARCHIVE_PATH) => {
-            if !archive_contains_profile {
-                return Err(
-                    "browser context import manifest references profile.tar.gz but the archive is missing it"
-                        .to_string(),
-                );
-            }
-        }
-        Some(path) => {
-            return Err(format!(
-                "unsupported browser context profile archive path {path}"
-            ));
-        }
-        None => {
-            if archive_contains_profile {
-                return Err(
-                    "browser context import archive contains profile.tar.gz but the manifest does not reference it"
-                        .to_string(),
-                );
-            }
-        }
-    }
-    Ok(())
 }
 
 fn browser_context_import_request_from_headers(
