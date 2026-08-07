@@ -3,7 +3,7 @@
 ## Metadata
 
 - Issue: [#153](https://github.com/ITmedes/browserpane/issues/153)
-- State: In Progress
+- State: Review
 - Owner: `thebackplane`
 - Lane: Operator Product
 - Target gate: Admin-New Phase 1 Promotion
@@ -221,4 +221,38 @@ exactly once.
 
 ## Evidence Record
 
-- Pending implementation.
+- Added `lib/api/authenticated-api.ts` as the single admin-new request
+  boundary. All nine domain clients now use it for token lookup, bearer-header
+  injection, bounded structured errors, authentication failure notification,
+  JSON/raw/binary responses, and empty responses while retaining their domain
+  mappers and error classes.
+- Added shared DOM-free asynchronous state and `ActionFeedback.svelte`; migrated
+  repeated create/detail/catalog feedback without replacing domain-specific
+  validation or control-level guidance.
+- Moved the authenticated shell to the root layout and provided its initialized
+  auth context to route components. Internal SvelteKit navigation now preserves
+  authentication, OIDC callback URL cleanup uses SvelteKit history, and the
+  standalone session preview remains outside the shell.
+- Consolidated repeated admin-new smoke helpers and route metadata. Added the
+  missing recordings smoke, strengthened session cleanup/navigation checks,
+  and added a real browser-level 409/retry assertion with retained project form
+  values and safe recovery guidance.
+- Admin-new unit and component tests: 106 files and 319 tests passed from a
+  clean install. Coverage passed its ratchet at 90.96% statements, 76.50%
+  branches, 93.53% functions, and 88.63% lines.
+- Browser client regression tests: 86 files and 661 tests passed; TypeScript
+  check, production build, and browser-client coverage ratchet passed.
+- Compose-backed admin-new smokes passed for dashboard, projects, browser
+  contexts, egress profiles, file workspaces, workflows, workflow runs,
+  sessions, and recordings. The recordings smoke verified a 2,048-byte WebM
+  download and responsive layout; the sessions smoke verified create/detail,
+  MCP delegation, popup preview, metrics, independent resize, stop, and
+  restart.
+- `node scripts/validate.mjs --profile fast` passed all 40 stages, including
+  repository/dependency policy, Rust format/Clippy/tests/coverage, clean package
+  installs, both admin applications, browser client, integration workers,
+  OpenAPI governance/compatibility, and egress observer tests.
+- README/ARCH impact checked: no update is required. This slice changes
+  admin-new implementation boundaries, feedback consistency, navigation, and
+  validation coverage without changing public API routes, runtime topology,
+  support claims, or operator setup.
