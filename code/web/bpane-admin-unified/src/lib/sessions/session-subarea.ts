@@ -1,4 +1,4 @@
-export type SessionSubareaId = 'overview' | 'live' | 'automation' | 'files' | 'recordings' | 'network';
+export type SessionSubareaId = 'overview' | 'live' | 'automation' | 'policy' | 'files' | 'recordings' | 'network';
 
 export type SessionSubareaDefinition = {
   readonly id: SessionSubareaId;
@@ -15,6 +15,7 @@ export const sessionSubareas: readonly SessionSubareaDefinition[] = [
   { id: 'overview', label: 'Overview', suffix: '' },
   { id: 'live', label: 'Live', suffix: '/live' },
   { id: 'automation', label: 'Automation', suffix: '/automation' },
+  { id: 'policy', label: 'Policy', suffix: '/policy' },
   { id: 'files', label: 'Files', suffix: '/files' },
   { id: 'recordings', label: 'Recordings', suffix: '/recordings' },
   { id: 'network', label: 'Network', suffix: '/network' },
@@ -30,7 +31,7 @@ export function sessionSubareaHref(sessionId: string, subareaId: SessionSubareaI
 
 export function resolveSessionSubareaRoute(pathname: string): SessionSubareaRoute | null {
   const normalized = normalizeRoute(pathname);
-  const match = normalized.match(/^\/sessions\/([^/]+)(?:\/(live|automation|files|recordings|network|preview))?$/);
+  const match = normalized.match(/^\/sessions\/([^/]+)(?:\/(live|automation|policy|files|recordings|network|preview))?$/);
   if (!match?.[1]) {
     return null;
   }
@@ -54,6 +55,9 @@ function subareaIdFromSuffix(suffix: string): SessionSubareaId {
   }
   if (suffix === 'automation') {
     return 'automation';
+  }
+  if (suffix === 'policy') {
+    return 'policy';
   }
   if (suffix === 'files') {
     return 'files';

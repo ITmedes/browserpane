@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Activity, Bot, Files, Gauge, Network, Video } from '@lucide/svelte';
+  import { Activity, Bot, Files, Gauge, Network, ShieldCheck, Video } from '@lucide/svelte';
   import {
     sessionSubareaHref,
     sessionSubareas,
@@ -38,6 +38,8 @@
           <Activity size={15} strokeWidth={1.8} />
         {:else if subarea.id === 'automation'}
           <Bot size={15} strokeWidth={1.8} />
+        {:else if subarea.id === 'policy'}
+          <ShieldCheck size={15} strokeWidth={1.8} />
         {:else if subarea.id === 'files'}
           <Files size={15} strokeWidth={1.8} />
         {:else if subarea.id === 'recordings'}
