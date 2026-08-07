@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
   import { ArrowLeft } from '@lucide/svelte';
   import { onMount } from 'svelte';
   import { adminErrorMessage } from '$lib/application/admin-async-state';
@@ -66,7 +67,7 @@
   }
 
   function defaultNavigateToProfile(profile: EgressProfileResource): void {
-    window.location.assign(`/admin-new/egress/${encodeURIComponent(profile.id)}`);
+    void goto(`/admin-new/egress/${encodeURIComponent(profile.id)}`);
   }
 </script>
 
