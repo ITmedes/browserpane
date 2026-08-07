@@ -47,7 +47,7 @@ or capacity decision.
 | --- | --- | --- | --- |
 | Foundation | Trusted build, auth, contracts, storage, and lifecycle baseline. | Complete through #179 | Foundation Gate |
 | Pilot Value | One bounded reference workflow with accepted evidence and runbook. | #174 | Phase 0 Gate |
-| Operator Product | Complete and promote `/admin-new/` as the default operator console. | #159 in review, then #160 | Phase 1 Gate |
+| Operator Product | Complete and promote `/admin-new/` as the default operator console. | #160 in implementation, then #161 | Phase 1 Gate |
 | Production | Harden deployment, security, recovery, supply chain, and telemetry. | #72 / #66 / #178 | Production Baseline |
 | Enterprise | Organization controls, policy, residency, HA, and governed integrations. | #176 / #70 / #79 | Phase N Gate |
 | Innovation | Teach Mode and controlled repair after stable execution contracts. | #171 | Phase N capability gate |
@@ -72,7 +72,7 @@ or capacity decision.
 | --- | --- | --- | --- | --- |
 | 1 | #157 | Done | #156 session operations parity | Identity/access review and registry lifecycle merged through PR #199. |
 | 2 | #158 | Done | #179 governed contract evidence | API, coverage, and docs companion routes merged through PR #200. |
-| 3 | #159 | Review | #153 shared catalog patterns | Extensions, credential bindings, and workflow event-subscription catalogs are implemented and under validation. |
+| 3 | #159 | Done | #153 shared catalog patterns | Extensions, credential bindings, and workflow event-subscription catalogs merged through PR #201. |
 
 #151, #184, and #185 established and accelerated the required validation
 baseline. #145 is merged through
@@ -84,9 +84,10 @@ scheduled Compose run on that `main` commit passed. #179 merged through PR #194
 after all 40 fast and all 10 Compose validation stages passed. #153 has
 merged through PR #195 after all required checks passed. #154 merged through
 PR #196, #155 through PR #197, #156 through PR #198, and #157 through PR #199.
-#158 merged through PR #200 and #159 through PR #201. #148 is implemented on
-`feature/BPANE-00148` and is the active conditional Foundation review slice;
-#160 is next after its safety prerequisite merges.
+#158 merged through PR #200, #159 through PR #201, and #148 through PR #202.
+#160 is implemented and locally validated on `feature/BPANE-00160`; hosted PR
+validation and merge remain before #161 becomes the next Operator Product
+slice.
 
 ## Foundation Gate Sequence
 
@@ -102,9 +103,8 @@ PR #196, #155 through PR #197, #156 through PR #198, and #157 through PR #199.
 
 Conditional Foundation work:
 
-- #148 is implemented on `feature/BPANE-00148` and must merge before a Pilot
-  imports untrusted browser contexts or #160 exposes archive upload in
-  admin-new.
+- #148 merged through PR #202 and supplies the bounded import contract consumed
+  by #160; no Pilot should bypass those archive safety limits.
 - #149 is required before recordings form part of Pilot acceptance evidence.
 - #167 is required before a Docker runtime boundary is promoted as a production
   deployment contract.

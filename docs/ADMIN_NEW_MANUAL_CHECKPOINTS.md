@@ -233,9 +233,22 @@ treated as complete.
 4. Reopen a context through the details link.
 5. Confirm validation blocks malformed labels, blank names, and non-positive
    retention/storage values.
-6. Clone an inactive context when clone UI is available.
-7. Export/import an archive when those UI actions are available.
-8. Confirm delete is blocked for unsafe contexts and succeeds for unused ones.
+6. Open an inactive reusable context, select `Clone`, change the target name or
+   scope, and confirm navigation to a distinct ready context.
+7. Export the inactive context and confirm a non-empty ZIP downloads with a
+   safe filename.
+8. Select `Import archive` from the catalog, import the downloaded ZIP with new
+   metadata, and confirm navigation to the imported ready context.
+9. Select a malformed ZIP and confirm inline HTTP `400` feedback preserves the
+   selected file and metadata draft for correction or retry.
+10. Bind a context to a running session and confirm clone/export are disabled
+    with an active-session link; stop the session and confirm the actions become
+    available after refresh.
+11. Confirm storage-over-limit evidence is a warning rather than an export
+    blocker, and confirm delete remains blocked for unsafe contexts but succeeds
+    for unused ones.
+12. At a narrow mobile width, confirm clone/import forms, action feedback, and
+    file metadata do not overflow horizontally.
 
 ## Egress Profiles
 

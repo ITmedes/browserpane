@@ -171,10 +171,6 @@ The unified admin app is not ready to replace `/admin/` yet. The important
 remaining admin-new gaps are:
 
 - session template catalog management
-- extensions catalog
-- credential bindings catalog
-- workflow event subscriptions catalog
-- browser-context clone/import/export parity
 - project governance evidence and cross-resource policy UX
 - operator CLI resource parity
 - command palette

@@ -76,8 +76,9 @@ Requirements:
 
 Current admin-new state:
 
-- catalog/create/detail/edit exist,
-- clone/import/export still need UI parity where considered promotion scope.
+- catalog/create/detail/edit/delete exist,
+- clone/import/export UI parity is implemented under `#160` with active-writer
+  blockers and bounded import feedback.
 
 ## Projects, Quotas, Admission, And Usage
 

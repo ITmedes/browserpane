@@ -3,7 +3,7 @@
 ## Metadata
 
 - Issue: `#160`
-- State: In Progress
+- State: Implemented and locally validated; hosted PR validation pending
 - Lane: Operator Product
 - Target gate: admin-new browser-context lifecycle parity
 - Depends on: `#148` merged through PR `#202`
@@ -244,6 +244,35 @@ file or metadata draft.
 - Unit, component/integration, admin-new smoke, compatibility smoke, CLI smoke,
   gateway browser-context, build/typecheck, and hosted validation pass.
 - README/docs, `#160`, and PR evidence agree.
+
+## Validation Evidence
+
+Implementation commits:
+
+- `25f697a` typed lifecycle client and eligibility model,
+- `84c4089` reusable browser-context metadata form,
+- `ed65ea2` route-backed clone flow,
+- `1d4c41b` detail clone/export actions and blockers,
+- `825f4ab` bounded archive import route,
+- `b1c02b5` Compose lifecycle smoke,
+- `43ea84d` responsive lifecycle-route smoke assertions.
+
+Local validation on 2026-08-07:
+
+- admin-new unit/component suite: 590 tests passed,
+- admin-new coverage: 90.17% lines overall and 92.3% lines for the
+  browser-context module,
+- admin-new typecheck and production build passed,
+- browser client suite: 661 tests passed,
+- admin-new lifecycle, compatibility-admin browser-context, and operator CLI
+  smokes passed against local Compose,
+- focused gateway browser-context suite: 24 tests passed,
+- live Compose `compose_browser_contexts_api_surface` case passed in 167.35s.
+
+Hosted `main` Compose run `31206781470` passed all three jobs before this
+branch. Hosted validation for this branch remains part of PR promotion. No
+`ARCH.md` or OpenAPI update is required because this slice consumes existing
+runtime boundaries and frozen operations without changing either contract.
 
 ## Post-Implementation Smoke Sequence
 
