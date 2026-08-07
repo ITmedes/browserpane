@@ -16,10 +16,10 @@ breaking-change detection, and the compatibility/deprecation policy. Issue
 canonical contract and conformance evidence; it must not become a separate
 handwritten API truth.
 
-Current audit baseline from the legacy planning pass:
+Current generated and contract-tested baseline:
 
-- OpenAPI operations: 126
-- Axum `/api/v1` route-method pairs: 126
+- OpenAPI operations: 131
+- OpenAPI operations recognized by the Axum router contract: 131
 - OpenAPI component schemas: 202
 - OpenAPI ref names: 231
 - reusable component parameters: 23
@@ -30,11 +30,14 @@ Current audit baseline from the legacy planning pass:
 - content types: `application/json`, `application/octet-stream`,
   `application/zip`, and `video/webm`
 
-The numbers must be regenerated if the OpenAPI contract changes.
+Operation metadata is generated into
+`openapi/bpane-control-v1.operations.json`. Classification is enforced against
+`openapi/bpane-control-v1.classifications.json` whenever the contract changes.
 
-The counts are inventory evidence only. They do not prove that every schema,
-example, error response, or implemented route conforms. #179 must turn the
-inventory into an enforced contract ratchet under #151 CI.
+The generated counts are inventory evidence. Redocly lint, OpenAPI Enforcer
+examples, semantic compatibility diffing, and the Rust Axum route contract add
+the enforceable #179 ratchet under #151 CI. Domain and Compose tests remain
+required for behavior that schemas cannot prove.
 
 ## Contract Governance Requirements
 
@@ -63,7 +66,7 @@ Every OpenAPI operation must have exactly one admin-new classification:
 
 Current classification counts:
 
-- `ui-primary`: 103
+- `ui-primary`: 108
 - `ui-evidence`: 6
 - `api-companion`: 5
 - `internal-worker`: 12
@@ -123,7 +126,7 @@ The API companion and coverage view must include these families:
 - Session recordings: `listSessionRecordings`, `getSessionRecording`,
   `getSessionRecordingContent`, `getSessionRecordingPlayback`,
   `getSessionRecordingPlaybackManifest`,
-  `getSessionRecordingPlaybackExport`
+  `getSessionRecordingPlaybackExport`, `updateSessionRecordingPolicy`
 - Session runtime: `issueSessionAccessToken`, `getSessionStatus`,
   `getSessionEgressDiagnostics`, `runSessionEgressDiagnosticsProbe`
 - Session templates: `listSessionTemplates`, `createSessionTemplate`,
@@ -133,7 +136,9 @@ The API companion and coverage view must include these families:
   `disconnectAllSessionConnections`, `stopSession`,
   `releaseSessionRuntime`, `killSession`
 - Workflows: `listWorkflowDefinitions`, `createWorkflowDefinition`,
-  `getWorkflowDefinition`, `listWorkflowDefinitionVersions`,
+  `getWorkflowDefinition`, `validateWorkflowDefinitionSource`,
+  `getWorkflowDefinitionSourcePreview`, `listWorkflowDefinitionSourceFiles`,
+  `listWorkflowDefinitionVersions`,
   `createWorkflowDefinitionVersion`, `getWorkflowDefinitionVersion`,
   `listWorkflowRuns`, `createWorkflowRun`, `getWorkflowRun`,
   `cancelWorkflowRun`, `rejectWorkflowRun`, `resumeWorkflowRun`,

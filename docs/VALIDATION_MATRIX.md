@@ -165,9 +165,22 @@ final required-check names aligned with this matrix.
 
 ## Public Contract And Protocol Floor
 
-Issue #179 owns OpenAPI lint, implementation conformance, executable examples,
-and breaking-change detection. Once established, every public API slice must
-run those checks in #151 CI.
+Issue #179 adds OpenAPI lint, implementation conformance, executable examples,
+and breaking-change detection to the #151 validation baseline. Run the focused
+contract floor with:
+
+```bash
+npm ci --ignore-scripts --prefix scripts/openapi
+npm test --prefix scripts/openapi
+npm run check --prefix scripts/openapi
+npm run compatibility --prefix scripts/openapi -- --base-ref origin/main
+cargo test -p bpane-gateway openapi_contract
+```
+
+The OpenAPI package validates the canonical document, the complete generated
+operation inventory, one classification per operation, representative success
+and error examples, and semantic compatibility. The Rust contract proves that
+every documented path and method is registered by the in-memory Axum router.
 
 Issue #175 owns the BrowserPane remote protocol specification, version/
 capability negotiation, shared Rust/TypeScript vectors, malformed-input tests,

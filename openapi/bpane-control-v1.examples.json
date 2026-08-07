@@ -1,0 +1,105 @@
+{
+  "version": 1,
+  "contract": "bpane-control-v1",
+  "examples": [
+    {
+      "name": "sessions-empty-list",
+      "operationId": "listSessions",
+      "request": { "method": "GET", "path": "/api/v1/sessions" },
+      "response": { "status": 200, "body": { "sessions": [] } }
+    },
+    {
+      "name": "sessions-unauthorized",
+      "operationId": "listSessions",
+      "request": { "method": "GET", "path": "/api/v1/sessions" },
+      "response": { "status": 401, "body": { "error": "missing bearer token" } }
+    },
+    {
+      "name": "projects-empty-list",
+      "operationId": "listProjects",
+      "request": { "method": "GET", "path": "/api/v1/projects" },
+      "response": { "status": 200, "body": { "projects": [] } }
+    },
+    {
+      "name": "projects-unauthorized",
+      "operationId": "listProjects",
+      "request": { "method": "GET", "path": "/api/v1/projects" },
+      "response": { "status": 401, "body": { "error": "missing bearer token" } }
+    },
+    {
+      "name": "workflow-definitions-empty-list",
+      "operationId": "listWorkflowDefinitions",
+      "request": { "method": "GET", "path": "/api/v1/workflows" },
+      "response": { "status": 200, "body": { "workflows": [] } }
+    },
+    {
+      "name": "workflow-definitions-unauthorized",
+      "operationId": "listWorkflowDefinitions",
+      "request": { "method": "GET", "path": "/api/v1/workflows" },
+      "response": { "status": 401, "body": { "error": "missing bearer token" } }
+    },
+    {
+      "name": "recordings-empty-list",
+      "operationId": "listSessionRecordings",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/sessions/00000000-0000-0000-0000-000000000001/recordings"
+      },
+      "response": { "status": 200, "body": { "recordings": [] } }
+    },
+    {
+      "name": "recordings-unauthorized",
+      "operationId": "listSessionRecordings",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/sessions/00000000-0000-0000-0000-000000000001/recordings"
+      },
+      "response": { "status": 401, "body": { "error": "missing bearer token" } }
+    },
+    {
+      "name": "current-service-principal",
+      "operationId": "getCurrentIdentity",
+      "request": { "method": "GET", "path": "/api/v1/identity/me" },
+      "response": {
+        "status": 200,
+        "body": {
+          "subject": "service-account-bpane",
+          "issuer": "https://identity.example/realms/browserpane",
+          "display_name": null,
+          "client_id": "bpane-integration",
+          "principal_type": "service_principal"
+        }
+      }
+    },
+    {
+      "name": "identity-unauthorized",
+      "operationId": "getCurrentIdentity",
+      "request": { "method": "GET", "path": "/api/v1/identity/me" },
+      "response": { "status": 401, "body": { "error": "missing bearer token" } }
+    },
+    {
+      "name": "file-workspaces-empty-list",
+      "operationId": "listFileWorkspaces",
+      "request": { "method": "GET", "path": "/api/v1/file-workspaces" },
+      "response": { "status": 200, "body": { "workspaces": [] } }
+    },
+    {
+      "name": "file-workspaces-unauthorized",
+      "operationId": "listFileWorkspaces",
+      "request": { "method": "GET", "path": "/api/v1/file-workspaces" },
+      "response": { "status": 401, "body": { "error": "missing bearer token" } }
+    },
+    {
+      "name": "egress-profiles-empty-list",
+      "operationId": "listEgressProfiles",
+      "request": { "method": "GET", "path": "/api/v1/egress-profiles" },
+      "response": { "status": 200, "body": { "profiles": [] } }
+    },
+    {
+      "name": "egress-profiles-unauthorized",
+      "operationId": "listEgressProfiles",
+      "request": { "method": "GET", "path": "/api/v1/egress-profiles" },
+      "response": { "status": 401, "body": { "error": "missing bearer token" } }
+    }
+  ]
+}

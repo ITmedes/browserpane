@@ -1,0 +1,23 @@
+apis:
+  control@v1:
+    root: ../../openapi/bpane-control-v1.yaml
+
+extends:
+  - recommended
+
+rules:
+  # OAS 3.0 nullable composition remains part of the frozen v1 contract. A
+  # future 3.1 contract can replace these with explicit null unions.
+  nullable-type-sibling: off
+  # The admin events operation returns HTTP 101, not a conventional 2xx body.
+  operation-2xx-response: off
+  # License metadata is owned by #180 and must not be guessed here.
+  info-license: off
+  no-server-example.com: off
+  operation-4xx-response: error
+  operation-operationId-unique: error
+  operation-operationId-url-safe: error
+  operation-summary: error
+  security-defined: error
+  spec-components-invalid-map-name: error
+  spec-strict-refs: error
