@@ -3,36 +3,16 @@ import { apiOrigin, poll } from './workflow-smoke-lib.mjs';
 export const ADMIN_UNIFIED_ROUTE_MANIFEST = Object.freeze([
   Object.freeze({ name: 'dashboard', path: '', readyTestId: 'dashboard-overview' }),
   Object.freeze({ name: 'projects', path: 'projects', readyTestId: 'projects-overview' }),
-  Object.freeze({
-    name: 'browser-contexts',
-    path: 'browser-contexts',
-    readyTestId: 'browser-contexts-overview',
-  }),
+  Object.freeze({ name: 'browser-contexts', path: 'browser-contexts', readyTestId: 'browser-contexts-overview' }),
   Object.freeze({ name: 'egress', path: 'egress', readyTestId: 'egress-profiles-overview' }),
-  Object.freeze({
-    name: 'file-workspaces',
-    path: 'files/workspaces',
-    readyTestId: 'file-workspaces-overview',
-  }),
+  Object.freeze({ name: 'file-workspaces', path: 'files/workspaces', readyTestId: 'file-workspaces-overview' }),
   Object.freeze({ name: 'workflows', path: 'workflows', readyTestId: 'workflows-overview' }),
-  Object.freeze({
-    name: 'workflow-runs',
-    path: 'workflow-runs',
-    readyTestId: 'workflow-runs-overview',
-  }),
+  Object.freeze({ name: 'workflow-runs', path: 'workflow-runs', readyTestId: 'workflow-runs-overview' }),
   Object.freeze({ name: 'sessions', path: 'sessions', readyTestId: 'sessions-overview' }),
   Object.freeze({ name: 'recordings', path: 'recordings', readyTestId: 'recordings-overview' }),
   Object.freeze({ name: 'extensions', path: 'extensions', readyTestId: 'extensions-overview' }),
-  Object.freeze({
-    name: 'credential-bindings',
-    path: 'credential-bindings',
-    readyTestId: 'credential-bindings-overview',
-  }),
-  Object.freeze({
-    name: 'workflow-event-subscriptions',
-    path: 'workflow-event-subscriptions',
-    readyTestId: 'workflow-event-subscriptions-overview',
-  }),
+  Object.freeze({ name: 'credential-bindings', path: 'credential-bindings', readyTestId: 'credential-bindings-overview' }),
+  Object.freeze({ name: 'workflow-event-subscriptions', path: 'workflow-event-subscriptions', readyTestId: 'workflow-event-subscriptions-overview' }),
   Object.freeze({ name: 'identity', path: 'identity', readyTestId: 'identity-access-workspace' }),
   Object.freeze({ name: 'api', path: 'api', readyTestId: 'api-companion-workspace' }),
   Object.freeze({ name: 'coverage', path: 'coverage', readyTestId: 'api-coverage-workspace' }),
@@ -58,13 +38,13 @@ export function findActiveSessionIdsByLabels(response, expectedLabels) {
   }
   return response.sessions.flatMap((session) => {
     if (
-      !session ||
-      typeof session.id !== 'string' ||
-      !session.id ||
-      typeof session.state !== 'string' ||
-      session.state === 'stopped' ||
-      !session.labels ||
-      typeof session.labels !== 'object'
+      !session
+      || typeof session.id !== 'string'
+      || !session.id
+      || typeof session.state !== 'string'
+      || session.state === 'stopped'
+      || !session.labels
+      || typeof session.labels !== 'object'
     ) {
       return [];
     }
@@ -77,11 +57,7 @@ export function findActiveSessionIdsByLabels(response, expectedLabels) {
 export async function waitForContains(scope, options, testId, expected) {
   await poll(
     testId,
-    async () =>
-      await scope
-        .getByTestId(testId)
-        .textContent()
-        .catch(() => ''),
+    async () => await scope.getByTestId(testId).textContent().catch(() => ''),
     (value) => typeof value === 'string' && value.includes(expected),
     options.connectTimeoutMs,
   );
@@ -105,9 +81,7 @@ export async function assertNoBodyHorizontalOverflow(page, label) {
 
 export function assertEqual(actual, expected, label) {
   if (actual !== expected) {
-    throw new Error(
-      `Expected ${label} to be ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`,
-    );
+    throw new Error(`Expected ${label} to be ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
   }
 }
 
