@@ -252,7 +252,7 @@ recovering either secret from the UI.
 
 ## Evidence Record
 
-- PR: pending creation after final Compose validation
+- PR: `#201`
 - Commits: `419d4b1` through `43f1f53`
 - Unit/integration results: 185 admin-new test files and 572 tests passed;
   focused extension, credential-binding, event-subscription, delivery-health,
@@ -261,7 +261,8 @@ recovering either secret from the UI.
   `smoke:admin-unified-resource-catalogs` passed locally, as did projects,
   egress, workflows, workflow events, workflow extension, workflow
   credentials, credential injection, API companion, and session/MCP
-  regressions. The final GitHub Compose run is pending review.
+  regressions. GitHub Compose run `31199532428` passed all three jobs: gateway
+  API docker-pool, gateway API default, and browser/integration smokes.
 - Coverage/build results: admin-new coverage passed with 91.96% statements,
   76.46% branches, 93.87% functions, and 90.06% lines; Svelte check and the
   production build passed.
