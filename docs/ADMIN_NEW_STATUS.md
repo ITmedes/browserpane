@@ -1,6 +1,6 @@
 # Admin-New Implementation Status
 
-Revalidated against current routes and package scripts: 2026-07-31
+Revalidated against current routes and package scripts: 2026-08-07
 
 This file maps the current `code/web/bpane-admin-unified` app to the
 consolidated redesign requirements. It is based on the current routes,
@@ -28,7 +28,7 @@ evidence, but default promotion remains a Phase 1 gate owned by #163. Use
 | Workflows | `/admin-new/workflows`, `/admin-new/workflows/[workflow_id]` | Partial | Catalog, detail, source tree/code preview, workflow launch controls exist. Publishing/catalog management is still not complete. |
 | Workflow integration endpoints | Recommended future `/admin-new/workflow-endpoints`, `/new`, `/[endpoint_id]`, `/runs`, `/deliveries` | Missing, Phase N | Stable project-scoped BPM action endpoints, service-principal grants, typed contracts, immutable revision promotion/rollback, completion profiles, overload/readiness, and callback diagnostics are planned in `#172`; this is not an admin-new promotion blocker. |
 | Workflow Studio / Teach Mode | Recommended future `/admin-new/workflows/teach`, `/admin-new/workflow-training/[draft_id]` | Missing, Phase N | Semantic demonstration capture, candidate generation, replay, review, immutable publication, and controlled repair are planned in `#171`; this is not an admin-new promotion blocker. |
-| Workflow runs | `/admin-new/runs` | Partial | Overview route exists. Detail route, logs/events/files/controls are still missing. |
+| Workflow runs | `/admin-new/workflow-runs`, `/admin-new/workflow-runs/[run_id]`; `/admin-new/runs` aliases | Implemented | Catalog and stable detail route expose metadata, independently loaded logs/events/files, produced-file downloads, related links, and state-gated intervention/cancel controls. |
 | Identity | Navigation points to `/admin-new/identity` | Missing | No route-backed identity/access-review implementation in unified admin. |
 | API reference | Navigation points to `/admin-new/api` | Missing | No API companion route yet. |
 | Design memo/docs | Navigation points to `/admin-new/docs` | Missing | Navigation exists, route does not. |
@@ -53,7 +53,7 @@ evidence, but default promotion remains a Phase 1 gate owned by #163. Use
 | Step 11: Automation | MCP delegation, workflow associations, automation owner/delegate state, and worker-route separation. | Partial | MCP delegation is implemented in session detail; workflow associations and automation subroute remain incomplete. |
 | Step 12: Browser policy | Local-file and File System Access guardrails, probe command, and CDP endpoint evidence. | Missing as session subroute | Old admin/browser-policy smoke exists; unified route does not. |
 | Step 13: Observability | Logs, metrics summaries, admin event stream state, workflow/recording snapshots, and future placeholders. | Missing as session subroute | Metrics drawer exists in preview, but logs/events/admin stream route is missing. |
-| Step 14: Remaining resource catalogs | Workflows, workflow runs, templates, extensions, credential bindings, event subscriptions, operation counters, identity/access review. | Partial | Workflows/runs exist; templates, extensions, credentials, event subscriptions, identity remain. |
+| Step 14: Remaining resource catalogs | Workflows, workflow runs, templates, extensions, credential bindings, event subscriptions, operation counters, identity/access review. | Partial | Workflow catalog/run launch and workflow-run catalog/detail exist; templates, extensions, credentials, event subscriptions, and identity remain. |
 | Step 15: Dashboard | Read-only resource counts, recent operational activity, and links to active work. | Done for first pass | Dashboard overview exists and has smoke coverage. |
 | Step 16: Command palette | Global navigation/session join/common creation actions without a second hidden state model. | Missing | No implemented command palette route/component. |
 | Step 17: API reference/coverage companion | Copyable API examples, operation classification, OpenAPI link, compatibility separation. | Missing | Navigation planned but routes absent. |

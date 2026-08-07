@@ -53,8 +53,15 @@ export function resolveAdminShellRoute(pathname: string): AdminShellRoute | null
   if (route.startsWith('/workflows/')) {
     return { activeId: 'workflows', title: 'BrowserPane Workflow Details' };
   }
-  if (route === '/runs') {
-    return { activeId: 'runs', title: 'BrowserPane Workflow Runs' };
+  if (route === '/runs' || route.startsWith('/runs/')) {
+    return { activeId: 'runs', title: route === '/runs'
+      ? 'BrowserPane Workflow Runs'
+      : 'BrowserPane Workflow Run Details' };
+  }
+  if (route === '/workflow-runs' || route.startsWith('/workflow-runs/')) {
+    return { activeId: 'runs', title: route === '/workflow-runs'
+      ? 'BrowserPane Workflow Runs'
+      : 'BrowserPane Workflow Run Details' };
   }
   if (route === '/sessions') {
     return { activeId: 'sessions', title: 'BrowserPane Sessions' };

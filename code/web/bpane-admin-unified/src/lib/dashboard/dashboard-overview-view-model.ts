@@ -124,7 +124,7 @@ export function buildDashboardOverviewModel(
         `${activeWorkflowRuns}`,
         `${snapshot.workflowRuns.length} total · ${snapshot.workflowRuns.filter(runNeedsAttention).length} need attention`,
         snapshot.workflowRuns.some(runNeedsAttention) ? 'warning' : activeWorkflowRuns > 0 ? 'success' : 'neutral',
-        '/admin-new/runs',
+        '/admin-new/workflow-runs',
       ),
       metric(
         'project-alerts',
@@ -145,7 +145,7 @@ export function buildDashboardOverviewModel(
     ],
     quickLinks: [
       quickLink('Sessions', 'Start, connect, stop, and inspect browser sessions.', snapshot.sessions.length, '/admin-new/sessions', 'sessions'),
-      quickLink('Workflow runs', 'Track automation execution and operator intervention.', snapshot.workflowRuns.length, '/admin-new/runs', 'runs'),
+      quickLink('Workflow runs', 'Track automation execution and operator intervention.', snapshot.workflowRuns.length, '/admin-new/workflow-runs', 'runs'),
       quickLink('Recordings', 'Review retained session recording artifacts.', snapshot.recordings.length, '/admin-new/recordings', 'recordings'),
       quickLink('Projects', 'Maintain admission policy, quota, and resource bindings.', snapshot.projects.length, '/admin-new/projects', 'projects'),
       quickLink('Browser contexts', 'Manage reusable and ephemeral browser state resources.', snapshot.browserContexts.length, '/admin-new/browser-contexts', 'contexts'),
@@ -193,7 +193,7 @@ function buildAttentionItems(
       title: `Workflow run ${shortIdentifier(run.id)}`,
       description: workflowRunAttentionDescription(run),
       tone: run.state === 'failed' || run.state === 'timed_out' ? 'danger' as ProjectTone : 'warning' as ProjectTone,
-      href: '/admin-new/runs',
+      href: '/admin-new/workflow-runs',
       testId: `dashboard-attention-run-${run.id}`,
     })),
     ...snapshot.recordings
@@ -241,7 +241,7 @@ function recentActivity(snapshot: DashboardSnapshot): readonly DashboardActivity
       title: `Run ${shortIdentifier(run.id)}`,
       detail: `${run.workflow_definition_id} · ${run.state}`,
       timestamp: run.updated_at,
-      href: '/admin-new/runs',
+      href: '/admin-new/workflow-runs',
     })),
     ...snapshot.recordings.map((entry) => ({
       title: `Recording ${shortIdentifier(entry.recording.id)}`,

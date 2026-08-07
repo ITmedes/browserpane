@@ -249,13 +249,14 @@ treated as complete.
 
 ## Workflow Runs
 
-1. Open `/admin-new/workflow-runs` or the current `/admin-new/runs` route.
+1. Open canonical `/admin-new/workflow-runs`; confirm `/admin-new/runs` remains
+   a compatible alias.
 2. Confirm loading, empty/error, metrics, lenses, search, and table rows render
    without layout shifts.
 3. Trigger at least one workflow run.
 4. Confirm state, workflow id, session id, project/admission, file count, and
    updated time are visible.
-5. Open the run detail once implemented.
+5. Open the run detail from the catalog and reload its stable URL directly.
 6. Confirm metadata, input, output, logs, events, produced files, errors,
    recordings, source snapshots, workspace inputs, and links to session and
    workflow are visible.
