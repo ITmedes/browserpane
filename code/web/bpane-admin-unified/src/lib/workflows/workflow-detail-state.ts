@@ -1,3 +1,4 @@
+import type { AdminActionState } from '$lib/application/admin-async-state';
 import type {
   WorkflowDefinitionSourceFileListResponse,
   WorkflowDefinitionSourcePreviewResource,
@@ -15,11 +16,7 @@ export type WorkflowDetailLoadState =
       readonly versions: readonly WorkflowDefinitionVersionResource[];
     };
 
-export type WorkflowActionState =
-  | { readonly status: 'idle' }
-  | { readonly status: 'running'; readonly label: string }
-  | { readonly status: 'success'; readonly message: string }
-  | { readonly status: 'error'; readonly message: string };
+export type WorkflowActionState = AdminActionState;
 
 export type WorkflowSourcePreviewState =
   | { readonly status: 'idle' }
