@@ -7,6 +7,7 @@ import {
   assertNoBodyHorizontalOverflow,
   assertNoHorizontalOverflow,
   authJsonHeaders,
+  findActiveSessionIdsByLabels,
   waitForContains,
 } from './admin-unified-smoke-lib.mjs';
 
@@ -44,6 +45,23 @@ describe('admin unified smoke helpers', () => {
     await waitForContains(scope, { connectTimeoutMs: 10 }, 'project-action-success', 'saved');
     assert.doesNotThrow(() => assertEqual('ready', 'ready', 'state'));
     assert.throws(() => assertEqual('failed', 'ready', 'state'), /Expected state to be "ready"/);
+  });
+
+  it('selects only active sessions with all expected smoke labels', () => {
+    assert.deepEqual(findActiveSessionIdsByLabels({ sessions: [
+      { id: 'active-match', state: 'ready', labels: { suite: 'admin-unified-sessions', purpose: 'smoke' } },
+      { id: 'stopped-match', state: 'stopped', labels: { suite: 'admin-unified-sessions', purpose: 'smoke' } },
+      { id: 'other-suite', state: 'ready', labels: { suite: 'manual', purpose: 'smoke' } },
+      { id: 'missing-label', state: 'ready', labels: { suite: 'admin-unified-sessions' } },
+      null,
+    ] }, {
+      suite: 'admin-unified-sessions',
+      purpose: 'smoke',
+    }), ['active-match']);
+    assert.throws(
+      () => findActiveSessionIdsByLabels({}, { suite: 'admin-unified-sessions' }),
+      /session catalog response/,
+    );
   });
 });
 
