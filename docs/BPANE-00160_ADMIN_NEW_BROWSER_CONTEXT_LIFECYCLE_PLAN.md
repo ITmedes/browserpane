@@ -3,7 +3,7 @@
 ## Metadata
 
 - Issue: `#160`
-- State: Implemented and locally validated; hosted PR validation pending
+- State: Ready for review; local and hosted validation complete
 - Lane: Operator Product
 - Target gate: admin-new browser-context lifecycle parity
 - Depends on: `#148` merged through PR `#202`
@@ -269,10 +269,13 @@ Local validation on 2026-08-07:
 - focused gateway browser-context suite: 24 tests passed,
 - live Compose `compose_browser_contexts_api_surface` case passed in 167.35s.
 
-Hosted `main` Compose run `31206781470` passed all three jobs before this
-branch. Hosted validation for this branch remains part of PR promotion. No
-`ARCH.md` or OpenAPI update is required because this slice consumes existing
-runtime boundaries and frozen operations without changing either contract.
+All 11 required checks passed for PR `#203` at `c569037`. Manually dispatched
+Compose run `31209939015` passed the default gateway, docker-pool gateway, and
+browser/integration jobs against the feature implementation at `51c4d9c`; the
+only subsequent change replaces a cross-realm Blob test assertion. The Compose
+resolver reported a pinned GHCR Rust builder hit. No `ARCH.md` or OpenAPI update
+is required because this slice consumes existing runtime boundaries and frozen
+operations without changing either contract.
 
 ## Post-Implementation Smoke Sequence
 
