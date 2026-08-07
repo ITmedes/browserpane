@@ -66,10 +66,10 @@
         config,
         tokenStore: new BrowserTokenStore(window.sessionStorage),
       });
+      await authClient.initialize();
       if (config.mode === 'oidc') {
         await completeLoginRedirect();
       }
-      await authClient.initialize();
       auth = authClient.getSnapshot();
       if (!auth.authenticated && config.mode === 'oidc') {
         await login();

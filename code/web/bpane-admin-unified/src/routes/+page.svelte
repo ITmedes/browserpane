@@ -1,10 +1,8 @@
 <script lang="ts">
   import DashboardOverviewRoute from '$lib/components/DashboardOverviewRoute.svelte';
-  import UnifiedAdminShell from '$lib/components/UnifiedAdminShell.svelte';
+  import { useUnifiedAdminContext } from '$lib/auth/unified-admin-context-provider';
+
+  const authContext = useUnifiedAdminContext();
 </script>
 
-<UnifiedAdminShell activeId="dashboard" title="BrowserPane Dashboard">
-  {#snippet children(authContext)}
-    <DashboardOverviewRoute {authContext} />
-  {/snippet}
-</UnifiedAdminShell>
+<DashboardOverviewRoute {authContext} />

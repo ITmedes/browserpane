@@ -5,13 +5,13 @@ import {
   cleanupRenderedComponents,
   renderComponent,
 } from '$lib/test-utils/svelte-component-test';
-import Page from './+page.svelte';
+import UnifiedAdminShell from '$lib/components/UnifiedAdminShell.svelte';
 
 afterEach(cleanupRenderedComponents);
 
 describe('unified admin shell page', () => {
   it('composes the header controls, navigation, and empty workspace', () => {
-    const target = renderComponent(Page);
+    const target = renderComponent(UnifiedAdminShell);
     const shell = byTestId(target, 'admin-new-shell');
     const header = byTestId(target, 'admin-new-header');
 
