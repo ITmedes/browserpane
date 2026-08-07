@@ -2,7 +2,7 @@
 
 Governance issue: [#173](https://github.com/ITmedes/browserpane/issues/173)
 
-Last reviewed: 2026-08-04
+Last reviewed: 2026-08-07
 
 ## Scale
 
@@ -19,7 +19,7 @@ Last reviewed: 2026-08-04
 | R-003 | Different token purposes share signing material and credentials appear in URL/query paths. | High | Critical | #145 | Purpose-separated credentials, constant-time/library verification, redaction tests. | Foundation |
 | R-004 | Shared admin authentication/browser security is insufficient for promotion. | High | Critical | #146 / #72 | CSP/origin/auth lifecycle/CSRF/frame policies and negative tests. | Foundation |
 | R-005 | Webhook delivery can reach unsafe destinations or redirect targets. | Low | Critical | #147 | Mitigated and merged through PR #191: URL/DNS/IP validation, pinned delivery, no redirects/proxies, exact-origin exceptions, negative and compose tests. | Foundation |
-| R-006 | Public OpenAPI can drift from code or break clients silently. | High | High | #179 | Lint, conformance, examples, breaking-diff policy and CI gate. | Foundation |
+| R-006 | Public OpenAPI can drift from code or break clients silently. | Low | High | #179 | Mitigating on `feature/BPANE-00179`: pinned lint, generated inventory, executable examples, Axum route coverage, semantic diff, policy, and CI stages. | Foundation |
 | R-007 | Protocol version is not enforced and compatibility is undocumented. | Medium | Critical | #175 | Version negotiation, shared vectors, fuzzing, compatibility matrix. | Production |
 | R-008 | In-memory and Postgres behavior can diverge. | Medium | High | #152 | Shared store contract suite and compose verification. | Foundation |
 | R-009 | Recording finalization can cross an unsafe filesystem/artifact boundary. | Medium | High | #149 | Artifact-store-owned finalize contract and failure/restart tests. | Phase 0 conditional |

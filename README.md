@@ -380,6 +380,7 @@ applications, CLI, integrations, and workers.
 Canonical contract:
 
 - [openapi/bpane-control-v1.yaml](openapi/bpane-control-v1.yaml)
+- [control API compatibility policy](docs/CONTROL_API_COMPATIBILITY_POLICY.md)
 
 Selected resource and diagnostics routes:
 
