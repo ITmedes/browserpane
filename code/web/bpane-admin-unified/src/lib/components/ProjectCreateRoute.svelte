@@ -8,7 +8,7 @@
     ProjectPolicyOptionsLoadState,
   } from '$lib/projects/project-detail-state';
   import type { ProjectResource, UpsertProjectRequest } from '$lib/projects/project-types';
-  import AdminMessage from './AdminMessage.svelte';
+  import ActionFeedback from './ActionFeedback.svelte';
   import ProjectEditForm from './ProjectEditForm.svelte';
 
   type ProjectCreateRouteProps = {
@@ -85,27 +85,14 @@
     </div>
   </header>
 
-  {#if projectActionState.status === 'success'}
-    <AdminMessage
-      tone="success"
-      title="Project action completed"
-      message={projectActionState.message}
-      testId="project-create-success"
-    />
-  {:else if projectActionState.status === 'error'}
-    <AdminMessage
-      tone="error"
-      title="Project action failed"
-      message={projectActionState.message}
-      testId="project-create-error"
-    />
-  {:else if projectActionState.status === 'running'}
-    <AdminMessage
-      tone="loading"
-      title={projectActionState.label}
-      testId="project-create-running"
-    />
-  {/if}
+  <ActionFeedback
+    state={projectActionState}
+    successTitle="Project action completed"
+    errorTitle="Project action failed"
+    successTestId="project-create-success"
+    errorTestId="project-create-error"
+    runningTestId="project-create-running"
+  />
 
   <ProjectEditForm
     mode="create"
