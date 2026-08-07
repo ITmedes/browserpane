@@ -468,7 +468,7 @@ paths:
     post:
       tags: [Browser Contexts]
       summary: Import a BrowserPane browser context export archive
-      description: Creates a new reusable context from an export zip. The import never overwrites an existing context; target metadata is provided by headers and omitted metadata defaults to the archive manifest. Project scope is applied only when `x-bpane-browser-context-project-id` is provided.
+      description: Creates a new reusable context from an export zip. The import never overwrites an existing context; target metadata is provided by headers and omitted metadata defaults to the archive manifest. Project scope is applied only when `x-bpane-browser-context-project-id` is provided. The authenticated request, nested compressed profile, expanded tar stream, tar entry count, and concurrent import work are bounded by gateway configuration.
       operationId: importBrowserContext
       parameters:
         - name: x-bpane-browser-context-name
@@ -527,6 +527,10 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '409':
           $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
   /api/v1/browser-contexts/{context_id}:
@@ -3430,6 +3434,18 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
     Gone:
       description: Artifact was previously available but has expired or been removed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    PayloadTooLarge:
+      description: Authenticated request or expanded archive exceeds a configured import limit
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    TooManyRequests:
+      description: Bounded import capacity is currently occupied; retry later
       content:
         application/json:
           schema:
