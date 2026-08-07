@@ -8,6 +8,7 @@
     type WorkflowRunOverviewRow,
   } from '$lib/workflow-runs/workflow-run-overview-view-model';
   import type { WorkflowRunResource } from '$lib/workflow-runs/workflow-run-types';
+  import { workflowRunDetailHref } from '$lib/workflow-runs/workflow-run-detail-view-model';
   import { projectToneClass } from '$lib/projects/project-ui';
 
   type WorkflowRunLens = 'all' | 'active' | 'awaiting_input' | 'failed' | 'completed' | 'attention';
@@ -181,7 +182,12 @@
             <tr class="border-b border-admin-border last:border-b-0 hover:bg-admin-soft" data-testid="workflow-runs-list-row">
               <td class="w-[230px] px-4 py-3 align-middle">
                 <div class="grid min-w-0 text-left">
-                  <span class="truncate font-mono text-sm font-semibold text-admin-ink" title={row.id}>{row.shortId}</span>
+                  <a
+                    class="truncate font-mono text-sm font-semibold text-admin-ink hover:text-admin-accent"
+                    href={workflowRunDetailHref(row.id)}
+                    title={row.id}
+                    data-testid="workflow-runs-detail-link"
+                  >{row.shortId}</a>
                   <span class="mt-1 truncate font-mono text-[11px] text-admin-muted">{row.id}</span>
                   <span class="mt-1 truncate text-xs text-admin-muted">{row.source}</span>
                 </div>
@@ -229,6 +235,13 @@
               </td>
               <td class="px-4 py-3 align-middle text-right">
                 <div class="flex justify-end gap-2">
+                  <a
+                    class="inline-flex h-8 items-center rounded-md border border-admin-border bg-admin-panel px-3 text-xs font-semibold text-admin-ink hover:bg-admin-soft"
+                    href={workflowRunDetailHref(row.id)}
+                    data-testid="workflow-runs-open-detail"
+                  >
+                    Details
+                  </a>
                   <a
                     class="inline-flex h-8 items-center rounded-md border border-admin-border bg-admin-panel px-3 text-xs font-semibold text-admin-ink hover:bg-admin-soft"
                     href={sessionHref(row.sessionId)}
