@@ -191,16 +191,14 @@ async function verifyWorkflowRunLauncher(page, options) {
   await page.getByTestId('workflow-run-input-scroll_step_px').fill('480');
   await page.getByTestId('workflow-run-input-max_scroll_steps').fill('2');
   await page.getByTestId('workflow-run-start').click();
-  await page.getByTestId('workflow-run-launch-success').waitFor({
-    state: 'visible',
-    timeout: options.connectTimeoutMs,
-  });
+  await waitForWorkflowLaunch(page, options);
   const runHref = await page.getByTestId('workflow-run-open-run').getAttribute('href');
   const sessionHref = await page.getByTestId('workflow-run-open-session').getAttribute('href');
-  const runId = new URL(runHref ?? '', apiOrigin(options)).searchParams.get('run');
+  const runUrl = new URL(runHref ?? '', apiOrigin(options));
+  const runId = runUrl.pathname.match(/^\/admin-new\/workflow-runs\/([^/]+)$/)?.[1] ?? '';
   const sessionId = sessionHref?.split('/').filter(Boolean).at(-1) ?? '';
   if (!runId) {
-    throw new Error(`Expected workflow run link to expose a run query param, got ${runHref}`);
+    throw new Error(`Expected a canonical workflow run detail link, got ${runHref}`);
   }
   if (!sessionId) {
     throw new Error(`Expected workflow run session link, got ${sessionHref}`);
@@ -209,8 +207,19 @@ async function verifyWorkflowRunLauncher(page, options) {
   return { runId, sessionId };
 }
 
+async function waitForWorkflowLaunch(page, options) {
+  const success = page.getByTestId('workflow-run-launch-success');
+  const failure = page.getByTestId('workflow-run-launch-error');
+  await Promise.race([
+    success.waitFor({ state: 'visible', timeout: options.connectTimeoutMs }),
+    failure.waitFor({ state: 'visible', timeout: options.connectTimeoutMs }).then(async () => {
+      throw new Error(`Workflow launch failed: ${(await failure.textContent())?.trim()}`);
+    }),
+  ]);
+}
+
 async function verifyCreatedRunCatalog(page, options, runId) {
-  await page.goto(adminRouteUrl(options, 'runs'), { waitUntil: 'domcontentloaded' });
+  await page.goto(adminRouteUrl(options, 'workflow-runs'), { waitUntil: 'domcontentloaded' });
   await page.getByTestId('workflow-runs-overview').waitFor({
     state: 'visible',
     timeout: options.connectTimeoutMs,

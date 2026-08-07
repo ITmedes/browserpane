@@ -30,6 +30,9 @@ evidence, but default promotion remains a Phase 1 gate owned by #163. Use
 | Workflow Studio / Teach Mode | Recommended future `/admin-new/workflows/teach`, `/admin-new/workflow-training/[draft_id]` | Missing, Phase N | Semantic demonstration capture, candidate generation, replay, review, immutable publication, and controlled repair are planned in `#171`; this is not an admin-new promotion blocker. |
 | Workflow runs | `/admin-new/workflow-runs`, `/admin-new/workflow-runs/[run_id]`; `/admin-new/runs` aliases | Implemented | Catalog and stable detail route expose metadata, independently loaded logs/events/files, produced-file downloads, related links, and state-gated intervention/cancel controls. |
 | Identity | `/admin-new/identity` | Implemented for #157 scope | Current principal, project/resource review, delegated principals, unmapped signals, and service-principal/identity-mapping create, edit, disable, and re-enable flows are route-backed and smoke-covered. Registry metadata remains distinct from future enforced RBAC grants in #176. |
+| Approved extensions | `/admin-new/extensions`, `/new`, `/[extension_id]` | Implemented for #159 scope | Catalog/create/detail, version publication, and enable/disable actions follow the existing extension control API. Installed paths remain deployment-managed. |
+| Credential bindings | `/admin-new/credential-bindings`, `/new`, `/[binding_id]` | Implemented for #159 scope | Owner/project-scoped Vault binding creation and safe metadata inspection are route-backed; submitted secret payloads remain write-only. |
+| Workflow event subscriptions | `/admin-new/workflow-event-subscriptions`, `/new`, `/[subscription_id]` | Implemented for #159 scope | Signed subscription creation, detail, deletion, and persisted delivery-attempt diagnostics are available without rendering signing secrets. |
 | API reference | `/admin-new/api` | Implemented for #158 scope | Contract-derived task flows expose copyable, placeholder-only commands for projects, sessions/connect tickets, workflow runs, and file workspaces without persisting or rendering the browser bearer token. |
 | Integration docs | `/admin-new/docs` | Implemented for #158 scope | Contract scope, authentication domains, error conventions, governance evidence, downloads, and 14 non-v1 compatibility surfaces are separated explicitly. |
 | API coverage | `/admin-new/coverage` | Implemented for #158 scope | All 131 frozen operations can be searched and filtered by family, classification, and auth domain from the generated contract evidence. |
@@ -53,7 +56,7 @@ evidence, but default promotion remains a Phase 1 gate owned by #163. Use
 | Step 11: Automation | MCP delegation, workflow associations, automation owner/delegate state, and worker-route separation. | Implemented for current API | `/automation` owns MCP authorize/revoke/default controls and shows only workflow runs bound to the selected session. |
 | Step 12: Browser policy | Local-file and File System Access guardrails, project restrictions, and runtime evidence. | Implemented as policy evidence | `/policy` separates effective session capabilities from optional project policy and labels managed-browser startup evidence as non-probe evidence. |
 | Step 13: Observability | Current state, admin event stream health, workflow/recording/file/MCP snapshots, and bounded local history. | Implemented for current event API | `/observability` uses short-lived initial-message WebSocket auth, selected-session projection, reconnect status, and a 40-entry in-memory timeline that is not presented as an audit log. |
-| Step 14: Remaining resource catalogs | Workflows, workflow runs, templates, extensions, credential bindings, event subscriptions, operation counters, identity/access review. | Partial | Workflow catalog/run launch, workflow-run catalog/detail, and identity/access review exist; templates, extensions, credentials, event subscriptions, and operation-counter catalogs remain. |
+| Step 14: Remaining resource catalogs | Workflows, workflow runs, templates, extensions, credential bindings, event subscriptions, operation counters, identity/access review. | Partial | Workflow/run, identity/access, extension, credential-binding, and event-subscription catalogs exist. Session templates (#124), operation counters, and deeper workflow publishing remain. |
 | Step 15: Dashboard | Read-only resource counts, recent operational activity, and links to active work. | Done for first pass | Dashboard overview exists and has smoke coverage. |
 | Step 16: Command palette | Global navigation/session join/common creation actions without a second hidden state model. | Missing | No implemented command palette route/component. |
 | Step 17: API reference/coverage companion | Copyable API examples, operation classification, OpenAPI link, compatibility separation. | Done for current contract | `/api`, `/coverage`, and `/docs` load strictly validated committed evidence, expose 19 schema-validated examples and 14 separate compatibility surfaces, and are compose-smoke covered. |
@@ -74,6 +77,7 @@ Current `bpane-client` scripts include:
 - `smoke:admin-unified-workflow-runs`
 - `smoke:admin-unified-identity`
 - `smoke:admin-unified-api-companion`
+- `smoke:admin-unified-resource-catalogs`
 
 These should remain mandatory for PRs that touch the unified admin app. #151
 must make the selected minimal checks enforceable in CI; the existence of local
@@ -84,7 +88,8 @@ scripts alone is not a promotion gate.
 The unified app is useful for manual testing and feature development, but it is
 not ready to become default because:
 
-1. Remaining resource catalogs and command-palette behavior are incomplete.
+1. Session-template and operation-counter catalogs plus command-palette behavior
+   are incomplete.
 2. Browser-context lifecycle and project-governance parity still require their
    focused slices.
 3. The explicit promotion, regression, and fallback gate in #163 has not run.

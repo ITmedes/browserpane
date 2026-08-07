@@ -363,6 +363,18 @@ treated as complete.
 11. Run `npm run smoke:admin-unified-api-companion -- --headless` from
     `code/web/bpane-client`; confirm its project/session cleanup succeeds.
 
+## Extension, Credential, And Event Catalogs
+
+1. Register an approved extension, publish a version, disable it, and re-enable
+   it from `/admin-new/extensions`.
+2. Create a disposable Vault credential binding and confirm neither its secret
+   payload nor a recoverable value appears after navigation or refresh.
+3. Create a signed workflow event subscription, run a workflow, inspect its
+   ordered delivery attempts, and delete the subscription.
+4. Run `npm run smoke:admin-unified-resource-catalogs -- --headless` from
+   `code/web/bpane-client` and confirm extension and subscription cleanup
+   succeeds while the no-delete credential fixture is reported explicitly.
+
 ## Command Palette
 
 1. Press `Cmd+K` or `Ctrl+K`.
