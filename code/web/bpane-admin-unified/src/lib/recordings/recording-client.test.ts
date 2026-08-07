@@ -57,7 +57,7 @@ describe('RecordingCatalogClient', () => {
     expect(response.failures).toEqual([
       {
         sessionId: 'session-2',
-        message: 'Recording catalog request failed with HTTP 503.',
+        message: 'Recording catalog request failed with HTTP 503: temporarily unavailable.',
       },
     ]);
   });
