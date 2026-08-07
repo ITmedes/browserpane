@@ -40,6 +40,9 @@ describe('BrowserContextOverview', () => {
     expect(byTestId(target, 'browser-contexts-metric-ready').textContent).toContain('1');
     expect(byTestId(target, 'browser-contexts-list').textContent).toContain('Support baseline');
     expect(byTestId(target, 'browser-contexts-new-link').getAttribute('href')).toBe('/admin-new/browser-contexts/new');
+    expect(byTestId(target, 'browser-contexts-import-link').getAttribute('href')).toBe(
+      '/admin-new/browser-contexts/import',
+    );
 
     byTestId(target, 'browser-contexts-refresh-button').click();
     expect(onRefresh).toHaveBeenCalledOnce();

@@ -91,6 +91,24 @@
     }
   }
 
+  async function exportContext(): Promise<void> {
+    if (contextState.status !== 'ready') {
+      return;
+    }
+    const contextId = contextState.context.id;
+    actionState = { status: 'running', label: 'Exporting browser context...' };
+    try {
+      const archive = await client().exportBrowserContext(contextId);
+      triggerDownload(archive.blob, archive.filename);
+      actionState = { status: 'success', message: `Download started for ${archive.filename}.` };
+    } catch (error) {
+      actionState = {
+        status: 'error',
+        message: adminErrorMessage(error, 'Browser context export failed.'),
+      };
+    }
+  }
+
   function currentContextId(): string | null {
     const match = window.location.pathname.match(/\/browser-contexts\/([^/]+)\/?$/);
     return match?.[1] ? decodeURIComponent(match[1]) : null;
@@ -104,6 +122,20 @@
       return contextState.contextId;
     }
     return null;
+  }
+
+  function triggerDownload(blob: Blob, filename: string): void {
+    const url = URL.createObjectURL(blob);
+    try {
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.append(link);
+      link.click();
+      link.remove();
+    } finally {
+      URL.revokeObjectURL(url);
+    }
   }
 </script>
 
@@ -132,6 +164,7 @@
       state={contextState}
       {actionState}
       onRefreshContext={refreshContext}
+      onExportContext={exportContext}
       onDeleteContext={deleteContext}
     />
   {/if}

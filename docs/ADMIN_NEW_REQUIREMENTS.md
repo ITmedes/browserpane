@@ -170,9 +170,9 @@ Required behavior:
 - expose clone/import/export as follow-up operations where API/runtime support
   is present.
 
-Current status: catalog/create/detail/edit implemented. Import/export/clone UX
-is not the main promotion blocker but must remain in old admin/API until
-implemented.
+Current status: catalog/create/detail/edit/delete and route-backed clone/import
+plus direct ZIP export are implemented. Active-writer blockers, storage
+warnings, and bounded import errors are represented in admin-new.
 
 ### Egress Profiles
 

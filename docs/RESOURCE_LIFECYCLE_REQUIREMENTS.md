@@ -59,13 +59,15 @@ Import safety status:
   limits, link and special-file rejection, and defensive runtime extraction.
 - BrowserPane exports omit ephemeral Chromium symlinks and sockets so generated
   archives remain compatible with the strict importer.
-- Admin-new clone/import/export controls remain owned by `#160`.
+- Admin-new clone/import/export controls are implemented under `#160` and use
+  the bounded import contract from `#148`.
 
 Admin-new status:
 
-- catalog/create/detail/edit exist,
-- clone/import/export UI remains a promotion-parity gap if old admin/API
-  parity is required.
+- catalog/create/detail/edit/delete exist,
+- route-backed clone and import plus direct ZIP export are implemented,
+- active-writer blockers, storage warnings, and bounded import failures are
+  represented without duplicating archive validation in the browser.
 
 Validation examples:
 

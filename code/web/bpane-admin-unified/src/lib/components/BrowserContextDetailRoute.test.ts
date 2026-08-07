@@ -14,6 +14,7 @@ beforeEach(() => {
 
 afterEach(async () => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
   await cleanupRenderedComponents();
 });
 
@@ -62,6 +63,80 @@ describe('BrowserContextDetailRoute', () => {
       expect(byTestId(target, 'browser-context-detail-error').textContent).toContain('Browser context detail unavailable');
     });
     expect(onAuthenticationFailure).toHaveBeenCalled();
+  });
+
+  it('downloads and revokes an exported browser context archive', async () => {
+    const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:context-export');
+    const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    const fetchImpl = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/api/v1/browser-contexts/context-1') && init?.method === 'GET') {
+        return jsonResponse(browserContextPayload(), 200);
+      }
+      if (url.endsWith('/api/v1/browser-contexts/context-1/export') && init?.method === 'GET') {
+        return new Response('zip-bytes', {
+          status: 200,
+          headers: {
+            'content-type': 'application/zip',
+            'content-disposition': 'attachment; filename="support-baseline.zip"',
+          },
+        });
+      }
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchImpl);
+    const target = renderComponent(BrowserContextDetailRoute, {
+      authContext: authContext({ accessTokenProvider: async () => 'shell-token' }),
+    });
+
+    await vi.waitFor(() => {
+      expect(byTestId(target, 'browser-context-export')).toBeInstanceOf(HTMLButtonElement);
+    });
+    byTestId(target, 'browser-context-export').click();
+
+    await vi.waitFor(() => {
+      expect(byTestId(target, 'browser-context-action-success').textContent).toContain(
+        'support-baseline.zip',
+      );
+    });
+    expect(createObjectURL).toHaveBeenCalledOnce();
+    expect(createObjectURL.mock.calls[0]?.[0]).toMatchObject({
+      size: 9,
+      type: 'application/zip',
+    });
+    expect(click).toHaveBeenCalledOnce();
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:context-export');
+    const exportCall = fetchImpl.mock.calls.find((call) => String(call[0]).endsWith('/export'));
+    const headers = exportCall?.[1]?.headers as Headers;
+    expect(headers.get('authorization')).toBe('Bearer shell-token');
+  });
+
+  it('keeps the detail view available when export is rejected by current runtime state', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/api/v1/browser-contexts/context-1') && init?.method === 'GET') {
+        return jsonResponse(browserContextPayload(), 200);
+      }
+      if (url.endsWith('/api/v1/browser-contexts/context-1/export') && init?.method === 'GET') {
+        return jsonResponse({ error: 'context became active' }, 409);
+      }
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchImpl);
+    const target = renderComponent(BrowserContextDetailRoute, {
+      authContext: authContext(),
+    });
+
+    await vi.waitFor(() => {
+      expect(byTestId(target, 'browser-context-export')).toBeInstanceOf(HTMLButtonElement);
+    });
+    byTestId(target, 'browser-context-export').click();
+
+    await vi.waitFor(() => {
+      expect(byTestId(target, 'browser-context-action-error').textContent).toContain('HTTP 409');
+    });
+    expect(byTestId(target, 'browser-context-detail-name').textContent).toContain('Support baseline');
   });
 });
 

@@ -490,9 +490,12 @@ headers, payloads, credentials, CA material, and decrypted traffic remain with
 the configured proxy or secure web gateway. TLS interception is opt-in and
 requires a proxy, custom CA, and approved sensitive-log sink.
 
-The unified admin supports context catalog, create, detail, and delete flows.
-Clone, import, and export remain available through the API, CLI, and legacy
-console while unified-admin parity is tracked in
+The unified admin supports context catalog, create, detail, delete, clone,
+export, and import flows. Clone and export expose active-writer blockers before
+submission, while import preserves the selected archive and metadata after
+bounded validation or capacity errors so the operator can correct or retry.
+The API, CLI, compatibility console, and unified admin use the same lifecycle
+contract tracked in
 [issue #160](https://github.com/ITmedes/browserpane/issues/160).
 
 ### Session Runtime And Delegation

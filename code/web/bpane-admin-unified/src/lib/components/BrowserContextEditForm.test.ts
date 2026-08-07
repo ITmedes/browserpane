@@ -6,6 +6,7 @@ import {
   cleanupRenderedComponents,
   renderComponent,
 } from '$lib/test-utils/svelte-component-test';
+import { createNewBrowserContextEditDraft } from '$lib/browser-contexts/browser-context-edit-view-model';
 import BrowserContextEditForm from './BrowserContextEditForm.svelte';
 
 afterEach(cleanupRenderedComponents);
@@ -55,6 +56,48 @@ describe('BrowserContextEditForm', () => {
       projectOptionsState: { status: 'error', message: 'No active admin access token is available.' },
     });
     expect(byTestId(target, 'browser-context-projects-error').textContent).toContain('Project options unavailable');
+  });
+
+  it('supports prefilled lifecycle operations, locked persistence, and external blockers', async () => {
+    const onSave = vi.fn();
+    const initialDraft = {
+      ...createNewBrowserContextEditDraft(),
+      name: 'Support baseline copy',
+      description: 'Copied profile',
+    };
+    let target = renderComponent(BrowserContextEditForm, {
+      initialDraft,
+      title: 'Clone browser context settings',
+      submitLabel: 'Clone browser context',
+      persistenceLocked: true,
+      requireChanges: false,
+      submitBlocked: true,
+      submitBlockedHint: 'Select an archive before importing.',
+      onSave,
+    });
+
+    expect(target.textContent).toContain('Clone browser context settings');
+    expect(target.textContent).toContain('Clone browser context');
+    expect((byTestId(target, 'browser-context-edit-persistence-mode') as HTMLSelectElement).disabled).toBe(true);
+    expect(byTestId(target, 'browser-context-edit-submit-blocked').textContent).toContain(
+      'Select an archive before importing.',
+    );
+    expect((byTestId(target, 'browser-context-edit-save') as HTMLButtonElement).disabled).toBe(true);
+
+    await cleanupRenderedComponents();
+    target = renderComponent(BrowserContextEditForm, {
+      initialDraft,
+      submitLabel: 'Clone browser context',
+      persistenceLocked: true,
+      requireChanges: false,
+      onSave,
+    });
+    byTestId(target, 'browser-context-edit-save').click();
+
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'Support baseline copy',
+      persistence_mode: 'reusable',
+    }));
   });
 });
 

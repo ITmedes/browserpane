@@ -41,6 +41,12 @@ strict response mapping and lifecycle smoke coverage. The #158 API companion
 links to existing operator routes rather than duplicating their forms or
 maintaining a second handwritten identity contract.
 
+The complete `ui-primary` browser-context family is implemented under
+`/admin-new/browser-contexts`: catalog/create/detail/delete plus route-backed
+clone and import, and direct ZIP export. The UI sends raw archive bytes and the
+contract-defined metadata headers without parsing archives client-side, and it
+preserves bounded `400`, `413`, and `429` failures for deliberate retry.
+
 The generated counts are inventory evidence. Redocly lint, OpenAPI Enforcer
 examples, semantic compatibility diffing, and the Rust Axum route contract add
 the enforceable #179 ratchet under #151 CI. Domain and Compose tests remain
