@@ -53,18 +53,43 @@ export const navGroups: NavGroup[] = [
     group: 'Resources',
     items: [
       { id: 'projects', label: 'Projects', route: '/admin-new/projects', icon: 'layers' },
-      { id: 'contexts', label: 'Browser contexts', route: '/admin-new/browser-contexts', icon: 'globe' },
+      {
+        id: 'contexts',
+        label: 'Browser contexts',
+        route: '/admin-new/browser-contexts',
+        icon: 'globe',
+      },
       { id: 'egress', label: 'Egress profiles', route: '/admin-new/egress', icon: 'network' },
-      { id: 'workspaces', label: 'File workspaces', route: '/admin-new/files/workspaces', icon: 'folder' },
-      { id: 'extensions', label: 'Approved extensions', route: '/admin-new/extensions', icon: 'boxes' },
-      { id: 'credentials', label: 'Credential bindings', route: '/admin-new/credential-bindings', icon: 'key' },
+      {
+        id: 'workspaces',
+        label: 'File workspaces',
+        route: '/admin-new/files/workspaces',
+        icon: 'folder',
+      },
+      {
+        id: 'extensions',
+        label: 'Approved extensions',
+        route: '/admin-new/extensions',
+        icon: 'boxes',
+      },
+      {
+        id: 'credentials',
+        label: 'Credential bindings',
+        route: '/admin-new/credential-bindings',
+        icon: 'key',
+      },
     ],
   },
   {
     group: 'Govern',
     items: [
       { id: 'identity', label: 'Identity & access', route: '/admin-new/identity', icon: 'shield' },
-      { id: 'events', label: 'Event subscriptions', route: '/admin-new/workflow-event-subscriptions', icon: 'activity' },
+      {
+        id: 'events',
+        label: 'Event subscriptions',
+        route: '/admin-new/workflow-event-subscriptions',
+        icon: 'activity',
+      },
       { id: 'api', label: 'API reference', route: '/admin-new/api', icon: 'key' },
     ],
   },
@@ -80,7 +105,19 @@ export const navGroups: NavGroup[] = [
 export const allNavItems = navGroups.flatMap((group) => group.items);
 
 export const primaryNav: NavItem[] = allNavItems.filter((item) =>
-  ['dashboard', 'sessions', 'recordings', 'workflows', 'runs', 'projects', 'contexts', 'egress', 'workspaces', 'extensions', 'credentials'].includes(item.id),
+  [
+    'dashboard',
+    'sessions',
+    'recordings',
+    'workflows',
+    'runs',
+    'projects',
+    'contexts',
+    'egress',
+    'workspaces',
+    'extensions',
+    'credentials',
+  ].includes(item.id),
 );
 
 export const secondaryNav: NavItem[] = allNavItems.filter((item) =>

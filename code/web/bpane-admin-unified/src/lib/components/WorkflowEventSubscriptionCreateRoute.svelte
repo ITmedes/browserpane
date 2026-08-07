@@ -1,6 +1,71 @@
 <script lang="ts">
-  import { goto } from '$app/navigation'; import { ArrowLeft } from '@lucide/svelte'; import { adminErrorMessage, type AdminActionState } from '$lib/application/admin-async-state'; import type { UnifiedAdminContext } from '$lib/auth/unified-admin-context'; import { WorkflowEventCatalogClient } from '$lib/workflow-events/workflow-event-client'; import type { CreateWorkflowEventSubscriptionRequest, WorkflowEventSubscriptionResource } from '$lib/workflow-events/workflow-event-types'; import ActionFeedback from './ActionFeedback.svelte'; import WorkflowEventSubscriptionCreateForm from './WorkflowEventSubscriptionCreateForm.svelte';
-  let { authContext, navigateToSubscription = async (subscription: WorkflowEventSubscriptionResource) => goto(`/admin-new/workflow-event-subscriptions/${encodeURIComponent(subscription.id)}`) }: { readonly authContext: UnifiedAdminContext; readonly navigateToSubscription?: (subscription: WorkflowEventSubscriptionResource) => void | Promise<void> } = $props(); let actionState = $state<AdminActionState>({ status: 'idle' }); const busy = $derived(actionState.status === 'running');
-  async function createSubscription(request: CreateWorkflowEventSubscriptionRequest): Promise<void> { actionState = { status: 'running', label: 'Creating signed event subscription...' }; try { const subscription = await new WorkflowEventCatalogClient({ baseUrl: window.location.origin, accessTokenProvider: authContext.accessTokenProvider, onAuthenticationFailure: authContext.onAuthenticationFailure }).createSubscription(request); actionState = { status: 'success', message: 'Workflow event subscription created. Signing secret was cleared from the active view.' }; await navigateToSubscription(subscription); } catch (error) { actionState = { status: 'error', message: adminErrorMessage(error, 'Workflow event subscription creation failed.') }; } }
+  import { goto } from '$app/navigation';
+  import { ArrowLeft } from '@lucide/svelte';
+  import { adminErrorMessage, type AdminActionState } from '$lib/application/admin-async-state';
+  import type { UnifiedAdminContext } from '$lib/auth/unified-admin-context';
+  import { WorkflowEventCatalogClient } from '$lib/workflow-events/workflow-event-client';
+  import type {
+    CreateWorkflowEventSubscriptionRequest,
+    WorkflowEventSubscriptionResource,
+  } from '$lib/workflow-events/workflow-event-types';
+  import ActionFeedback from './ActionFeedback.svelte';
+  import WorkflowEventSubscriptionCreateForm from './WorkflowEventSubscriptionCreateForm.svelte';
+  let {
+    authContext,
+    navigateToSubscription = async (subscription: WorkflowEventSubscriptionResource) =>
+      goto(`/admin-new/workflow-event-subscriptions/${encodeURIComponent(subscription.id)}`),
+  }: {
+    readonly authContext: UnifiedAdminContext;
+    readonly navigateToSubscription?: (
+      subscription: WorkflowEventSubscriptionResource,
+    ) => void | Promise<void>;
+  } = $props();
+  let actionState = $state<AdminActionState>({ status: 'idle' });
+  const busy = $derived(actionState.status === 'running');
+  async function createSubscription(
+    request: CreateWorkflowEventSubscriptionRequest,
+  ): Promise<void> {
+    actionState = { status: 'running', label: 'Creating signed event subscription...' };
+    try {
+      const subscription = await new WorkflowEventCatalogClient({
+        baseUrl: window.location.origin,
+        accessTokenProvider: authContext.accessTokenProvider,
+        onAuthenticationFailure: authContext.onAuthenticationFailure,
+      }).createSubscription(request);
+      actionState = {
+        status: 'success',
+        message:
+          'Workflow event subscription created. Signing secret was cleared from the active view.',
+      };
+      await navigateToSubscription(subscription);
+    } catch (error) {
+      actionState = {
+        status: 'error',
+        message: adminErrorMessage(error, 'Workflow event subscription creation failed.'),
+      };
+    }
+  }
 </script>
-<div class="mx-auto flex min-h-full w-full max-w-[1180px] flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8" data-testid="workflow-event-subscription-create-route"><header class="border-b border-admin-border pb-4"><a class="inline-flex items-center gap-2 text-sm font-medium text-admin-muted hover:text-admin-ink" href="/admin-new/workflow-event-subscriptions"><ArrowLeft size={16} strokeWidth={1.8} /><span>Workflow event subscriptions</span></a><p class="m-0 mt-3 text-xs font-semibold uppercase text-admin-muted">Govern</p><h1 class="m-0 mt-1 text-2xl font-semibold text-admin-ink">New event subscription</h1></header><ActionFeedback state={actionState} successTitle="Event subscription action completed" errorTitle="Event subscription action failed" successTestId="workflow-event-subscription-create-success" errorTestId="workflow-event-subscription-create-error" runningTestId="workflow-event-subscription-create-running" /><WorkflowEventSubscriptionCreateForm disabled={busy} onSave={createSubscription} /></div>
+
+<div
+  class="mx-auto flex min-h-full w-full max-w-[1180px] flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8"
+  data-testid="workflow-event-subscription-create-route"
+>
+  <header class="border-b border-admin-border pb-4">
+    <a
+      class="inline-flex items-center gap-2 text-sm font-medium text-admin-muted hover:text-admin-ink"
+      href="/admin-new/workflow-event-subscriptions"
+      ><ArrowLeft size={16} strokeWidth={1.8} /><span>Workflow event subscriptions</span></a
+    >
+    <p class="m-0 mt-3 text-xs font-semibold uppercase text-admin-muted">Govern</p>
+    <h1 class="m-0 mt-1 text-2xl font-semibold text-admin-ink">New event subscription</h1>
+  </header>
+  <ActionFeedback
+    state={actionState}
+    successTitle="Event subscription action completed"
+    errorTitle="Event subscription action failed"
+    successTestId="workflow-event-subscription-create-success"
+    errorTestId="workflow-event-subscription-create-error"
+    runningTestId="workflow-event-subscription-create-running"
+  /><WorkflowEventSubscriptionCreateForm disabled={busy} onSave={createSubscription} />
+</div>
