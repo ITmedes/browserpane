@@ -460,7 +460,8 @@ coverage.
 Required behavior:
 
 - route-backed `/admin-new/api`,
-- route-backed `/admin-new/coverage` or hidden navigation until implemented,
+- route-backed `/admin-new/coverage`,
+- route-backed `/admin-new/docs`,
 - OpenAPI operation family list,
 - classification for `ui-primary`, `ui-evidence`, `api-companion`, and
   `internal-worker`,
@@ -468,7 +469,14 @@ Required behavior:
 - clear separation between owner bearer APIs, worker/session automation APIs,
   and compatibility endpoints.
 
-Current status: missing.
+Current status: implemented for #158 scope. The three routes consume the
+committed OpenAPI operation, classification, example, and compatibility
+artifacts rather than maintaining a second handwritten inventory. Commands use
+explicit environment placeholders, do not read or persist the active browser
+bearer, and internal-worker/compatibility surfaces remain documentation rather
+than normal operator actions. The compose smoke validates direct refresh,
+classification counts, copy behavior, unauthenticated failures, representative
+owner operations, cleanup, and desktop/mobile containment.
 
 ## Pattern Requirements
 

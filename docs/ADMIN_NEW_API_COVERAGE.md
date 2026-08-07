@@ -2,7 +2,7 @@
 
 This document preserves the API coverage requirements that must guide the
 `/admin-new` migration. It is standalone and should be used when adding route
-clients, API examples, mapper tests, or the future API companion route.
+clients, API examples, mapper tests, or API companion behavior.
 
 ## Coverage Baseline
 
@@ -20,6 +20,8 @@ Current generated and contract-tested baseline:
 
 - OpenAPI operations: 131
 - OpenAPI operations recognized by the Axum router contract: 131
+- schema-validated request/response examples: 19
+- separately governed non-v1 compatibility surfaces: 14
 - OpenAPI component schemas: 202
 - OpenAPI ref names: 231
 - reusable component parameters: 23
@@ -35,9 +37,9 @@ Operation metadata is generated into
 `openapi/bpane-control-v1.classifications.json` whenever the contract changes.
 
 The `ui-primary` identity family is implemented at `/admin-new/identity` with
-strict response mapping and lifecycle smoke coverage. The future #158 API
-companion must link to that operator route rather than duplicate its forms or
-maintain a second handwritten identity contract.
+strict response mapping and lifecycle smoke coverage. The #158 API companion
+links to existing operator routes rather than duplicating their forms or
+maintaining a second handwritten identity contract.
 
 The generated counts are inventory evidence. Redocly lint, OpenAPI Enforcer
 examples, semantic compatibility diffing, and the Rust Axum route contract add
@@ -447,9 +449,8 @@ Structured error rendering must preserve `ErrorResponse.category`,
 These endpoints must be documented separately from the frozen owner-scoped API:
 
 - web-tier `/auth-config.json`
-- configured OIDC issuer discovery, authorization, token, and logout endpoints
-- gateway admin-event token issuance `/api/v1/admin/events/access-tokens` and
-  first-message-authenticated stream `/api/v1/admin/events`
+- configured OIDC issuer discovery; authorization, token, and logout endpoints
+  remain discovered external identity-provider metadata
 - local `mcp-bridge` `/health`
 - local `mcp-bridge` `/control-session` GET/PUT/DELETE
 - MCP protocol routes `/mcp`, `/sse`, `/sessions/{session_id}/mcp`,
@@ -458,8 +459,11 @@ These endpoints must be documented separately from the frozen owner-scoped API:
   `/messages?sessionId=...`; conflicting selectors are rejected by the bridge
 - gateway legacy `/api/session/status`
 - gateway legacy `/api/session/mcp-owner`
-- versioned gateway `/api/v1/sessions/{session_id}/mcp-owner`
 - local certificate helpers `/cert-fingerprint` and `/cert-hash`
+
+The versioned admin-event access-token/stream routes and
+`/api/v1/sessions/{session_id}/mcp-owner` are frozen OpenAPI operations. They
+must not be duplicated in the compatibility catalog.
 
 The coverage manifest should document why each endpoint exists, whether it is
 frozen, and which UI flow owns it.
@@ -505,16 +509,18 @@ boundaries:
 
 ## API Companion Acceptance
 
-Before API companion or coverage routes are considered complete:
+The current #158 route acceptance is:
 
 1. Every OpenAPI operation has exactly one classification.
-2. Every `ui-primary` and `ui-evidence` operation has a typed client wrapper
-   before its route is marked done.
+2. A `ui-primary` classification does not by itself claim a completed UI;
+   actual operator routes still require typed client and mapper tests before
+   their domain slice is marked done.
 3. Internal-worker operations are visible only as API companion documentation or
    sanitized evidence.
 4. Compatibility endpoints are listed separately from the OpenAPI contract.
-5. Client wrappers have tests for path encoding, auth failure propagation,
-   validation errors, content types, and secret redaction.
+5. The companion artifact client rejects malformed or drifting evidence, and
+   domain clients retain tests for path encoding, auth failures, validation
+   errors, content types, and secret redaction where applicable.
 6. The coverage manifest is tested against `openapi/bpane-control-v1.yaml`.
 7. #179 conformance and compatibility checks are visible from the route rather
    than inferred from operation counts alone.

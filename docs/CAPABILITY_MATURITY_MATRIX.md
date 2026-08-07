@@ -2,7 +2,7 @@
 
 Governance issue: [#173](https://github.com/ITmedes/browserpane/issues/173)
 
-Last verified: 2026-08-07 on `feature/BPANE-00179` through `4671a8c`
+Last verified: 2026-08-07 on `feature/BPANE-00158`
 
 ## Maturity Definitions
 
@@ -27,7 +27,7 @@ capability.
 | Tile-first remote rendering and ROI H.264 | Prototype | `bpane-protocol`, host capture, TypeScript compositors, media tests | #175, #168, #169 |
 | BrowserPane remote protocol | Prototype | Rust frame types and TypeScript client interoperate | #175 specification/conformance |
 | Shared live sessions and reconnect | Prototype | gateway session hub, client session tests, multisession/reconnect smokes | #169, #178 |
-| Owner-scoped control API | Prototype | 131 governed OpenAPI operations, generated classification inventory, executable examples, Axum route recognition, semantic diff, and fast/Compose evidence on #179 | #179 merge, #75 release compatibility, #158 API companion |
+| Owner-scoped control API | Prototype | 131 governed OpenAPI operations, generated classification inventory, 19 executable examples, Axum route recognition, semantic diff, and contract-derived admin-new API/coverage/docs companions | #75 release compatibility; domain and production gates |
 | Projects and policy bindings | Prototype | API/store resources and admin-new project views | #161, #176, #79 |
 | Session templates | Implemented API; incomplete operator product | API/store and legacy coverage | #124 admin-new catalog |
 | Reusable browser contexts | Prototype | lifecycle, limits, clone/export/import backend paths | #148, #160 |

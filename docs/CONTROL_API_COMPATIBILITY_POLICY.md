@@ -18,9 +18,11 @@ need their own documented contract before compatibility claims apply.
 - `openapi/bpane-control-v1.operations.json` is generated evidence, not an
   independently edited contract.
 - `openapi/bpane-control-v1.classifications.json` owns operator and worker
-  audience classification until #158 consumes it in the API companion.
+  audience classification and is consumed by the #158 API companion.
 - `openapi/bpane-control-v1.examples.json` contains executable representative
   request/response fixtures.
+- `openapi/bpane-control-v1.compatibility.json` inventories checked non-v1
+  surfaces separately and must not collide with frozen operation paths.
 
 Code and OpenAPI must change together. A handler-only or document-only public
 change is incomplete.

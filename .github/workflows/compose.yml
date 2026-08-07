@@ -123,6 +123,7 @@ jobs:
           --stage compose-admin-new-dashboard
           --stage compose-admin-new-projects
           --stage compose-admin-new-sessions
+          --stage compose-admin-new-api-companion
           --stage compose-admin-compat
           --stage compose-cli
           --stage compose-mcp

@@ -28,4 +28,8 @@ export class ContractPaths {
   get examples() {
     return path.join(this.rootDirectory, 'openapi/bpane-control-v1.examples.json');
   }
+
+  get compatibilitySurfaces() {
+    return path.join(this.rootDirectory, 'openapi/bpane-control-v1.compatibility.json');
+  }
 }

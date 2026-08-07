@@ -9,7 +9,14 @@ profiles, recordings, workflows, files, credentials, approved extensions, and
 identity/access-review summaries. The container size drives the remote
 resolution pixel-for-pixel.
 
-The canonical frozen v1 session-control contract is [openapi/bpane-control-v1.yaml](openapi/bpane-control-v1.yaml).
+The canonical frozen v1 session-control contract is
+[openapi/bpane-control-v1.yaml](openapi/bpane-control-v1.yaml). Generated
+operation, classification, and executable-example artifacts remain checked
+against that contract. A separately validated compatibility manifest inventories
+non-v1 web, identity-provider, MCP, legacy gateway, and local trust-helper
+surfaces without promoting them into v1. The web image publishes these artifacts
+under `/openapi/`; admin-new strictly parses them for `/api`, `/coverage`, and
+`/docs` instead of maintaining a second API inventory.
 
 The topology below tracks the current repo shape across browser, gateway,
 runtime, automation, recording, and persistence boundaries.
@@ -521,6 +528,9 @@ The default dev stack no longer uses a shared token file.
 - local browser users authenticate against Keycloak on `http://localhost:8091`
 - the local demo user is `demo / demo-demo`
 - after login, the admin console lists owner-scoped `/api/v1/sessions`, projects, session templates, egress profiles, browser contexts, file workspaces, session-derived recording segments, and the current `/api/v1/identity/access-review`; it lets the user join an existing session, start a new one with optional project, template, network-identity, egress-profile, reusable-context, and capability bindings, create project-owned reusable contexts and file workspaces where needed, inspect and download retained recording artifacts where available, inspect project/admission metadata on live rows and session detail views, inspect the current principal, resource counts, project usage, registered service principals, identity-to-project mappings, unmapped principal signals, and delegated automation principals in the Identity tab, create/edit/disable/re-enable service principals and identity-to-project mappings from that tab, inspect API-backed reusable context references, active writer state, profile storage usage, storage-limit state, and retention expiry, clone or export inactive reusable contexts, import BrowserPane export archives as new reusable contexts, and delete unused contexts in the operations overlay or `/admin/browser-contexts`, then uses the selected session resource's connect metadata
+- admin-new's `/api`, `/coverage`, and `/docs` routes load public committed
+  contract evidence only; copyable commands contain environment placeholders,
+  and the active in-memory owner bearer is neither inserted nor persisted
 - docker-backed reusable browser contexts mount a context-scoped Chromium profile volume at the session profile path while keeping uploads, downloads, and session-file mounts in the session-scoped data volume; runtime admission allows only one active writer per reusable context
 - browser-context retention cleanup is metadata-driven per context and removes expired reusable profile data only when the runtime manager confirms there is no active writer
 - the console then mints a short-lived `session_connect_ticket` through `POST /api/v1/sessions/{id}/access-tokens`

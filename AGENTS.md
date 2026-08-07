@@ -138,8 +138,9 @@ Current product shape:
 - `code/web/bpane-admin-unified`
   - Side-by-side SvelteKit admin console under active development at
     `/admin-new/`.
-  - Owns the route-backed dashboard, resource catalogs, session flows, preview
-    popup, recordings, workflows, and workflow-run overview described in
+  - Owns the route-backed dashboard, resource catalogs, session flows and
+    subareas, preview popup, recordings, workflows/runs, identity review, and
+    contract-derived API/coverage/docs companions described in
     `docs/ADMIN_NEW_STATUS.md`.
 - `code/integrations/mcp-bridge`
   - Streamable HTTP and legacy SSE bridge to `@playwright/mcp`; owns session registration and MCP supervision behavior.
@@ -221,6 +222,7 @@ Run these in `code/web/bpane-client`:
 - `npm run smoke:admin-unified-workflows -- --headless`
 - `npm run smoke:admin-unified-workflow-runs -- --headless`
 - `npm run smoke:admin-unified-identity -- --headless`
+- `npm run smoke:admin-unified-api-companion -- --headless`
 - `npm run smoke:admin-unified-file-workspaces -- --headless`
 - `npm run smoke:file-workspaces -- --headless`
 - `npm test`

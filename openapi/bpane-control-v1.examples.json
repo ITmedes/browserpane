@@ -100,6 +100,78 @@
       "operationId": "listEgressProfiles",
       "request": { "method": "GET", "path": "/api/v1/egress-profiles" },
       "response": { "status": 401, "body": { "error": "missing bearer token" } }
+    },
+    {
+      "name": "companion-project-create",
+      "operationId": "createProject",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/projects",
+        "body": {
+          "name": "Integration pilot",
+          "description": "Project boundary for an external workflow integration.",
+          "labels": { "environment": "pilot" },
+          "state": "active"
+        }
+      },
+      "response": { "status": 401, "body": { "error": "missing bearer token" } }
+    },
+    {
+      "name": "companion-session-create",
+      "operationId": "createSession",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/sessions",
+        "body": {
+          "project_id": "11111111-1111-4111-8111-111111111111",
+          "owner_mode": "collaborative",
+          "viewport": { "width": 1440, "height": 900 },
+          "labels": { "source": "api-companion" }
+        }
+      },
+      "response": { "status": 401, "body": { "error": "missing bearer token" } }
+    },
+    {
+      "name": "companion-session-connect-ticket",
+      "operationId": "issueSessionAccessToken",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/sessions/22222222-2222-4222-8222-222222222222/access-tokens"
+      },
+      "response": { "status": 401, "body": { "error": "missing bearer token" } }
+    },
+    {
+      "name": "companion-workflow-run-create",
+      "operationId": "createWorkflowRun",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/workflow-runs",
+        "body": {
+          "workflow_id": "33333333-3333-4333-8333-333333333333",
+          "version": "1.0.0",
+          "project_id": "11111111-1111-4111-8111-111111111111",
+          "input": { "case_id": "CASE-123" },
+          "source_system": "example-bpm",
+          "source_reference": "CASE-123",
+          "client_request_id": "example-run-001"
+        }
+      },
+      "response": { "status": 401, "body": { "error": "missing bearer token" } }
+    },
+    {
+      "name": "companion-file-workspace-create",
+      "operationId": "createFileWorkspace",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/file-workspaces",
+        "body": {
+          "name": "Pilot workflow files",
+          "project_id": "11111111-1111-4111-8111-111111111111",
+          "description": "Reusable inputs and produced files for the pilot workflow.",
+          "labels": { "environment": "pilot" }
+        }
+      },
+      "response": { "status": 401, "body": { "error": "missing bearer token" } }
     }
   ]
 }
