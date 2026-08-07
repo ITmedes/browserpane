@@ -203,6 +203,9 @@ Validation:
 
 Priority: admin-new parity.
 
+Status: in progress on `feature/BPANE-00155`; the phased route contract and
+validation sequence are recorded in `BPANE-00155_SESSION_SUBAREAS_PLAN.md`.
+
 Why:
 
 - The current session detail route aggregates too much.
