@@ -4,7 +4,7 @@ Status: Canonical execution roadmap
 
 Governance issue: [#173](https://github.com/ITmedes/browserpane/issues/173)
 
-Last implementation audit: 2026-08-04 on `feature/BPANE-00150`
+Last implementation audit: 2026-08-07 on `main` at `a0c67ea`
 
 ## How To Use This Document
 
@@ -44,7 +44,7 @@ or capacity decision.
 
 | Lane | Outcome | Current entry point | Promotion target |
 | --- | --- | --- | --- |
-| Foundation | Trusted build, auth, contracts, storage, and lifecycle baseline. | #152 | Foundation Gate |
+| Foundation | Trusted build, auth, contracts, storage, and lifecycle baseline. | #179 | Foundation Gate |
 | Pilot Value | One bounded reference workflow with accepted evidence and runbook. | #174 | Phase 0 Gate |
 | Operator Product | Complete and promote `/admin-new/` as the default operator console. | #153 | Phase 1 Gate |
 | Production | Harden deployment, security, recovery, supply chain, and telemetry. | #72 / #66 / #178 | Production Baseline |
@@ -62,24 +62,25 @@ or capacity decision.
 | 2 | #146 | Done | #145 secure credential contract | Harden shared admin auth, CSP, and browser security. |
 | 3 | #147 | Done | #145 credential/log baseline | Callback and webhook SSRF controls merged through PR #191. |
 | 4 | #150 | Done | #147 callback boundary | Lifecycle, dependency readiness, and bounded drain merged through PR #192. |
-| 5 | #152 | Review | #150 stable readiness contract | Shared in-memory/Postgres store contract parity implemented and validated. |
+| 5 | #152 | Done | #150 stable readiness contract | Shared in-memory/Postgres store contract parity merged through PR #193. |
+| 6 | #179 | Ready | #152 persistent behavior baseline | Enforce control API lint, conformance, examples, and compatibility governance. |
 
 ### Next Three Product Slices
 
 | Order | Issue | State | Dependency | Outcome |
 | --- | --- | --- | --- | --- |
-| 1 | #150 | Done | #147 callback boundary | Lifecycle, dependency readiness, and bounded drain merged through PR #192. |
-| 2 | #152 | Review | #150 stable readiness contract | Shared in-memory/Postgres store contracts await review and merge. |
-| 3 | #179 | Qualified | #152 persistent behavior baseline | Add control API conformance and compatibility governance. |
+| 1 | #179 | Ready | #152 persistent behavior baseline | Add control API conformance and compatibility governance. |
+| 2 | #153 | Qualified | #179 Foundation Gate | Consolidate admin-new patterns and API-client behavior. |
+| 3 | #154 | Qualified | #153 shared admin-new patterns | Add route-backed workflow-run detail. |
 
 #151, #184, and #185 established and accelerated the required validation
 baseline. #145 is merged through
 `docs/BPANE-00145_TOKEN_DOMAIN_SEPARATION_PLAN.md`; #146 is merged through PR
 #190 and documented in `docs/BPANE-00146_ADMIN_AUTH_SECURITY_PLAN.md`. #147
 merged through PR #191. #150 merged through PR #192 after passing the canonical
-full 46-stage validation profile. #152 has completed local implementation and
-validation; #179 remains the next qualified Foundation slice after review and
-merge.
+full 46-stage validation profile. #152 merged through PR #193 and the latest
+scheduled Compose run on that `main` commit passed. #179 is the next Ready
+Foundation slice.
 
 ## Foundation Gate Sequence
 
@@ -91,7 +92,7 @@ merge.
 | F4 | #147 | Callback/webhook SSRF controls. | Required before production callbacks. |
 | F5 | #150 | Lifecycle, health, dependency readiness, bounded drain. | Required for accepting external work. |
 | F6 | #152 | In-memory/Postgres store contract parity. | Required before relying on persistent behavior. |
-| F7 | #179 P0 | OpenAPI lint and compatibility/conformance ratchet. | May be delivered with or immediately after #151. |
+| F7 | #179 P1 | OpenAPI lint and compatibility/conformance ratchet. | Final unconditional Foundation slice after #152. |
 
 Conditional Foundation work:
 
