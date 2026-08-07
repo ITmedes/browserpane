@@ -8,7 +8,7 @@
     FileWorkspaceProjectOptionsLoadState,
   } from '$lib/file-workspaces/file-workspace-detail-state';
   import type { CreateFileWorkspaceRequest, FileWorkspaceResource } from '$lib/file-workspaces/file-workspace-types';
-  import AdminMessage from './AdminMessage.svelte';
+  import ActionFeedback from './ActionFeedback.svelte';
   import FileWorkspaceEditForm from './FileWorkspaceEditForm.svelte';
 
   type FileWorkspaceCreateRouteProps = {
@@ -85,13 +85,14 @@
     </div>
   </header>
 
-  {#if actionState.status === 'success'}
-    <AdminMessage tone="success" title="File workspace action completed" message={actionState.message} testId="file-workspace-create-success" />
-  {:else if actionState.status === 'error'}
-    <AdminMessage tone="error" title="File workspace action failed" message={actionState.message} testId="file-workspace-create-error" />
-  {:else if actionState.status === 'running'}
-    <AdminMessage tone="loading" title={actionState.label} testId="file-workspace-create-running" />
-  {/if}
+  <ActionFeedback
+    state={actionState}
+    successTitle="File workspace action completed"
+    errorTitle="File workspace action failed"
+    successTestId="file-workspace-create-success"
+    errorTestId="file-workspace-create-error"
+    runningTestId="file-workspace-create-running"
+  />
 
   <FileWorkspaceEditForm
     disabled={busy}

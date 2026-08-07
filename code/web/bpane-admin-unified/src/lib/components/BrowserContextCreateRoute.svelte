@@ -8,7 +8,7 @@
     BrowserContextProjectOptionsLoadState,
   } from '$lib/browser-contexts/browser-context-detail-state';
   import type { BrowserContextResource, CreateBrowserContextRequest } from '$lib/browser-contexts/browser-context-types';
-  import AdminMessage from './AdminMessage.svelte';
+  import ActionFeedback from './ActionFeedback.svelte';
   import BrowserContextEditForm from './BrowserContextEditForm.svelte';
 
   type BrowserContextCreateRouteProps = {
@@ -85,13 +85,14 @@
     </div>
   </header>
 
-  {#if actionState.status === 'success'}
-    <AdminMessage tone="success" title="Browser context action completed" message={actionState.message} testId="browser-context-create-success" />
-  {:else if actionState.status === 'error'}
-    <AdminMessage tone="error" title="Browser context action failed" message={actionState.message} testId="browser-context-create-error" />
-  {:else if actionState.status === 'running'}
-    <AdminMessage tone="loading" title={actionState.label} testId="browser-context-create-running" />
-  {/if}
+  <ActionFeedback
+    state={actionState}
+    successTitle="Browser context action completed"
+    errorTitle="Browser context action failed"
+    successTestId="browser-context-create-success"
+    errorTestId="browser-context-create-error"
+    runningTestId="browser-context-create-running"
+  />
 
   <BrowserContextEditForm
     disabled={busy}
