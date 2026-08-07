@@ -6,6 +6,7 @@
     type RecordingOverviewLoadState,
   } from '$lib/recordings/recording-overview-view-model';
   import type { RecordingCatalogEntry } from '$lib/recordings/recording-types';
+  import ActionFeedback from './ActionFeedback.svelte';
   import AdminMessage from './AdminMessage.svelte';
   import RecordingCatalogTable from './RecordingCatalogTable.svelte';
 
@@ -51,13 +52,14 @@
     </button>
   </header>
 
-  {#if actionState.status === 'success'}
-    <AdminMessage tone="success" title="Recording action completed" message={actionState.message} testId="recordings-action-success" />
-  {:else if actionState.status === 'error'}
-    <AdminMessage tone="error" title="Recording action failed" message={actionState.message} testId="recordings-action-error" />
-  {:else if actionState.status === 'running'}
-    <AdminMessage tone="loading" title={actionState.label} testId="recordings-action-running" />
-  {/if}
+  <ActionFeedback
+    state={actionState}
+    successTitle="Recording action completed"
+    errorTitle="Recording action failed"
+    successTestId="recordings-action-success"
+    errorTestId="recordings-action-error"
+    runningTestId="recordings-action-running"
+  />
 
   {#if loadState.status === 'loading'}
     <section

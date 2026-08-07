@@ -12,6 +12,7 @@
   import { formatDateTime } from '$lib/projects/project-formatters';
   import { projectToneClass } from '$lib/projects/project-ui';
   import AdminMessage from './AdminMessage.svelte';
+  import ActionFeedback from './ActionFeedback.svelte';
 
   type FileWorkspaceInspectorProps = {
     readonly state: FileWorkspaceDetailLoadState;
@@ -134,19 +135,16 @@
       </div>
     </div>
 
-    {#if actionState.status === 'success'}
-      <div class="border-b border-admin-border p-4">
-        <AdminMessage tone="success" title="File workspace action completed" message={actionState.message} testId="file-workspace-action-success" />
-      </div>
-    {:else if actionState.status === 'error'}
-      <div class="border-b border-admin-border p-4">
-        <AdminMessage tone="error" title="File workspace action failed" message={actionState.message} testId="file-workspace-action-error" />
-      </div>
-    {:else if actionState.status === 'running'}
-      <div class="border-b border-admin-border p-4">
-        <AdminMessage tone="loading" title={actionState.label} testId="file-workspace-action-running" />
-      </div>
-    {/if}
+    <div class="border-b border-admin-border p-4">
+      <ActionFeedback
+        state={actionState}
+        successTitle="File workspace action completed"
+        errorTitle="File workspace action failed"
+        successTestId="file-workspace-action-success"
+        errorTestId="file-workspace-action-error"
+        runningTestId="file-workspace-action-running"
+      />
+    </div>
 
     <div class="grid gap-4 p-4">
       <section class="rounded-md border border-admin-border bg-admin-soft/50 p-4" data-testid="file-workspace-detail-configuration">

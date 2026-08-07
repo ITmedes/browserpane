@@ -2,7 +2,7 @@
   import { Copy, RefreshCw, ShieldCheck, ShieldOff, Star, XCircle } from '@lucide/svelte';
   import type { McpDelegationTone, McpDelegationViewModel } from '$lib/mcp/mcp-delegation-view-model';
   import type { SessionActionState } from '$lib/sessions/session-overview-view-model';
-  import AdminMessage from './AdminMessage.svelte';
+  import ActionFeedback from './ActionFeedback.svelte';
 
   type SessionMcpDelegationCardProps = {
     readonly viewModel: McpDelegationViewModel;
@@ -155,17 +155,14 @@
     </div>
   </dl>
 
-  {#if actionState.status === 'success'}
-    <div class="mt-4">
-      <AdminMessage tone="success" title="MCP action completed" message={actionState.message} testId="mcp-action-success" />
-    </div>
-  {:else if actionState.status === 'error'}
-    <div class="mt-4">
-      <AdminMessage tone="error" title="MCP action failed" message={actionState.message} testId="mcp-action-error" />
-    </div>
-  {:else if actionState.status === 'running'}
-    <div class="mt-4">
-      <AdminMessage tone="loading" title={actionState.label} testId="mcp-action-running" />
-    </div>
-  {/if}
+  <div class="mt-4">
+    <ActionFeedback
+      state={actionState}
+      successTitle="MCP action completed"
+      errorTitle="MCP action failed"
+      successTestId="mcp-action-success"
+      errorTestId="mcp-action-error"
+      runningTestId="mcp-action-running"
+    />
+  </div>
 </section>

@@ -9,6 +9,7 @@
   import type { McpDelegationViewModel } from '$lib/mcp/mcp-delegation-view-model';
   import { projectToneClass } from '$lib/projects/project-ui';
   import AdminMessage from './AdminMessage.svelte';
+  import ActionFeedback from './ActionFeedback.svelte';
   import SessionMcpDelegationCard from './SessionMcpDelegationCard.svelte';
 
   type SessionInspectorProps = {
@@ -126,19 +127,16 @@
       </div>
     </div>
 
-    {#if actionState.status === 'success'}
-      <div class="border-b border-admin-border p-4">
-        <AdminMessage tone="success" title="Session action completed" message={actionState.message} testId="session-detail-action-success" />
-      </div>
-    {:else if actionState.status === 'error'}
-      <div class="border-b border-admin-border p-4">
-        <AdminMessage tone="error" title="Session action failed" message={actionState.message} testId="session-detail-action-error" />
-      </div>
-    {:else if actionState.status === 'running'}
-      <div class="border-b border-admin-border p-4">
-        <AdminMessage tone="loading" title={actionState.label} testId="session-detail-action-running" />
-      </div>
-    {/if}
+    <div class="border-b border-admin-border p-4">
+      <ActionFeedback
+        state={actionState}
+        successTitle="Session action completed"
+        errorTitle="Session action failed"
+        successTestId="session-detail-action-success"
+        errorTestId="session-detail-action-error"
+        runningTestId="session-detail-action-running"
+      />
+    </div>
 
     <div class="grid gap-4 p-4">
       <section class="flex flex-wrap gap-2 rounded-md border border-admin-border bg-admin-soft/50 p-4" aria-label="Session lifecycle actions">

@@ -9,6 +9,7 @@
   import type { UpsertProjectRequest } from '$lib/projects/project-types';
   import { projectToneClass } from '$lib/projects/project-ui';
   import AdminMessage from './AdminMessage.svelte';
+  import ActionFeedback from './ActionFeedback.svelte';
   import ProjectEditForm from './ProjectEditForm.svelte';
 
   type ProjectInspectorProps = {
@@ -115,33 +116,16 @@
       </div>
     </div>
 
-    {#if actionState.status === 'success'}
-      <div class="border-b border-admin-border p-4">
-        <AdminMessage
-          tone="success"
-          title="Project action completed"
-          message={actionState.message}
-          testId="project-action-success"
-        />
-      </div>
-    {:else if actionState.status === 'error'}
-      <div class="border-b border-admin-border p-4">
-        <AdminMessage
-          tone="error"
-          title="Project action failed"
-          message={actionState.message}
-          testId="project-action-error"
-        />
-      </div>
-    {:else if actionState.status === 'running'}
-      <div class="border-b border-admin-border p-4">
-        <AdminMessage
-          tone="loading"
-          title={actionState.label}
-          testId="project-action-running"
-        />
-      </div>
-    {/if}
+    <div class="border-b border-admin-border p-4">
+      <ActionFeedback
+        state={actionState}
+        successTitle="Project action completed"
+        errorTitle="Project action failed"
+        successTestId="project-action-success"
+        errorTestId="project-action-error"
+        runningTestId="project-action-running"
+      />
+    </div>
 
     <div class="grid gap-4 p-4">
       {#key `${state.project.id}:${state.project.updated_at}`}
