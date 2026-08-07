@@ -4,13 +4,6 @@
   import { adminErrorMessage } from '$lib/application/admin-async-state';
   import type { UnifiedAdminContext } from '$lib/auth/unified-admin-context';
   import AdminMessage from '$lib/components/AdminMessage.svelte';
-  import { McpBridgeClient } from '$lib/mcp/mcp-bridge-client';
-  import type { McpBridgeHealth } from '$lib/mcp/mcp-bridge-client';
-  import {
-    buildMcpDelegationViewModel,
-    isDelegatedToBridge,
-    sessionEndpointUrl,
-  } from '$lib/mcp/mcp-delegation-view-model';
   import SessionInspector from '$lib/components/SessionInspector.svelte';
   import SessionSubareaNavigation from '$lib/components/SessionSubareaNavigation.svelte';
   import { SessionCatalogClient } from '$lib/sessions/session-client';
@@ -25,17 +18,7 @@
   let { authContext }: SessionDetailRouteProps = $props();
   let sessionState = $state<SessionDetailLoadState>({ status: 'idle' });
   let actionState = $state<SessionActionState>({ status: 'idle' });
-  let mcpHealth = $state<McpBridgeHealth | null>(null);
-  let mcpActionState = $state<SessionActionState>({ status: 'idle' });
-  const mcpBridge = $derived(authContext.authConfig?.mcpBridge ?? null);
-  const selectedSession = $derived(sessionState.status === 'ready' ? sessionState.session : null);
   const routeSessionId = $derived(activeSessionId());
-  const mcpViewModel = $derived(buildMcpDelegationViewModel({
-    bridge: mcpBridge,
-    session: selectedSession,
-    health: mcpHealth,
-    busy: mcpActionState.status === 'running',
-  }));
 
   onMount(() => {
     const sessionId = currentSessionId();
@@ -68,7 +51,6 @@
         session: loaded.session,
         liveStatus: loaded.liveStatus,
       };
-      void refreshMcpBridge(false);
     } catch (error) {
       sessionState = {
         status: 'error',
@@ -91,7 +73,6 @@
         session: loaded.session,
         liveStatus: loaded.liveStatus,
       };
-      void refreshMcpBridge(false);
       actionState = { status: 'success', message: 'Session refreshed.' };
     } catch (error) {
       actionState = {
@@ -167,97 +148,6 @@
     await mutateSession('Killing session...', 'Session killed.', (catalog, sessionId) => catalog.killSession(sessionId));
   }
 
-  async function refreshMcpBridge(showFeedback = true): Promise<void> {
-    const bridgeClient = mcpClient();
-    if (!bridgeClient) {
-      mcpHealth = null;
-      return;
-    }
-    if (showFeedback) {
-      mcpActionState = { status: 'running', label: 'Refreshing MCP bridge...' };
-    }
-    try {
-      mcpHealth = await bridgeClient.getHealth();
-      if (showFeedback) {
-        mcpActionState = { status: 'success', message: 'MCP bridge status refreshed.' };
-      }
-    } catch (error) {
-      mcpActionState = {
-        status: 'error',
-        message: adminErrorMessage(error, 'MCP bridge refresh failed.'),
-      };
-    }
-  }
-
-  async function authorizeMcp(): Promise<void> {
-    await mutateMcp('Authorizing MCP bridge...', 'MCP bridge authorized for this session.', async (catalog, sessionId, bridge) => {
-      await catalog.setAutomationDelegate(sessionId, {
-        client_id: bridge.clientId,
-        issuer: bridge.issuer,
-        display_name: bridge.displayName,
-      });
-    });
-  }
-
-  async function revokeMcp(): Promise<void> {
-    const sessionId = activeSessionId();
-    if (sessionId && mcpHealth?.control_session_id === sessionId) {
-      mcpActionState = {
-        status: 'error',
-        message: 'Clear the default MCP session before revoking this authorization.',
-      };
-      return;
-    }
-    await mutateMcp('Revoking MCP bridge...', 'MCP bridge authorization revoked for this session.', async (catalog, sessionId) => {
-      await catalog.clearAutomationDelegate(sessionId);
-    });
-  }
-
-  async function setDefaultMcpSession(): Promise<void> {
-    await mutateMcp('Setting default MCP session...', 'This session is now the default MCP session.', async (
-      catalog,
-      sessionId,
-      bridge,
-      bridgeClient,
-    ) => {
-      if (!isDelegatedToBridge(selectedSession, bridge)) {
-        await catalog.setAutomationDelegate(sessionId, {
-          client_id: bridge.clientId,
-          issuer: bridge.issuer,
-          display_name: bridge.displayName,
-        });
-      }
-      await bridgeClient.setControlSession(sessionId);
-    });
-  }
-
-  async function clearDefaultMcpSession(): Promise<void> {
-    await mutateMcp('Clearing default MCP session...', 'Default MCP session cleared.', async (
-      _catalog,
-      _sessionId,
-      _bridge,
-      bridgeClient,
-    ) => {
-      await bridgeClient.clearControlSession();
-    });
-  }
-
-  async function copyMcpEndpoint(): Promise<void> {
-    const endpoint = sessionEndpointUrl(mcpBridge, activeSessionId());
-    if (!endpoint) {
-      return;
-    }
-    try {
-      await navigator.clipboard?.writeText(endpoint);
-      mcpActionState = { status: 'success', message: 'Session MCP endpoint copied.' };
-    } catch (error) {
-      mcpActionState = {
-        status: 'error',
-        message: adminErrorMessage(error, 'MCP endpoint copy failed.'),
-      };
-    }
-  }
-
   function openPreviewWindow(sessionId: string): void {
     const url = `/admin-new/sessions/${encodeURIComponent(sessionId)}/preview`;
     const popup = window.open(
@@ -314,46 +204,6 @@
     }
   }
 
-  async function mutateMcp(
-    runningLabel: string,
-    successMessage: string,
-    mutation: (
-      catalog: SessionCatalogClient,
-      sessionId: string,
-      bridge: NonNullable<typeof mcpBridge>,
-      bridgeClient: McpBridgeClient,
-    ) => Promise<void>,
-  ): Promise<void> {
-    const sessionId = activeSessionId();
-    const bridge = mcpBridge;
-    const bridgeClient = mcpClient();
-    if (!sessionId || !bridge || !bridgeClient) {
-      mcpActionState = {
-        status: 'error',
-        message: 'MCP bridge delegation is not configured for this admin deployment.',
-      };
-      return;
-    }
-    const catalog = client();
-    mcpActionState = { status: 'running', label: runningLabel };
-    try {
-      await mutation(catalog, sessionId, bridge, bridgeClient);
-      const loaded = await loadSessionPair(sessionId);
-      sessionState = {
-        status: 'ready',
-        session: loaded.session,
-        liveStatus: loaded.liveStatus,
-      };
-      mcpHealth = await bridgeClient.getHealth();
-      mcpActionState = { status: 'success', message: successMessage };
-    } catch (error) {
-      mcpActionState = {
-        status: 'error',
-        message: adminErrorMessage(error, 'MCP action failed.'),
-      };
-    }
-  }
-
   async function loadSessionPair(sessionId: string): Promise<{
     readonly session: SessionResource;
     readonly liveStatus: SessionStatus | null;
@@ -387,16 +237,6 @@
     return null;
   }
 
-  function mcpClient(): McpBridgeClient | null {
-    const bridge = mcpBridge;
-    return bridge
-      ? new McpBridgeClient({
-          controlUrl: bridge.controlUrl,
-          accessTokenProvider: authContext.accessTokenProvider,
-          onAuthenticationFailure: authContext.onAuthenticationFailure,
-        })
-      : null;
-  }
 </script>
 
 <div class="mx-auto flex min-h-full w-full max-w-[1180px] flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8" data-testid="session-detail-route">
@@ -416,7 +256,7 @@
   </header>
 
   {#if routeSessionId}
-    <SessionSubareaNavigation sessionId={routeSessionId} activeId="overview" availableIds={['overview', 'live', 'files', 'recordings', 'network']} />
+    <SessionSubareaNavigation sessionId={routeSessionId} activeId="overview" availableIds={['overview', 'live', 'automation', 'files', 'recordings', 'network']} />
   {/if}
 
   {#if sessionState.status === 'error'}
@@ -436,14 +276,6 @@
       onRelease={releaseSessionRuntime}
       onStop={stopSession}
       onKill={killSession}
-      {mcpViewModel}
-      {mcpActionState}
-      onMcpRefresh={refreshMcpBridge}
-      onMcpAuthorize={authorizeMcp}
-      onMcpRevoke={revokeMcp}
-      onMcpSetDefault={setDefaultMcpSession}
-      onMcpClearDefault={clearDefaultMcpSession}
-      onMcpCopyEndpoint={copyMcpEndpoint}
     />
   {/if}
 </div>

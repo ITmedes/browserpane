@@ -12,6 +12,8 @@ describe('session subarea routes', () => {
       .toBe('/admin-new/sessions/session%2Fwith%20space');
     expect(sessionSubareaHref('session/with space', 'live'))
       .toBe('/admin-new/sessions/session%2Fwith%20space/live');
+    expect(sessionSubareaHref('session-1', 'automation'))
+      .toBe('/admin-new/sessions/session-1/automation');
     expect(sessionSubareaHref('session-1', 'network'))
       .toBe('/admin-new/sessions/session-1/network');
   });
@@ -30,6 +32,8 @@ describe('session subarea routes', () => {
       activeId: 'live',
     });
     expect(resolveSessionSubareaRoute('/admin-new/sessions/session-1/files')?.activeId).toBe('files');
+    expect(resolveSessionSubareaRoute('/admin-new/sessions/session-1/automation')?.activeId)
+      .toBe('automation');
   });
 
   it('rejects unrelated, nested, and malformed paths', () => {
@@ -42,6 +46,7 @@ describe('session subarea routes', () => {
     expect(sessionSubareas.map((subarea) => subarea.id)).toEqual([
       'overview',
       'live',
+      'automation',
       'files',
       'recordings',
       'network',

@@ -36,6 +36,18 @@ describe('SessionSubareaNavigation', () => {
     expect(byTestId(target, 'session-subarea-files').getAttribute('aria-current')).toBe('page');
   });
 
+  it('links the automation area after that route is enabled', () => {
+    const target = renderComponent(SessionSubareaNavigation, {
+      sessionId: 'session-1',
+      activeId: 'automation',
+      availableIds: ['overview', 'live', 'automation'],
+    });
+
+    expect(byTestId(target, 'session-subarea-automation').getAttribute('href'))
+      .toBe('/admin-new/sessions/session-1/automation');
+    expect(byTestId(target, 'session-subarea-automation').getAttribute('aria-current')).toBe('page');
+  });
+
   it('links the recordings area after that route is enabled', () => {
     const target = renderComponent(SessionSubareaNavigation, {
       sessionId: 'session-1',
