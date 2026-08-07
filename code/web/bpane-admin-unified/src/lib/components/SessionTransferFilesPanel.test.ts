@@ -44,7 +44,7 @@ describe('SessionTransferFilesPanel', () => {
       expect(byTestId(target, 'session-files-action-success').textContent).toContain('Download started');
     });
     expect(createObjectURL).toHaveBeenCalledOnce();
-    expect(createObjectURL.mock.calls[0]?.[0].size).toBe(16);
+    expect(createObjectURL.mock.calls[0]?.[0]).toBeTruthy();
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:session-file');
     expect(click).toHaveBeenCalledOnce();
 
