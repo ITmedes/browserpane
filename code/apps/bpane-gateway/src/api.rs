@@ -97,6 +97,7 @@ use crate::workspaces::{
 mod admin_events;
 mod authz;
 mod automation_tasks;
+mod browser_context_archive;
 mod browser_contexts;
 mod credential_bindings;
 mod egress_profiles;
@@ -126,6 +127,9 @@ mod workflow_run_operations;
 mod workflows;
 
 use authz::*;
+pub(crate) use browser_context_archive::{
+    BrowserContextImportArchiveLimits, BrowserContextImportService,
+};
 use errors::*;
 use http_helpers::*;
 use resources::*;
@@ -167,6 +171,7 @@ pub async fn run_api_server(
         idle_stop_timeout: config.idle_stop_timeout,
         public_gateway_url: config.public_gateway_url,
         default_owner_mode: config.default_owner_mode,
+        browser_context_import: config.browser_context_import,
         mcp_bridge_control: config.mcp_bridge_control,
     });
 

@@ -1,10 +1,14 @@
-use std::io::{Cursor, Read};
+use std::io::{Cursor, Read, Write};
 
 use anyhow::{anyhow, Context, Result};
+use flate2::write::GzEncoder;
+use flate2::Compression;
 use reqwest::StatusCode;
 use serde_json::{json, Value};
+use tar::{Builder, EntryType, Header};
 use tokio::process::Command;
 use uuid::Uuid;
+use zip::write::SimpleFileOptions;
 use zip::ZipArchive;
 
 use super::support::{json_array, json_id, label_map, ComposeHarness};
@@ -302,6 +306,7 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
         .get_bytes(&format!("/api/v1/browser-contexts/{context_id}/export"))
         .await?;
     verify_browser_context_export_archive(&export_bytes, &context_id, true)?;
+    verify_unsafe_import_rejection(harness, &export_bytes).await?;
 
     let imported_context_name = harness.unique_name("compose-browser-context-import");
     let imported_context = harness
@@ -493,6 +498,107 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
     verify_browser_context_storage_quota(harness).await?;
 
     Ok(())
+}
+
+async fn verify_unsafe_import_rejection(
+    harness: &ComposeHarness,
+    valid_export: &[u8],
+) -> Result<()> {
+    let manifest = browser_context_export_manifest(valid_export)?;
+    let unsafe_profile = profile_archive_with_link();
+    let unsafe_archive = browser_context_import_archive(&manifest, &unsafe_profile)?;
+    let rejected_name = harness.unique_name("compose-browser-context-unsafe-import");
+    let rejected = harness
+        .post_bytes_outcome(
+            "/api/v1/browser-contexts/import",
+            unsafe_archive,
+            "application/zip",
+            &[("x-bpane-browser-context-name", rejected_name.as_str())],
+        )
+        .await?;
+    if rejected.status != StatusCode::BAD_REQUEST {
+        return Err(anyhow!(
+            "unsafe browser context import returned {} instead of 400: {}",
+            rejected.status,
+            rejected.body
+        ));
+    }
+    if !rejected.body["error"]
+        .as_str()
+        .unwrap_or_default()
+        .contains("unsupported entry type")
+    {
+        return Err(anyhow!(
+            "unsafe browser context import returned unexpected error: {}",
+            rejected.body
+        ));
+    }
+
+    let malformed_name = harness.unique_name("compose-browser-context-malformed-import");
+    let malformed = harness
+        .post_bytes_outcome(
+            "/api/v1/browser-contexts/import",
+            b"not a zip archive".to_vec(),
+            "application/zip",
+            &[("x-bpane-browser-context-name", malformed_name.as_str())],
+        )
+        .await?;
+    if malformed.status != StatusCode::BAD_REQUEST {
+        return Err(anyhow!(
+            "malformed browser context import returned {} instead of 400: {}",
+            malformed.status,
+            malformed.body
+        ));
+    }
+
+    let contexts = harness.get_json("/api/v1/browser-contexts").await?;
+    if json_array(&contexts, "contexts")?.iter().any(|context| {
+        context["name"] == json!(rejected_name) || context["name"] == json!(malformed_name)
+    }) {
+        return Err(anyhow!(
+            "rejected browser context import left catalog metadata behind"
+        ));
+    }
+    Ok(())
+}
+
+fn browser_context_export_manifest(bytes: &[u8]) -> Result<Vec<u8>> {
+    let mut archive = ZipArchive::new(Cursor::new(bytes))
+        .context("failed to read source browser context export")?;
+    let mut manifest = archive
+        .by_name("manifest.json")
+        .context("source browser context export did not include manifest.json")?;
+    let mut bytes = Vec::new();
+    manifest
+        .read_to_end(&mut bytes)
+        .context("failed to read source browser context manifest")?;
+    Ok(bytes)
+}
+
+fn browser_context_import_archive(manifest: &[u8], profile: &[u8]) -> Result<Vec<u8>> {
+    let cursor = Cursor::new(Vec::new());
+    let mut archive = zip::ZipWriter::new(cursor);
+    let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+    archive.start_file("manifest.json", options)?;
+    archive.write_all(manifest)?;
+    archive.start_file("profile.tar.gz", options)?;
+    archive.write_all(profile)?;
+    Ok(archive.finish()?.into_inner())
+}
+
+fn profile_archive_with_link() -> Vec<u8> {
+    let encoder = GzEncoder::new(Vec::new(), Compression::default());
+    let mut archive = Builder::new(encoder);
+    let mut header = Header::new_gnu();
+    header.set_entry_type(EntryType::Symlink);
+    header.set_mode(0o777);
+    header.set_size(0);
+    header.set_link_name("/etc/passwd").unwrap();
+    header.set_cksum();
+    archive
+        .append_data(&mut header, "Default/unsafe-link", std::io::empty())
+        .unwrap();
+    archive.into_inner().unwrap().finish().unwrap()
 }
 
 fn verify_browser_context_export_archive(

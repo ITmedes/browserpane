@@ -31,7 +31,7 @@ impl Default for SessionFileTransportPolicy {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(super) struct SessionTransportPolicy {
     pub capabilities: SessionCapabilities,
     file_transfer: SessionFileTransportPolicy,
@@ -66,15 +66,6 @@ impl SessionTransportPolicy {
 
     fn exposes_file_transfer_capability(&self) -> bool {
         self.allow_browser_uploads() && self.allow_browser_downloads()
-    }
-}
-
-impl Default for SessionTransportPolicy {
-    fn default() -> Self {
-        Self {
-            capabilities: SessionCapabilities::default(),
-            file_transfer: SessionFileTransportPolicy::default(),
-        }
     }
 }
 

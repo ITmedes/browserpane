@@ -84,8 +84,9 @@ scheduled Compose run on that `main` commit passed. #179 merged through PR #194
 after all 40 fast and all 10 Compose validation stages passed. #153 has
 merged through PR #195 after all required checks passed. #154 merged through
 PR #196, #155 through PR #197, #156 through PR #198, and #157 through PR #199.
-#158 merged through PR #200. #159 is implemented on `feature/BPANE-00159` and
-is the active Operator Product review slice; #160 is next after merge.
+#158 merged through PR #200 and #159 through PR #201. #148 is implemented on
+`feature/BPANE-00148` and is the active conditional Foundation review slice;
+#160 is next after its safety prerequisite merges.
 
 ## Foundation Gate Sequence
 
@@ -101,7 +102,9 @@ is the active Operator Product review slice; #160 is next after merge.
 
 Conditional Foundation work:
 
-- #148 is required before a Pilot imports untrusted browser contexts.
+- #148 is implemented on `feature/BPANE-00148` and must merge before a Pilot
+  imports untrusted browser contexts or #160 exposes archive upload in
+  admin-new.
 - #149 is required before recordings form part of Pilot acceptance evidence.
 - #167 is required before a Docker runtime boundary is promoted as a production
   deployment contract.

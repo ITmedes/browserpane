@@ -41,6 +41,8 @@ tokio-postgres = { version = "0.7", features = ["with-chrono-0_4", "with-serde_j
 uuid = { version = "1", features = ["serde", "v7"] }
 chrono = { version = "0.4", features = ["serde"] }
 async-trait = "0.1"
+flate2 = "1"
+tar = "0.4"
 zip = { version = "2", default-features = false }
 tempfile = "3"
 

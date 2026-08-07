@@ -134,6 +134,11 @@ services:
       --readiness-check-timeout-secs ${BPANE_GATEWAY_READINESS_CHECK_TIMEOUT_SECS:-3}
       --shutdown-drain-timeout-secs ${BPANE_GATEWAY_SHUTDOWN_DRAIN_TIMEOUT_SECS:-15}
       --shutdown-readiness-grace-secs ${BPANE_GATEWAY_SHUTDOWN_READINESS_GRACE_SECS:-2}
+      --browser-context-import-max-archive-bytes ${BPANE_BROWSER_CONTEXT_IMPORT_MAX_ARCHIVE_BYTES:-536870912}
+      --browser-context-import-max-profile-archive-bytes ${BPANE_BROWSER_CONTEXT_IMPORT_MAX_PROFILE_ARCHIVE_BYTES:-536870912}
+      --browser-context-import-max-profile-uncompressed-bytes ${BPANE_BROWSER_CONTEXT_IMPORT_MAX_PROFILE_UNCOMPRESSED_BYTES:-2147483648}
+      --browser-context-import-max-profile-entries ${BPANE_BROWSER_CONTEXT_IMPORT_MAX_PROFILE_ENTRIES:-100000}
+      --browser-context-import-max-concurrent ${BPANE_BROWSER_CONTEXT_IMPORT_MAX_CONCURRENT:-2}
       --cert /certs/cert.pem
       --key /certs/cert.key
       --workflow-worker-docker-bin ${BPANE_WORKFLOW_WORKER_DOCKER_BIN:-docker}

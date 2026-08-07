@@ -1,10 +1,14 @@
+use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{anyhow, bail};
 use tracing::{info, warn};
 
-use crate::api::{self, ApiServerConfig, McpBridgeControlConfig};
+use crate::api::{
+    self, ApiServerConfig, BrowserContextImportArchiveLimits, BrowserContextImportService,
+    McpBridgeControlConfig,
+};
 use crate::config::Config;
 use crate::lifecycle::GatewayLifecycle;
 use crate::readiness::GatewayReadiness;
@@ -31,6 +35,7 @@ pub(crate) struct GatewayApp {
 impl GatewayApp {
     pub(crate) async fn build(config: Config) -> anyhow::Result<Self> {
         validate_operational_timeouts(&config)?;
+        let browser_context_import = build_browser_context_import_service(&config)?;
         let lifecycle = Arc::new(GatewayLifecycle::new());
         let auth_services = AuthServices::build(&config).await?;
         let runtime_services = RuntimeServices::build(&config).await?;
@@ -139,6 +144,7 @@ impl GatewayApp {
             idle_stop_timeout: Duration::from_secs(config.runtime.idle_timeout_secs),
             public_gateway_url: config.gateway.public_gateway_url.clone(),
             default_owner_mode: default_owner_mode(&config),
+            browser_context_import,
             mcp_bridge_control: mcp_bridge_control_config(&config),
         };
 
@@ -246,6 +252,53 @@ fn validate_operational_timeouts(config: &Config) -> anyhow::Result<()> {
         bail!("--shutdown-readiness-grace-secs must be less than --shutdown-drain-timeout-secs");
     }
     Ok(())
+}
+
+fn build_browser_context_import_service(
+    config: &Config,
+) -> anyhow::Result<BrowserContextImportService> {
+    let gateway = &config.gateway;
+    if gateway.browser_context_import_max_archive_bytes == 0 {
+        bail!("--browser-context-import-max-archive-bytes must be greater than zero");
+    }
+    if gateway.browser_context_import_max_profile_archive_bytes == 0 {
+        bail!("--browser-context-import-max-profile-archive-bytes must be greater than zero");
+    }
+    if gateway.browser_context_import_max_profile_uncompressed_bytes == 0 {
+        bail!("--browser-context-import-max-profile-uncompressed-bytes must be greater than zero");
+    }
+    if gateway.browser_context_import_max_profile_entries == 0 {
+        bail!("--browser-context-import-max-profile-entries must be greater than zero");
+    }
+    if gateway.browser_context_import_max_profile_archive_bytes
+        > gateway.browser_context_import_max_archive_bytes
+    {
+        bail!(
+            "--browser-context-import-max-profile-archive-bytes must not exceed --browser-context-import-max-archive-bytes"
+        );
+    }
+    usize::try_from(gateway.browser_context_import_max_archive_bytes).map_err(|_| {
+        anyhow!(
+            "--browser-context-import-max-archive-bytes exceeds this platform's request-body limit"
+        )
+    })?;
+    let max_concurrent = NonZeroUsize::new(gateway.browser_context_import_max_concurrent)
+        .ok_or_else(|| {
+            anyhow!("--browser-context-import-max-concurrent must be greater than zero")
+        })?;
+
+    Ok(BrowserContextImportService::new(
+        BrowserContextImportArchiveLimits {
+            max_archive_bytes: gateway.browser_context_import_max_archive_bytes,
+            max_manifest_bytes: 128 * 1024,
+            max_profile_archive_bytes: gateway.browser_context_import_max_profile_archive_bytes,
+            max_profile_uncompressed_bytes: gateway
+                .browser_context_import_max_profile_uncompressed_bytes,
+            max_profile_entries: gateway.browser_context_import_max_profile_entries,
+            max_profile_path_bytes: 4096,
+        },
+        max_concurrent,
+    ))
 }
 
 fn joined_server_error(

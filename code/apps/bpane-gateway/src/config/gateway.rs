@@ -64,4 +64,36 @@ pub struct GatewayConfig {
     /// Time to advertise not-ready before closing the HTTP listener.
     #[arg(long = "shutdown-readiness-grace-secs", default_value_t = 2)]
     pub shutdown_readiness_grace_secs: u64,
+
+    /// Maximum compressed size of one browser-context import request.
+    #[arg(
+        long = "browser-context-import-max-archive-bytes",
+        default_value_t = 536_870_912
+    )]
+    pub browser_context_import_max_archive_bytes: u64,
+
+    /// Maximum compressed size of profile.tar.gz inside an import archive.
+    #[arg(
+        long = "browser-context-import-max-profile-archive-bytes",
+        default_value_t = 536_870_912
+    )]
+    pub browser_context_import_max_profile_archive_bytes: u64,
+
+    /// Maximum uncompressed tar stream size accepted from profile.tar.gz.
+    #[arg(
+        long = "browser-context-import-max-profile-uncompressed-bytes",
+        default_value_t = 2_147_483_648
+    )]
+    pub browser_context_import_max_profile_uncompressed_bytes: u64,
+
+    /// Maximum number of tar entries accepted from profile.tar.gz.
+    #[arg(
+        long = "browser-context-import-max-profile-entries",
+        default_value_t = 100_000
+    )]
+    pub browser_context_import_max_profile_entries: usize,
+
+    /// Maximum number of browser-context imports admitted concurrently.
+    #[arg(long = "browser-context-import-max-concurrent", default_value_t = 2)]
+    pub browser_context_import_max_concurrent: usize,
 }

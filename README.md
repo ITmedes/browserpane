@@ -879,6 +879,14 @@ cd code/web/bpane-client && npm run smoke:admin-browser-contexts -- --headless
 cd code/web/bpane-client && npm run smoke:admin-unified-browser-contexts -- --headless
 ```
 
+Browser-context imports authenticate before buffering, preflight the nested
+profile archive, reject traversal/link/special-file entries, and return JSON
+`413` for configured size/entry limits or `429` when import capacity is full.
+Local compose defaults to a 512 MiB request/profile archive, a 2 GiB expanded
+profile, 100,000 entries, and two concurrent imports. Override these with the
+`BPANE_BROWSER_CONTEXT_IMPORT_*` compose variables shown in
+`deploy/compose.yml` for intentionally larger environments.
+
 File-workspace admin smoke coverage:
 
 ```bash

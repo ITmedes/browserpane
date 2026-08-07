@@ -2,7 +2,7 @@ mod container;
 mod container_lifecycle;
 mod recovery;
 mod resolve;
-mod session_files;
+pub(in crate::runtime_manager) mod session_files;
 
 #[cfg(test)]
 pub(in crate::runtime_manager) use session_files::parse_docker_size_bytes;
