@@ -1,10 +1,8 @@
 <script lang="ts">
+  import { useUnifiedAdminContext } from '$lib/auth/unified-admin-context-provider';
   import EgressProfileDetailRoute from '$lib/components/EgressProfileDetailRoute.svelte';
-  import UnifiedAdminShell from '$lib/components/UnifiedAdminShell.svelte';
+
+  const authContext = useUnifiedAdminContext();
 </script>
 
-<UnifiedAdminShell activeId="egress" title="BrowserPane Egress Profile Details">
-  {#snippet children(authContext)}
-    <EgressProfileDetailRoute {authContext} />
-  {/snippet}
-</UnifiedAdminShell>
+<EgressProfileDetailRoute {authContext} />

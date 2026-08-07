@@ -1,10 +1,8 @@
 <script lang="ts">
+  import { useUnifiedAdminContext } from '$lib/auth/unified-admin-context-provider';
   import SessionDetailRoute from '$lib/components/SessionDetailRoute.svelte';
-  import UnifiedAdminShell from '$lib/components/UnifiedAdminShell.svelte';
+
+  const authContext = useUnifiedAdminContext();
 </script>
 
-<UnifiedAdminShell activeId="sessions" title="BrowserPane Session Details">
-  {#snippet children(authContext)}
-    <SessionDetailRoute {authContext} />
-  {/snippet}
-</UnifiedAdminShell>
+<SessionDetailRoute {authContext} />
