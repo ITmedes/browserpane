@@ -3,6 +3,10 @@ import process from 'node:process';
 import { chromium } from 'playwright-core';
 import { ensureAdminLoggedIn } from './admin-smoke-lib.mjs';
 import {
+  assertNoBodyHorizontalOverflow,
+  assertNoHorizontalOverflow,
+} from './admin-unified-smoke-lib.mjs';
+import {
   DEFAULTS,
   createLogger,
   launchChrome,
@@ -63,26 +67,6 @@ async function expectLink(page, testId, expectedPath) {
   const href = await page.getByTestId(testId).getAttribute('href');
   if (!href || !href.includes(expectedPath)) {
     throw new Error(`Expected ${testId} to link to ${expectedPath}, got ${href}`);
-  }
-}
-
-async function assertNoHorizontalOverflow(page, testId, label) {
-  const size = await page.getByTestId(testId).evaluate((element) => ({
-    clientWidth: element.clientWidth,
-    scrollWidth: element.scrollWidth,
-  }));
-  if (size.scrollWidth > size.clientWidth + 1) {
-    throw new Error(`${label} overflows horizontally: ${JSON.stringify(size)}`);
-  }
-}
-
-async function assertNoBodyHorizontalOverflow(page, label) {
-  const size = await page.evaluate(() => ({
-    clientWidth: document.documentElement.clientWidth,
-    scrollWidth: document.documentElement.scrollWidth,
-  }));
-  if (size.scrollWidth > size.clientWidth + 1) {
-    throw new Error(`${label} causes document horizontal overflow: ${JSON.stringify(size)}`);
   }
 }
 

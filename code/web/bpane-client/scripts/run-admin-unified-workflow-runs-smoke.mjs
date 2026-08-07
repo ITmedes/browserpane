@@ -6,6 +6,13 @@ import {
   getAdminAccessToken,
 } from './admin-smoke-lib.mjs';
 import {
+  adminRouteUrl,
+  assertNoBodyHorizontalOverflow,
+  assertNoHorizontalOverflow,
+  authJsonHeaders as jsonAuthHeaders,
+  waitForContains,
+} from './admin-unified-smoke-lib.mjs';
+import {
   createWorkflow,
   createWorkflowVersion,
 } from './admin-workflow-smoke-lib.mjs';
@@ -130,43 +137,6 @@ async function waitForRunRow(page, options, runId) {
     Boolean,
     options.connectTimeoutMs,
   );
-}
-
-async function waitForContains(scope, options, testId, expected) {
-  await poll(
-    testId,
-    async () => await scope.getByTestId(testId).textContent(),
-    (value) => value !== null && value.includes(expected),
-    options.connectTimeoutMs,
-  );
-}
-
-async function assertNoHorizontalOverflow(page, testId, label) {
-  const size = await page.getByTestId(testId).evaluate((element) => ({
-    clientWidth: element.clientWidth,
-    scrollWidth: element.scrollWidth,
-  }));
-  if (size.scrollWidth > size.clientWidth + 1) {
-    throw new Error(`${label} overflows horizontally: ${JSON.stringify(size)}`);
-  }
-}
-
-async function assertNoBodyHorizontalOverflow(page, label) {
-  const size = await page.evaluate(() => ({
-    clientWidth: document.documentElement.clientWidth,
-    scrollWidth: document.documentElement.scrollWidth,
-  }));
-  if (size.scrollWidth > size.clientWidth + 1) {
-    throw new Error(`${label} causes document horizontal overflow: ${JSON.stringify(size)}`);
-  }
-}
-
-function adminRouteUrl(options, routePath) {
-  return new URL(`/admin-new/${routePath.replace(/^\/+/, '')}`, apiOrigin(options)).toString();
-}
-
-function jsonAuthHeaders(accessToken) {
-  return { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' };
 }
 
 async function emitSummary(options, summary, log) {
