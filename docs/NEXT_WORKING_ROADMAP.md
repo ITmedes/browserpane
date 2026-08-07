@@ -203,8 +203,9 @@ Validation:
 
 Priority: admin-new parity.
 
-Status: in progress on `feature/BPANE-00155`; the phased route contract and
-validation sequence are recorded in `BPANE-00155_SESSION_SUBAREAS_PLAN.md`.
+Status: phase 1 is implemented and validated on `feature/BPANE-00155`; the
+route contract and evidence are recorded in
+`BPANE-00155_SESSION_SUBAREAS_PLAN.md`. Phase 2 remains issue #156.
 
 Why:
 
@@ -212,16 +213,19 @@ Why:
 - The redesign plan explicitly calls for route-backed session areas.
 - This is needed before the new app is ergonomic enough to replace the old app.
 
-Scope:
+Phase 1 scope (#155):
 
 1. `/admin-new/sessions/[session_id]/live` or keep preview popup and document
    the replacement.
 2. `/files` for session files and file bindings.
 3. `/recordings` for session recording segments/playback/export.
 4. `/network` for effective network identity, egress diagnostics, probes.
-5. `/automation` for MCP delegation, workflow associations, automation owner.
-6. `/policy` for capabilities and browser policy evidence.
-7. `/observability` for logs, metrics, snapshots, admin event state.
+
+Phase 2 scope (#156):
+
+1. `/automation` for MCP delegation, workflow associations, automation owner.
+2. `/policy` for capabilities and browser policy evidence.
+3. `/observability` for logs, metrics, snapshots, admin event state.
 
 Validation:
 

@@ -4,7 +4,7 @@
 
 - Issue: [#155 Add admin-new session subareas for live, files, recordings, and network](https://github.com/ITmedes/browserpane/issues/155)
 - Branch: `feature/BPANE-00155`
-- State: In progress
+- State: Complete; ready for review
 - Product surface: `/admin-new/sessions/[session_id]`
 
 ## Business Case
@@ -120,6 +120,8 @@ run probes only against already-ready sessions.
 
 ### 5. Regression, Documentation, And Promotion Evidence
 
+Implementation status: complete.
+
 1. Extend the admin-new session smoke across direct subroute navigation,
    refresh, session switching, responsive layout, and authentication recovery.
 2. Run old-admin session/files/recording/network smokes until its retirement
@@ -127,6 +129,28 @@ run probes only against already-ready sessions.
 3. Synchronize `README.md`, admin-new status, manual checkpoints, architecture,
    and issue evidence where behavior changed.
 4. Record exact unit, integration, smoke, and e2e results before PR creation.
+
+## Validation Evidence
+
+- Admin auth: 5 files / 31 tests; coverage baseline passed at 88.4% statements,
+  79.47% branches, 95.65% functions, and 88.4% lines.
+- Admin-new: 123 files / 410 tests; TypeScript check and static production
+  build passed; coverage baseline passed at 91.07% statements, 76.69%
+  branches, 93.25% functions, and 88.82% lines.
+- Session Compose smoke: direct navigation and reload across overview, live,
+  files, recordings, and network; switching to a second session with distinct
+  network evidence; desktop/mobile overflow; MCP delegation; popup connect and
+  metrics; stop and start/reconnect all passed.
+- Compatibility regressions: auth/security, session lifecycle, route-level
+  session detail, exact session-file download, retained recording capture and
+  download, and egress profiles passed. Egress validation used the documented
+  Squid, authenticated Squid, and mitmproxy fixture stack.
+- Adjacent admin-new regressions: recording catalog/download, egress profile
+  lifecycle, file-workspace upload, and workflow-run detail/session links
+  passed.
+- GitHub validation for the feature checkpoint passed all 11 Rust, Node,
+  security, dependency, and repository-metadata checks. The final
+  smoke-stability commit must pass the same checks before review promotion.
 
 ## Test Strategy
 

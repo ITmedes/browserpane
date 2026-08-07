@@ -202,6 +202,12 @@ npm run smoke:admin-unified-workflows -- --headless
 npm run smoke:admin-unified-workflow-runs -- --headless
 ```
 
+The unified sessions smoke opens and reloads the canonical overview, live,
+files, recordings, and network routes, validates active navigation and
+responsive layout, switches each subarea to a second session with distinct
+network evidence, then exercises MCP delegation and the popup browser
+connection lifecycle.
+
 ## Broader Existing Client Smoke Matrix
 
 The old and new admin apps coexist, so broader browser/client smokes must remain

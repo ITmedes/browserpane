@@ -252,7 +252,8 @@ Required detail behavior:
   policy, and observability.
 
 Current status: catalog/create/detail/preview/MCP are implemented. Route-backed
-subareas remain missing.
+live, files, recordings, and network subareas are implemented; automation,
+policy, and observability remain issue #156.
 
 ### Session Preview And Live Browser
 
@@ -271,8 +272,9 @@ Required behavior:
 - clear connection state and error feedback,
 - metrics drawer for local browser transition diagnostics.
 
-Current status: preview popup implemented with metrics drawer. Dedicated
-`/live` route is not implemented.
+Current status: preview popup implemented with metrics drawer. The dedicated
+`/live` route provides refresh-safe connection evidence and launches that
+standalone stream surface explicitly.
 
 ### Recordings
 
