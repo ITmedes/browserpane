@@ -70,6 +70,16 @@ fn browser_context_import_runtime_rejects_special_entries_and_unsafe_metadata() 
     assert!(script.contains("chown -R --no-dereference"));
 }
 
+#[test]
+fn browser_context_export_runtime_omits_links_and_special_entries() {
+    let script = super::docker::session_files::EXPORT_BROWSER_CONTEXT_PROFILE_SCRIPT;
+
+    assert!(script.contains("find . -xdev"));
+    assert!(script.contains("-type f -o -type d"));
+    assert!(script.contains("-print0"));
+    assert!(script.contains("tar --null --no-recursion --files-from=-"));
+}
+
 fn test_principal(subject: &str) -> AuthenticatedPrincipal {
     AuthenticatedPrincipal {
         subject: subject.to_string(),
