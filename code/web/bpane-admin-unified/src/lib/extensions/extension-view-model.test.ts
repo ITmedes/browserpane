@@ -42,11 +42,13 @@ describe('extension view model', () => {
       valid: false,
       fieldErrors: { name: ['Name is required.'] },
     });
-    expect(validateExtensionDefinitionDraft({
-      name: ' Login helper ',
-      description: ' Approved helper ',
-      labelsText: 'team=platform',
-    })).toEqual({
+    expect(
+      validateExtensionDefinitionDraft({
+        name: ' Login helper ',
+        description: ' Approved helper ',
+        labelsText: 'team=platform',
+      }),
+    ).toEqual({
       valid: true,
       fieldErrors: {},
       request: {
@@ -55,21 +57,28 @@ describe('extension view model', () => {
         labels: { team: 'platform' },
       },
     });
-    expect(validateExtensionDefinitionDraft({
-      name: 'Login helper',
-      description: '',
-      labelsText: 'invalid',
-    }).fieldErrors.labels).toEqual(['Labels must use key=value format.']);
+    expect(
+      validateExtensionDefinitionDraft({
+        name: 'Login helper',
+        description: '',
+        labelsText: 'invalid',
+      }).fieldErrors.labels,
+    ).toEqual(['Labels must use key=value format.']);
   });
 
   it('validates absolute installed paths for versions', () => {
-    expect(validateExtensionVersionDraft(createExtensionVersionDraft())).toMatchObject({ valid: false });
-    expect(validateExtensionVersionDraft({ version: '1.0.0', installPath: 'relative/path' }).fieldErrors)
-      .toEqual({ installPath: ['Install path must be absolute.'] });
-    expect(validateExtensionVersionDraft({
-      version: ' 1.0.0 ',
-      installPath: ' /opt/extensions/login ',
-    }).request).toEqual({ version: '1.0.0', install_path: '/opt/extensions/login' });
+    expect(validateExtensionVersionDraft(createExtensionVersionDraft())).toMatchObject({
+      valid: false,
+    });
+    expect(
+      validateExtensionVersionDraft({ version: '1.0.0', installPath: 'relative/path' }).fieldErrors,
+    ).toEqual({ installPath: ['Install path must be absolute.'] });
+    expect(
+      validateExtensionVersionDraft({
+        version: ' 1.0.0 ',
+        installPath: ' /opt/extensions/login ',
+      }).request,
+    ).toEqual({ version: '1.0.0', install_path: '/opt/extensions/login' });
   });
 });
 

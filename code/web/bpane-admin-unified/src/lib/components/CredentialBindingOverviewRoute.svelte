@@ -8,12 +8,30 @@
 
   let { authContext }: { readonly authContext: UnifiedAdminContext } = $props();
   let bindingState = $state<CredentialBindingOverviewLoadState>({ status: 'loading' });
-  onMount(() => { void loadBindings(); });
-  function client() { return new CredentialBindingCatalogClient({ baseUrl: window.location.origin, accessTokenProvider: authContext.accessTokenProvider, onAuthenticationFailure: authContext.onAuthenticationFailure }); }
+  onMount(() => {
+    void loadBindings();
+  });
+  function client() {
+    return new CredentialBindingCatalogClient({
+      baseUrl: window.location.origin,
+      accessTokenProvider: authContext.accessTokenProvider,
+      onAuthenticationFailure: authContext.onAuthenticationFailure,
+    });
+  }
   async function loadBindings(): Promise<void> {
     bindingState = { status: 'loading' };
-    try { bindingState = { status: 'ready', bindings: (await client().listCredentialBindings()).credential_bindings }; }
-    catch (error) { bindingState = { status: 'error', message: adminErrorMessage(error, 'Unexpected credential binding catalog error.') }; }
+    try {
+      bindingState = {
+        status: 'ready',
+        bindings: (await client().listCredentialBindings()).credential_bindings,
+      };
+    } catch (error) {
+      bindingState = {
+        status: 'error',
+        message: adminErrorMessage(error, 'Unexpected credential binding catalog error.'),
+      };
+    }
   }
 </script>
+
 <CredentialBindingOverview state={bindingState} onRefresh={loadBindings} />

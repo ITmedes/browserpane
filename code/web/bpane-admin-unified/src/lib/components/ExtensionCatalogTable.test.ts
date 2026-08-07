@@ -2,7 +2,11 @@ import { tick } from 'svelte';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import type { ExtensionDefinitionResource } from '$lib/extensions/extension-types';
-import { byTestId, cleanupRenderedComponents, renderComponent } from '$lib/test-utils/svelte-component-test';
+import {
+  byTestId,
+  cleanupRenderedComponents,
+  renderComponent,
+} from '$lib/test-utils/svelte-component-test';
 import ExtensionCatalogTable from './ExtensionCatalogTable.svelte';
 
 afterEach(cleanupRenderedComponents);
@@ -10,7 +14,10 @@ afterEach(cleanupRenderedComponents);
 describe('ExtensionCatalogTable', () => {
   it('filters by lifecycle state and search text', async () => {
     const target = renderComponent(ExtensionCatalogTable, {
-      extensions: [extension('enabled-extension', true, '1.0.0'), extension('disabled-extension', false, null)],
+      extensions: [
+        extension('enabled-extension', true, '1.0.0'),
+        extension('disabled-extension', false, null),
+      ],
     });
 
     expect(target.querySelectorAll('[data-testid="extensions-list-row"]')).toHaveLength(2);
@@ -26,9 +33,12 @@ describe('ExtensionCatalogTable', () => {
   });
 
   it('links each row to a direct detail route', () => {
-    const target = renderComponent(ExtensionCatalogTable, { extensions: [extension('extension/one', true, '1.0.0')] });
-    expect((byTestId(target, 'extensions-detail-link') as HTMLAnchorElement).getAttribute('href'))
-      .toBe('/admin-new/extensions/extension%2Fone');
+    const target = renderComponent(ExtensionCatalogTable, {
+      extensions: [extension('extension/one', true, '1.0.0')],
+    });
+    expect(
+      (byTestId(target, 'extensions-detail-link') as HTMLAnchorElement).getAttribute('href'),
+    ).toBe('/admin-new/extensions/extension%2Fone');
   });
 });
 
@@ -39,7 +49,11 @@ async function input(target: HTMLElement, testId: string, value: string): Promis
   await tick();
 }
 
-function extension(id: string, enabled: boolean, version: string | null): ExtensionDefinitionResource {
+function extension(
+  id: string,
+  enabled: boolean,
+  version: string | null,
+): ExtensionDefinitionResource {
   return {
     id,
     name: id,

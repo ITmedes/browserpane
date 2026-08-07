@@ -60,25 +60,53 @@ export type CredentialBindingValidation = {
 };
 
 export const CREDENTIAL_INJECTION_MODE_OPTIONS = [
-  { value: 'form_fill', label: 'Form fill', description: 'Fill configured page selectors with stored values.' },
-  { value: 'cookie_seed', label: 'Cookie seed', description: 'Seed browser-context cookies before the workflow step.' },
-  { value: 'storage_seed', label: 'Storage seed', description: 'Seed local and session storage for an allowed origin.' },
-  { value: 'totp_fill', label: 'TOTP fill', description: 'Generate and fill a time-based one-time password.' },
-] satisfies readonly { readonly value: CredentialInjectionMode; readonly label: string; readonly description: string }[];
+  {
+    value: 'form_fill',
+    label: 'Form fill',
+    description: 'Fill configured page selectors with stored values.',
+  },
+  {
+    value: 'cookie_seed',
+    label: 'Cookie seed',
+    description: 'Seed browser-context cookies before the workflow step.',
+  },
+  {
+    value: 'storage_seed',
+    label: 'Storage seed',
+    description: 'Seed local and session storage for an allowed origin.',
+  },
+  {
+    value: 'totp_fill',
+    label: 'TOTP fill',
+    description: 'Generate and fill a time-based one-time password.',
+  },
+] satisfies readonly {
+  readonly value: CredentialInjectionMode;
+  readonly label: string;
+  readonly description: string;
+}[];
 
-export function buildCredentialBindingOverviewModel(bindings: readonly CredentialBindingResource[]) {
+export function buildCredentialBindingOverviewModel(
+  bindings: readonly CredentialBindingResource[],
+) {
   return {
     metrics: [
       metric('total', 'Bindings', bindings.length),
       metric('owner', 'Owner scoped', bindings.filter((binding) => !binding.project_id).length),
       metric('project', 'Project scoped', bindings.filter((binding) => binding.project_id).length),
-      metric('totp', 'TOTP', bindings.filter((binding) => binding.injection_mode === 'totp_fill').length),
+      metric(
+        'totp',
+        'TOTP',
+        bindings.filter((binding) => binding.injection_mode === 'totp_fill').length,
+      ),
     ],
     rows: bindings.map(credentialBindingOverviewRow),
   };
 }
 
-export function credentialBindingOverviewRow(binding: CredentialBindingResource): CredentialBindingOverviewRow {
+export function credentialBindingOverviewRow(
+  binding: CredentialBindingResource,
+): CredentialBindingOverviewRow {
   return {
     id: binding.id,
     name: binding.name,
@@ -86,17 +114,32 @@ export function credentialBindingOverviewRow(binding: CredentialBindingResource)
     scopeTone: binding.project_id ? 'warning' : 'neutral',
     provider: binding.provider === 'vault_kv_v2' ? 'Vault KV v2' : binding.provider,
     injectionMode: injectionModeLabel(binding.injection_mode),
-    origins: binding.allowed_origins.length > 0 ? binding.allowed_origins.join(', ') : 'No allowed origins',
+    origins:
+      binding.allowed_origins.length > 0
+        ? binding.allowed_origins.join(', ')
+        : 'No allowed origins',
     namespace: binding.namespace ?? 'Default namespace',
     labels: labelSummary(binding.labels),
     updatedAt: formatDateTime(binding.updated_at),
   };
 }
 
-export function credentialBindingMatchesSearch(row: CredentialBindingOverviewRow, query: string): boolean {
+export function credentialBindingMatchesSearch(
+  row: CredentialBindingOverviewRow,
+  query: string,
+): boolean {
   if (!query) return true;
-  return [row.id, row.name, row.scope, row.provider, row.injectionMode, row.origins, row.namespace, row.labels, row.updatedAt]
-    .some((value) => value.toLowerCase().includes(query));
+  return [
+    row.id,
+    row.name,
+    row.scope,
+    row.provider,
+    row.injectionMode,
+    row.origins,
+    row.namespace,
+    row.labels,
+    row.updatedAt,
+  ].some((value) => value.toLowerCase().includes(query));
 }
 
 export function createCredentialBindingDraft(): CredentialBindingDraft {
@@ -118,7 +161,9 @@ export function createCredentialBindingDraft(): CredentialBindingDraft {
   };
 }
 
-export function validateCredentialBindingDraft(draft: CredentialBindingDraft): CredentialBindingValidation {
+export function validateCredentialBindingDraft(
+  draft: CredentialBindingDraft,
+): CredentialBindingValidation {
   const fieldErrors: Record<string, string[]> = {};
   const name = draft.name.trim();
   if (!name) fieldErrors.name = ['Name is required.'];
@@ -126,7 +171,8 @@ export function validateCredentialBindingDraft(draft: CredentialBindingDraft): C
 
   const allowedOrigins = splitFormEntries(draft.allowedOriginsText);
   const invalidOrigin = allowedOrigins.find((origin) => !isHttpOrigin(origin));
-  if (invalidOrigin) fieldErrors.allowedOrigins = [`${invalidOrigin} must be an HTTP or HTTPS origin.`];
+  if (invalidOrigin)
+    fieldErrors.allowedOrigins = [`${invalidOrigin} must be an HTTP or HTTPS origin.`];
 
   const labels = parseKeyValueLabels(draft.labelsText);
   if (!labels.ok) fieldErrors.labels = [labels.error];
@@ -171,7 +217,9 @@ export function validateCredentialBindingDraft(draft: CredentialBindingDraft): C
       project_id: draft.scope === 'project' ? draft.projectId : null,
       name,
       provider: 'vault_kv_v2',
-      ...(draft.secretSource === 'external_ref' ? { external_ref: externalRef } : { secret_payload: secretPayload }),
+      ...(draft.secretSource === 'external_ref'
+        ? { external_ref: externalRef }
+        : { secret_payload: secretPayload }),
       namespace: draft.namespace.trim() || null,
       allowed_origins: allowedOrigins,
       injection_mode: draft.injectionMode,
@@ -187,7 +235,9 @@ export function injectionModeLabel(mode: CredentialInjectionMode): string {
 
 export function labelSummary(labels: Readonly<Record<string, string>>): string {
   const entries = Object.entries(labels).sort(([left], [right]) => left.localeCompare(right));
-  return entries.length === 0 ? 'No labels' : entries.map(([key, value]) => `${key}=${value}`).join(', ');
+  return entries.length === 0
+    ? 'No labels'
+    : entries.map(([key, value]) => `${key}=${value}`).join(', ');
 }
 
 function metric(key: string, label: string, value: number) {
@@ -197,7 +247,10 @@ function metric(key: string, label: string, value: number) {
 function isHttpOrigin(value: string): boolean {
   try {
     const url = new URL(value);
-    return (url.protocol === 'http:' || url.protocol === 'https:') && url.origin === value.replace(/\/$/, '');
+    return (
+      (url.protocol === 'http:' || url.protocol === 'https:') &&
+      url.origin === value.replace(/\/$/, '')
+    );
   } catch {
     return false;
   }

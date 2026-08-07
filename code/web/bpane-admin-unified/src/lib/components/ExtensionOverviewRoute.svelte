@@ -9,7 +9,9 @@
   let { authContext }: { readonly authContext: UnifiedAdminContext } = $props();
   let extensionState = $state<ExtensionOverviewLoadState>({ status: 'loading' });
 
-  onMount(() => { void loadExtensions(); });
+  onMount(() => {
+    void loadExtensions();
+  });
 
   function client(): ExtensionCatalogClient {
     return new ExtensionCatalogClient({
@@ -25,7 +27,10 @@
       const response = await client().listExtensions();
       extensionState = { status: 'ready', extensions: response.extensions };
     } catch (error) {
-      extensionState = { status: 'error', message: adminErrorMessage(error, 'Unexpected extension catalog error.') };
+      extensionState = {
+        status: 'error',
+        message: adminErrorMessage(error, 'Unexpected extension catalog error.'),
+      };
     }
   }
 </script>

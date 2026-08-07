@@ -3,4 +3,5 @@
   import ExtensionCreateRoute from '$lib/components/ExtensionCreateRoute.svelte';
   const authContext = useUnifiedAdminContext();
 </script>
+
 <ExtensionCreateRoute {authContext} />

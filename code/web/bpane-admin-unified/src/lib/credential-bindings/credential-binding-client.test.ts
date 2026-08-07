@@ -37,19 +37,33 @@ describe('CredentialBindingCatalogClient', () => {
   });
 
   it('loads active and archived project options', async () => {
-    const client = catalogClient(vi.fn<typeof fetch>(async () => jsonResponse({
-      projects: [{ id: 'project-1', name: 'Support', state: 'active', ignored: true }],
-    }, 200)));
+    const client = catalogClient(
+      vi.fn<typeof fetch>(async () =>
+        jsonResponse(
+          {
+            projects: [{ id: 'project-1', name: 'Support', state: 'active', ignored: true }],
+          },
+          200,
+        ),
+      ),
+    );
     expect(await client.listProjectOptions()).toEqual({
       projects: [{ id: 'project-1', name: 'Support', state: 'active' }],
     });
   });
 
   it('ignores unexpected secret fields in responses and rejects malformed metadata', () => {
-    const resource = toCredentialBindingResource({ ...bindingPayload(), secret_payload: { password: 'must-not-leak' } });
+    const resource = toCredentialBindingResource({
+      ...bindingPayload(),
+      secret_payload: { password: 'must-not-leak' },
+    });
     expect(JSON.stringify(resource)).not.toContain('must-not-leak');
-    expect(() => toCredentialBindingListResponse({ credential_bindings: {} })).toThrow(CredentialBindingCatalogError);
-    expect(() => toCredentialBindingResource({ ...bindingPayload(), injection_mode: 'unknown' })).toThrow('must be one of');
+    expect(() => toCredentialBindingListResponse({ credential_bindings: {} })).toThrow(
+      CredentialBindingCatalogError,
+    );
+    expect(() =>
+      toCredentialBindingResource({ ...bindingPayload(), injection_mode: 'unknown' }),
+    ).toThrow('must be one of');
   });
 
   it('delegates authentication failures', async () => {
@@ -66,11 +80,18 @@ describe('CredentialBindingCatalogClient', () => {
 });
 
 function catalogClient(fetchImpl: typeof fetch): CredentialBindingCatalogClient {
-  return new CredentialBindingCatalogClient({ baseUrl: 'http://browserpane.test', accessTokenProvider: () => 'token-1', fetchImpl });
+  return new CredentialBindingCatalogClient({
+    baseUrl: 'http://browserpane.test',
+    accessTokenProvider: () => 'token-1',
+    fetchImpl,
+  });
 }
 
 function jsonResponse(payload: unknown, status: number): Response {
-  return new Response(JSON.stringify(payload), { status, headers: { 'content-type': 'application/json' } });
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  });
 }
 
 function bindingPayload() {
