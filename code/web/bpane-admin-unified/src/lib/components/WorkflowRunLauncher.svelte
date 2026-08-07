@@ -162,7 +162,7 @@
   }
 
   function runDetailHref(runId: string): string {
-    return `/admin-new/runs?run=${encodeURIComponent(runId)}`;
+    return `/admin-new/workflow-runs/${encodeURIComponent(runId)}`;
   }
 
   function sessionDetailHref(sessionId: string): string {

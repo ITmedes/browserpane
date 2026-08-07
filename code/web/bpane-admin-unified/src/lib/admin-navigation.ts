@@ -46,7 +46,7 @@ export const navGroups: NavGroup[] = [
       { id: 'sessions', label: 'Sessions', route: '/admin-new/sessions', icon: 'cpu' },
       { id: 'recordings', label: 'Recordings', route: '/admin-new/recordings', icon: 'video' },
       { id: 'workflows', label: 'Workflows', route: '/admin-new/workflows', icon: 'workflow' },
-      { id: 'runs', label: 'Workflow runs', route: '/admin-new/runs', icon: 'list' },
+      { id: 'runs', label: 'Workflow runs', route: '/admin-new/workflow-runs', icon: 'list' },
     ],
   },
   {
