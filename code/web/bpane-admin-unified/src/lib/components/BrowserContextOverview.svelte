@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { RefreshCw } from '@lucide/svelte';
+  import { RefreshCw, Upload } from '@lucide/svelte';
   import {
     buildBrowserContextOverviewModel,
     type BrowserContextOverviewLoadState,
@@ -40,6 +40,14 @@
         data-testid="browser-contexts-new-link"
       >
         New browser context
+      </a>
+      <a
+        class="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-admin-border bg-admin-panel px-3 text-sm font-medium text-admin-ink shadow-sm transition hover:bg-admin-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-admin-accent/25"
+        href="/admin-new/browser-contexts/import"
+        data-testid="browser-contexts-import-link"
+      >
+        <Upload size={16} strokeWidth={1.9} />
+        <span>Import archive</span>
       </a>
       <button
         class="inline-flex h-10 w-fit items-center gap-2 rounded-md border border-admin-border bg-admin-panel px-3 text-sm font-medium text-admin-ink shadow-sm hover:bg-admin-soft disabled:cursor-not-allowed disabled:opacity-60"
