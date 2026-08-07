@@ -1,6 +1,8 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
   import { ArrowLeft } from '@lucide/svelte';
   import { onMount } from 'svelte';
+  import { adminErrorMessage } from '$lib/application/admin-async-state';
   import type { UnifiedAdminContext } from '$lib/auth/unified-admin-context';
   import { EgressProfileCatalogClient } from '$lib/egress-profiles/egress-profile-client';
   import type {
@@ -8,12 +10,12 @@
     EgressProfileProjectOptionsLoadState,
   } from '$lib/egress-profiles/egress-profile-detail-state';
   import type { EgressProfileResource, UpsertEgressProfileRequest } from '$lib/egress-profiles/egress-profile-types';
-  import AdminMessage from './AdminMessage.svelte';
+  import ActionFeedback from './ActionFeedback.svelte';
   import EgressProfileEditForm from './EgressProfileEditForm.svelte';
 
   type EgressProfileCreateRouteProps = {
     readonly authContext: UnifiedAdminContext;
-    readonly navigateToProfile?: (profile: EgressProfileResource) => void;
+    readonly navigateToProfile?: (profile: EgressProfileResource) => void | Promise<void>;
   };
 
   let {
@@ -45,7 +47,7 @@
     } catch (error) {
       projectOptionsState = {
         status: 'error',
-        message: error instanceof Error ? error.message : 'Project options load failed.',
+        message: adminErrorMessage(error, 'Project options load failed.'),
       };
     }
   }
@@ -55,17 +57,17 @@
     try {
       const profile = await client().createEgressProfile(request);
       actionState = { status: 'success', message: 'Egress profile created.' };
-      navigateToProfile(profile);
+      await navigateToProfile(profile);
     } catch (error) {
       actionState = {
         status: 'error',
-        message: error instanceof Error ? error.message : 'Egress profile creation failed.',
+        message: adminErrorMessage(error, 'Egress profile creation failed.'),
       };
     }
   }
 
-  function defaultNavigateToProfile(profile: EgressProfileResource): void {
-    window.location.assign(`/admin-new/egress/${encodeURIComponent(profile.id)}`);
+  async function defaultNavigateToProfile(profile: EgressProfileResource): Promise<void> {
+    await goto(`/admin-new/egress/${encodeURIComponent(profile.id)}`);
   }
 </script>
 
@@ -85,13 +87,14 @@
     </div>
   </header>
 
-  {#if actionState.status === 'success'}
-    <AdminMessage tone="success" title="Egress profile action completed" message={actionState.message} testId="egress-profile-create-success" />
-  {:else if actionState.status === 'error'}
-    <AdminMessage tone="error" title="Egress profile action failed" message={actionState.message} testId="egress-profile-create-error" />
-  {:else if actionState.status === 'running'}
-    <AdminMessage tone="loading" title={actionState.label} testId="egress-profile-create-running" />
-  {/if}
+  <ActionFeedback
+    state={actionState}
+    successTitle="Egress profile action completed"
+    errorTitle="Egress profile action failed"
+    successTestId="egress-profile-create-success"
+    errorTestId="egress-profile-create-error"
+    runningTestId="egress-profile-create-running"
+  />
 
   <EgressProfileEditForm
     mode="create"

@@ -246,7 +246,8 @@ issue and capture the exact slice boundary in a checked-in `docs/*_PLAN.md`:
 | --- | --- | --- |
 | Foundation validation baseline | closed `#151` | Keep the implemented validation scope intact. |
 | Foundation validation performance | `#184` implemented; `#185` ready | Retain the measured sharding result; use #185 for deterministic Docker build acceleration without reducing coverage. |
-| Remaining Foundation trust/runtime work | `#145`-`#150` and `#152` merged; `#179` review-ready | Merge #179 after required checks; then qualify #153 as the next bounded product slice. |
+| Remaining Foundation trust/runtime work | `#145`-`#150`, `#152`, and `#179` merged | Foundation Gate is complete; preserve its validation and compatibility evidence. |
+| Active Operator Product work | `#153` in review | Validate `BPANE-00153_ADMIN_NEW_PATTERN_CONSOLIDATION_PLAN.md`; after merge, select `#154` for route-backed workflow-run detail. |
 | Items 10-19: admin-new parity and promotion work | `#154`-`#163`, with session templates still tracked by `#124` | Use the matching focused issue and keep old admin regression scope explicit. |
 | Items 20-26: scalability, runtime hygiene, docs, performance, and refactors | `#164`-`#170` | Use the matching focused issue and require validation evidence before broad refactors. |
 | Pilot Value | `#174`, conditional `#172`, `#149`, `#71`, `#66`, `#154` | Use the Phase 0 plan and select only dependencies required by the agreed process. |

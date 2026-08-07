@@ -1,6 +1,7 @@
 <script lang="ts">
   import { ArrowLeft } from '@lucide/svelte';
   import { onMount } from 'svelte';
+  import { adminErrorMessage } from '$lib/application/admin-async-state';
   import type { UnifiedAdminContext } from '$lib/auth/unified-admin-context';
   import { EgressProfileCatalogClient } from '$lib/egress-profiles/egress-profile-client';
   import type {
@@ -53,7 +54,7 @@
       profileState = {
         status: 'error',
         profileId,
-        message: error instanceof Error ? error.message : 'Unexpected egress profile detail error.',
+        message: adminErrorMessage(error, 'Unexpected egress profile detail error.'),
       };
     }
   }
@@ -66,7 +67,7 @@
     } catch (error) {
       projectOptionsState = {
         status: 'error',
-        message: error instanceof Error ? error.message : 'Project options load failed.',
+        message: adminErrorMessage(error, 'Project options load failed.'),
       };
     }
   }
@@ -84,7 +85,7 @@
     } catch (error) {
       actionState = {
         status: 'error',
-        message: error instanceof Error ? error.message : 'Egress profile refresh failed.',
+        message: adminErrorMessage(error, 'Egress profile refresh failed.'),
       };
     }
   }
@@ -102,7 +103,7 @@
     } catch (error) {
       actionState = {
         status: 'error',
-        message: error instanceof Error ? error.message : 'Egress profile save failed.',
+        message: adminErrorMessage(error, 'Egress profile save failed.'),
       };
     }
   }

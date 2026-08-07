@@ -1,3 +1,4 @@
+import type { AdminActionState } from '$lib/application/admin-async-state';
 import type { EgressProfileProjectResource, EgressProfileResource } from './egress-profile-types';
 
 export type EgressProfileDetailLoadState =
@@ -6,11 +7,7 @@ export type EgressProfileDetailLoadState =
   | { readonly status: 'error'; readonly profileId: string; readonly message: string }
   | { readonly status: 'ready'; readonly profile: EgressProfileResource };
 
-export type EgressProfileActionState =
-  | { readonly status: 'idle' }
-  | { readonly status: 'running'; readonly label: string }
-  | { readonly status: 'success'; readonly message: string }
-  | { readonly status: 'error'; readonly message: string };
+export type EgressProfileActionState = AdminActionState;
 
 export type EgressProfileProjectOptionsLoadState =
   | { readonly status: 'idle' }

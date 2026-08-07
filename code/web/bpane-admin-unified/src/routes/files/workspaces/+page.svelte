@@ -1,10 +1,8 @@
 <script lang="ts">
+  import { useUnifiedAdminContext } from '$lib/auth/unified-admin-context-provider';
   import FileWorkspaceOverviewRoute from '$lib/components/FileWorkspaceOverviewRoute.svelte';
-  import UnifiedAdminShell from '$lib/components/UnifiedAdminShell.svelte';
+
+  const authContext = useUnifiedAdminContext();
 </script>
 
-<UnifiedAdminShell activeId="workspaces" title="BrowserPane File Workspaces">
-  {#snippet children(authContext)}
-    <FileWorkspaceOverviewRoute {authContext} />
-  {/snippet}
-</UnifiedAdminShell>
+<FileWorkspaceOverviewRoute {authContext} />

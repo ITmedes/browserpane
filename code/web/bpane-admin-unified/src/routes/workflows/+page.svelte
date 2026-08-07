@@ -1,10 +1,8 @@
 <script lang="ts">
-  import UnifiedAdminShell from '$lib/components/UnifiedAdminShell.svelte';
+  import { useUnifiedAdminContext } from '$lib/auth/unified-admin-context-provider';
   import WorkflowOverviewRoute from '$lib/components/WorkflowOverviewRoute.svelte';
+
+  const authContext = useUnifiedAdminContext();
 </script>
 
-<UnifiedAdminShell activeId="workflows" title="BrowserPane Workflows">
-  {#snippet children(authContext)}
-    <WorkflowOverviewRoute {authContext} />
-  {/snippet}
-</UnifiedAdminShell>
+<WorkflowOverviewRoute {authContext} />

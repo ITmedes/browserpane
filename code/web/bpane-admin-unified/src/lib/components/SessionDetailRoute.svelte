@@ -1,6 +1,7 @@
 <script lang="ts">
   import { ArrowLeft } from '@lucide/svelte';
   import { onMount } from 'svelte';
+  import { adminErrorMessage } from '$lib/application/admin-async-state';
   import type { UnifiedAdminContext } from '$lib/auth/unified-admin-context';
   import AdminMessage from '$lib/components/AdminMessage.svelte';
   import { McpBridgeClient } from '$lib/mcp/mcp-bridge-client';
@@ -70,7 +71,7 @@
       sessionState = {
         status: 'error',
         sessionId,
-        message: error instanceof Error ? error.message : 'Unexpected session detail error.',
+        message: adminErrorMessage(error, 'Unexpected session detail error.'),
       };
     }
   }
@@ -93,7 +94,7 @@
     } catch (error) {
       actionState = {
         status: 'error',
-        message: error instanceof Error ? error.message : 'Session refresh failed.',
+        message: adminErrorMessage(error, 'Session refresh failed.'),
       };
     }
   }
@@ -136,7 +137,7 @@
     } catch (error) {
       actionState = {
         status: 'error',
-        message: error instanceof Error ? error.message : 'Session recording enable failed.',
+        message: adminErrorMessage(error, 'Session recording enable failed.'),
       };
     }
   }
@@ -181,7 +182,7 @@
     } catch (error) {
       mcpActionState = {
         status: 'error',
-        message: error instanceof Error ? error.message : 'MCP bridge refresh failed.',
+        message: adminErrorMessage(error, 'MCP bridge refresh failed.'),
       };
     }
   }
@@ -250,7 +251,7 @@
     } catch (error) {
       mcpActionState = {
         status: 'error',
-        message: error instanceof Error ? error.message : 'MCP endpoint copy failed.',
+        message: adminErrorMessage(error, 'MCP endpoint copy failed.'),
       };
     }
   }
@@ -306,7 +307,7 @@
     } catch (error) {
       actionState = {
         status: 'error',
-        message: error instanceof Error ? error.message : 'Session action failed.',
+        message: adminErrorMessage(error, 'Session action failed.'),
       };
     }
   }
@@ -346,7 +347,7 @@
     } catch (error) {
       mcpActionState = {
         status: 'error',
-        message: error instanceof Error ? error.message : 'MCP action failed.',
+        message: adminErrorMessage(error, 'MCP action failed.'),
       };
     }
   }

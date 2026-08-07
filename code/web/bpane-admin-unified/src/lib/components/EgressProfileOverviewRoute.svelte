@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { adminErrorMessage } from '$lib/application/admin-async-state';
   import type { UnifiedAdminContext } from '$lib/auth/unified-admin-context';
   import { EgressProfileCatalogClient } from '$lib/egress-profiles/egress-profile-client';
   import type { EgressProfileOverviewLoadState } from '$lib/egress-profiles/egress-profile-overview-view-model';
@@ -35,7 +36,7 @@
     } catch (error) {
       profileState = {
         status: 'error',
-        message: error instanceof Error ? error.message : 'Unexpected egress profile catalog error.',
+        message: adminErrorMessage(error, 'Unexpected egress profile catalog error.'),
       };
     }
   }

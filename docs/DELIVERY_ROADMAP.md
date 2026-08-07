@@ -44,7 +44,7 @@ or capacity decision.
 
 | Lane | Outcome | Current entry point | Promotion target |
 | --- | --- | --- | --- |
-| Foundation | Trusted build, auth, contracts, storage, and lifecycle baseline. | #179 | Foundation Gate |
+| Foundation | Trusted build, auth, contracts, storage, and lifecycle baseline. | Complete through #179 | Foundation Gate |
 | Pilot Value | One bounded reference workflow with accepted evidence and runbook. | #174 | Phase 0 Gate |
 | Operator Product | Complete and promote `/admin-new/` as the default operator console. | #153 | Phase 1 Gate |
 | Production | Harden deployment, security, recovery, supply chain, and telemetry. | #72 / #66 / #178 | Production Baseline |
@@ -63,14 +63,14 @@ or capacity decision.
 | 3 | #147 | Done | #145 credential/log baseline | Callback and webhook SSRF controls merged through PR #191. |
 | 4 | #150 | Done | #147 callback boundary | Lifecycle, dependency readiness, and bounded drain merged through PR #192. |
 | 5 | #152 | Done | #150 stable readiness contract | Shared in-memory/Postgres store contract parity merged through PR #193. |
-| 6 | #179 | Review | #152 persistent behavior baseline | Control API lint, conformance, examples, compatibility policy, and CI enforcement implemented and fully validated. |
+| 6 | #179 | Done | #152 persistent behavior baseline | Control API lint, conformance, examples, compatibility policy, and CI enforcement merged through PR #194. |
 
 ### Next Three Product Slices
 
 | Order | Issue | State | Dependency | Outcome |
 | --- | --- | --- | --- | --- |
-| 1 | #179 | Review | #152 persistent behavior baseline | Merge the completed control API conformance and compatibility governance slice. |
-| 2 | #153 | Qualified | #179 Foundation Gate | Consolidate admin-new patterns and API-client behavior. |
+| 1 | #179 | Done | #152 persistent behavior baseline | Control API conformance and compatibility governance merged through PR #194. |
+| 2 | #153 | Review | #179 Foundation Gate | Consolidate admin-new patterns, API-client behavior, and feedback handling. |
 | 3 | #154 | Qualified | #153 shared admin-new patterns | Add route-backed workflow-run detail. |
 
 #151, #184, and #185 established and accelerated the required validation
@@ -79,10 +79,10 @@ baseline. #145 is merged through
 #190 and documented in `docs/BPANE-00146_ADMIN_AUTH_SECURITY_PLAN.md`. #147
 merged through PR #191. #150 merged through PR #192 after passing the canonical
 full 46-stage validation profile. #152 merged through PR #193 and the latest
-scheduled Compose run on that `main` commit passed. #179 is in Review after
-all 40 fast and all 10 Compose validation stages passed. After merge, #153 is
-the next Qualified product slice and must receive a bounded plan before it can
-enter Ready.
+scheduled Compose run on that `main` commit passed. #179 merged through PR #194
+after all 40 fast and all 10 Compose validation stages passed. #153 has
+completed implementation and validation on its feature branch and is under
+review; #154 remains the next qualified Operator Product slice after merge.
 
 ## Foundation Gate Sequence
 

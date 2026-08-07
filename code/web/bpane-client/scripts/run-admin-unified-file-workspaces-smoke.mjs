@@ -8,6 +8,13 @@ import {
   getAdminAccessToken,
 } from './admin-smoke-lib.mjs';
 import {
+  adminRouteUrl,
+  assertEqual,
+  assertNoBodyHorizontalOverflow,
+  assertNoHorizontalOverflow,
+  authJsonHeaders,
+} from './admin-unified-smoke-lib.mjs';
+import {
   DEFAULTS,
   apiOrigin,
   createLogger,
@@ -331,43 +338,6 @@ function verifyCreatedWorkspace(workspace, project, runLabel) {
   assertEqual(workspace.project_id, project.id, 'file workspace project id');
   assertEqual(workspace.labels?.suite, 'admin-unified-file-workspaces-smoke', 'file workspace suite label');
   assertEqual(workspace.labels?.run, runLabel, 'file workspace run label');
-}
-
-async function assertNoHorizontalOverflow(page, testId, label) {
-  const size = await page.getByTestId(testId).evaluate((element) => ({
-    clientWidth: element.clientWidth,
-    scrollWidth: element.scrollWidth,
-  }));
-  if (size.scrollWidth > size.clientWidth + 1) {
-    throw new Error(`${label} overflows horizontally: ${JSON.stringify(size)}`);
-  }
-}
-
-async function assertNoBodyHorizontalOverflow(page, label) {
-  const size = await page.evaluate(() => ({
-    clientWidth: document.documentElement.clientWidth,
-    scrollWidth: document.documentElement.scrollWidth,
-  }));
-  if (size.scrollWidth > size.clientWidth + 1) {
-    throw new Error(`${label} causes document horizontal overflow: ${JSON.stringify(size)}`);
-  }
-}
-
-function adminRouteUrl(options, routePath) {
-  return new URL(`/admin-new/${routePath.replace(/^\/+/, '')}`, apiOrigin(options)).toString();
-}
-
-function authJsonHeaders(accessToken) {
-  return {
-    Authorization: `Bearer ${accessToken}`,
-    'content-type': 'application/json',
-  };
-}
-
-function assertEqual(actual, expected, label) {
-  if (actual !== expected) {
-    throw new Error(`Expected ${label} to be ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
-  }
 }
 
 run().catch((error) => {

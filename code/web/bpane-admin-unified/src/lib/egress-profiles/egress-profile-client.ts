@@ -1,3 +1,12 @@
+import {
+  AdminApiRequestError,
+  AuthenticatedApiClient,
+  formatAdminApiRequestError,
+  type AccessTokenProvider,
+  type AdminApiRequestErrorCode,
+  type AdminApiRequestFailure,
+  type FetchLike,
+} from '$lib/api/authenticated-api';
 import type {
   EgressCustomCaConfig,
   EgressDiagnosticsHealth,
@@ -26,9 +35,8 @@ const EGRESS_PROOF_LEVELS = [
   'active_probe',
 ] satisfies readonly EgressDiagnosticsProofLevel[];
 
-export type AccessTokenProvider = () => Promise<string | null> | string | null;
-export type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-export type EgressProfileCatalogErrorCode = 'missing_token' | 'http_error' | 'invalid_payload';
+export type { AccessTokenProvider, FetchLike } from '$lib/api/authenticated-api';
+export type EgressProfileCatalogErrorCode = AdminApiRequestErrorCode;
 
 export type EgressProfileCatalogClientOptions = {
   readonly baseUrl: string | URL;
@@ -37,28 +45,37 @@ export type EgressProfileCatalogClientOptions = {
   readonly onAuthenticationFailure?: () => void;
 };
 
-export class EgressProfileCatalogError extends Error {
-  readonly status: number | null;
-  readonly code: EgressProfileCatalogErrorCode;
-
-  constructor(message: string, code: EgressProfileCatalogErrorCode, status: number | null = null) {
-    super(message);
+export class EgressProfileCatalogError extends AdminApiRequestError {
+  constructor(
+    message: string,
+    code: EgressProfileCatalogErrorCode,
+    status: number | null = null,
+    failure?: AdminApiRequestFailure,
+  ) {
+    super(message, failure ?? { code, status, message });
     this.name = 'EgressProfileCatalogError';
-    this.code = code;
-    this.status = status;
   }
 }
 export class EgressProfileCatalogClient {
   readonly #baseUrl: URL;
-  readonly #accessTokenProvider: AccessTokenProvider;
-  readonly #fetchImpl: FetchLike;
-  readonly #onAuthenticationFailure: (() => void) | undefined;
+  readonly #api: AuthenticatedApiClient;
 
   constructor(options: EgressProfileCatalogClientOptions) {
     this.#baseUrl = new URL(options.baseUrl);
-    this.#accessTokenProvider = options.accessTokenProvider;
-    this.#fetchImpl = options.fetchImpl ?? fetch;
-    this.#onAuthenticationFailure = options.onAuthenticationFailure;
+    this.#api = new AuthenticatedApiClient({
+      baseUrl: this.#baseUrl,
+      accessTokenProvider: options.accessTokenProvider,
+      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+      ...(options.onAuthenticationFailure === undefined
+        ? {}
+        : { onAuthenticationFailure: options.onAuthenticationFailure }),
+      errorFactory: (failure) => new EgressProfileCatalogError(
+        formatAdminApiRequestError('Egress profile catalog request', failure),
+        failure.code,
+        failure.status,
+        failure,
+      ),
+    });
   }
 
   async listEgressProfiles(): Promise<EgressProfileListResponse> {
@@ -127,30 +144,7 @@ export class EgressProfileCatalogClient {
   }
 
   async #request(input: URL, init: RequestInit): Promise<Response> {
-    const accessToken = await this.#accessTokenProvider();
-    if (!accessToken) {
-      throw new EgressProfileCatalogError('No active admin access token is available.', 'missing_token');
-    }
-
-    const headers = new Headers(init.headers);
-    headers.set('authorization', `Bearer ${accessToken}`);
-
-    const response = await this.#fetchImpl(input, {
-      ...init,
-      headers,
-    });
-    if (response.status === 401) {
-      this.#onAuthenticationFailure?.();
-    }
-    if (!response.ok) {
-      throw new EgressProfileCatalogError(
-        `Egress profile catalog request failed with HTTP ${response.status}.`,
-        'http_error',
-        response.status,
-      );
-    }
-
-    return response;
+    return await this.#api.request(input, init);
   }
 }
 

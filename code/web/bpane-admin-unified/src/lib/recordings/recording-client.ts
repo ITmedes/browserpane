@@ -1,3 +1,12 @@
+import {
+  AdminApiRequestError,
+  AuthenticatedApiClient,
+  formatAdminApiRequestError,
+  type AccessTokenProvider,
+  type AdminApiRequestErrorCode,
+  type AdminApiRequestFailure,
+  type FetchLike,
+} from '$lib/api/authenticated-api';
 import type { SessionResource } from '$lib/sessions/session-types';
 import type {
   RecordingCatalogEntry,
@@ -6,9 +15,8 @@ import type {
   SessionRecordingResource,
 } from './recording-types';
 
-export type AccessTokenProvider = () => Promise<string | null> | string | null;
-export type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-export type RecordingCatalogErrorCode = 'missing_token' | 'http_error' | 'invalid_payload';
+export type { AccessTokenProvider, FetchLike } from '$lib/api/authenticated-api';
+export type RecordingCatalogErrorCode = AdminApiRequestErrorCode;
 
 export type RecordingCatalogClientOptions = {
   readonly baseUrl: string | URL;
@@ -22,29 +30,38 @@ export type RecordingCatalogResponse = {
   readonly failures: readonly RecordingCatalogLoadFailure[];
 };
 
-export class RecordingCatalogError extends Error {
-  readonly status: number | null;
-  readonly code: RecordingCatalogErrorCode;
-
-  constructor(message: string, code: RecordingCatalogErrorCode, status: number | null = null) {
-    super(message);
+export class RecordingCatalogError extends AdminApiRequestError {
+  constructor(
+    message: string,
+    code: RecordingCatalogErrorCode,
+    status: number | null = null,
+    failure?: AdminApiRequestFailure,
+  ) {
+    super(message, failure ?? { code, status, message });
     this.name = 'RecordingCatalogError';
-    this.code = code;
-    this.status = status;
   }
 }
 
 export class RecordingCatalogClient {
   readonly #baseUrl: URL;
-  readonly #accessTokenProvider: AccessTokenProvider;
-  readonly #fetchImpl: FetchLike;
-  readonly #onAuthenticationFailure: (() => void) | undefined;
+  readonly #api: AuthenticatedApiClient;
 
   constructor(options: RecordingCatalogClientOptions) {
     this.#baseUrl = new URL(options.baseUrl);
-    this.#accessTokenProvider = options.accessTokenProvider;
-    this.#fetchImpl = options.fetchImpl ?? fetch;
-    this.#onAuthenticationFailure = options.onAuthenticationFailure;
+    this.#api = new AuthenticatedApiClient({
+      baseUrl: this.#baseUrl,
+      accessTokenProvider: options.accessTokenProvider,
+      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+      ...(options.onAuthenticationFailure === undefined
+        ? {}
+        : { onAuthenticationFailure: options.onAuthenticationFailure }),
+      errorFactory: (failure) => new RecordingCatalogError(
+        formatAdminApiRequestError('Recording catalog request', failure),
+        failure.code,
+        failure.status,
+        failure,
+      ),
+    });
   }
 
   async listRecordingsForSessions(sessions: readonly SessionResource[]): Promise<RecordingCatalogResponse> {
@@ -112,26 +129,7 @@ export class RecordingCatalogClient {
   }
 
   async #request(input: URL, init: RequestInit): Promise<Response> {
-    const accessToken = await this.#accessTokenProvider();
-    if (!accessToken) {
-      throw new RecordingCatalogError('No active admin access token is available.', 'missing_token');
-    }
-
-    const headers = new Headers(init.headers);
-    headers.set('authorization', `Bearer ${accessToken}`);
-
-    const response = await this.#fetchImpl(input, { ...init, headers });
-    if (response.status === 401) {
-      this.#onAuthenticationFailure?.();
-    }
-    if (!response.ok) {
-      throw new RecordingCatalogError(
-        `Recording catalog request failed with HTTP ${response.status}.`,
-        'http_error',
-        response.status,
-      );
-    }
-    return response;
+    return await this.#api.request(input, init);
   }
 }
 

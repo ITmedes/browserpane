@@ -5,6 +5,7 @@
     type SessionActionState,
     type SessionOverviewLoadState,
   } from '$lib/sessions/session-overview-view-model';
+  import ActionFeedback from './ActionFeedback.svelte';
   import AdminMessage from './AdminMessage.svelte';
   import SessionCatalogTable from './SessionCatalogTable.svelte';
 
@@ -59,13 +60,14 @@
     </div>
   </header>
 
-  {#if actionState.status === 'success'}
-    <AdminMessage tone="success" title="Session action completed" message={actionState.message} testId="sessions-action-success" />
-  {:else if actionState.status === 'error'}
-    <AdminMessage tone="error" title="Session action failed" message={actionState.message} testId="sessions-action-error" />
-  {:else if actionState.status === 'running'}
-    <AdminMessage tone="loading" title={actionState.label} testId="sessions-action-running" />
-  {/if}
+  <ActionFeedback
+    state={actionState}
+    successTitle="Session action completed"
+    errorTitle="Session action failed"
+    successTestId="sessions-action-success"
+    errorTestId="sessions-action-error"
+    runningTestId="sessions-action-running"
+  />
 
   {#if loadState.status === 'loading'}
     <section

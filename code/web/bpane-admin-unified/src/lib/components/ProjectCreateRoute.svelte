@@ -1,6 +1,8 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
   import { ArrowLeft } from '@lucide/svelte';
   import { onMount } from 'svelte';
+  import { adminErrorMessage } from '$lib/application/admin-async-state';
   import type { UnifiedAdminContext } from '$lib/auth/unified-admin-context';
   import { ProjectCatalogClient } from '$lib/projects/project-client';
   import type {
@@ -8,12 +10,12 @@
     ProjectPolicyOptionsLoadState,
   } from '$lib/projects/project-detail-state';
   import type { ProjectResource, UpsertProjectRequest } from '$lib/projects/project-types';
-  import AdminMessage from './AdminMessage.svelte';
+  import ActionFeedback from './ActionFeedback.svelte';
   import ProjectEditForm from './ProjectEditForm.svelte';
 
   type ProjectCreateRouteProps = {
     readonly authContext: UnifiedAdminContext;
-    readonly navigateToProject?: (project: ProjectResource) => void;
+    readonly navigateToProject?: (project: ProjectResource) => void | Promise<void>;
   };
 
   let {
@@ -45,7 +47,7 @@
     } catch (error) {
       policyOptionsState = {
         status: 'error',
-        message: error instanceof Error ? error.message : 'Project resource selector load failed.',
+        message: adminErrorMessage(error, 'Project resource selector load failed.'),
       };
     }
   }
@@ -55,17 +57,17 @@
     try {
       const project = await client().createProject(request);
       projectActionState = { status: 'success', message: 'Project created.' };
-      navigateToProject(project);
+      await navigateToProject(project);
     } catch (error) {
       projectActionState = {
         status: 'error',
-        message: error instanceof Error ? error.message : 'Project creation failed.',
+        message: adminErrorMessage(error, 'Project creation failed.'),
       };
     }
   }
 
-  function defaultNavigateToProject(project: ProjectResource): void {
-    window.location.assign(`/admin-new/projects/${encodeURIComponent(project.id)}`);
+  async function defaultNavigateToProject(project: ProjectResource): Promise<void> {
+    await goto(`/admin-new/projects/${encodeURIComponent(project.id)}`);
   }
 </script>
 
@@ -85,27 +87,14 @@
     </div>
   </header>
 
-  {#if projectActionState.status === 'success'}
-    <AdminMessage
-      tone="success"
-      title="Project action completed"
-      message={projectActionState.message}
-      testId="project-create-success"
-    />
-  {:else if projectActionState.status === 'error'}
-    <AdminMessage
-      tone="error"
-      title="Project action failed"
-      message={projectActionState.message}
-      testId="project-create-error"
-    />
-  {:else if projectActionState.status === 'running'}
-    <AdminMessage
-      tone="loading"
-      title={projectActionState.label}
-      testId="project-create-running"
-    />
-  {/if}
+  <ActionFeedback
+    state={projectActionState}
+    successTitle="Project action completed"
+    errorTitle="Project action failed"
+    successTestId="project-create-success"
+    errorTestId="project-create-error"
+    runningTestId="project-create-running"
+  />
 
   <ProjectEditForm
     mode="create"

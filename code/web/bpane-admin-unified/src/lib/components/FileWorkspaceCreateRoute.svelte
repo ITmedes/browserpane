@@ -1,6 +1,8 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
   import { ArrowLeft } from '@lucide/svelte';
   import { onMount } from 'svelte';
+  import { adminErrorMessage } from '$lib/application/admin-async-state';
   import type { UnifiedAdminContext } from '$lib/auth/unified-admin-context';
   import { FileWorkspaceCatalogClient } from '$lib/file-workspaces/file-workspace-client';
   import type {
@@ -8,12 +10,12 @@
     FileWorkspaceProjectOptionsLoadState,
   } from '$lib/file-workspaces/file-workspace-detail-state';
   import type { CreateFileWorkspaceRequest, FileWorkspaceResource } from '$lib/file-workspaces/file-workspace-types';
-  import AdminMessage from './AdminMessage.svelte';
+  import ActionFeedback from './ActionFeedback.svelte';
   import FileWorkspaceEditForm from './FileWorkspaceEditForm.svelte';
 
   type FileWorkspaceCreateRouteProps = {
     readonly authContext: UnifiedAdminContext;
-    readonly navigateToWorkspace?: (workspace: FileWorkspaceResource) => void;
+    readonly navigateToWorkspace?: (workspace: FileWorkspaceResource) => void | Promise<void>;
   };
 
   let {
@@ -45,7 +47,7 @@
     } catch (error) {
       projectOptionsState = {
         status: 'error',
-        message: error instanceof Error ? error.message : 'Project options load failed.',
+        message: adminErrorMessage(error, 'Project options load failed.'),
       };
     }
   }
@@ -55,17 +57,17 @@
     try {
       const workspace = await client().createFileWorkspace(request);
       actionState = { status: 'success', message: 'File workspace created.' };
-      navigateToWorkspace(workspace);
+      await navigateToWorkspace(workspace);
     } catch (error) {
       actionState = {
         status: 'error',
-        message: error instanceof Error ? error.message : 'File workspace creation failed.',
+        message: adminErrorMessage(error, 'File workspace creation failed.'),
       };
     }
   }
 
-  function defaultNavigateToWorkspace(workspace: FileWorkspaceResource): void {
-    window.location.assign(`/admin-new/files/workspaces/${encodeURIComponent(workspace.id)}`);
+  async function defaultNavigateToWorkspace(workspace: FileWorkspaceResource): Promise<void> {
+    await goto(`/admin-new/files/workspaces/${encodeURIComponent(workspace.id)}`);
   }
 </script>
 
@@ -85,13 +87,14 @@
     </div>
   </header>
 
-  {#if actionState.status === 'success'}
-    <AdminMessage tone="success" title="File workspace action completed" message={actionState.message} testId="file-workspace-create-success" />
-  {:else if actionState.status === 'error'}
-    <AdminMessage tone="error" title="File workspace action failed" message={actionState.message} testId="file-workspace-create-error" />
-  {:else if actionState.status === 'running'}
-    <AdminMessage tone="loading" title={actionState.label} testId="file-workspace-create-running" />
-  {/if}
+  <ActionFeedback
+    state={actionState}
+    successTitle="File workspace action completed"
+    errorTitle="File workspace action failed"
+    successTestId="file-workspace-create-success"
+    errorTestId="file-workspace-create-error"
+    runningTestId="file-workspace-create-running"
+  />
 
   <FileWorkspaceEditForm
     disabled={busy}
