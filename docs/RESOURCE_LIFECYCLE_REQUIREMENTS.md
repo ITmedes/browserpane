@@ -52,6 +52,15 @@ Clone/export/import:
 - import must validate archive size, entry count, manifest, profile archive
   size, and symlink/hardlink safety before extraction.
 
+Import safety status:
+
+- `#148` implements authenticated bounded request reads, concurrency
+  backpressure, blocking archive preflight, compressed/expanded/entry/path
+  limits, link and special-file rejection, and defensive runtime extraction.
+- BrowserPane exports omit ephemeral Chromium symlinks and sockets so generated
+  archives remain compatible with the strict importer.
+- Admin-new clone/import/export controls remain owned by `#160`.
+
 Admin-new status:
 
 - catalog/create/detail/edit exist,
