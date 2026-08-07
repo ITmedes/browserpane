@@ -229,7 +229,7 @@ describe('ProjectCatalogClient', () => {
       apiCode: 'project_policy_conflict',
       apiCategory: 'conflict',
       recoveryHint: 'Refresh the project before saving again.',
-      message: 'Project catalog request failed with HTTP 409: Project policy changed.',
+      message: 'Project catalog request failed with HTTP 409: Project policy changed. Recovery: Refresh the project before saving again.',
     });
   });
 
