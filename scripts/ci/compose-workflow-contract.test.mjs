@@ -36,6 +36,7 @@ test('compose workflow preserves every browser-facing smoke stage', () => {
     'compose-admin-auth-security',
     'compose-admin-new-dashboard',
     'compose-admin-new-projects',
+    'compose-admin-new-resource-catalogs',
     'compose-admin-new-sessions',
     'compose-admin-new-api-companion',
     'compose-admin-compat',

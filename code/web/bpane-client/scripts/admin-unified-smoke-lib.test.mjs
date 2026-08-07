@@ -13,10 +13,10 @@ import {
 
 describe('admin unified smoke helpers', () => {
   it('keeps route names, paths, and ready selectors unique', () => {
-    assert.equal(ADMIN_UNIFIED_ROUTE_MANIFEST.length, 13);
-    assert.equal(new Set(ADMIN_UNIFIED_ROUTE_MANIFEST.map((route) => route.name)).size, 13);
-    assert.equal(new Set(ADMIN_UNIFIED_ROUTE_MANIFEST.map((route) => route.path)).size, 13);
-    assert.equal(new Set(ADMIN_UNIFIED_ROUTE_MANIFEST.map((route) => route.readyTestId)).size, 13);
+    assert.equal(ADMIN_UNIFIED_ROUTE_MANIFEST.length, 16);
+    assert.equal(new Set(ADMIN_UNIFIED_ROUTE_MANIFEST.map((route) => route.name)).size, 16);
+    assert.equal(new Set(ADMIN_UNIFIED_ROUTE_MANIFEST.map((route) => route.path)).size, 16);
+    assert.equal(new Set(ADMIN_UNIFIED_ROUTE_MANIFEST.map((route) => route.readyTestId)).size, 16);
   });
 
   it('builds normalized admin-new URLs and JSON auth headers', () => {

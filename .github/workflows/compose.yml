@@ -122,6 +122,7 @@ jobs:
           --stage compose-admin-auth-security
           --stage compose-admin-new-dashboard
           --stage compose-admin-new-projects
+          --stage compose-admin-new-resource-catalogs
           --stage compose-admin-new-sessions
           --stage compose-admin-new-api-companion
           --stage compose-admin-compat

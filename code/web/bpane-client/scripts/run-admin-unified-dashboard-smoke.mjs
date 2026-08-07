@@ -37,7 +37,7 @@ async function run() {
     await waitForDashboardMetric(page, options, 'dashboard-metric-workflow-runs');
     await expectLink(page, 'dashboard-link-sessions', '/admin-new/sessions');
     await expectLink(page, 'dashboard-link-projects', '/admin-new/projects');
-    await expectLink(page, 'dashboard-link-runs', '/admin-new/runs');
+    await expectLink(page, 'dashboard-link-runs', '/admin-new/workflow-runs');
     await expectLink(page, 'dashboard-link-recordings', '/admin-new/recordings');
     await assertNoBodyHorizontalOverflow(page, 'unified dashboard');
     await assertNoHorizontalOverflow(page, 'dashboard-overview', 'unified dashboard overview');

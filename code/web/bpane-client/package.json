@@ -27,6 +27,7 @@
     "smoke:admin-unified-dashboard": "node scripts/run-admin-unified-dashboard-smoke.mjs",
     "smoke:admin-unified-egress-profiles": "node scripts/run-admin-unified-egress-profiles-smoke.mjs",
     "smoke:admin-unified-projects": "node scripts/run-admin-unified-projects-smoke.mjs",
+    "smoke:admin-unified-resource-catalogs": "node scripts/run-admin-unified-resource-catalogs-smoke.mjs",
     "smoke:admin-unified-recordings": "node scripts/run-admin-unified-recordings-smoke.mjs",
     "smoke:admin-unified-sessions": "node scripts/run-admin-unified-sessions-smoke.mjs",
     "smoke:admin-unified-workflow-runs": "node scripts/run-admin-unified-workflow-runs-smoke.mjs",

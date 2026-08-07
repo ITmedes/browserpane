@@ -3,6 +3,7 @@
   import { adminErrorMessage, type AdminActionState } from '$lib/application/admin-async-state';
   import type { UnifiedAdminContext } from '$lib/auth/unified-admin-context';
   import { McpBridgeClient, type McpBridgeHealth } from '$lib/mcp/mcp-bridge-client';
+  import { waitForMcpControlSession } from '$lib/mcp/mcp-bridge-health-poller';
   import {
     buildMcpDelegationViewModel,
     isDelegatedToBridge,
@@ -188,6 +189,7 @@
         });
       }
       await bridgeClient.setControlSession(requestSessionId);
+      return await waitForMcpControlSession(() => bridgeClient.getHealth(), requestSessionId);
     });
   }
 
@@ -199,6 +201,7 @@
       bridgeClient,
     ) => {
       await bridgeClient.clearControlSession();
+      return await waitForMcpControlSession(() => bridgeClient.getHealth(), null);
     });
   }
 
@@ -226,7 +229,7 @@
       requestSessionId: string,
       bridge: NonNullable<typeof mcpBridge>,
       bridgeClient: McpBridgeClient,
-    ) => Promise<void>,
+    ) => Promise<McpBridgeHealth | void>,
   ): Promise<void> {
     const requestSessionId = sessionId;
     const bridge = mcpBridge;
@@ -241,13 +244,13 @@
     const catalog = sessionClient();
     mcpActionState = { status: 'running', label: runningLabel };
     try {
-      await mutation(catalog, requestSessionId, bridge, bridgeClient);
+      const convergedHealth = await mutation(catalog, requestSessionId, bridge, bridgeClient);
       const session = await catalog.getSession(requestSessionId);
       if (loadedSessionId !== requestSessionId || routeState.status !== 'ready') {
         return;
       }
       routeState = { ...routeState, session };
-      mcpHealth = await bridgeClient.getHealth();
+      mcpHealth = convergedHealth ?? (await bridgeClient.getHealth());
       mcpActionState = { status: 'success', message: successMessage };
     } catch (error) {
       if (loadedSessionId === requestSessionId) {

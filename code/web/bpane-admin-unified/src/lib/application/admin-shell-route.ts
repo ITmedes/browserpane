@@ -47,6 +47,24 @@ export function resolveAdminShellRoute(pathname: string): AdminShellRoute | null
   if (route.startsWith('/files/workspaces/')) {
     return { activeId: 'workspaces', title: 'BrowserPane File Workspace Details' };
   }
+  if (route === '/extensions') {
+    return { activeId: 'extensions', title: 'BrowserPane Approved Extensions' };
+  }
+  if (route === '/extensions/new') {
+    return { activeId: 'extensions', title: 'BrowserPane New Approved Extension' };
+  }
+  if (route.startsWith('/extensions/')) {
+    return { activeId: 'extensions', title: 'BrowserPane Extension Details' };
+  }
+  if (route === '/credential-bindings') {
+    return { activeId: 'credentials', title: 'BrowserPane Credential Bindings' };
+  }
+  if (route === '/credential-bindings/new') {
+    return { activeId: 'credentials', title: 'BrowserPane New Credential Binding' };
+  }
+  if (route.startsWith('/credential-bindings/')) {
+    return { activeId: 'credentials', title: 'BrowserPane Credential Binding Details' };
+  }
   if (route === '/workflows') {
     return { activeId: 'workflows', title: 'BrowserPane Workflows' };
   }
@@ -54,14 +72,19 @@ export function resolveAdminShellRoute(pathname: string): AdminShellRoute | null
     return { activeId: 'workflows', title: 'BrowserPane Workflow Details' };
   }
   if (route === '/runs' || route.startsWith('/runs/')) {
-    return { activeId: 'runs', title: route === '/runs'
-      ? 'BrowserPane Workflow Runs'
-      : 'BrowserPane Workflow Run Details' };
+    return {
+      activeId: 'runs',
+      title: route === '/runs' ? 'BrowserPane Workflow Runs' : 'BrowserPane Workflow Run Details',
+    };
   }
   if (route === '/workflow-runs' || route.startsWith('/workflow-runs/')) {
-    return { activeId: 'runs', title: route === '/workflow-runs'
-      ? 'BrowserPane Workflow Runs'
-      : 'BrowserPane Workflow Run Details' };
+    return {
+      activeId: 'runs',
+      title:
+        route === '/workflow-runs'
+          ? 'BrowserPane Workflow Runs'
+          : 'BrowserPane Workflow Run Details',
+    };
   }
   if (route === '/sessions') {
     return { activeId: 'sessions', title: 'BrowserPane Sessions' };
@@ -89,6 +112,15 @@ export function resolveAdminShellRoute(pathname: string): AdminShellRoute | null
   }
   if (route === '/identity') {
     return { activeId: 'identity', title: 'BrowserPane Identity And Access' };
+  }
+  if (route === '/workflow-event-subscriptions') {
+    return { activeId: 'events', title: 'BrowserPane Workflow Event Subscriptions' };
+  }
+  if (route === '/workflow-event-subscriptions/new') {
+    return { activeId: 'events', title: 'BrowserPane New Workflow Event Subscription' };
+  }
+  if (route.startsWith('/workflow-event-subscriptions/')) {
+    return { activeId: 'events', title: 'BrowserPane Workflow Event Subscription Details' };
   }
   if (route === '/api') {
     return { activeId: 'api', title: 'BrowserPane API Reference' };
