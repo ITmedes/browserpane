@@ -1,6 +1,7 @@
 <script lang="ts">
   import { ArrowLeft } from '@lucide/svelte';
   import { onMount } from 'svelte';
+  import { adminErrorMessage } from '$lib/application/admin-async-state';
   import type { UnifiedAdminContext } from '$lib/auth/unified-admin-context';
   import AdminMessage from '$lib/components/AdminMessage.svelte';
   import ProjectInspector from '$lib/components/ProjectInspector.svelte';
@@ -53,7 +54,7 @@
       projectState = {
         status: 'error',
         projectId,
-        message: error instanceof Error ? error.message : 'Unexpected project detail error.',
+        message: adminErrorMessage(error, 'Unexpected project detail error.'),
       };
     }
   }
@@ -66,7 +67,7 @@
     } catch (error) {
       policyOptionsState = {
         status: 'error',
-        message: error instanceof Error ? error.message : 'Project resource selector load failed.',
+        message: adminErrorMessage(error, 'Project resource selector load failed.'),
       };
     }
   }
@@ -84,7 +85,7 @@
     } catch (error) {
       projectActionState = {
         status: 'error',
-        message: error instanceof Error ? error.message : 'Project refresh failed.',
+        message: adminErrorMessage(error, 'Project refresh failed.'),
       };
     }
   }
@@ -102,7 +103,7 @@
     } catch (error) {
       projectActionState = {
         status: 'error',
-        message: error instanceof Error ? error.message : 'Project usage refresh failed.',
+        message: adminErrorMessage(error, 'Project usage refresh failed.'),
       };
     }
   }
@@ -120,7 +121,7 @@
     } catch (error) {
       projectActionState = {
         status: 'error',
-        message: error instanceof Error ? error.message : 'Project save failed.',
+        message: adminErrorMessage(error, 'Project save failed.'),
       };
     }
   }

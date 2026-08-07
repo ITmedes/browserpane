@@ -1,6 +1,7 @@
 <script lang="ts">
   import { ArrowLeft } from '@lucide/svelte';
   import { onMount } from 'svelte';
+  import { adminErrorMessage } from '$lib/application/admin-async-state';
   import type { UnifiedAdminContext } from '$lib/auth/unified-admin-context';
   import { FileWorkspaceCatalogClient } from '$lib/file-workspaces/file-workspace-client';
   import type {
@@ -54,7 +55,7 @@
       workspaceState = {
         status: 'error',
         workspaceId,
-        message: error instanceof Error ? error.message : 'Unexpected file workspace detail error.',
+        message: adminErrorMessage(error, 'Unexpected file workspace detail error.'),
       };
     }
   }
@@ -76,7 +77,7 @@
     } catch (error) {
       actionState = {
         status: 'error',
-        message: error instanceof Error ? error.message : 'File workspace refresh failed.',
+        message: adminErrorMessage(error, 'File workspace refresh failed.'),
       };
     }
   }
@@ -105,7 +106,7 @@
     } catch (error) {
       actionState = {
         status: 'error',
-        message: error instanceof Error ? error.message : 'Workspace file upload failed.',
+        message: adminErrorMessage(error, 'Workspace file upload failed.'),
       };
     }
   }
@@ -119,7 +120,7 @@
     } catch (error) {
       actionState = {
         status: 'error',
-        message: error instanceof Error ? error.message : 'Workspace file download failed.',
+        message: adminErrorMessage(error, 'Workspace file download failed.'),
       };
     }
   }
@@ -140,7 +141,7 @@
     } catch (error) {
       actionState = {
         status: 'error',
-        message: error instanceof Error ? error.message : 'Workspace file delete failed.',
+        message: adminErrorMessage(error, 'Workspace file delete failed.'),
       };
     }
   }

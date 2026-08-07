@@ -1,6 +1,7 @@
 <script lang="ts">
   import { ArrowLeft } from '@lucide/svelte';
   import { onMount } from 'svelte';
+  import { adminErrorMessage } from '$lib/application/admin-async-state';
   import type { UnifiedAdminContext } from '$lib/auth/unified-admin-context';
   import { BrowserContextCatalogClient } from '$lib/browser-contexts/browser-context-client';
   import type {
@@ -49,7 +50,7 @@
       contextState = {
         status: 'error',
         contextId,
-        message: error instanceof Error ? error.message : 'Unexpected browser context detail error.',
+        message: adminErrorMessage(error, 'Unexpected browser context detail error.'),
       };
     }
   }
@@ -67,7 +68,7 @@
     } catch (error) {
       actionState = {
         status: 'error',
-        message: error instanceof Error ? error.message : 'Browser context refresh failed.',
+        message: adminErrorMessage(error, 'Browser context refresh failed.'),
       };
     }
   }
@@ -85,7 +86,7 @@
     } catch (error) {
       actionState = {
         status: 'error',
-        message: error instanceof Error ? error.message : 'Browser context delete failed.',
+        message: adminErrorMessage(error, 'Browser context delete failed.'),
       };
     }
   }
