@@ -35,13 +35,13 @@ impl BrowserContextImportArchiveError {
 type ImportArchiveResult<T> = Result<T, BrowserContextImportArchiveError>;
 
 #[derive(Debug, Clone, Copy)]
-pub(super) struct BrowserContextImportArchiveLimits {
-    pub max_archive_bytes: u64,
-    pub max_manifest_bytes: u64,
-    pub max_profile_archive_bytes: u64,
-    pub max_profile_uncompressed_bytes: u64,
-    pub max_profile_entries: usize,
-    pub max_profile_path_bytes: usize,
+pub(crate) struct BrowserContextImportArchiveLimits {
+    pub(crate) max_archive_bytes: u64,
+    pub(crate) max_manifest_bytes: u64,
+    pub(crate) max_profile_archive_bytes: u64,
+    pub(crate) max_profile_uncompressed_bytes: u64,
+    pub(crate) max_profile_entries: usize,
+    pub(crate) max_profile_path_bytes: usize,
 }
 
 impl Default for BrowserContextImportArchiveLimits {
@@ -57,14 +57,14 @@ impl Default for BrowserContextImportArchiveLimits {
     }
 }
 
-#[derive(Clone)]
-pub(super) struct BrowserContextImportService {
+#[derive(Debug, Clone)]
+pub(crate) struct BrowserContextImportService {
     limits: BrowserContextImportArchiveLimits,
     permits: Arc<Semaphore>,
 }
 
 impl BrowserContextImportService {
-    pub(super) fn new(
+    pub(crate) fn new(
         limits: BrowserContextImportArchiveLimits,
         max_concurrent_imports: NonZeroUsize,
     ) -> Self {
@@ -74,7 +74,7 @@ impl BrowserContextImportService {
         }
     }
 
-    pub(super) fn limits(&self) -> BrowserContextImportArchiveLimits {
+    pub(crate) fn limits(&self) -> BrowserContextImportArchiveLimits {
         self.limits
     }
 

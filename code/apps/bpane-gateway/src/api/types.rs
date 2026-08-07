@@ -69,6 +69,7 @@ pub(crate) struct ApiServerConfig {
     pub idle_stop_timeout: std::time::Duration,
     pub public_gateway_url: String,
     pub default_owner_mode: SessionOwnerMode,
+    pub browser_context_import: BrowserContextImportService,
     pub mcp_bridge_control: Option<McpBridgeControlConfig>,
 }
 
