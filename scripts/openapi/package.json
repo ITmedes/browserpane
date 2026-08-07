@@ -1,0 +1,19 @@
+{
+  "name": "browserpane-openapi-governance",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "npm run lint && npm run inventory",
+    "compatibility": "node src/check-compatibility.mjs",
+    "generate": "node src/generate-contract.mjs",
+    "inventory": "node src/check-contract.mjs",
+    "lint": "redocly lint --config redocly.yaml ../../openapi/bpane-control-v1.yaml",
+    "test": "node --test test/*.test.mjs"
+  },
+  "devDependencies": {
+    "@redocly/cli": "2.45.0",
+    "openapi-diff": "0.24.1",
+    "yaml": "2.9.0"
+  }
+}
