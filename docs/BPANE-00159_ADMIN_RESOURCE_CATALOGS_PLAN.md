@@ -3,12 +3,12 @@
 ## Metadata
 
 - Issue: `#159`
-- State: In Progress
+- State: Review
 - Lane: Operator Product
 - Target gate: Phase 1 Gate
 - Depends on: merged `#153` shared admin-new patterns and merged `#158` API companion
 - Excludes: session-template catalog work owned by `#124`
-- Last verified: `main` at `67df2f46135aedebe1bffa06ba2cd5cd30daa363`, 2026-08-07
+- Last verified: `feature/BPANE-00159` at `43f1f536ed596766a5b4b2e50d0c937102d402c1`, 2026-08-07
 
 ## Business Outcome
 
@@ -143,19 +143,19 @@ recovering either secret from the UI.
 
 ## Implementation Slices
 
-1. **Plan and route foundation**: create this plan, align issue context, add
+1. **Plan and route foundation (complete)**: create this plan, align issue context, add
    navigation/shell route definitions and tests. Commit boundary: docs and route
    foundation.
-2. **Approved extensions**: types, strict client, view models, catalog/create/
+2. **Approved extensions (complete)**: types, strict client, view models, catalog/create/
    detail components, version publishing, enable/disable, and focused tests.
    Commit boundary: complete extension catalog.
-3. **Credential bindings**: types, strict client, project options, safe creation
+3. **Credential bindings (complete)**: types, strict client, project options, safe creation
    form, read-only detail, and focused tests. Commit boundary: complete
    credential-binding catalog.
-4. **Workflow event subscriptions**: types, strict client, catalog/create/detail,
+4. **Workflow event subscriptions (complete)**: types, strict client, catalog/create/detail,
    delete, delivery health, and focused tests. Commit boundary: complete event
    subscription catalog.
-5. **Battle test and documentation**: compose-backed admin smoke, existing
+5. **Battle test and documentation (complete locally; CI review pending)**: compose-backed admin smoke, existing
    extension/credential/event regressions, type/build/coverage, current-state and
    roadmap updates. Commit boundary: validation and status evidence.
 
@@ -217,7 +217,8 @@ recovering either secret from the UI.
 
 ## Documentation And Claim Impact
 
-- Mark #159 implemented only after compose smoke evidence is recorded.
+- Mark #159 implemented on the feature branch; merge only after the final
+  Compose and required PR checks pass.
 - Update `ADMIN_NEW_STATUS.md`, `DELIVERY_ROADMAP.md`,
   `OPEN_ISSUES_CONTEXT.md`, and manual checkpoint commands.
 - Update `README.md` only if its admin-new capability summary names these
@@ -251,10 +252,20 @@ recovering either secret from the UI.
 
 ## Evidence Record
 
-- PR: pending
-- Commits: pending
-- Unit/integration results: pending
-- Compose smoke results: pending
-- Coverage/build results: pending
-- README decision: pending
-- ARCH decision: pending
+- PR: pending creation after final Compose validation
+- Commits: `419d4b1` through `43f1f53`
+- Unit/integration results: 184 admin-new test files and 570 tests passed;
+  focused extension, credential-binding, event-subscription, delivery-health,
+  and MCP convergence tests passed.
+- Compose smoke results: the new
+  `smoke:admin-unified-resource-catalogs` passed locally, as did projects,
+  egress, workflows, workflow events, workflow extension, workflow
+  credentials, credential injection, API companion, and session/MCP
+  regressions. The final GitHub Compose run is pending review.
+- Coverage/build results: admin-new coverage passed with 91.95% statements,
+  76.45% branches, 93.86% functions, and 90.05% lines; Svelte check and the
+  production build passed.
+- README decision: updated because the unified-admin capability summary names
+  the resource catalogs.
+- ARCH decision: no update required; this slice consumes existing control-plane
+  contracts and does not change subsystem ownership or runtime topology.

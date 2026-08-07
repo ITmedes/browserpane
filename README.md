@@ -26,9 +26,11 @@ The current prototype includes the dashboard; project, browser-context,
 egress-profile, and file-workspace catalogs; session create/detail and popup
 preview flows; recording catalog/download; workflow source, version, and run
 launching; workflow-run catalog/detail; identity/access review and registry
-management; and refresh-safe session live, files, recordings, network,
-automation, policy, and observability routes. Contract-derived API, coverage,
-and docs companions are implemented; the remaining resource catalogs are not.
+management; approved-extension, credential-binding, and workflow-event
+subscription catalogs; and refresh-safe session live, files, recordings,
+network, automation, policy, and observability routes. Contract-derived API,
+coverage, and docs companions are implemented. Session-template and operation
+counter catalogs remain open.
 See the
 [admin-new implementation status](docs/ADMIN_NEW_STATUS.md) for the maintained
 route-level matrix.
@@ -124,7 +126,9 @@ Current support and scope:
   catalog/detail, identity/access review, and session
   live/files/recordings/network/automation/policy/observability routes are
   implemented. Contract-derived API, coverage, and docs companions are also
-  implemented. Remaining resource catalogs are still open; `/admin/` remains
+  implemented, together with approved-extension, credential-binding, and signed
+  workflow-event subscription catalogs. Session-template and operation-counter
+  catalogs remain open; `/admin/` remains
   the compatibility fallback until
   [issue #163](https://github.com/ITmedes/browserpane/issues/163) completes the
   promotion and rollback gate.
