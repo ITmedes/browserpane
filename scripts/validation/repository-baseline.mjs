@@ -9,6 +9,9 @@ const DEFAULT_REQUIRED_PATHS = [
   '.github/workflows/compose.yml',
   '.nvmrc',
   'openapi/bpane-control-v1.yaml',
+  'openapi/bpane-control-v1.classifications.json',
+  'openapi/bpane-control-v1.examples.json',
+  'openapi/bpane-control-v1.operations.json',
   'docs/BPANE-00151_MINIMAL_CI_VALIDATION_PLAN.md',
   'docs/VALIDATION_MATRIX.md',
   'quality/coverage-baselines.json',
@@ -18,6 +21,9 @@ const DEFAULT_REQUIRED_PATHS = [
   'scripts/collect-compose-diagnostics.mjs',
   'scripts/ci/cleanup-compose.sh',
   'scripts/run-rust-coverage.mjs',
+  'scripts/openapi/package-lock.json',
+  'scripts/openapi/package.json',
+  'scripts/openapi/redocly.yaml',
   'scripts/validate.mjs',
   'rust-toolchain.toml',
   'security/dependency-exceptions.json',
@@ -30,7 +36,8 @@ const DEFAULT_PACKAGES = [
   ['code/web/bpane-client', ['check', 'test', 'test:coverage', 'build']],
   ['code/integrations/mcp-bridge', ['test', 'build']],
   ['code/integrations/recording-worker', ['build']],
-  ['code/integrations/workflow-worker', ['build']]
+  ['code/integrations/workflow-worker', ['build']],
+  ['scripts/openapi', ['test', 'check', 'compatibility']]
 ];
 
 const DEFAULT_DOCUMENTED_COMMANDS = [
@@ -40,7 +47,10 @@ const DEFAULT_DOCUMENTED_COMMANDS = [
   ['README.md', 'node scripts/check-dependency-safety.mjs'],
   ['README.md', 'node scripts/check-repository-documents.mjs'],
   ['README.md', 'node scripts/validate.mjs --profile fast'],
-  ['docs/VALIDATION_MATRIX.md', 'node scripts/validate.mjs --profile fast']
+  ['docs/VALIDATION_MATRIX.md', 'node scripts/validate.mjs --profile fast'],
+  ['AGENTS.md', 'npm run check --prefix scripts/openapi'],
+  ['README.md', 'npm run check --prefix scripts/openapi'],
+  ['docs/VALIDATION_MATRIX.md', 'npm run check --prefix scripts/openapi']
 ];
 
 export class RepositoryBaselineChecker {
