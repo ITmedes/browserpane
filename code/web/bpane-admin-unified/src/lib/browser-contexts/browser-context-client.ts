@@ -1,3 +1,12 @@
+import {
+  AdminApiRequestError,
+  AuthenticatedApiClient,
+  formatAdminApiRequestError,
+  type AccessTokenProvider,
+  type AdminApiRequestErrorCode,
+  type AdminApiRequestFailure,
+  type FetchLike,
+} from '$lib/api/authenticated-api';
 import type {
   BrowserContextListResponse,
   BrowserContextPersistenceMode,
@@ -13,9 +22,8 @@ const BROWSER_CONTEXT_STATES = ['ready', 'deleted'] satisfies readonly BrowserCo
 const BROWSER_CONTEXT_PERSISTENCE_MODES = ['reusable', 'ephemeral'] satisfies readonly BrowserContextPersistenceMode[];
 const PROJECT_STATES = ['active', 'archived'] satisfies readonly BrowserContextProjectResource['state'][];
 
-export type AccessTokenProvider = () => Promise<string | null> | string | null;
-export type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-export type BrowserContextCatalogErrorCode = 'missing_token' | 'http_error' | 'invalid_payload';
+export type { AccessTokenProvider, FetchLike } from '$lib/api/authenticated-api';
+export type BrowserContextCatalogErrorCode = AdminApiRequestErrorCode;
 
 export type BrowserContextCatalogClientOptions = {
   readonly baseUrl: string | URL;
@@ -24,29 +32,38 @@ export type BrowserContextCatalogClientOptions = {
   readonly onAuthenticationFailure?: () => void;
 };
 
-export class BrowserContextCatalogError extends Error {
-  readonly status: number | null;
-  readonly code: BrowserContextCatalogErrorCode;
-
-  constructor(message: string, code: BrowserContextCatalogErrorCode, status: number | null = null) {
-    super(message);
+export class BrowserContextCatalogError extends AdminApiRequestError {
+  constructor(
+    message: string,
+    code: BrowserContextCatalogErrorCode,
+    status: number | null = null,
+    failure?: AdminApiRequestFailure,
+  ) {
+    super(message, failure ?? { code, status, message });
     this.name = 'BrowserContextCatalogError';
-    this.code = code;
-    this.status = status;
   }
 }
 
 export class BrowserContextCatalogClient {
   readonly #baseUrl: URL;
-  readonly #accessTokenProvider: AccessTokenProvider;
-  readonly #fetchImpl: FetchLike;
-  readonly #onAuthenticationFailure: (() => void) | undefined;
+  readonly #api: AuthenticatedApiClient;
 
   constructor(options: BrowserContextCatalogClientOptions) {
     this.#baseUrl = new URL(options.baseUrl);
-    this.#accessTokenProvider = options.accessTokenProvider;
-    this.#fetchImpl = options.fetchImpl ?? fetch;
-    this.#onAuthenticationFailure = options.onAuthenticationFailure;
+    this.#api = new AuthenticatedApiClient({
+      baseUrl: this.#baseUrl,
+      accessTokenProvider: options.accessTokenProvider,
+      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+      ...(options.onAuthenticationFailure === undefined
+        ? {}
+        : { onAuthenticationFailure: options.onAuthenticationFailure }),
+      errorFactory: (failure) => new BrowserContextCatalogError(
+        formatAdminApiRequestError('Browser context catalog request', failure),
+        failure.code,
+        failure.status,
+        failure,
+      ),
+    });
   }
 
   async listBrowserContexts(): Promise<BrowserContextListResponse> {
@@ -113,30 +130,7 @@ export class BrowserContextCatalogClient {
   }
 
   async #request(input: URL, init: RequestInit): Promise<Response> {
-    const accessToken = await this.#accessTokenProvider();
-    if (!accessToken) {
-      throw new BrowserContextCatalogError('No active admin access token is available.', 'missing_token');
-    }
-
-    const headers = new Headers(init.headers);
-    headers.set('authorization', `Bearer ${accessToken}`);
-
-    const response = await this.#fetchImpl(input, {
-      ...init,
-      headers,
-    });
-    if (response.status === 401) {
-      this.#onAuthenticationFailure?.();
-    }
-    if (!response.ok) {
-      throw new BrowserContextCatalogError(
-        `Browser context catalog request failed with HTTP ${response.status}.`,
-        'http_error',
-        response.status,
-      );
-    }
-
-    return response;
+    return await this.#api.request(input, init);
   }
 }
 
