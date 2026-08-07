@@ -87,24 +87,26 @@ treated as complete.
 
 ## Live Browser
 
-1. Open a ready session live surface or preview popup.
-2. Attach and confirm the browser becomes visible.
-3. Resize the popup/window and confirm browser height derives from the live
+1. Open `/admin-new/sessions/{session_id}/live` directly and refresh it.
+2. Confirm runtime, connection, and resolution facts match the session status
+   API, then launch the standalone preview popup.
+3. Attach and confirm the browser becomes visible.
+4. Resize the popup/window and confirm browser height derives from the live
    container/canvas, not the outer window.
-4. Navigate away while attached and confirm the attach/follow state is clear.
-5. Return to live and confirm the same session is still attached when intended.
-6. Disconnect and confirm live state is cleaned up.
-7. Switch sessions and confirm the old canvas is not reused.
-8. Simulate a WebTransport opening-handshake failure and confirm the error
+5. Navigate away while attached and confirm the attach/follow state is clear.
+6. Return to live and confirm the same session is still attached when intended.
+7. Disconnect and confirm live state is cleaned up.
+8. Switch sessions and confirm the old canvas is not reused.
+9. Simulate a WebTransport opening-handshake failure and confirm the error
    mentions the gateway URL, local QUIC trust guidance, and SPKI fingerprint
    helper.
-9. Confirm upload, desktop audio, microphone, camera, clipboard, HiDPI,
+10. Confirm upload, desktop audio, microphone, camera, clipboard, HiDPI,
    scroll-copy, and render-backend controls respect capabilities and policy.
 
 ## Session Files
 
 1. Upload a small file through the live browser flow where policy allows it.
-2. Open the session files area.
+2. Open `/admin-new/sessions/{session_id}/files` directly and refresh it.
 3. Confirm the session file appears and can be downloaded.
 4. Bind a workspace file to a relative mount path.
 5. Try an absolute or parent-traversal mount path and confirm validation blocks
@@ -112,31 +114,54 @@ treated as complete.
 6. Bind files with `read_only`, `read_write`, and `scratch_output` where
    allowed, and confirm the resulting mode is visible.
 7. Refresh the route and confirm bindings remain visible.
+8. Disable project file bindings and confirm existing evidence remains visible
+   while create/remove controls are blocked with a policy message.
+9. Make either the binding or workspace catalog unavailable and confirm the
+   other section remains usable without a route-wide failure.
 
 ## Recordings
 
-1. Create or select a session whose recording policy allows the intended mode.
-2. Start or inspect recording state.
-3. Perform a short browser action.
-4. Stop where supported.
-5. Confirm the artifact is non-empty and downloadable.
-6. Refresh retained segments and confirm metadata is preserved.
-7. Download a retained segment.
-8. Download playback/export where available.
-9. Confirm failed/unavailable artifacts explain the state instead of appearing
-   as broken download buttons.
+1. Create or select a session, then open
+   `/admin-new/sessions/{session_id}/recordings` directly and refresh it.
+2. Enable always-on recording and confirm a stopped/released session is not
+   implicitly started.
+3. Start/connect the session, perform a short browser action, and disconnect or
+   stop so the active segment finalizes.
+4. Refresh the recording route and confirm policy, playback summary, segment
+   state, size, duration, termination reason, and timestamps are retained.
+5. With one available segment, confirm the single download action returns a
+   non-empty WebM.
+6. Restart/reconnect to create another segment, finalize it, and confirm the
+   same action now returns a playback ZIP.
+7. Confirm failed and expired/missing artifacts remain visible without an
+   enabled broken download action.
+8. Make either the segment list or playback-summary endpoint unavailable and
+   confirm the other evidence block remains usable.
+9. Disable recording and confirm the policy changes without deleting retained
+   segment evidence.
 
 ## Network And Egress
 
 1. Create or open sessions using no egress, forward-proxy egress, and
-   TLS-intercept egress profiles.
-2. Confirm effective network identity, profile, mode, and project scope are
-   visible.
-3. Run egress diagnostics/probe against a ready session.
-4. Confirm diagnostics do not expose requested URLs, credentials, CA material,
-   headers, payloads, or decrypted traffic.
-5. Confirm stopped sessions are not implicitly started by diagnostics.
-6. Open the related egress profile detail from the session network area.
+   TLS-intercept egress profiles, then open
+   `/admin-new/sessions/{session_id}/network` directly.
+2. Refresh the route and confirm requested identity, effective mode, profile,
+   runtime binding/assignment, proof level, and warnings retain session context.
+3. Open the related egress profile and return to the same session route.
+4. Confirm active probe is disabled for stopped, released, starting, and
+   otherwise unassigned runtimes and that no runtime is started as a side
+   effect.
+5. Start/connect the session, refresh until the runtime assignment is ready,
+   run the active probe, and confirm browser-observed public IP and TLS issuer
+   evidence appears.
+6. Confirm failed probes expose a sanitized reason and remain visible after
+   refresh.
+7. Make the diagnostics endpoint unavailable and confirm requested/effective
+   session identity remains visible with section-local feedback.
+8. Confirm the page never exposes requested URLs, proxy credentials, CA
+   material, headers, payloads, or decrypted traffic.
+9. Confirm the operator UI does not call the observer-only
+   `POST /api/v1/sessions/{id}/egress-usage` route.
 
 ## Automation And MCP
 

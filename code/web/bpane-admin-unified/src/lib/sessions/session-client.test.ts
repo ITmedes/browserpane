@@ -6,6 +6,7 @@ import {
   toSessionListResponse,
 } from './session-client';
 import { sessionPayload, sessionStatusPayload } from '$lib/test-utils/session-fixtures';
+import { egressDiagnosticsPayload } from '$lib/test-utils/egress-fixtures';
 
 describe('SessionCatalogClient', () => {
   it('lists, creates, and loads session status through authenticated endpoints', async () => {
@@ -107,6 +108,41 @@ describe('SessionCatalogClient', () => {
       ['http://browserpane.test/api/v1/sessions/session-1/stop', 'POST'],
       ['http://browserpane.test/api/v1/sessions/session-1/kill', 'POST'],
       ['http://browserpane.test/api/v1/sessions/session-1/connections/disconnect-all', 'POST'],
+    ]);
+  });
+
+  it('gets and probes session egress diagnostics through encoded authenticated routes', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async (_input, init) => {
+      if (init?.method === 'POST') {
+        expect(JSON.parse(String(init.body))).toEqual({ timeout_ms: 5000 });
+        return jsonResponse(egressDiagnosticsPayload({
+          proof_level: 'active_probe',
+          proof: {
+            ...egressDiagnosticsPayload().proof as Record<string, unknown>,
+            active_probe_collected: true,
+            observed_public_ip: '203.0.113.10',
+          },
+        }), 200);
+      }
+      return jsonResponse(egressDiagnosticsPayload(), 200);
+    });
+    const client = new SessionCatalogClient({
+      baseUrl: 'http://browserpane.test',
+      accessTokenProvider: () => 'token-1',
+      fetchImpl,
+    });
+
+    const current = await client.getSessionEgressDiagnostics('session/one');
+    const probed = await client.runSessionEgressDiagnosticsProbe('session/one', { timeout_ms: 5000 });
+
+    expect(current.proof_level).toBe('runtime_launch_metadata');
+    expect(probed).toMatchObject({
+      proof_level: 'active_probe',
+      proof: { active_probe_collected: true, observed_public_ip: '203.0.113.10' },
+    });
+    expect(fetchImpl.mock.calls.map((call) => [String(call[0]), call[1]?.method])).toEqual([
+      ['http://browserpane.test/api/v1/sessions/session%2Fone/egress-diagnostics', 'GET'],
+      ['http://browserpane.test/api/v1/sessions/session%2Fone/egress-diagnostics', 'POST'],
     ]);
   });
 

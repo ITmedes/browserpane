@@ -1,3 +1,5 @@
+import type { EgressDiagnosticsResource } from '$lib/egress-profiles/egress-profile-types';
+
 export type SessionProjectResource = {
   readonly id: string;
   readonly name: string;
@@ -80,12 +82,12 @@ export type SessionEffectiveEgress = {
   readonly sensitive_log_sink_configured: boolean;
 };
 
-export type SessionEgressDiagnostics = {
-  readonly health: string;
-  readonly proof_level: string;
-  readonly observation_mode: string;
-  readonly warnings: readonly string[];
-  readonly observed_at: string;
+export type SessionEgressDiagnostics = EgressDiagnosticsResource;
+
+export type RunSessionEgressDiagnosticsProbeRequest = {
+  readonly public_ip_url?: string;
+  readonly tls_probe_url?: string;
+  readonly timeout_ms?: number;
 };
 
 export type SessionCapabilities = {

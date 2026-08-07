@@ -34,6 +34,7 @@ async function run() {
   const page = await context.newPage();
   let accessToken = '';
   let createdSessionId = '';
+  const createdSessionIds = [];
   let authConfig = null;
 
   try {
@@ -86,6 +87,7 @@ async function run() {
       createdSessionId = typeof createdSession?.id === 'string' ? createdSession.id : '';
     }
     createdSessionId = await waitForSessionDetailUrl(page, options, createdSessionId);
+    createdSessionIds.push(createdSessionId);
     await page.getByTestId('session-detail-route').waitFor({
       state: 'visible',
       timeout: options.connectTimeoutMs,
@@ -111,6 +113,10 @@ async function run() {
 
     await page.getByTestId('session-detail-refresh').click();
     await waitForContains(page, options, 'session-detail-action-success', 'refreshed');
+    await verifySessionSubareas(page, options, createdSessionId);
+    const switchSession = await createSwitchSession(accessToken, options);
+    createdSessionIds.push(switchSession.id);
+    await verifySessionSwitch(page, options, createdSessionId, switchSession.id);
     await verifyMcpDelegation(page, options, createdSessionId, authConfig, accessToken);
     await verifySessionPreviewPopup(page, options);
     await verifyStoppedSessionCanStartWithPreview(page, options);
@@ -118,6 +124,8 @@ async function run() {
     console.log(JSON.stringify({
       sessionId: createdSessionId,
       detailVisible: true,
+      sessionSubareas: true,
+      sessionSwitch: true,
       mcpDelegation: true,
       previewPopup: true,
       stoppedSessionRestarted: true,
@@ -127,13 +135,136 @@ async function run() {
       await cleanupMcpDelegation(accessToken, options, createdSessionId, authConfig).catch((error) => {
         log(`MCP cleanup for ${createdSessionId} failed: ${error.message}`);
       });
-      await cleanupSession(accessToken, options, createdSessionId).catch((error) => {
-        log(`Session cleanup for ${createdSessionId} failed: ${error.message}`);
-      });
+    }
+    if (accessToken) {
+      for (const sessionId of createdSessionIds) {
+        await cleanupSession(accessToken, options, sessionId).catch((error) => {
+          log(`Session cleanup for ${sessionId} failed: ${error.message}`);
+        });
+      }
     }
     await context.close();
     await browser.close();
   }
+}
+
+async function createSwitchSession(accessToken, options) {
+  return await fetchJson(`${apiOrigin(options)}/api/v1/sessions`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      labels: {
+        suite: 'admin-unified-sessions',
+        purpose: 'smoke',
+        role: 'switch-target',
+      },
+      network_identity: {
+        timezone: 'Pacific/Auckland',
+      },
+    }),
+  });
+}
+
+async function verifySessionSwitch(page, options, primarySessionId, switchSessionId) {
+  const subareas = [
+    ['live', 'session-live-route'],
+    ['files', 'session-files-route'],
+    ['recordings', 'session-recordings-route'],
+    ['network', 'session-network-route'],
+  ];
+  for (const [subarea, routeTestId] of subareas) {
+    await page.goto(adminRouteUrl(options, `sessions/${switchSessionId}/${subarea}`), {
+      waitUntil: 'domcontentloaded',
+    });
+    await waitForContains(page, options, routeTestId, switchSessionId);
+  }
+  await waitForContains(page, options, 'session-network-requested-timezone', 'Pacific/Auckland');
+
+  await page.goto(adminRouteUrl(options, `sessions/${primarySessionId}`), { waitUntil: 'domcontentloaded' });
+  await page.getByTestId('session-detail-route').waitFor({
+    state: 'visible',
+    timeout: options.connectTimeoutMs,
+  });
+  await waitForContains(page, options, 'session-detail-title', shortSessionId(primarySessionId));
+}
+
+async function verifySessionSubareas(page, options, sessionId) {
+  const subareas = [
+    {
+      id: 'live',
+      route: `sessions/${sessionId}/live`,
+      routeTestId: 'session-live-route',
+      readyTestId: 'session-live-panel',
+    },
+    {
+      id: 'files',
+      route: `sessions/${sessionId}/files`,
+      routeTestId: 'session-files-route',
+      readyTestId: 'session-transfer-files-panel',
+    },
+    {
+      id: 'recordings',
+      route: `sessions/${sessionId}/recordings`,
+      routeTestId: 'session-recordings-route',
+      readyTestId: 'session-recording-policy',
+    },
+    {
+      id: 'network',
+      route: `sessions/${sessionId}/network`,
+      routeTestId: 'session-network-route',
+      readyTestId: 'session-network-summary',
+    },
+  ];
+  for (const subarea of subareas) {
+    const href = await page.getByTestId(`session-subarea-${subarea.id}`).getAttribute('href');
+    const expectedPath = `/admin-new/${subarea.route}`;
+    if (href !== expectedPath) {
+      throw new Error(`Expected ${subarea.id} session route ${expectedPath}, got ${href}`);
+    }
+  }
+
+  for (const subarea of subareas) {
+    await page.goto(adminRouteUrl(options, subarea.route), { waitUntil: 'domcontentloaded' });
+    await page.getByTestId(subarea.routeTestId).waitFor({
+      state: 'visible',
+      timeout: options.connectTimeoutMs,
+    });
+    await page.getByTestId(subarea.readyTestId).waitFor({
+      state: 'visible',
+      timeout: options.connectTimeoutMs,
+    });
+    const active = await page.getByTestId(`session-subarea-${subarea.id}`).getAttribute('aria-current');
+    if (active !== 'page') {
+      throw new Error(`Expected ${subarea.id} session tab to be active, got ${active}`);
+    }
+    await assertNoBodyHorizontalOverflow(page, `unified session ${subarea.id}`);
+    await assertNoHorizontalOverflow(page, subarea.routeTestId, `unified session ${subarea.id} route`);
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.getByTestId(subarea.readyTestId).waitFor({
+      state: 'visible',
+      timeout: options.connectTimeoutMs,
+    });
+  }
+
+  const probeDisabled = await page.getByTestId('session-network-probe').isDisabled();
+  if (!probeDisabled) {
+    throw new Error('Expected active egress probe to remain disabled before the session runtime starts.');
+  }
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await assertNoBodyHorizontalOverflow(page, 'unified session network mobile');
+  await assertNoHorizontalOverflow(page, 'session-network-route', 'unified session network mobile route');
+  await page.setViewportSize({ width: 1440, height: 980 });
+
+  await page.goto(adminRouteUrl(options, `sessions/${sessionId}`), { waitUntil: 'domcontentloaded' });
+  await page.getByTestId('session-detail-route').waitFor({
+    state: 'visible',
+    timeout: options.connectTimeoutMs,
+  });
 }
 
 async function verifyMcpDelegation(page, options, sessionId, authConfig, accessToken) {
