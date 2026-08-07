@@ -97,7 +97,7 @@ async function verifyListDeepLink(page, options, sessionId) {
 }
 
 async function verifyLiveWorkspaceDetailLink(page, options, sessionId) {
-  await page.goto(options.pageUrl, { waitUntil: 'domcontentloaded' });
+  await ensureAdminLoggedIn(page, options);
   await openAdminTab(page, 'sessions');
   const row = page.locator(`[data-testid="session-row"][data-session-id="${sessionId}"]`);
   await row.waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
@@ -126,7 +126,7 @@ async function verifyDetailLifecycleDisabledWithLiveClient(page, options, sessio
       timeout: options.connectTimeoutMs,
     });
 
-    await page.goto(options.pageUrl, { waitUntil: 'domcontentloaded' });
+    await ensureAdminLoggedIn(page, options);
     await openAdminTab(page, 'sessions');
     const row = page.locator(`[data-testid="session-row"][data-session-id="${sessionId}"]`);
     await row.waitFor({ state: 'visible', timeout: options.connectTimeoutMs });

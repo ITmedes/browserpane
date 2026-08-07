@@ -2,7 +2,7 @@ import { cleanupWorkflowSmokeSessions, fetchAuthConfig, fetchJson, poll } from '
 
 export async function ensureAdminLoggedIn(page, options) {
   await installBearerCapture(page);
-  await page.goto(options.pageUrl, { waitUntil: 'domcontentloaded' });
+  await navigateToAdminAuthSurface(page, options.pageUrl);
   const authConfig = await fetchAuthConfig(options);
   if (!authConfig || authConfig.mode !== 'oidc') {
     return authConfig;
@@ -22,6 +22,16 @@ export async function ensureAdminLoggedIn(page, options) {
   await page.waitForURL(urlPatternFor(options.pageUrl), { timeout: options.connectTimeoutMs });
   await waitForAdminAuthenticated(page, options);
   return authConfig;
+}
+
+async function navigateToAdminAuthSurface(page, pageUrl) {
+  try {
+    await page.goto(pageUrl, { waitUntil: 'domcontentloaded' });
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes('net::ERR_ABORTED')) {
+      throw error;
+    }
+  }
 }
 
 export async function cleanupAdminSmoke(page, options, log) {
