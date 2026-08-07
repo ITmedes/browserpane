@@ -100,7 +100,11 @@ describe('BrowserContextDetailRoute', () => {
         'support-baseline.zip',
       );
     });
-    expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+    expect(createObjectURL).toHaveBeenCalledOnce();
+    expect(createObjectURL.mock.calls[0]?.[0]).toMatchObject({
+      size: 9,
+      type: 'application/zip',
+    });
     expect(click).toHaveBeenCalledOnce();
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:context-export');
     const exportCall = fetchImpl.mock.calls.find((call) => String(call[0]).endsWith('/export'));
