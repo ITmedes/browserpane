@@ -126,6 +126,20 @@ async function fetchWorkflowOperations(accessToken, options) {
   });
 }
 
+async function cleanupEventSubscriptions(accessToken, options) {
+  const response = await fetchJson(`${options.pageUrl}/api/v1/workflow-event-subscriptions`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const subscriptions = Array.isArray(response.subscriptions) ? response.subscriptions : [];
+  for (const subscription of subscriptions) {
+    if (subscription.name !== 'workflow-events-smoke') continue;
+    await fetchJson(
+      `${options.pageUrl}/api/v1/workflow-event-subscriptions/${subscription.id}`,
+      { method: 'DELETE', headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+  }
+}
+
 async function main() {
   const options = parseSmokeArgs(process.argv.slice(2), 'run-workflow-events-smoke.mjs');
   const browser = await launchChrome(chromium, options);
@@ -149,6 +163,7 @@ async function main() {
     }
 
     await cleanupWorkflowSmokeSessions(accessToken, options, log);
+    await cleanupEventSubscriptions(accessToken, options);
 
     log('Starting webhook receiver container');
     webhookReceiver = await startWorkflowWebhookReceiver({
@@ -262,6 +277,9 @@ async function main() {
     }
     log(`Smoke complete: ${JSON.stringify(summary)}`);
   } finally {
+    if (accessToken) {
+      await cleanupEventSubscriptions(accessToken, options).catch(() => {});
+    }
     await page?.close().catch(() => {});
     await context?.close().catch(() => {});
     await browser.close().catch(() => {});
