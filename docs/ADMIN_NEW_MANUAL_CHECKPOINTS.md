@@ -345,14 +345,23 @@ treated as complete.
 ## API Companion And Coverage
 
 1. Open `/admin-new/api`.
-2. Confirm the OpenAPI link works.
-3. Copy a session-list example and run it locally with an authenticated token
-   if available.
-4. Confirm API docs do not replace task-oriented UI routes.
-5. Confirm every OpenAPI operation has one coverage classification.
-6. Confirm compatibility endpoints are listed separately from OpenAPI routes.
-7. Confirm certificate helper endpoints are listed as runtime helpers, not
-   owner-scoped API resources.
+2. Confirm project, session/connect-ticket, workflow-run, and file-workspace
+   task flows render copyable commands with environment placeholders only.
+3. Copy a command and confirm success feedback is local to that command.
+4. Confirm the OpenAPI and generated-evidence download links work.
+5. Open `/admin-new/coverage` and confirm the total is 131 operations.
+6. Filter each classification (`ui-primary`, `ui-evidence`, `api-companion`,
+   and `internal-worker`) and confirm the visible count follows the filter.
+7. Search for a specific operation id, refresh, and confirm the query remains
+   represented by the route.
+8. Open `/admin-new/docs` and confirm owner-bearer, session-automation, and
+   unauthenticated credential domains are distinct.
+9. Confirm all 14 non-v1 compatibility surfaces are listed separately and the
+   certificate helpers are not presented as owner-scoped resources.
+10. Confirm API docs link back to task-oriented UI routes rather than replacing
+    them with a generic request executor.
+11. Run `npm run smoke:admin-unified-api-companion -- --headless` from
+    `code/web/bpane-client`; confirm its project/session cleanup succeeds.
 
 ## Command Palette
 

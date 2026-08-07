@@ -27,8 +27,8 @@ egress-profile, and file-workspace catalogs; session create/detail and popup
 preview flows; recording catalog/download; workflow source, version, and run
 launching; workflow-run catalog/detail; identity/access review and registry
 management; and refresh-safe session live, files, recordings, network,
-automation, policy, and observability routes. API/docs companions and the
-remaining resource catalogs remain incomplete.
+automation, policy, and observability routes. Contract-derived API, coverage,
+and docs companions are implemented; the remaining resource catalogs are not.
 See the
 [admin-new implementation status](docs/ADMIN_NEW_STATUS.md) for the maintained
 route-level matrix.
@@ -63,6 +63,19 @@ route-level matrix.
 These screenshots show the current `/admin-new/` prototype with local demo
 data. The frozen owner-scoped v1 control-plane contract lives in
 [openapi/bpane-control-v1.yaml](openapi/bpane-control-v1.yaml).
+
+The unified console also provides three contract-derived integration surfaces:
+
+- `/admin-new/api` presents task-oriented, copyable commands for common project,
+  session, workflow-run, and file-workspace flows.
+- `/admin-new/coverage` inventories all frozen operations by family,
+  authentication domain, and UI/worker ownership.
+- `/admin-new/docs` explains contract scope and keeps non-v1 compatibility
+  surfaces separate from the frozen owner-scoped API.
+
+These routes load the committed operation, classification, example, and
+compatibility manifests published beside the OpenAPI document. They do not
+store a bearer token or act as a generic in-browser API executor.
 
 ## Why BrowserPane
 
@@ -110,8 +123,9 @@ Current support and scope:
   popup preview, recording catalog/download, workflow launcher, workflow-run
   catalog/detail, identity/access review, and session
   live/files/recordings/network/automation/policy/observability routes are
-  implemented. API/docs companions and remaining resource catalogs are still
-  open; `/admin/` remains the compatibility fallback until
+  implemented. Contract-derived API, coverage, and docs companions are also
+  implemented. Remaining resource catalogs are still open; `/admin/` remains
+  the compatibility fallback until
   [issue #163](https://github.com/ITmedes/browserpane/issues/163) completes the
   promotion and rollback gate.
 - Workflow boundary: BrowserPane currently focuses on executing and supervising browser workflows. Broader scheduling, DAG orchestration, and cross-system coordination are expected to sit above BrowserPane rather than inside it.
@@ -1200,8 +1214,9 @@ clean installs, maintained Node checks/tests/builds, browser-client and
 admin-new coverage ratchets, OpenAPI lint/inventory/example/compatibility
 contracts, Markdown/YAML/workflow policy, and operational script checks.
 `compose` runs the bounded gateway API, admin, CLI, MCP,
-recording, and workflow smoke set; it may build or start the local stack and
-leaves it running for inspection. `full` runs both profiles. Use `--list`,
+recording, workflow, and admin-new API-companion smoke set; it may build or
+start the local stack and leaves it running for inspection. `full` runs both
+profiles. Use `--list`,
 `--dry-run`, or repeatable `--stage <id>` selections for focused work. The
 runner stops at the first failing stage, preserves its exit code, prints the
 exact rerun command, and terminates the active child process on timeout or
@@ -1367,7 +1382,10 @@ Admin and browser-harness smokes are also script-backed. Run the focused
 `smoke:browser-policy`, and `smoke:multisession` commands from
 `code/web/bpane-client/package.json` when touching those areas.
 The `smoke:admin-unified-*` scripts cover the implemented `/admin-new/`
-dashboard and primary resource flows. The legacy `smoke:admin-session` covers
+dashboard, primary resource flows, identity route, and API/coverage/docs
+companions. Run the contract companion smoke directly with
+`npm run smoke:admin-unified-api-companion -- --headless` from
+`code/web/bpane-client`. The legacy `smoke:admin-session` covers
 live session join, disconnect, release,
 profile-backed reconnect, stop/reconnect behavior, session-switch disconnect,
 display upload, policy/lifecycle panels, and Identity tab resource counts,

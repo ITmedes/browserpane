@@ -265,6 +265,11 @@ Validation:
 
 Priority: admin-new completion/documentation.
 
+Status: implemented for #158 scope on 2026-08-07. `/admin-new/api`,
+`/admin-new/coverage`, and `/admin-new/docs` consume the committed #179
+evidence, publish the raw artifacts, keep compatibility routes separate, and
+have focused unit/coverage/build plus compose-backed smoke evidence.
+
 Why:
 
 - Navigation advertises API docs/coverage.
@@ -275,9 +280,10 @@ Why:
 Scope:
 
 1. Add `/admin-new/api`.
-2. Add `/admin-new/coverage` or remove/hide nav until implemented.
-3. Surface OpenAPI classifications.
-4. Keep compatibility endpoints separated from frozen v1 API.
+2. Add `/admin-new/coverage`.
+3. Add `/admin-new/docs`.
+4. Surface OpenAPI classifications and task-oriented examples.
+5. Keep compatibility endpoints separated from frozen v1 API.
 
 Validation:
 

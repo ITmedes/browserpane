@@ -38,6 +38,7 @@
     "smoke:admin-file-workspaces": "node scripts/run-admin-file-workspaces-smoke.mjs",
     "smoke:admin-unified-file-workspaces": "node scripts/run-admin-unified-file-workspaces-smoke.mjs",
     "smoke:admin-unified-identity": "node scripts/run-admin-unified-identity-smoke.mjs",
+    "smoke:admin-unified-api-companion": "node scripts/run-admin-unified-api-companion-smoke.mjs",
     "smoke:admin-metrics": "node scripts/run-admin-metrics-smoke.mjs",
     "smoke:admin-mcp": "node scripts/run-admin-mcp-smoke.mjs",
     "smoke:mcp-session-endpoints": "node scripts/run-mcp-session-endpoints-smoke.mjs",

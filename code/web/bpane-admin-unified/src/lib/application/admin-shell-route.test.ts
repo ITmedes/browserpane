@@ -22,6 +22,10 @@ describe('admin shell route metadata', () => {
     ['/admin-new/sessions/session-1/recordings', 'sessions', 'BrowserPane Session Recordings'],
     ['/admin-new/sessions/session-1/network', 'sessions', 'BrowserPane Session Network'],
     ['/admin-new/recordings', 'recordings', 'BrowserPane Recordings'],
+    ['/admin-new/identity', 'identity', 'BrowserPane Identity And Access'],
+    ['/admin-new/api', 'api', 'BrowserPane API Reference'],
+    ['/admin-new/docs', 'memo', 'BrowserPane Integration Guide'],
+    ['/admin-new/coverage', 'coverage', 'BrowserPane API Coverage'],
   ])('resolves %s', (pathname, activeId, title) => {
     expect(resolveAdminShellRoute(pathname)).toEqual({ activeId, title });
   });
