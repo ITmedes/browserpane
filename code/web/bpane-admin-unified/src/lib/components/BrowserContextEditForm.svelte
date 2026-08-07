@@ -1,7 +1,7 @@
 <script lang="ts">
   import {
     createNewBrowserContextEditDraft,
-    hasNewBrowserContextEditChanges,
+    hasBrowserContextEditChanges,
     mergeProjectsWithSelected,
     validateBrowserContextEdit,
     type BrowserContextEditDraft,
@@ -13,28 +13,47 @@
 
   type BrowserContextEditFormProps = {
     readonly disabled?: boolean;
+    readonly initialDraft?: BrowserContextEditDraft;
+    readonly title?: string;
+    readonly description?: string;
+    readonly submitLabel?: string;
+    readonly persistenceLocked?: boolean;
+    readonly requireChanges?: boolean;
+    readonly submitBlocked?: boolean;
+    readonly submitBlockedHint?: string | null;
     readonly projectOptionsState?: BrowserContextProjectOptionsLoadState;
     readonly onSave?: (request: CreateBrowserContextRequest) => void | Promise<void>;
   };
 
   let {
     disabled = false,
+    initialDraft = createNewBrowserContextEditDraft(),
+    title = 'New browser context settings',
+    description = 'Define scope, persistence, retention, and profile-storage limits before creating the reusable context.',
+    submitLabel = 'Create browser context',
+    persistenceLocked = false,
+    requireChanges = true,
+    submitBlocked = false,
+    submitBlockedHint = null,
     projectOptionsState = { status: 'idle' },
     onSave,
   }: BrowserContextEditFormProps = $props();
   // svelte-ignore state_referenced_locally
-  let draft = $state<BrowserContextEditDraft>(createNewBrowserContextEditDraft());
+  let draft = $state<BrowserContextEditDraft>({ ...initialDraft });
 
   const validation = $derived(validateBrowserContextEdit(draft));
-  const changed = $derived(hasNewBrowserContextEditChanges(draft));
+  const changed = $derived(hasBrowserContextEditChanges(draft, initialDraft));
+  const readyToSubmit = $derived(
+    validation.valid && !submitBlocked && (!requireChanges || changed),
+  );
   const changeStatusLabel = $derived(disabled
     ? 'Read-only access'
-    : validation.valid
-      ? 'Ready to create'
+    : readyToSubmit
+      ? 'Ready to submit'
       : 'Context draft');
   const changeStatusClass = $derived(disabled
     ? 'border-admin-border bg-admin-soft text-admin-muted'
-    : validation.valid
+    : readyToSubmit
       ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
       : 'border-amber-200 bg-amber-50 text-amber-900');
   const projectOptions = $derived(projectOptionsState.status === 'ready'
@@ -42,7 +61,7 @@
     : mergeProjectsWithSelected([], draft.projectId));
 
   function reset(): void {
-    draft = createNewBrowserContextEditDraft();
+    draft = { ...initialDraft };
   }
 
   function save(): void {
@@ -60,9 +79,9 @@
 <section class="rounded-md border border-admin-border bg-admin-panel p-4 sm:p-5" data-testid="browser-context-edit-form">
   <div class="flex flex-col gap-3 border-b border-admin-border pb-4 lg:flex-row lg:items-start lg:justify-between">
     <div class="min-w-0">
-      <h3 class="m-0 text-base font-semibold text-admin-ink">New browser context settings</h3>
+      <h3 class="m-0 text-base font-semibold text-admin-ink">{title}</h3>
       <p class="m-0 mt-1 text-sm leading-6 text-admin-muted">
-        Define scope, persistence, retention, and profile-storage limits before creating the reusable context.
+        {description}
       </p>
     </div>
     <span class={`inline-flex w-fit shrink-0 rounded-full border px-2.5 py-1 text-xs font-semibold ${changeStatusClass}`}>
@@ -98,13 +117,15 @@
           <select
             class="h-10 w-full min-w-0 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
             bind:value={draft.persistenceMode}
-            disabled={disabled}
+            disabled={disabled || persistenceLocked}
             data-testid="browser-context-edit-persistence-mode"
           >
             <option value="reusable">reusable</option>
             <option value="ephemeral">ephemeral</option>
           </select>
-          <FieldFeedback hint="Reusable contexts can be selected by future sessions." />
+          <FieldFeedback hint={persistenceLocked
+            ? 'This lifecycle operation always creates a reusable context.'
+            : 'Reusable contexts can be selected by future sessions.'} />
         </label>
 
         <label class="grid min-w-0 content-start gap-1.5 text-sm lg:col-span-2">
@@ -279,6 +300,17 @@
     </section>
   </div>
 
+  {#if submitBlockedHint}
+    <div class="mt-4">
+      <AdminMessage
+        tone="info"
+        title="Additional input required"
+        message={submitBlockedHint}
+        testId="browser-context-edit-submit-blocked"
+      />
+    </div>
+  {/if}
+
   <div class="sticky bottom-0 z-10 -mx-4 -mb-4 mt-5 flex flex-col gap-2 border-t border-admin-border bg-admin-panel/95 px-4 py-3 backdrop-blur sm:-mx-5 sm:-mb-5 sm:flex-row sm:items-center sm:justify-end sm:px-5">
     <button
       class="inline-flex h-10 w-full items-center justify-center rounded-md border border-admin-border bg-admin-panel px-3 text-sm font-medium text-admin-ink transition hover:bg-admin-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
@@ -293,10 +325,10 @@
       class="inline-flex h-10 w-full items-center justify-center rounded-md border border-admin-accent bg-admin-accent px-3 text-sm font-semibold text-white shadow-sm transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-admin-accent/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
       type="button"
       onclick={save}
-      disabled={disabled || !changed || !validation.valid}
+      disabled={disabled || !readyToSubmit}
       data-testid="browser-context-edit-save"
     >
-      Create browser context
+      {submitLabel}
     </button>
   </div>
 </section>
