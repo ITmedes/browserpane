@@ -115,9 +115,7 @@ fn validate_project_retained_storage_quota(
     incoming_bytes: u64,
     max_retained_storage_bytes: u64,
 ) -> Result<(), SessionStoreError> {
-    let projected_storage_bytes = retained_storage_bytes
-        .checked_add(incoming_bytes)
-        .unwrap_or(u64::MAX);
+    let projected_storage_bytes = retained_storage_bytes.saturating_add(incoming_bytes);
     if projected_storage_bytes <= max_retained_storage_bytes {
         return Ok(());
     }
@@ -271,10 +269,7 @@ pub(crate) fn validate_project_file_workspace_policy(
         return Ok(());
     };
     if policy.allowed_file_workspace_ids.is_empty()
-        || policy
-            .allowed_file_workspace_ids
-            .iter()
-            .any(|allowed_id| *allowed_id == workspace_id)
+        || policy.allowed_file_workspace_ids.contains(&workspace_id)
     {
         return Ok(());
     }
@@ -347,8 +342,7 @@ fn validate_project_session_policy(
             project
                 .policy
                 .allowed_egress_profile_ids
-                .iter()
-                .any(|allowed_id| *allowed_id == profile_id)
+                .contains(&profile_id)
         });
         if !allowed {
             let message = match egress_profile_id {
@@ -412,8 +406,7 @@ fn validate_project_session_policy(
                     project
                         .policy
                         .allowed_browser_context_ids
-                        .iter()
-                        .any(|allowed_id| *allowed_id == context_id)
+                        .contains(&context_id)
                 });
                 if !allowed {
                     let message = match context_id {

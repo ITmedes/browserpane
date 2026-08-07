@@ -12,6 +12,8 @@ use super::browser_context_archive::{
 use super::*;
 use crate::session_control::{BrowserContextUsageResource, StoredBrowserContext};
 
+type BrowserContextApiResult<T> = Result<T, (StatusCode, Json<ErrorResponse>)>;
+
 pub(super) fn browser_context_routes() -> Router<Arc<ApiState>> {
     Router::new()
         .route(
@@ -682,7 +684,7 @@ fn optional_uuid_header(
 fn parse_optional_string_map_header(
     headers: &HeaderMap,
     name: &str,
-) -> Result<Option<HashMap<String, String>>, (StatusCode, Json<ErrorResponse>)> {
+) -> BrowserContextApiResult<Option<HashMap<String, String>>> {
     let Some(value) = parse_optional_json_object_header(headers, name)? else {
         return Ok(None);
     };

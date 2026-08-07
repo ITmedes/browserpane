@@ -384,7 +384,7 @@ mod tests {
             ("b".to_string(), "2".to_string()),
         ]));
         second.created_at = first.created_at;
-        second.updated_at = second.updated_at + chrono::Duration::seconds(1);
+        second.updated_at += chrono::Duration::seconds(1);
         let first_key =
             serialized_change_key(&vec![session_snapshot_change_summary(&first)]).unwrap();
         let second_key =

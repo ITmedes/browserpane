@@ -1099,6 +1099,10 @@ impl StoredServicePrincipal {
 impl StoredProject {
     const USAGE_ALERT_THRESHOLD_PERCENT: u8 = 80;
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "project usage assembly mirrors independently collected counters"
+    )]
     pub fn usage(
         &self,
         active_sessions: u32,
@@ -1166,6 +1170,10 @@ impl StoredProject {
         alerts
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "project resource assembly mirrors independently collected counters"
+    )]
     pub fn to_resource(
         &self,
         active_sessions: u32,
@@ -2229,6 +2237,10 @@ pub struct StoredSession {
 }
 
 impl StoredSession {
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "session resource assembly mirrors independent runtime and policy sections"
+    )]
     pub fn to_resource(
         &self,
         public_gateway_url: &str,
