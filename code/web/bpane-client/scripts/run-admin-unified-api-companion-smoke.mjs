@@ -43,6 +43,11 @@ async function run() {
     await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin });
     log(`Opening ${options.pageUrl}`);
     await ensureAdminLoggedIn(page, options);
+    await page.goto(adminRouteUrl(options, 'projects'), { waitUntil: 'domcontentloaded' });
+    await page.getByTestId('projects-overview').waitFor({
+      state: 'visible',
+      timeout: options.connectTimeoutMs,
+    });
     accessToken = await getAdminAccessToken(page);
     assert.ok(accessToken, 'Expected an owner access token after Keycloak login.');
 
