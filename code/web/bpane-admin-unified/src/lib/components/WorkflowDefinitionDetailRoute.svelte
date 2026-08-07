@@ -1,6 +1,7 @@
 <script lang="ts">
   import { ArrowLeft } from '@lucide/svelte';
   import { onMount } from 'svelte';
+  import { adminErrorMessage } from '$lib/application/admin-async-state';
   import type { UnifiedAdminContext } from '$lib/auth/unified-admin-context';
   import {
     WorkflowCatalogClient,
@@ -83,7 +84,7 @@
       workflowState = {
         status: 'error',
         workflowId,
-        message: error instanceof Error ? error.message : 'Unexpected workflow definition detail error.',
+        message: adminErrorMessage(error, 'Unexpected workflow definition detail error.'),
       };
     }
   }
@@ -109,7 +110,7 @@
     } catch (error) {
       actionState = {
         status: 'error',
-        message: error instanceof Error ? error.message : 'Workflow definition refresh failed.',
+        message: adminErrorMessage(error, 'Workflow definition refresh failed.'),
       };
     }
   }
@@ -140,7 +141,7 @@
       if (sourceFilesRequestId !== requestId) {
         return;
       }
-      const message = error instanceof Error ? error.message : 'Workflow source files failed.';
+      const message = adminErrorMessage(error, 'Workflow source files failed.');
       if (error instanceof WorkflowCatalogError && error.status === 404) {
         const unavailableMessage = 'This workflow version does not expose source metadata for browsing.';
         sourceFilesState = { status: 'unavailable', version, message: unavailableMessage };
@@ -216,7 +217,7 @@
       if (sourcePreviewRequestId !== requestId) {
         return;
       }
-      const message = error instanceof Error ? error.message : 'Workflow source preview failed.';
+      const message = adminErrorMessage(error, 'Workflow source preview failed.');
       if (error instanceof WorkflowCatalogError && error.status === 404) {
         sourcePreviewState = {
           status: 'unavailable',

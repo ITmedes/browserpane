@@ -5,6 +5,12 @@ import {
   ensureAdminLoggedIn,
   getAdminAccessToken,
 } from './admin-smoke-lib.mjs';
+import {
+  adminRouteUrl,
+  assertNoBodyHorizontalOverflow,
+  assertNoHorizontalOverflow,
+  waitForContains,
+} from './admin-unified-smoke-lib.mjs';
 import { createWorkflow, createWorkflowVersion } from './admin-workflow-smoke-lib.mjs';
 import {
   DEFAULTS,
@@ -130,15 +136,6 @@ async function waitForCatalogRow(page, options, text) {
   );
 }
 
-async function waitForContains(page, options, testId, expected) {
-  await poll(
-    testId,
-    async () => await page.getByTestId(testId).textContent(),
-    (value) => value?.includes(expected),
-    options.connectTimeoutMs,
-  );
-}
-
 async function waitForSourceTreePath(page, options, path) {
   await poll(
     `source tree path ${path}`,
@@ -231,30 +228,6 @@ async function verifyCreatedRunCatalog(page, options, runId) {
   );
   await assertNoBodyHorizontalOverflow(page, 'unified workflow run catalog after launch');
   await assertNoHorizontalOverflow(page, 'workflow-runs-overview', 'unified workflow run catalog after launch');
-}
-
-async function assertNoHorizontalOverflow(page, testId, label) {
-  const size = await page.getByTestId(testId).evaluate((element) => ({
-    clientWidth: element.clientWidth,
-    scrollWidth: element.scrollWidth,
-  }));
-  if (size.scrollWidth > size.clientWidth + 1) {
-    throw new Error(`${label} overflows horizontally: ${JSON.stringify(size)}`);
-  }
-}
-
-async function assertNoBodyHorizontalOverflow(page, label) {
-  const size = await page.evaluate(() => ({
-    clientWidth: document.documentElement.clientWidth,
-    scrollWidth: document.documentElement.scrollWidth,
-  }));
-  if (size.scrollWidth > size.clientWidth + 1) {
-    throw new Error(`${label} causes document horizontal overflow: ${JSON.stringify(size)}`);
-  }
-}
-
-function adminRouteUrl(options, routePath) {
-  return new URL(`/admin-new/${routePath.replace(/^\/+/, '')}`, apiOrigin(options)).toString();
 }
 
 async function emitSummary(options, summary, log) {

@@ -1,5 +1,14 @@
-export type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-export type AccessTokenProvider = () => Promise<string | null> | string | null;
+import {
+  AdminApiRequestError,
+  AuthenticatedApiClient,
+  formatAdminApiRequestError,
+  type AccessTokenProvider,
+  type AdminApiRequestErrorCode,
+  type AdminApiRequestFailure,
+  type FetchLike,
+} from '$lib/api/authenticated-api';
+
+export type { AccessTokenProvider, FetchLike } from '$lib/api/authenticated-api';
 
 export type McpBridgeHealth = {
   readonly status: string;
@@ -38,17 +47,40 @@ export type McpBridgeClientOptions = {
   readonly onAuthenticationFailure?: () => void;
 };
 
+export class McpBridgeError extends AdminApiRequestError {
+  constructor(
+    message: string,
+    code: AdminApiRequestErrorCode,
+    status: number | null = null,
+    failure?: AdminApiRequestFailure,
+  ) {
+    super(message, failure ?? { code, status, message });
+    this.name = 'McpBridgeError';
+  }
+}
+
 export class McpBridgeClient {
   readonly #controlUrl: URL;
-  readonly #accessTokenProvider: AccessTokenProvider | undefined;
-  readonly #fetchImpl: FetchLike;
-  readonly #onAuthenticationFailure: (() => void) | undefined;
+  readonly #api: AuthenticatedApiClient;
 
   constructor(options: McpBridgeClientOptions) {
     this.#controlUrl = new URL(options.controlUrl);
-    this.#accessTokenProvider = options.accessTokenProvider;
-    this.#fetchImpl = options.fetchImpl ?? fetch;
-    this.#onAuthenticationFailure = options.onAuthenticationFailure;
+    this.#api = new AuthenticatedApiClient({
+      baseUrl: this.#controlUrl,
+      ...(options.accessTokenProvider === undefined
+        ? { authentication: 'optional' }
+        : { accessTokenProvider: options.accessTokenProvider }),
+      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+      ...(options.onAuthenticationFailure === undefined
+        ? {}
+        : { onAuthenticationFailure: options.onAuthenticationFailure }),
+      errorFactory: (failure) => new McpBridgeError(
+        formatAdminApiRequestError('MCP bridge request', failure),
+        failure.code,
+        failure.status,
+        failure,
+      ),
+    });
   }
 
   async getHealth(): Promise<McpBridgeHealth> {
@@ -70,23 +102,7 @@ export class McpBridgeClient {
   }
 
   async #send(url: URL, init: RequestInit): Promise<Response> {
-    const headers = new Headers(init.headers);
-    if (this.#accessTokenProvider) {
-      const accessToken = await this.#accessTokenProvider();
-      if (!accessToken) {
-        throw new Error('No active admin access token is available for MCP bridge control.');
-      }
-      headers.set('authorization', `Bearer ${accessToken}`);
-    }
-    const response = await this.#fetchImpl(url, { ...init, headers });
-    if (response.status === 401) {
-      this.#onAuthenticationFailure?.();
-    }
-    if (!response.ok) {
-      const detail = await response.text().catch(() => '');
-      throw new Error(`MCP bridge request failed with HTTP ${response.status}${detail ? `: ${detail}` : ''}`);
-    }
-    return response;
+    return await this.#api.request(url, init);
   }
 
   #healthUrl(): URL {

@@ -5,6 +5,13 @@ import {
   getAdminAccessToken,
 } from './admin-smoke-lib.mjs';
 import {
+  adminRouteUrl,
+  assertNoBodyHorizontalOverflow,
+  assertNoHorizontalOverflow,
+  findActiveSessionIdsByLabels,
+  waitForContains,
+} from './admin-unified-smoke-lib.mjs';
+import {
   DEFAULTS,
   apiOrigin,
   createLogger,
@@ -36,6 +43,7 @@ async function run() {
     if (!accessToken) {
       throw new Error('No admin access token available after login.');
     }
+    await cleanupStaleSessionSmokes(accessToken, options, log);
 
     await page.goto(adminRouteUrl(options, 'sessions'), { waitUntil: 'domcontentloaded' });
     await page.getByTestId('sessions-overview').waitFor({
@@ -66,8 +74,18 @@ async function run() {
     if (!preview?.includes('"camera": false') || !preview.includes('"microphone": false')) {
       throw new Error(`Session create form did not include capability overrides: ${preview}`);
     }
+    const createResponsePromise = page.waitForResponse((response) => {
+      const request = response.request();
+      const url = new URL(response.url());
+      return request.method() === 'POST' && url.pathname === '/api/v1/sessions';
+    }, { timeout: options.connectTimeoutMs });
     await page.getByTestId('session-create-save').click();
-    createdSessionId = await waitForSessionDetailUrl(page, options);
+    const createResponse = await createResponsePromise;
+    if (createResponse.ok()) {
+      const createdSession = await createResponse.json();
+      createdSessionId = typeof createdSession?.id === 'string' ? createdSession.id : '';
+    }
+    createdSessionId = await waitForSessionDetailUrl(page, options, createdSessionId);
     await page.getByTestId('session-detail-route').waitFor({
       state: 'visible',
       timeout: options.connectTimeoutMs,
@@ -336,51 +354,53 @@ async function assertPreviewResizeUsesIndependentHeight(popup, options) {
   }
 }
 
-async function waitForContains(page, options, testId, expected) {
-  await poll(
-    testId,
-    async () => await page.getByTestId(testId).textContent().catch(() => ''),
-    (value) => value?.includes(expected),
-    options.connectTimeoutMs,
-  );
-}
-
-async function waitForSessionDetailUrl(page, options) {
+async function waitForSessionDetailUrl(page, options, expectedSessionId = '') {
   const result = await poll(
-    'created unified session detail url',
+    'created unified session detail route',
     async () => {
-      const url = new URL(page.url());
+      const href = await page.evaluate(() => window.location.href);
+      const url = new URL(href);
       const match = url.pathname.match(/\/admin-new\/sessions\/([^/]+)$/);
       const sessionId = match?.[1] ? decodeURIComponent(match[1]) : '';
-      const error = await page.getByTestId('session-create-error').textContent().catch(() => '');
-      return { sessionId: sessionId && sessionId !== 'new' ? sessionId : '', error };
+      const detailVisible = await page.getByTestId('session-detail-route').isVisible().catch(() => false);
+      const error = detailVisible
+        ? ''
+        : (await page.getByTestId('session-create-error').allTextContents()).join(' ');
+      return {
+        sessionId: sessionId && sessionId !== 'new' ? sessionId : '',
+        detailVisible,
+        error,
+        url: url.toString(),
+      };
     },
-    (value) => Boolean(value.sessionId || value.error),
+    (value) => Boolean(value.error || (value.detailVisible && value.sessionId)),
     options.connectTimeoutMs,
   );
   if (result.error) {
     throw new Error(`Session create form failed: ${result.error}`);
   }
+  if (!result.sessionId) {
+    throw new Error(`Created session detail rendered at an unexpected URL: ${result.url}`);
+  }
+  if (expectedSessionId && result.sessionId !== expectedSessionId) {
+    throw new Error(`Expected created session detail ${expectedSessionId}, got ${result.sessionId}`);
+  }
   return result.sessionId;
 }
 
-async function assertNoHorizontalOverflow(page, testId, label) {
-  const size = await page.getByTestId(testId).evaluate((element) => ({
-    clientWidth: element.clientWidth,
-    scrollWidth: element.scrollWidth,
-  }));
-  if (size.scrollWidth > size.clientWidth + 1) {
-    throw new Error(`${label} overflows horizontally: ${JSON.stringify(size)}`);
+async function cleanupStaleSessionSmokes(accessToken, options, log) {
+  const catalog = await fetchJson(`${apiOrigin(options)}/api/v1/sessions`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const sessionIds = findActiveSessionIdsByLabels(catalog, {
+    suite: 'admin-unified-sessions',
+    purpose: 'smoke',
+  });
+  for (const sessionId of sessionIds) {
+    await cleanupSession(accessToken, options, sessionId);
   }
-}
-
-async function assertNoBodyHorizontalOverflow(page, label) {
-  const size = await page.evaluate(() => ({
-    clientWidth: document.documentElement.clientWidth,
-    scrollWidth: document.documentElement.scrollWidth,
-  }));
-  if (size.scrollWidth > size.clientWidth + 1) {
-    throw new Error(`${label} causes document horizontal overflow: ${JSON.stringify(size)}`);
+  if (sessionIds.length > 0) {
+    log(`Removed ${sessionIds.length} stale admin-new session smoke runtime(s).`);
   }
 }
 
@@ -394,10 +414,6 @@ async function cleanupSession(accessToken, options, sessionId) {
   }
   const detail = await response.text().catch(() => '');
   throw new Error(`HTTP ${response.status}${detail ? ` ${detail}` : ''}`);
-}
-
-function adminRouteUrl(options, routePath) {
-  return new URL(`/admin-new/${routePath.replace(/^\/+/, '')}`, apiOrigin(options)).toString();
 }
 
 function shortSessionId(sessionId) {

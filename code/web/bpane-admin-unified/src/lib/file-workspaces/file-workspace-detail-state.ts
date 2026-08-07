@@ -1,3 +1,4 @@
+import type { AdminActionState } from '$lib/application/admin-async-state';
 import type {
   FileWorkspaceFileResource,
   FileWorkspaceProjectResource,
@@ -14,11 +15,7 @@ export type FileWorkspaceDetailLoadState =
       readonly files: readonly FileWorkspaceFileResource[];
     };
 
-export type FileWorkspaceActionState =
-  | { readonly status: 'idle' }
-  | { readonly status: 'running'; readonly label: string }
-  | { readonly status: 'success'; readonly message: string }
-  | { readonly status: 'error'; readonly message: string };
+export type FileWorkspaceActionState = AdminActionState;
 
 export type FileWorkspaceProjectOptionsLoadState =
   | { readonly status: 'idle' }

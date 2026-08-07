@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { replaceState } from '$app/navigation';
   import { onMount } from 'svelte';
   import type { Snippet } from 'svelte';
   import { AuthConfigClient, type AuthConfig } from '$lib/auth/auth-config';
@@ -66,10 +67,10 @@
         config,
         tokenStore: new BrowserTokenStore(window.sessionStorage),
       });
+      await authClient.initialize();
       if (config.mode === 'oidc') {
         await completeLoginRedirect();
       }
-      await authClient.initialize();
       auth = authClient.getSnapshot();
       if (!auth.authenticated && config.mode === 'oidc') {
         await login();
@@ -85,7 +86,7 @@
     const currentUrl = new URL(window.location.href);
     const completion = await authClient?.completeLoginIfNeeded(currentUrl);
     if (completion?.completed) {
-      window.history.replaceState({}, document.title, completion.cleanUrl);
+      replaceState(completion.cleanUrl, {});
     }
   }
 

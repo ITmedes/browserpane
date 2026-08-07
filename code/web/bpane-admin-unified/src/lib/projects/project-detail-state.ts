@@ -1,3 +1,4 @@
+import type { AdminActionState } from '$lib/application/admin-async-state';
 import type { ProjectPolicyOptions, ProjectResource } from './project-types';
 
 export type ProjectDetailLoadState =
@@ -6,11 +7,7 @@ export type ProjectDetailLoadState =
   | { readonly status: 'error'; readonly projectId: string; readonly message: string }
   | { readonly status: 'ready'; readonly project: ProjectResource };
 
-export type ProjectActionState =
-  | { readonly status: 'idle' }
-  | { readonly status: 'running'; readonly label: string }
-  | { readonly status: 'success'; readonly message: string }
-  | { readonly status: 'error'; readonly message: string };
+export type ProjectActionState = AdminActionState;
 
 export type ProjectPolicyOptionsLoadState =
   | { readonly status: 'idle' }

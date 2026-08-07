@@ -5,6 +5,12 @@ import {
   getAdminAccessToken,
 } from './admin-smoke-lib.mjs';
 import {
+  adminRouteUrl,
+  assertEqual,
+  assertNoHorizontalOverflow,
+  authJsonHeaders,
+} from './admin-unified-smoke-lib.mjs';
+import {
   DEFAULTS,
   apiOrigin,
   createLogger,
@@ -59,6 +65,7 @@ async function run() {
 
     await verifyCreateValidation(page);
     await configureProjectCreate(page, resources, runLabel);
+    await verifyConflictFeedback(page, options, runLabel);
     await page.getByTestId('project-edit-save').click();
     await page.waitForURL((url) => {
       const segments = url.pathname.split('/').filter(Boolean);
@@ -157,6 +164,60 @@ async function configureProjectCreate(page, resources, runLabel) {
   await page.getByTestId('project-quota-session-creation-window-sec-value').fill('3600');
   await enableAndFillQuota(page, 'max-runtime-usage-ms', '14400000');
   await enableAndFillQuota(page, 'max-egress-total-bytes', '2147483648');
+}
+
+async function verifyConflictFeedback(page, options, runLabel) {
+  let intercepted = false;
+  const handler = async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.fallback();
+      return;
+    }
+    intercepted = true;
+    await route.fulfill({
+      status: 409,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        error: 'Project policy changed while this draft was open.',
+        code: 'project_revision_conflict',
+        category: 'conflict',
+        recovery_hint: 'Review the latest policy and retry.',
+      }),
+    });
+  };
+  await page.route('**/api/v1/projects', handler);
+  try {
+    await page.getByTestId('project-edit-save').click();
+    await page.getByTestId('project-create-error').waitFor({
+      state: 'visible',
+      timeout: options.connectTimeoutMs,
+    });
+    const feedback = page.getByTestId('project-create-error');
+    const message = await feedback.textContent();
+    if (!message?.includes('Project policy changed') || !message.includes('Review the latest policy')) {
+      throw new Error(`Expected structured project conflict guidance, got ${message}`);
+    }
+    if (await feedback.getAttribute('role') !== 'alert') {
+      throw new Error('Expected project conflict feedback to use an alert role.');
+    }
+    const retainedName = await page.getByTestId('project-edit-name').inputValue();
+    if (retainedName !== `Unified smoke project ${runLabel}`) {
+      throw new Error(`Project conflict did not retain the draft name: ${retainedName}`);
+    }
+    const [feedbackBox, formBox] = await Promise.all([
+      feedback.boundingBox(),
+      page.getByTestId('project-edit-form').boundingBox(),
+    ]);
+    if (!feedbackBox || !formBox || feedbackBox.y + feedbackBox.height > formBox.y + 1) {
+      throw new Error(`Project conflict feedback overlaps the form: ${JSON.stringify({ feedbackBox, formBox })}`);
+    }
+    await assertNoHorizontalOverflow(page, 'project-create-route', 'project conflict feedback route');
+  } finally {
+    await page.unroute('**/api/v1/projects', handler);
+  }
+  if (!intercepted) {
+    throw new Error('Project conflict response was not intercepted.');
+  }
 }
 
 async function restrictAndSelect(page, group, resourceId) {
@@ -444,16 +505,6 @@ async function deleteBrowserContext(accessToken, options, contextId, log) {
   });
 }
 
-async function assertNoHorizontalOverflow(page, testId, label) {
-  const size = await page.getByTestId(testId).evaluate((element) => ({
-    clientWidth: element.clientWidth,
-    scrollWidth: element.scrollWidth,
-  }));
-  if (size.scrollWidth > size.clientWidth + 1) {
-    throw new Error(`${label} overflows horizontally: ${JSON.stringify(size)}`);
-  }
-}
-
 async function assertInputValue(page, testId, expected) {
   const actual = await page.getByTestId(testId).inputValue();
   assertEqual(actual, expected, `${testId} value`);
@@ -469,23 +520,6 @@ async function assertPolicyOption(page, group, resourceId) {
   await option.waitFor({ state: 'visible' });
   const checked = await option.isChecked();
   assertEqual(checked, true, `${group} policy option ${resourceId} checked state`);
-}
-
-function adminRouteUrl(options, path) {
-  return new URL(`/admin-new/${path.replace(/^\/+/, '')}`, apiOrigin(options)).toString();
-}
-
-function authJsonHeaders(accessToken) {
-  return {
-    Authorization: `Bearer ${accessToken}`,
-    'content-type': 'application/json',
-  };
-}
-
-function assertEqual(actual, expected, label) {
-  if (actual !== expected) {
-    throw new Error(`Expected ${label} to be ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
-  }
 }
 
 function assertSameIds(actual, expected, label) {

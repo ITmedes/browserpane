@@ -1,10 +1,8 @@
 <script lang="ts">
+  import { useUnifiedAdminContext } from '$lib/auth/unified-admin-context-provider';
   import ProjectCreateRoute from '$lib/components/ProjectCreateRoute.svelte';
-  import UnifiedAdminShell from '$lib/components/UnifiedAdminShell.svelte';
+
+  const authContext = useUnifiedAdminContext();
 </script>
 
-<UnifiedAdminShell activeId="projects" title="BrowserPane New Project">
-  {#snippet children(authContext)}
-    <ProjectCreateRoute {authContext} />
-  {/snippet}
-</UnifiedAdminShell>
+<ProjectCreateRoute {authContext} />

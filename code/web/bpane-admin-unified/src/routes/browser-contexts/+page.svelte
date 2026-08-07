@@ -1,10 +1,8 @@
 <script lang="ts">
+  import { useUnifiedAdminContext } from '$lib/auth/unified-admin-context-provider';
   import BrowserContextOverviewRoute from '$lib/components/BrowserContextOverviewRoute.svelte';
-  import UnifiedAdminShell from '$lib/components/UnifiedAdminShell.svelte';
+
+  const authContext = useUnifiedAdminContext();
 </script>
 
-<UnifiedAdminShell activeId="contexts" title="BrowserPane Browser Contexts">
-  {#snippet children(authContext)}
-    <BrowserContextOverviewRoute {authContext} />
-  {/snippet}
-</UnifiedAdminShell>
+<BrowserContextOverviewRoute {authContext} />

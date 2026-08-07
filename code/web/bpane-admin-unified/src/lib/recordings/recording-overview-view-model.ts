@@ -1,3 +1,4 @@
+import type { AdminActionState } from '$lib/application/admin-async-state';
 import {
   formatBytes,
   formatDateTime,
@@ -19,11 +20,7 @@ export type RecordingOverviewLoadState =
       readonly failures: readonly RecordingCatalogLoadFailure[];
     };
 
-export type RecordingActionState =
-  | { readonly status: 'idle' }
-  | { readonly status: 'running'; readonly label: string }
-  | { readonly status: 'success'; readonly message: string }
-  | { readonly status: 'error'; readonly message: string };
+export type RecordingActionState = AdminActionState;
 
 export type RecordingOverviewMetric = {
   readonly label: string;

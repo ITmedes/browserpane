@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { adminErrorMessage } from '$lib/application/admin-async-state';
   import type { UnifiedAdminContext } from '$lib/auth/unified-admin-context';
   import ProjectOverview from '$lib/components/ProjectOverview.svelte';
   import { ProjectCatalogClient } from '$lib/projects/project-client';
@@ -35,7 +36,7 @@
     } catch (error) {
       projectState = {
         status: 'error',
-        message: error instanceof Error ? error.message : 'Unexpected project catalog error.',
+        message: adminErrorMessage(error, 'Unexpected project catalog error.'),
       };
     }
   }

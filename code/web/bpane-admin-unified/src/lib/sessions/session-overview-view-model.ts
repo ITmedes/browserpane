@@ -1,3 +1,4 @@
+import type { AdminActionState } from '$lib/application/admin-async-state';
 import { formatDateTime } from '$lib/projects/project-formatters';
 import type { ProjectTone } from '$lib/projects/project-formatters';
 import type { SessionResource } from './session-types';
@@ -7,11 +8,7 @@ export type SessionOverviewLoadState =
   | { readonly status: 'error'; readonly message: string }
   | { readonly status: 'ready'; readonly sessions: readonly SessionResource[] };
 
-export type SessionActionState =
-  | { readonly status: 'idle' }
-  | { readonly status: 'running'; readonly label: string }
-  | { readonly status: 'success'; readonly message: string }
-  | { readonly status: 'error'; readonly message: string };
+export type SessionActionState = AdminActionState;
 
 export type SessionOverviewMetric = {
   readonly label: string;

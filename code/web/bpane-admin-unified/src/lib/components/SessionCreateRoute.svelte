@@ -1,30 +1,26 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
   import { ArrowLeft } from '@lucide/svelte';
   import { onMount } from 'svelte';
+  import { adminErrorMessage, type AdminActionState } from '$lib/application/admin-async-state';
   import type { UnifiedAdminContext } from '$lib/auth/unified-admin-context';
   import { ProjectCatalogClient } from '$lib/projects/project-client';
   import { SessionCatalogClient } from '$lib/sessions/session-client';
   import type { SessionCreateOptionsLoadState } from '$lib/sessions/session-create-view-model';
   import type { CreateSessionRequest, SessionResource } from '$lib/sessions/session-types';
-  import AdminMessage from './AdminMessage.svelte';
+  import ActionFeedback from './ActionFeedback.svelte';
   import SessionCreateForm from './SessionCreateForm.svelte';
 
   type SessionCreateRouteProps = {
     readonly authContext: UnifiedAdminContext;
-    readonly navigateToSession?: (session: SessionResource) => void;
+    readonly navigateToSession?: (session: SessionResource) => void | Promise<void>;
   };
-
-  type SessionActionState =
-    | { readonly status: 'idle' }
-    | { readonly status: 'running'; readonly label: string }
-    | { readonly status: 'success'; readonly message: string }
-    | { readonly status: 'error'; readonly message: string };
 
   let {
     authContext,
     navigateToSession = defaultNavigateToSession,
   }: SessionCreateRouteProps = $props();
-  let actionState = $state<SessionActionState>({ status: 'idle' });
+  let actionState = $state<AdminActionState>({ status: 'idle' });
   let optionsState = $state<SessionCreateOptionsLoadState>({ status: 'idle' });
 
   const busy = $derived(actionState.status === 'running');
@@ -69,7 +65,7 @@
     } catch (error) {
       optionsState = {
         status: 'error',
-        message: error instanceof Error ? error.message : 'Session option load failed.',
+        message: adminErrorMessage(error, 'Session option load failed.'),
       };
     }
   }
@@ -79,17 +75,17 @@
     try {
       const session = await sessionClient().createSession(request);
       actionState = { status: 'success', message: 'Session created.' };
-      navigateToSession(session);
+      await navigateToSession(session);
     } catch (error) {
       actionState = {
         status: 'error',
-        message: error instanceof Error ? error.message : 'Session creation failed.',
+        message: adminErrorMessage(error, 'Session creation failed.'),
       };
     }
   }
 
-  function defaultNavigateToSession(session: SessionResource): void {
-    window.location.assign(`/admin-new/sessions/${encodeURIComponent(session.id)}`);
+  async function defaultNavigateToSession(session: SessionResource): Promise<void> {
+    await goto(`/admin-new/sessions/${encodeURIComponent(session.id)}`);
   }
 </script>
 
@@ -109,13 +105,14 @@
     </div>
   </header>
 
-  {#if actionState.status === 'success'}
-    <AdminMessage tone="success" title="Session action completed" message={actionState.message} testId="session-create-success" />
-  {:else if actionState.status === 'error'}
-    <AdminMessage tone="error" title="Session action failed" message={actionState.message} testId="session-create-error" />
-  {:else if actionState.status === 'running'}
-    <AdminMessage tone="loading" title={actionState.label} testId="session-create-running" />
-  {/if}
+  <ActionFeedback
+    state={actionState}
+    successTitle="Session action completed"
+    errorTitle="Session action failed"
+    successTestId="session-create-success"
+    errorTestId="session-create-error"
+    runningTestId="session-create-running"
+  />
 
   <SessionCreateForm
     disabled={busy}
