@@ -162,9 +162,9 @@ Detailed endpoint authorization and negative-case tests live in
 
 ## Admin-New Requirements
 
-The unified admin app still needs a route-backed `/admin-new/identity` surface.
+The unified admin app provides a route-backed `/admin-new/identity` surface.
 
-That route should provide:
+That route provides:
 
 - current principal summary,
 - project access review,
@@ -192,7 +192,12 @@ The operator CLI should support:
 - `service-principal list`,
 - `service-principal get`,
 - `service-principal update`,
-- identity mapping commands where supported by the current CLI.
+- `service-principal disable`,
+- `identity-mapping create`,
+- `identity-mapping list`,
+- `identity-mapping get`,
+- `identity-mapping update`,
+- `identity-mapping disable`.
 
 CLI output must stay JSON-stable and redact sensitive token material.
 
@@ -226,7 +231,9 @@ Use the relevant subset:
 - `cargo test -p bpane-gateway --test compose_api_surface compose_identity_access_review_api_surface -- --ignored --test-threads=1`
 - `cargo test -p bpane-gateway --test compose_api_surface compose_service_principals_api_surface -- --ignored --test-threads=1`
 - `cd code/web/bpane-admin && npm test && npm run check && npm run build`
+- `cd code/web/bpane-admin-unified && npm test && npm run check && npm run build && npm run test:coverage`
 - `cd code/web/bpane-client && npm test -- js/__tests__/bpane-cli.test.ts`
+- `cd code/web/bpane-client && npm run smoke:admin-unified-identity -- --headless`
 - `cd code/web/bpane-client && npm run smoke:bpane-cli -- --headless`
 - `cd code/web/bpane-client && npm run smoke:admin-session -- --headless`
 

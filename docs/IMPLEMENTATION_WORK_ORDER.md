@@ -428,6 +428,10 @@ Validation:
 
 Tier: P2 admin-new enterprise parity.
 
+Status: implemented for #157 scope on 2026-08-07. The route includes the
+sanitized review plus contained service-principal and identity-mapping
+lifecycle management; enforced RBAC remains #176.
+
 Why here:
 
 - Backend identity/access-review and service-principal APIs already exist.

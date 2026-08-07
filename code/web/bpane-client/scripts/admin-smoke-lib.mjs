@@ -211,7 +211,8 @@ async function adminAuthenticatedVisible(page) {
     || await page.getByTestId('recordings-overview').isVisible().catch(() => false)
     || await page.getByTestId('workflows-overview').isVisible().catch(() => false)
     || await page.getByTestId('workflow-definition-detail-route').isVisible().catch(() => false)
-    || await page.getByTestId('workflow-runs-overview').isVisible().catch(() => false);
+    || await page.getByTestId('workflow-runs-overview').isVisible().catch(() => false)
+    || await page.getByTestId('identity-access-workspace').isVisible().catch(() => false);
 }
 
 async function waitForSessionClients(page, options, sessionId, expectedClients) {

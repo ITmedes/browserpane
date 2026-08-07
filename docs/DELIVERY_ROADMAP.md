@@ -4,7 +4,8 @@ Status: Canonical execution roadmap
 
 Governance issue: [#173](https://github.com/ITmedes/browserpane/issues/173)
 
-Last implementation audit: 2026-08-07 on `feature/BPANE-00179` through `4671a8c`
+Last implementation audit: 2026-08-07 on `feature/BPANE-00157` through the
+locally validated identity/access-review implementation.
 
 ## How To Use This Document
 
@@ -46,7 +47,7 @@ or capacity decision.
 | --- | --- | --- | --- |
 | Foundation | Trusted build, auth, contracts, storage, and lifecycle baseline. | Complete through #179 | Foundation Gate |
 | Pilot Value | One bounded reference workflow with accepted evidence and runbook. | #174 | Phase 0 Gate |
-| Operator Product | Complete and promote `/admin-new/` as the default operator console. | #154 | Phase 1 Gate |
+| Operator Product | Complete and promote `/admin-new/` as the default operator console. | #157 in review, then #158 | Phase 1 Gate |
 | Production | Harden deployment, security, recovery, supply chain, and telemetry. | #72 / #66 / #178 | Production Baseline |
 | Enterprise | Organization controls, policy, residency, HA, and governed integrations. | #176 / #70 / #79 | Phase N Gate |
 | Innovation | Teach Mode and controlled repair after stable execution contracts. | #171 | Phase N capability gate |
@@ -69,9 +70,9 @@ or capacity decision.
 
 | Order | Issue | State | Dependency | Outcome |
 | --- | --- | --- | --- | --- |
-| 1 | #179 | Done | #152 persistent behavior baseline | Control API conformance and compatibility governance merged through PR #194. |
-| 2 | #153 | Done | #179 Foundation Gate | Shared admin-new patterns merged through PR #195. |
-| 3 | #154 | Review | #153 shared admin-new patterns | Route-backed workflow-run detail is implemented and locally validated. |
+| 1 | #155 | Done | #154 workflow-run detail | Session live, files, recordings, and network subareas merged through PR #197. |
+| 2 | #156 | Done | #155 session subarea foundation | Session automation, policy, and observability subareas merged through PR #198. |
+| 3 | #157 | Review | #156 session operations parity | Identity/access review and registry lifecycle are implemented and locally validated. |
 
 #151, #184, and #185 established and accelerated the required validation
 baseline. #145 is merged through
@@ -81,8 +82,10 @@ merged through PR #191. #150 merged through PR #192 after passing the canonical
 full 46-stage validation profile. #152 merged through PR #193 and the latest
 scheduled Compose run on that `main` commit passed. #179 merged through PR #194
 after all 40 fast and all 10 Compose validation stages passed. #153 has
-merged through PR #195 after all required checks passed. #154 is implemented
-on `feature/BPANE-00154` and is the active Operator Product review slice.
+merged through PR #195 after all required checks passed. #154 merged through
+PR #196, #155 through PR #197, and #156 through PR #198. #157 is implemented
+on `feature/BPANE-00157` and is the active Operator Product review slice; #158
+is the next ordered companion-route slice after merge.
 
 ## Foundation Gate Sequence
 

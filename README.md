@@ -25,9 +25,10 @@ has verified the remaining route parity and regression coverage.
 The current prototype includes the dashboard; project, browser-context,
 egress-profile, and file-workspace catalogs; session create/detail and popup
 preview flows; recording catalog/download; workflow source, version, and run
-launching; workflow-run catalog/detail; and refresh-safe session live, files,
-recordings, and network routes. Identity/access review, API/docs companions,
-and the session-detail policy and observability subareas remain incomplete.
+launching; workflow-run catalog/detail; identity/access review and registry
+management; and refresh-safe session live, files, recordings, network,
+automation, policy, and observability routes. API/docs companions and the
+remaining resource catalogs remain incomplete.
 See the
 [admin-new implementation status](docs/ADMIN_NEW_STATUS.md) for the maintained
 route-level matrix.
@@ -107,9 +108,9 @@ Current support and scope:
 - Admin console: `/admin-new/` is the target standard operator application. Its
   first-pass dashboard, primary resource catalogs, session creation/detail and
   popup preview, recording catalog/download, workflow launcher, workflow-run
-  catalog/detail, and session live/files/recordings/network routes are
-  implemented. Identity/access review, API/docs companions, and the remaining
-  session-specific policy/observability subareas are still
+  catalog/detail, identity/access review, and session
+  live/files/recordings/network/automation/policy/observability routes are
+  implemented. API/docs companions and remaining resource catalogs are still
   open; `/admin/` remains the compatibility fallback until
   [issue #163](https://github.com/ITmedes/browserpane/issues/163) completes the
   promotion and rollback gate.
@@ -448,8 +449,9 @@ surfaces, not an exhaustive duplicate of the contract.
   registered service principals, and explicit identity-to-project mappings
   without returning raw bearer-token payloads. Disabled service principals
   cannot receive new automation delegation. These operations are available
-  through the API and CLI; `/admin-new/identity` remains tracked in
-  [issue #157](https://github.com/ITmedes/browserpane/issues/157).
+  through the API, CLI, and `/admin-new/identity`. The unified route supports
+  service-principal and identity-mapping create, edit, disable, and re-enable
+  while keeping registry metadata distinct from enforced RBAC grants.
 - **Network identity and egress profiles** define locale, timezone, browser
   identity, proxy routing, proxy authentication, and optional custom CA policy.
   Project-scoped profiles and credentials cannot cross project boundaries.
