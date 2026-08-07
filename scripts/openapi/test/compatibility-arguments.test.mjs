@@ -13,7 +13,15 @@ test('uses explicit, environment, and default base refs in priority order', () =
   ).baseRef, 'base-sha');
 });
 
-test('rejects unknown and empty arguments', () => {
+test('rejects unknown, empty, option-valued, and duplicate arguments', () => {
   assert.throws(() => CompatibilityArguments.parse(['--unknown'], {}), /unknown argument/);
   assert.throws(() => CompatibilityArguments.parse(['--base-ref'], {}), /non-empty/);
+  assert.throws(
+    () => CompatibilityArguments.parse(['--base-ref', '--help'], {}),
+    /non-empty/
+  );
+  assert.throws(
+    () => CompatibilityArguments.parse(['--base-ref', 'main', '--base-ref', 'release'], {}),
+    /only once/
+  );
 });

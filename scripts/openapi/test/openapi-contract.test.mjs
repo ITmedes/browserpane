@@ -63,3 +63,14 @@ paths:
     assert.throws(() => OpenApiContract.load(filename), /Map keys must be unique/);
   });
 });
+
+test('rejects external references before a contract tool can fetch them', () => {
+  assert.throws(() => OpenApiContract.parse(`
+openapi: 3.0.3
+paths: {}
+components:
+  schemas:
+    Widget:
+      $ref: https://contracts.example/widget.yaml
+`), /external OpenAPI reference/);
+});

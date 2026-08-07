@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "npm run lint && npm run inventory && npm run examples",
+    "check": "npm run inventory && npm run lint && npm run examples",
     "compatibility": "node src/check-compatibility.mjs",
     "examples": "node src/check-examples.mjs",
     "generate": "node src/generate-contract.mjs",

@@ -6,7 +6,11 @@ const HTTP_METHODS = new Set(['delete', 'get', 'head', 'options', 'patch', 'post
 
 export class OpenApiContract {
   static load(filename) {
-    const document = parseDocument(fs.readFileSync(filename, 'utf8'), {
+    return this.parse(fs.readFileSync(filename, 'utf8'));
+  }
+
+  static parse(content) {
+    const document = parseDocument(content, {
       prettyErrors: true,
       strict: true,
       uniqueKeys: true
@@ -14,7 +18,27 @@ export class OpenApiContract {
     if (document.errors.length > 0) {
       throw new Error(document.errors.map((error) => error.message).join('\n'));
     }
-    return new OpenApiContract(document.toJS({ maxAliasCount: 100 }));
+    const value = document.toJS({ maxAliasCount: 100 });
+    this.#assertLocalReferences(value);
+    return new OpenApiContract(value);
+  }
+
+  static #assertLocalReferences(value, location = '$') {
+    if (Array.isArray(value)) {
+      value.forEach((item, index) => this.#assertLocalReferences(item, `${location}[${index}]`));
+      return;
+    }
+    if (value === null || typeof value !== 'object') return;
+    for (const [key, child] of Object.entries(value)) {
+      const childLocation = `${location}.${key}`;
+      if (key === '$ref') {
+        if (typeof child !== 'string' || !/^#(?:\/|$)/.test(child)) {
+          throw new Error(`${childLocation} uses an external OpenAPI reference`);
+        }
+      } else {
+        this.#assertLocalReferences(child, childLocation);
+      }
+    }
   }
 
   constructor(document) {
