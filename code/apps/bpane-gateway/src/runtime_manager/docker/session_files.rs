@@ -61,7 +61,7 @@ pub(in crate::runtime_manager) const EXPORT_BROWSER_CONTEXT_PROFILE_SCRIPT: &str
 set -eu
 cd /bpane-profile
 find . -xdev \( -type f -o -type d \) -print0 \
-  | tar --null --no-recursion --files-from=- -czf -
+  | tar --null --no-recursion --hard-dereference --files-from=- -czf -
 "#;
 
 pub(in crate::runtime_manager) const IMPORT_BROWSER_CONTEXT_PROFILE_SCRIPT: &str = r#"
