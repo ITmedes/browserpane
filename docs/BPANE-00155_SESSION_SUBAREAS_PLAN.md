@@ -84,6 +84,9 @@ the route, download the available content, and verify blocked/empty states.
 
 ### 3. Recording Evidence
 
+Implementation status: complete in code; automated and Compose validation are
+the remaining gate before promotion of this checkpoint.
+
 1. Load session recording policy, retained segments, and playback/export
    summary independently from the global recording catalog.
 2. Show active, finalizing, ready, failed, and expired-artifact states.

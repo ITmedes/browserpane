@@ -35,4 +35,16 @@ describe('SessionSubareaNavigation', () => {
       .toBe('/admin-new/sessions/session-1/files');
     expect(byTestId(target, 'session-subarea-files').getAttribute('aria-current')).toBe('page');
   });
+
+  it('links the recordings area after that route is enabled', () => {
+    const target = renderComponent(SessionSubareaNavigation, {
+      sessionId: 'session-1',
+      activeId: 'recordings',
+      availableIds: ['overview', 'live', 'files', 'recordings'],
+    });
+
+    expect(byTestId(target, 'session-subarea-recordings').getAttribute('href'))
+      .toBe('/admin-new/sessions/session-1/recordings');
+    expect(byTestId(target, 'session-subarea-recordings').getAttribute('aria-current')).toBe('page');
+  });
 });

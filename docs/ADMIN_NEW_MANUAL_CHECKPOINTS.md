@@ -121,16 +121,24 @@ treated as complete.
 
 ## Recordings
 
-1. Create or select a session whose recording policy allows the intended mode.
-2. Start or inspect recording state.
-3. Perform a short browser action.
-4. Stop where supported.
-5. Confirm the artifact is non-empty and downloadable.
-6. Refresh retained segments and confirm metadata is preserved.
-7. Download a retained segment.
-8. Download playback/export where available.
-9. Confirm failed/unavailable artifacts explain the state instead of appearing
-   as broken download buttons.
+1. Create or select a session, then open
+   `/admin-new/sessions/{session_id}/recordings` directly and refresh it.
+2. Enable always-on recording and confirm a stopped/released session is not
+   implicitly started.
+3. Start/connect the session, perform a short browser action, and disconnect or
+   stop so the active segment finalizes.
+4. Refresh the recording route and confirm policy, playback summary, segment
+   state, size, duration, termination reason, and timestamps are retained.
+5. With one available segment, confirm the single download action returns a
+   non-empty WebM.
+6. Restart/reconnect to create another segment, finalize it, and confirm the
+   same action now returns a playback ZIP.
+7. Confirm failed and expired/missing artifacts remain visible without an
+   enabled broken download action.
+8. Make either the segment list or playback-summary endpoint unavailable and
+   confirm the other evidence block remains usable.
+9. Disable recording and confirm the policy changes without deleting retained
+   segment evidence.
 
 ## Network And Egress
 

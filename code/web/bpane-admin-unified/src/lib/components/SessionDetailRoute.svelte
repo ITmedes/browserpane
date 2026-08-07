@@ -416,7 +416,7 @@
   </header>
 
   {#if routeSessionId}
-    <SessionSubareaNavigation sessionId={routeSessionId} activeId="overview" availableIds={['overview', 'live', 'files']} />
+    <SessionSubareaNavigation sessionId={routeSessionId} activeId="overview" availableIds={['overview', 'live', 'files', 'recordings']} />
   {/if}
 
   {#if sessionState.status === 'error'}

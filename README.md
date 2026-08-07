@@ -25,9 +25,10 @@ has verified the remaining route parity and regression coverage.
 The current prototype includes the dashboard; project, browser-context,
 egress-profile, and file-workspace catalogs; session create/detail and popup
 preview flows; recording catalog/download; workflow source, version, and run
-launching; and the workflow-run catalog. Identity/access review, API/docs
-companions, workflow-run detail, and the session-detail files, recordings,
-network, policy, and observability subareas remain incomplete. See the
+launching; workflow-run catalog/detail; and refresh-safe session live, files,
+and recordings routes. Identity/access review, API/docs companions, and the
+session-detail network, policy, and observability subareas remain incomplete.
+See the
 [admin-new implementation status](docs/ADMIN_NEW_STATUS.md) for the maintained
 route-level matrix.
 
@@ -105,10 +106,11 @@ Current support and scope:
 - Workflow execution: Git-backed workflow versions run through a gateway-managed `workflow-worker`; the current executor model is Playwright.
 - Admin console: `/admin-new/` is the target standard operator application. Its
   first-pass dashboard, primary resource catalogs, session creation/detail and
-  popup preview, recording catalog/download, workflow launcher, and workflow-run
-  catalog are implemented. Identity/access review, API/docs companions,
-  workflow-run detail, and session-specific subareas are still open; `/admin/`
-  remains the compatibility fallback until
+  popup preview, recording catalog/download, workflow launcher, workflow-run
+  catalog/detail, and session live/files/recordings routes are implemented.
+  Identity/access review, API/docs companions, and the
+  remaining session-specific network/policy/observability subareas are still
+  open; `/admin/` remains the compatibility fallback until
   [issue #163](https://github.com/ITmedes/browserpane/issues/163) completes the
   promotion and rollback gate.
 - Workflow boundary: BrowserPane currently focuses on executing and supervising browser workflows. Broader scheduling, DAG orchestration, and cross-system coordination are expected to sit above BrowserPane rather than inside it.
@@ -925,8 +927,9 @@ BrowserPane session recording is now a control-plane feature rather than only a 
 
 - Session recording policy supports `disabled`, `manual`, and `always`.
 - Recording resources are session-scoped and persist segment metadata, runtime state, termination reason, and artifact linkage.
-- Recordings can be downloaded from the `/admin-new/recordings` catalog, the
-  legacy development harness where applicable, or through the v1 API.
+- Recordings can be inspected and downloaded from the global
+  `/admin-new/recordings` catalog or the session-specific
+  `/admin-new/sessions/{id}/recordings` route, as well as through the v1 API.
 - Playback/export is modeled separately from raw recording segments, so multi-segment sessions stay explicit.
 - Project policy can set `allow_manual_recordings=false` to block ad-hoc manual
   recording starts for project sessions. The unified admin session form uses
@@ -957,9 +960,9 @@ Local automatic backend recording flow:
    session runtime.
 4. Disconnect the last interactive preview or use an applicable disconnect,
    release, stop, or kill action so the gateway finalizes the active segment.
-5. Refresh and download from `http://localhost:8080/admin-new/recordings`; a single
-   retained segment downloads as WebM, while sessions with multiple retained
-   segments download as a playback ZIP bundle.
+5. Refresh `/admin-new/sessions/{id}/recordings` for policy, playback, and
+   segment evidence. A single retained segment downloads as WebM, while a
+   session with multiple retained segments downloads as a playback ZIP bundle.
 
 ## Workflow Platform
 
