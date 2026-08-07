@@ -9,13 +9,16 @@ import {
 } from '$lib/api/authenticated-api';
 import type {
   BrowserContextListResponse,
+  BrowserContextExportArchive,
   BrowserContextPersistenceMode,
   BrowserContextProjectOptionsResponse,
   BrowserContextProjectResource,
   BrowserContextResource,
   BrowserContextState,
   BrowserContextUsageResource,
+  CloneBrowserContextRequest,
   CreateBrowserContextRequest,
+  ImportBrowserContextRequest,
 } from './browser-context-types';
 
 const BROWSER_CONTEXT_STATES = ['ready', 'deleted'] satisfies readonly BrowserContextState[];
@@ -118,6 +121,53 @@ export class BrowserContextCatalogClient {
     return toBrowserContextResource(await response.json());
   }
 
+  async cloneBrowserContext(
+    contextId: string,
+    request: CloneBrowserContextRequest,
+  ): Promise<BrowserContextResource> {
+    const response = await this.#request(
+      new URL(`/api/v1/browser-contexts/${encodeURIComponent(contextId)}/clone`, this.#baseUrl),
+      {
+        method: 'POST',
+        headers: {
+          accept: 'application/json',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify(request),
+      },
+    );
+
+    return toBrowserContextResource(await response.json());
+  }
+
+  async exportBrowserContext(contextId: string): Promise<BrowserContextExportArchive> {
+    const response = await this.#request(
+      new URL(`/api/v1/browser-contexts/${encodeURIComponent(contextId)}/export`, this.#baseUrl),
+      {
+        method: 'GET',
+        headers: {
+          accept: 'application/zip',
+        },
+      },
+    );
+
+    return {
+      blob: await response.blob(),
+      filename: browserContextExportFilename(response.headers, contextId),
+    };
+  }
+
+  async importBrowserContext(request: ImportBrowserContextRequest): Promise<BrowserContextResource> {
+    const headers = browserContextImportHeaders(request);
+    const response = await this.#request(new URL('/api/v1/browser-contexts/import', this.#baseUrl), {
+      method: 'POST',
+      headers,
+      body: request.archive,
+    });
+
+    return toBrowserContextResource(await response.json());
+  }
+
   async listProjectOptions(): Promise<BrowserContextProjectOptionsResponse> {
     const response = await this.#request(new URL('/api/v1/projects', this.#baseUrl), {
       method: 'GET',
@@ -131,6 +181,63 @@ export class BrowserContextCatalogClient {
 
   async #request(input: URL, init: RequestInit): Promise<Response> {
     return await this.#api.request(input, init);
+  }
+}
+
+export function browserContextExportFilename(headers: Headers, contextId: string): string {
+  const disposition = headers.get('content-disposition') ?? '';
+  const encodedMatch = disposition.match(/filename\*\s*=\s*UTF-8''([^;]+)/i);
+  const quotedMatch = disposition.match(/filename\s*=\s*"([^"]*)"/i);
+  const plainMatch = disposition.match(/filename\s*=\s*([^;]+)/i);
+  let candidate = encodedMatch?.[1] ?? quotedMatch?.[1] ?? plainMatch?.[1] ?? '';
+  if (encodedMatch?.[1]) {
+    try {
+      candidate = decodeURIComponent(encodedMatch[1]);
+    } catch {
+      candidate = '';
+    }
+  }
+  return sanitizeBrowserContextArchiveFilename(candidate, contextId);
+}
+
+export function sanitizeBrowserContextArchiveFilename(candidate: string, contextId: string): string {
+  const normalized = candidate
+    .normalize('NFKC')
+    .replace(/[\\/]/g, '-')
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/^[.-]+|[.-]+$/g, '')
+    .slice(0, 120);
+  const fallbackId = contextId
+    .replace(/[^a-zA-Z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80) || 'context';
+  const filename = normalized || `browserpane-browser-context-${fallbackId}`;
+  return filename.toLowerCase().endsWith('.zip') ? filename : `${filename}.zip`;
+}
+
+function browserContextImportHeaders(request: ImportBrowserContextRequest): Headers {
+  const headers = new Headers({
+    accept: 'application/json',
+    'content-type': 'application/zip',
+    'x-bpane-browser-context-name': request.name,
+  });
+  setOptionalHeader(headers, 'x-bpane-browser-context-project-id', request.project_id);
+  setOptionalHeader(headers, 'x-bpane-browser-context-description', request.description);
+  if (request.labels !== undefined) {
+    headers.set('x-bpane-browser-context-labels', JSON.stringify(request.labels));
+  }
+  setOptionalHeader(headers, 'x-bpane-browser-context-retention-sec', request.retention_sec);
+  setOptionalHeader(
+    headers,
+    'x-bpane-browser-context-max-profile-storage-bytes',
+    request.max_profile_storage_bytes,
+  );
+  return headers;
+}
+
+function setOptionalHeader(headers: Headers, name: string, value: string | number | null | undefined): void {
+  if (value !== undefined && value !== null) {
+    headers.set(name, String(value));
   }
 }
 
