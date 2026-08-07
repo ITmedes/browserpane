@@ -33,7 +33,9 @@ A release process may add a second comparison with the latest supported v1
 release artifact; it must not replace the pull-request comparison.
 
 The baseline and revision are processed locally. Contract content must not be
-uploaded to a hosted diff service.
+uploaded to a hosted diff service. The frozen contract is self-contained:
+non-fragment `$ref` values are rejected before lint, example, or diff tooling
+can resolve or fetch them.
 
 ## Allowed V1 Changes
 
@@ -65,6 +67,8 @@ The compatibility gate rejects, at minimum:
 
 A breaking change is not approved by editing generated evidence or suppressing
 the check. It requires an additive v1 design or a new versioned contract.
+Changes the semantic engine cannot classify also fail closed and require a
+reviewed contract design; they are not treated as compatible by default.
 
 ## Deprecation And Support Window
 

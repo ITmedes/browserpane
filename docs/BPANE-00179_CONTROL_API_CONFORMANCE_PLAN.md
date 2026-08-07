@@ -256,11 +256,13 @@ optional field should pass without a manual exception.
   - `e825a76` and `9efe1d6` add local/CI stages and exact workflow-base
     selection.
   - `4671a8c` completes governance failure-path coverage.
+  - `5ba5bbd` rejects remote references, unclassified semantic changes, and
+    malformed catalog or CLI inputs before downstream tools run.
 - Validation on 2026-08-07:
   - `node scripts/validate.mjs --profile fast`: all 40 stages passed.
   - Rust workspace tests and coverage ratchet passed; the focused OpenAPI
     gateway contract passed for all 131 operations.
-  - OpenAPI tooling: 19 unit/fixture tests, structural lint, deterministic
+  - OpenAPI tooling: 22 unit/fixture tests, structural lint, deterministic
     inventory, 14 examples, and semantic compatibility passed.
   - `node scripts/validate.mjs --profile compose`: all 10 stages passed,
     including 17 default-runtime and 4 docker-pool gateway API tests plus
