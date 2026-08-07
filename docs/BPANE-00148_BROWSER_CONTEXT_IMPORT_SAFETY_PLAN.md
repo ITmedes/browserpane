@@ -3,7 +3,7 @@
 ## Metadata
 
 - Issue: `#148`
-- State: Implemented; hosted validation pending
+- State: Implemented and validated
 - Lane: Foundation
 - Target gate: Foundation Gate and prerequisite for `#160`
 - Depends on: merged browser-context clone/export/import API baseline
@@ -288,9 +288,9 @@ leave a context row or Docker profile volume behind.
 
 ## Evidence Record
 
-- PR: pending
+- PR: `#202`
 - Commits: `7b7d902`, `2ed29e3`, `226f1a2`, `c4f44ca`, `12f7282`,
-  `aae2186`, `cdc2f71`, `778bfbd`, `764a714`
+  `aae2186`, `cdc2f71`, `778bfbd`, `764a714`, `51a4db2`, `4d456af`
 - Unit/integration results: `cargo test -p bpane-gateway` passed with 413
   tests, zero failures, and one ignored opt-in Postgres contract test.
 - Compose smoke results: focused `compose_browser_contexts_api_surface` passed
@@ -303,6 +303,9 @@ leave a context row or Docker profile volume behind.
 - Coverage/build results: gateway package line coverage 60.34%; new archive
   parser line coverage 80.91%. Formatting, strict clippy, compose config, and
   OpenAPI generation/lint/examples/compatibility checks passed.
+- Hosted validation: manually dispatched Compose run `31205125816` targets the
+  final code commit because Compose is intentionally not a pull-request trigger;
+  its result is recorded on `#148` and `#202`.
 - README decision: updated with deployment defaults and bounded response
   behavior.
 - ARCH decision: updated with the authenticated, backpressured import boundary
