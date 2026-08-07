@@ -1,6 +1,10 @@
 use std::io::Read;
+use std::num::NonZeroUsize;
 
 use super::*;
+use crate::api::browser_context_archive::{
+    BrowserContextImportArchiveLimits, BrowserContextImportService,
+};
 
 #[tokio::test]
 async fn manages_browser_context_catalog_and_reusable_session_binding() {
@@ -296,6 +300,83 @@ async fn manages_browser_context_catalog_and_reusable_session_binding() {
         .await
         .unwrap();
     assert_eq!(deleted_context_session.status(), StatusCode::CONFLICT);
+}
+
+#[tokio::test]
+async fn enforces_authenticated_browser_context_import_bounds_and_capacity() {
+    let limits = BrowserContextImportArchiveLimits {
+        max_archive_bytes: 64,
+        max_manifest_bytes: 64,
+        max_profile_archive_bytes: 64,
+        max_profile_uncompressed_bytes: 1024,
+        max_profile_entries: 10,
+        max_profile_path_bytes: 128,
+    };
+    let service = BrowserContextImportService::new(
+        limits,
+        NonZeroUsize::new(1).expect("test capacity must be non-zero"),
+    );
+    let (app, token, state) = test_router_with_browser_context_import(service);
+
+    let unauthorized = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/browser-contexts/import")
+                .body(Body::from(vec![0_u8; 65]))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(unauthorized.status(), StatusCode::UNAUTHORIZED);
+
+    let oversized = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/browser-contexts/import")
+                .header("authorization", bearer(&token))
+                .body(Body::from(vec![0_u8; 65]))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(oversized.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    assert!(response_json(oversized).await["error"]
+        .as_str()
+        .unwrap()
+        .contains("64-byte request limit"));
+
+    let permit = state.browser_context_import.try_acquire().unwrap();
+    let saturated = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/browser-contexts/import")
+                .header("authorization", bearer(&token))
+                .body(Body::from("not a zip"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(saturated.status(), StatusCode::TOO_MANY_REQUESTS);
+    drop(permit);
+
+    let malformed = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/browser-contexts/import")
+                .header("authorization", bearer(&token))
+                .body(Body::from("not a zip"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(malformed.status(), StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]

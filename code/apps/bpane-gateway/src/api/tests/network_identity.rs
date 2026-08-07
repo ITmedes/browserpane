@@ -1276,7 +1276,7 @@ async fn start_profile_proxy_probe_server(
             }
         }
         let request_text = String::from_utf8_lossy(&request).to_string();
-        let authenticated = expected_proxy_auth.as_ref().map_or(true, |expected| {
+        let authenticated = expected_proxy_auth.as_ref().is_none_or(|expected| {
             request_text
                 .lines()
                 .any(|line| line.eq_ignore_ascii_case(&format!("Proxy-Authorization: {expected}")))

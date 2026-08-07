@@ -168,3 +168,38 @@ fn operational_timeouts_must_be_nonzero() {
         .to_string()
         .contains("--shutdown-readiness-grace-secs"));
 }
+
+#[test]
+fn browser_context_import_limits_are_validated_and_materialized() {
+    let mut config = test_config();
+    let service = super::build_browser_context_import_service(&config).unwrap();
+    let limits = service.limits();
+    assert_eq!(limits.max_archive_bytes, 536_870_912);
+    assert_eq!(limits.max_profile_archive_bytes, 536_870_912);
+    assert_eq!(limits.max_profile_uncompressed_bytes, 2_147_483_648);
+    assert_eq!(limits.max_profile_entries, 100_000);
+
+    config.gateway.browser_context_import_max_archive_bytes = 0;
+    assert!(super::build_browser_context_import_service(&config)
+        .unwrap_err()
+        .to_string()
+        .contains("max-archive-bytes"));
+
+    config.gateway.browser_context_import_max_archive_bytes = 128;
+    config
+        .gateway
+        .browser_context_import_max_profile_archive_bytes = 129;
+    assert!(super::build_browser_context_import_service(&config)
+        .unwrap_err()
+        .to_string()
+        .contains("must not exceed"));
+
+    config
+        .gateway
+        .browser_context_import_max_profile_archive_bytes = 128;
+    config.gateway.browser_context_import_max_concurrent = 0;
+    assert!(super::build_browser_context_import_service(&config)
+        .unwrap_err()
+        .to_string()
+        .contains("max-concurrent"));
+}

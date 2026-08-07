@@ -43,6 +43,7 @@ async fn scopes_session_resources_to_the_authenticated_owner() {
         idle_stop_timeout: Duration::from_secs(300),
         public_gateway_url: "https://localhost:4433".to_string(),
         default_owner_mode: SessionOwnerMode::Collaborative,
+        browser_context_import: Default::default(),
         mcp_bridge_control: None,
     });
     let app = build_api_router(state);
@@ -122,6 +123,7 @@ async fn rejects_session_scoped_runtime_routes_for_unknown_or_foreign_sessions_b
         idle_stop_timeout: Duration::from_secs(300),
         public_gateway_url: "https://localhost:4433".to_string(),
         default_owner_mode: SessionOwnerMode::Collaborative,
+        browser_context_import: Default::default(),
         mcp_bridge_control: None,
     });
     let app = build_api_router(state);

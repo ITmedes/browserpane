@@ -303,7 +303,7 @@ service.
   - `GET /api/v1/browser-contexts/{id}` — fetch one browser context with optional project summary, visible-session, active-runtime, optional profile-storage, storage-limit, and retention-expiry summary
   - `POST /api/v1/browser-contexts/{id}/clone` — clone an inactive reusable context into a new owner-scoped or project-owned reusable context; docker-backed runtimes copy profile volume data when present
   - `GET /api/v1/browser-contexts/{id}/export` — download an inactive reusable context as a zip archive with manifest and optional docker-backed profile payload
-  - `POST /api/v1/browser-contexts/import` — import a BrowserPane export archive into a new owner-scoped or project-owned reusable context; docker-backed runtimes restore `profile.tar.gz` when present
+  - `POST /api/v1/browser-contexts/import` — import a BrowserPane export archive into a new owner-scoped or project-owned reusable context; authentication precedes bounded body reads, archive preflight runs off the async executor with bounded concurrency, and docker-backed runtimes restore validated `profile.tar.gz` data when present
   - `DELETE /api/v1/browser-contexts/{id}` — delete one browser context; docker-backed runtimes remove the context profile volume and reject active writers
   - `POST /api/v1/session-templates` — create a reusable owner-scoped session template
   - `GET /api/v1/session-templates` — list reusable owner-scoped session templates
@@ -353,7 +353,7 @@ service.
   - rejects new reusable sessions from a context once inspected docker profile storage exceeds the configured per-context limit
   - clones inactive reusable contexts into new owner-scoped reusable contexts and copies docker-backed Chromium profile volume data when present
   - exports inactive reusable contexts as zip archives containing manifest metadata plus `profile.tar.gz` when docker profile data exists
-  - imports BrowserPane export archives into new reusable contexts after validating the manifest and archive entries; imports never overwrite existing context ids
+  - imports BrowserPane export archives into new reusable contexts after bounding compressed/expanded bytes and entry counts and rejecting traversal, links, and special files; imports never overwrite existing context ids
   - scans expired ready contexts on startup and then on a configurable interval
   - removes docker-backed context profile volumes through the runtime manager and skips active writers for a later pass
 - **Workflow lifecycle** (`workflow_lifecycle.rs`, `workflow/observability.rs`, `workflow/retention.rs`):

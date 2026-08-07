@@ -58,6 +58,28 @@ fn docker_profile(max_runtime_sessions: usize) -> RuntimeProfile {
     }
 }
 
+#[test]
+fn browser_context_import_runtime_rejects_special_entries_and_unsafe_metadata() {
+    let script = super::docker::session_files::IMPORT_BROWSER_CONTEXT_PROFILE_SCRIPT;
+
+    assert!(script.contains("entry_type != \"-\" && entry_type != \"d\""));
+    assert!(script.contains("--no-same-owner"));
+    assert!(script.contains("--no-same-permissions"));
+    assert!(script.contains("--delay-directory-restore"));
+    assert!(script.contains("! -type d ! -type f"));
+    assert!(script.contains("chown -R --no-dereference"));
+}
+
+#[test]
+fn browser_context_export_runtime_omits_links_and_special_entries() {
+    let script = super::docker::session_files::EXPORT_BROWSER_CONTEXT_PROFILE_SCRIPT;
+
+    assert!(script.contains("find . -xdev"));
+    assert!(script.contains("-type f -o -type d"));
+    assert!(script.contains("-print0"));
+    assert!(script.contains("tar --null --no-recursion --hard-dereference --files-from=-"));
+}
+
 fn test_principal(subject: &str) -> AuthenticatedPrincipal {
     AuthenticatedPrincipal {
         subject: subject.to_string(),
