@@ -25,6 +25,28 @@ export function authJsonHeaders(accessToken) {
   };
 }
 
+export function findActiveSessionIdsByLabels(response, expectedLabels) {
+  if (!response || !Array.isArray(response.sessions)) {
+    throw new Error('Expected a session catalog response.');
+  }
+  return response.sessions.flatMap((session) => {
+    if (
+      !session
+      || typeof session.id !== 'string'
+      || !session.id
+      || typeof session.state !== 'string'
+      || session.state === 'stopped'
+      || !session.labels
+      || typeof session.labels !== 'object'
+    ) {
+      return [];
+    }
+    return Object.entries(expectedLabels).every(([key, value]) => session.labels[key] === value)
+      ? [session.id]
+      : [];
+  });
+}
+
 export async function waitForContains(scope, options, testId, expected) {
   await poll(
     testId,

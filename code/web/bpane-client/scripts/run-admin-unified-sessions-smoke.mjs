@@ -8,6 +8,7 @@ import {
   adminRouteUrl,
   assertNoBodyHorizontalOverflow,
   assertNoHorizontalOverflow,
+  findActiveSessionIdsByLabels,
   waitForContains,
 } from './admin-unified-smoke-lib.mjs';
 import {
@@ -42,6 +43,7 @@ async function run() {
     if (!accessToken) {
       throw new Error('No admin access token available after login.');
     }
+    await cleanupStaleSessionSmokes(accessToken, options, log);
 
     await page.goto(adminRouteUrl(options, 'sessions'), { waitUntil: 'domcontentloaded' });
     await page.getByTestId('sessions-overview').waitFor({
@@ -72,8 +74,18 @@ async function run() {
     if (!preview?.includes('"camera": false') || !preview.includes('"microphone": false')) {
       throw new Error(`Session create form did not include capability overrides: ${preview}`);
     }
+    const createResponsePromise = page.waitForResponse((response) => {
+      const request = response.request();
+      const url = new URL(response.url());
+      return request.method() === 'POST' && url.pathname === '/api/v1/sessions';
+    }, { timeout: options.connectTimeoutMs });
     await page.getByTestId('session-create-save').click();
-    createdSessionId = await waitForSessionDetailUrl(page, options);
+    const createResponse = await createResponsePromise;
+    if (createResponse.ok()) {
+      const createdSession = await createResponse.json();
+      createdSessionId = typeof createdSession?.id === 'string' ? createdSession.id : '';
+    }
+    createdSessionId = await waitForSessionDetailUrl(page, options, createdSessionId);
     await page.getByTestId('session-detail-route').waitFor({
       state: 'visible',
       timeout: options.connectTimeoutMs,
@@ -342,7 +354,7 @@ async function assertPreviewResizeUsesIndependentHeight(popup, options) {
   }
 }
 
-async function waitForSessionDetailUrl(page, options) {
+async function waitForSessionDetailUrl(page, options, expectedSessionId = '') {
   const result = await poll(
     'created unified session detail url',
     async () => {
@@ -358,7 +370,26 @@ async function waitForSessionDetailUrl(page, options) {
   if (result.error) {
     throw new Error(`Session create form failed: ${result.error}`);
   }
+  if (expectedSessionId && result.sessionId !== expectedSessionId) {
+    throw new Error(`Expected created session detail ${expectedSessionId}, got ${result.sessionId}`);
+  }
   return result.sessionId;
+}
+
+async function cleanupStaleSessionSmokes(accessToken, options, log) {
+  const catalog = await fetchJson(`${apiOrigin(options)}/api/v1/sessions`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const sessionIds = findActiveSessionIdsByLabels(catalog, {
+    suite: 'admin-unified-sessions',
+    purpose: 'smoke',
+  });
+  for (const sessionId of sessionIds) {
+    await cleanupSession(accessToken, options, sessionId);
+  }
+  if (sessionIds.length > 0) {
+    log(`Removed ${sessionIds.length} stale admin-new session smoke runtime(s).`);
+  }
 }
 
 async function cleanupSession(accessToken, options, sessionId) {
