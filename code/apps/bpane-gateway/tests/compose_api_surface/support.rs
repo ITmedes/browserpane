@@ -383,6 +383,30 @@ impl ComposeHarness {
         self.send_bytes(Method::POST, path, bytes, headers).await
     }
 
+    pub async fn post_bytes_outcome(
+        &self,
+        path: &str,
+        bytes: Vec<u8>,
+        content_type: &str,
+        extra_headers: &[(&str, &str)],
+    ) -> Result<JsonOutcome> {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            CONTENT_TYPE,
+            HeaderValue::from_str(content_type).context("invalid content-type header")?,
+        );
+        for (name, value) in extra_headers {
+            headers.insert(
+                HeaderName::from_bytes(name.as_bytes())
+                    .with_context(|| format!("invalid header name {name}"))?,
+                HeaderValue::from_str(value)
+                    .with_context(|| format!("invalid header value for {name}"))?,
+            );
+        }
+        self.send_bytes_outcome(Method::POST, path, bytes, headers)
+            .await
+    }
+
     pub async fn get_bytes(&self, path: &str) -> Result<Vec<u8>> {
         self.send_for_bytes(Method::GET, path, None).await
     }
@@ -843,6 +867,35 @@ impl ComposeHarness {
         }
         serde_json::from_str(&text)
             .with_context(|| format!("failed to decode JSON response from {path}: {text}"))
+    }
+
+    async fn send_bytes_outcome(
+        &self,
+        method: Method,
+        path: &str,
+        bytes: Vec<u8>,
+        headers: HeaderMap,
+    ) -> Result<JsonOutcome> {
+        let response = self
+            .client
+            .request(method.clone(), self.api_url(path))
+            .bearer_auth(self.bearer_token())
+            .headers(headers)
+            .body(bytes)
+            .send()
+            .await
+            .with_context(|| format!("failed to call {method} {path}"))?;
+        let status = response.status();
+        let text = response
+            .text()
+            .await
+            .context("failed to read response body")?;
+        let body = serde_json::from_str(&text).with_context(|| {
+            format!(
+                "failed to decode JSON response from {method} {path} with status {status}: {text}"
+            )
+        })?;
+        Ok(JsonOutcome { status, body })
     }
 
     async fn send_for_bytes(

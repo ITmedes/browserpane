@@ -103,8 +103,37 @@ fn rejects_profile_links() {
 }
 
 #[test]
+fn rejects_hardlinks_devices_and_fifos() {
+    for entry_type in [
+        EntryType::Link,
+        EntryType::Char,
+        EntryType::Block,
+        EntryType::Fifo,
+    ] {
+        let profile = profile_archive_with_special_entry(entry_type);
+        let archive =
+            build_browser_context_export_archive(&test_manifest(true), Some(&profile)).unwrap();
+
+        let error = parse_browser_context_import_archive(&archive, test_limits()).unwrap_err();
+
+        assert!(error.to_string().contains("unsupported entry type"));
+    }
+}
+
+#[test]
 fn rejects_parent_directory_paths() {
     let profile = profile_archive_with_raw_path(b"../escape");
+    let archive =
+        build_browser_context_export_archive(&test_manifest(true), Some(&profile)).unwrap();
+
+    let error = parse_browser_context_import_archive(&archive, test_limits()).unwrap_err();
+
+    assert!(error.to_string().contains("unsafe path"));
+}
+
+#[test]
+fn rejects_absolute_paths() {
+    let profile = profile_archive_with_raw_path(b"/escape");
     let archive =
         build_browser_context_export_archive(&test_manifest(true), Some(&profile)).unwrap();
 
@@ -197,6 +226,27 @@ fn profile_archive_with_symlink() -> Vec<u8> {
         .unwrap();
     let encoder = builder.into_inner().unwrap();
     encoder.finish().unwrap()
+}
+
+fn profile_archive_with_special_entry(entry_type: EntryType) -> Vec<u8> {
+    let encoder = GzEncoder::new(Vec::new(), Compression::default());
+    let mut builder = Builder::new(encoder);
+    let mut header = Header::new_gnu();
+    header.set_entry_type(entry_type);
+    header.set_mode(0o600);
+    header.set_size(0);
+    if entry_type.is_hard_link() {
+        header.set_link_name("Default/source").unwrap();
+    }
+    if entry_type.is_character_special() || entry_type.is_block_special() {
+        header.set_device_major(1).unwrap();
+        header.set_device_minor(3).unwrap();
+    }
+    header.set_cksum();
+    builder
+        .append_data(&mut header, "Default/special", std::io::empty())
+        .unwrap();
+    builder.into_inner().unwrap().finish().unwrap()
 }
 
 fn profile_archive_with_raw_path(path: &[u8]) -> Vec<u8> {
