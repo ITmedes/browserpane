@@ -49,6 +49,54 @@ describe('BrowserContextInspector', () => {
     expect(onDeleteContext).not.toHaveBeenCalled();
   });
 
+  it('blocks clone and export for an active writer and links to the active session', () => {
+    const onExportContext = vi.fn();
+    const target = renderComponent(BrowserContextInspector, {
+      state: {
+        status: 'ready',
+        context: context({ activeRuntimeSessions: 1, activeRuntimeSessionId: 'session-1' }),
+      },
+      onExportContext,
+    });
+
+    const cloneButton = byTestId(target, 'browser-context-clone') as HTMLButtonElement;
+    const exportButton = byTestId(target, 'browser-context-export') as HTMLButtonElement;
+    expect(cloneButton.disabled).toBe(true);
+    expect(cloneButton.title).toContain('Stop the active browser session');
+    expect(exportButton.disabled).toBe(true);
+    expect(exportButton.title).toContain('Stop the active browser session');
+    expect(byTestId(target, 'browser-context-lifecycle-blocked').textContent).toContain(
+      'Stop the active browser session',
+    );
+    expect(byTestId(target, 'browser-context-active-session').getAttribute('href')).toBe(
+      '/admin-new/sessions/session-1',
+    );
+    exportButton.click();
+    expect(onExportContext).not.toHaveBeenCalled();
+  });
+
+  it('allows clone and export with inactive references and warns without blocking over-limit recovery', () => {
+    const onExportContext = vi.fn();
+    const target = renderComponent(BrowserContextInspector, {
+      state: {
+        status: 'ready',
+        context: context({ visibleSessions: 2, profileStorageLimitExceeded: true }),
+      },
+      onExportContext,
+    });
+
+    expect(byTestId(target, 'browser-context-clone').getAttribute('href')).toBe(
+      '/admin-new/browser-contexts/context-1/clone',
+    );
+    const exportButton = byTestId(target, 'browser-context-export') as HTMLButtonElement;
+    expect(exportButton.disabled).toBe(false);
+    expect(byTestId(target, 'browser-context-storage-warning').textContent).toContain(
+      'Export remains available for recovery',
+    );
+    exportButton.click();
+    expect(onExportContext).toHaveBeenCalledOnce();
+  });
+
   it('runs refresh and delete actions for deletable contexts', () => {
     const onRefreshContext = vi.fn();
     const onDeleteContext = vi.fn();
@@ -69,6 +117,8 @@ describe('BrowserContextInspector', () => {
 function context(options: Partial<{
   readonly visibleSessions: number;
   readonly activeRuntimeSessions: number;
+  readonly activeRuntimeSessionId: string | null;
+  readonly profileStorageLimitExceeded: boolean;
   readonly state: BrowserContextResource['state'];
 }> = {}): BrowserContextResource {
   return {
@@ -86,9 +136,9 @@ function context(options: Partial<{
     usage: {
       visible_session_count: options.visibleSessions ?? 0,
       active_runtime_session_count: options.activeRuntimeSessions ?? 0,
-      active_runtime_session_id: null,
+      active_runtime_session_id: options.activeRuntimeSessionId ?? null,
       profile_storage_bytes: 1048576,
-      profile_storage_limit_exceeded: false,
+      profile_storage_limit_exceeded: options.profileStorageLimitExceeded ?? false,
     },
     created_at: '2026-06-18T09:00:00.000Z',
     updated_at: '2026-06-18T10:00:00.000Z',

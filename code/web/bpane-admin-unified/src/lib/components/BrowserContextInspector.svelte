@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Copy, RefreshCw, Trash2 } from '@lucide/svelte';
+  import { Copy, CopyPlus, Download, RefreshCw, Trash2 } from '@lucide/svelte';
   import type {
     BrowserContextActionState,
     BrowserContextDetailLoadState,
@@ -7,6 +7,7 @@
   import {
     buildBrowserContextStatusSummaryModel,
   } from '$lib/browser-contexts/browser-context-edit-view-model';
+  import { browserContextLifecycleEligibility } from '$lib/browser-contexts/browser-context-lifecycle-view-model';
   import {
     browserContextRow,
     retentionSummary,
@@ -23,6 +24,7 @@
     readonly state: BrowserContextDetailLoadState;
     readonly actionState?: BrowserContextActionState;
     readonly onRefreshContext?: () => void | Promise<void>;
+    readonly onExportContext?: () => void | Promise<void>;
     readonly onDeleteContext?: () => void | Promise<void>;
   };
 
@@ -30,12 +32,16 @@
     state,
     actionState = { status: 'idle' },
     onRefreshContext,
+    onExportContext,
     onDeleteContext,
   }: BrowserContextInspectorProps = $props();
 
   const row = $derived(state.status === 'ready' ? browserContextRow(state.context) : null);
   const statusSummary = $derived(state.status === 'ready' ? buildBrowserContextStatusSummaryModel(state.context) : null);
   const busy = $derived(actionState.status === 'running');
+  const lifecycle = $derived(state.status === 'ready'
+    ? browserContextLifecycleEligibility(state.context)
+    : null);
   const deleteBlockedReason = $derived(state.status === 'ready' ? browserContextDeleteBlockedReason(state.context) : null);
 
   function refreshContext(): void {
@@ -44,6 +50,10 @@
 
   function deleteContext(): void {
     void onDeleteContext?.();
+  }
+
+  function exportContext(): void {
+    void onExportContext?.();
   }
 
   async function copyContextId(contextId: string): Promise<void> {
@@ -122,6 +132,38 @@
             <RefreshCw size={15} strokeWidth={1.8} />
             <span>Refresh</span>
           </button>
+          {#if lifecycle?.canClone}
+            <a
+              class="inline-flex h-9 items-center gap-2 rounded-md border border-admin-border bg-admin-panel px-3 text-sm font-medium text-admin-ink hover:bg-admin-soft"
+              href={`/admin-new/browser-contexts/${encodeURIComponent(row.id)}/clone`}
+              data-testid="browser-context-clone"
+            >
+              <CopyPlus size={15} strokeWidth={1.8} />
+              <span>Clone</span>
+            </a>
+          {:else}
+            <button
+              class="inline-flex h-9 items-center gap-2 rounded-md border border-admin-border bg-admin-panel px-3 text-sm font-medium text-admin-ink disabled:cursor-not-allowed disabled:opacity-60"
+              type="button"
+              disabled
+              title={lifecycle?.cloneBlockedReason ?? 'Clone unavailable'}
+              data-testid="browser-context-clone"
+            >
+              <CopyPlus size={15} strokeWidth={1.8} />
+              <span>Clone</span>
+            </button>
+          {/if}
+          <button
+            class="inline-flex h-9 items-center gap-2 rounded-md border border-admin-border bg-admin-panel px-3 text-sm font-medium text-admin-ink hover:bg-admin-soft disabled:cursor-not-allowed disabled:opacity-60"
+            type="button"
+            onclick={exportContext}
+            disabled={busy || !lifecycle?.canExport}
+            title={lifecycle?.exportBlockedReason ?? 'Download browser context archive'}
+            data-testid="browser-context-export"
+          >
+            <Download size={15} strokeWidth={1.8} />
+            <span>Export</span>
+          </button>
           <button
             class="inline-flex h-9 items-center gap-2 rounded-md border border-rose-200 bg-rose-50 px-3 text-sm font-medium text-rose-800 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
             type="button"
@@ -146,6 +188,33 @@
         errorTestId="browser-context-action-error"
         runningTestId="browser-context-action-running"
       />
+      {#if lifecycle?.cloneBlockedReason}
+        <div class="mt-3">
+          <AdminMessage
+            tone="warning"
+            title="Lifecycle actions unavailable"
+            message={lifecycle.cloneBlockedReason}
+            testId="browser-context-lifecycle-blocked"
+          />
+        </div>
+      {/if}
+      {#if lifecycle?.activeSessionId}
+        <a
+          class="mt-2 inline-flex text-sm font-semibold text-admin-accent hover:underline"
+          href={`/admin-new/sessions/${encodeURIComponent(lifecycle.activeSessionId)}`}
+          data-testid="browser-context-active-session"
+        >Open active session</a>
+      {/if}
+      {#if lifecycle?.storageWarning}
+        <div class="mt-3">
+          <AdminMessage
+            tone="warning"
+            title="Profile storage over limit"
+            message={lifecycle.storageWarning}
+            testId="browser-context-storage-warning"
+          />
+        </div>
+      {/if}
     </div>
 
     <div class="grid gap-4 p-4">
