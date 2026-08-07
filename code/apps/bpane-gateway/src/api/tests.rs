@@ -55,6 +55,7 @@ mod identity;
 mod identity_mappings;
 mod mcp_bridge_control;
 mod network_identity;
+mod openapi_contract;
 mod projects;
 mod recordings;
 mod service_principals;
