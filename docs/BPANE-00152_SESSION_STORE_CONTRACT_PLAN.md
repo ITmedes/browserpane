@@ -3,13 +3,13 @@
 ## Metadata
 
 - Issue: [#152](https://github.com/ITmedes/browserpane/issues/152)
-- State: Review
+- State: Done
 - Owner: `thebackplane`
 - Lane: Foundation
 - Target gate: Foundation Gate
 - Depends on: #150 gateway lifecycle and dependency readiness
 - Branch: `feature/BPANE-00152`
-- Last verified: 2026-08-04 on `feature/BPANE-00152` at `dabf59e`
+- Last verified: 2026-08-07 on `main` at `a0c67ea`
 
 ## Business Outcome
 
@@ -232,7 +232,7 @@ unit tests while failing against the Postgres-backed local or deployed stack.
 ## Evidence Record
 
 - Branch: `feature/BPANE-00152`
-- PR: pending
+- PR: [#193](https://github.com/ITmedes/browserpane/pull/193), merged
 - Contract implementation:
   - `208bbbf` adds the backend-neutral harness and isolated Postgres fixture,
   - `dddfa8b` covers core resources and tenant boundaries,
