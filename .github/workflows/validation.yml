@@ -32,6 +32,9 @@ jobs:
           cache-dependency-path: scripts/openapi/package-lock.json
           node-version-file: .nvmrc
       - name: Run repository validation
+        env:
+          BPANE_OPENAPI_BASE_REF: >-
+            ${{ github.event.pull_request.base.sha || github.event.before || 'origin/main' }}
         run: >-
           node scripts/validate.mjs
           --stage validation-tool-tests
