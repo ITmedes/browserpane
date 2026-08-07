@@ -91,6 +91,8 @@ export class ValidationStageCatalog {
       'code/integrations/recording-worker', ['build']));
     stages.push(...this.#npmPackage(root, 'workflow-worker',
       'code/integrations/workflow-worker', ['build']));
+    stages.push(...this.#npmPackage(root, 'openapi', 'scripts/openapi',
+      ['test', 'check', 'compatibility']));
     stages.push(this.#node('egress-observer-check', 'Parse egress observer example', root,
       ['--check', 'deploy/examples/egress-observer/egress-usage-reporter.mjs'], 120));
     stages.push(this.#node('egress-observer-tests', 'Test egress observer example', root,
