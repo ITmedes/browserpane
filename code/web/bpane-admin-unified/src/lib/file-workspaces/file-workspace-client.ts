@@ -1,3 +1,12 @@
+import {
+  AdminApiRequestError,
+  AuthenticatedApiClient,
+  formatAdminApiRequestError,
+  type AccessTokenProvider,
+  type AdminApiRequestErrorCode,
+  type AdminApiRequestFailure,
+  type FetchLike,
+} from '$lib/api/authenticated-api';
 import type {
   CreateFileWorkspaceRequest,
   FileWorkspaceFileListResponse,
@@ -11,9 +20,8 @@ import type {
 
 const PROJECT_STATES = ['active', 'archived'] satisfies readonly FileWorkspaceProjectResource['state'][];
 
-export type AccessTokenProvider = () => Promise<string | null> | string | null;
-export type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-export type FileWorkspaceCatalogErrorCode = 'missing_token' | 'http_error' | 'invalid_payload';
+export type { AccessTokenProvider, FetchLike } from '$lib/api/authenticated-api';
+export type FileWorkspaceCatalogErrorCode = AdminApiRequestErrorCode;
 
 export type FileWorkspaceCatalogClientOptions = {
   readonly baseUrl: string | URL;
@@ -22,29 +30,38 @@ export type FileWorkspaceCatalogClientOptions = {
   readonly onAuthenticationFailure?: () => void;
 };
 
-export class FileWorkspaceCatalogError extends Error {
-  readonly status: number | null;
-  readonly code: FileWorkspaceCatalogErrorCode;
-
-  constructor(message: string, code: FileWorkspaceCatalogErrorCode, status: number | null = null) {
-    super(message);
+export class FileWorkspaceCatalogError extends AdminApiRequestError {
+  constructor(
+    message: string,
+    code: FileWorkspaceCatalogErrorCode,
+    status: number | null = null,
+    failure?: AdminApiRequestFailure,
+  ) {
+    super(message, failure ?? { code, status, message });
     this.name = 'FileWorkspaceCatalogError';
-    this.code = code;
-    this.status = status;
   }
 }
 
 export class FileWorkspaceCatalogClient {
   readonly #baseUrl: URL;
-  readonly #accessTokenProvider: AccessTokenProvider;
-  readonly #fetchImpl: FetchLike;
-  readonly #onAuthenticationFailure: (() => void) | undefined;
+  readonly #api: AuthenticatedApiClient;
 
   constructor(options: FileWorkspaceCatalogClientOptions) {
     this.#baseUrl = new URL(options.baseUrl);
-    this.#accessTokenProvider = options.accessTokenProvider;
-    this.#fetchImpl = options.fetchImpl ?? fetch;
-    this.#onAuthenticationFailure = options.onAuthenticationFailure;
+    this.#api = new AuthenticatedApiClient({
+      baseUrl: this.#baseUrl,
+      accessTokenProvider: options.accessTokenProvider,
+      ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+      ...(options.onAuthenticationFailure === undefined
+        ? {}
+        : { onAuthenticationFailure: options.onAuthenticationFailure }),
+      errorFactory: (failure) => new FileWorkspaceCatalogError(
+        formatAdminApiRequestError('File workspace catalog request', failure),
+        failure.code,
+        failure.status,
+        failure,
+      ),
+    });
   }
 
   async listFileWorkspaces(): Promise<FileWorkspaceListResponse> {
@@ -150,30 +167,7 @@ export class FileWorkspaceCatalogClient {
   }
 
   async #request(input: URL, init: RequestInit): Promise<Response> {
-    const accessToken = await this.#accessTokenProvider();
-    if (!accessToken) {
-      throw new FileWorkspaceCatalogError('No active admin access token is available.', 'missing_token');
-    }
-
-    const headers = new Headers(init.headers);
-    headers.set('authorization', `Bearer ${accessToken}`);
-
-    const response = await this.#fetchImpl(input, {
-      ...init,
-      headers,
-    });
-    if (response.status === 401) {
-      this.#onAuthenticationFailure?.();
-    }
-    if (!response.ok) {
-      throw new FileWorkspaceCatalogError(
-        `File workspace catalog request failed with HTTP ${response.status}.`,
-        'http_error',
-        response.status,
-      );
-    }
-
-    return response;
+    return await this.#api.request(input, init);
   }
 }
 
