@@ -40,3 +40,23 @@ paths: {}
     /breaking OpenAPI changes detected:[\s\S]*path.remove/
   );
 });
+
+test('rejects unclassified engine results instead of silently accepting them', async () => {
+  const engine = {
+    async diffSpecs() {
+      return {
+        breakingDifferencesFound: false,
+        nonBreakingDifferences: [],
+        unclassifiedDifferences: [{
+          code: 'extension.change',
+          destinationSpecEntityDetails: [{ location: 'paths./widgets.get' }]
+        }]
+      };
+    }
+  };
+
+  await assert.rejects(
+    new SemanticCompatibilityChecker(engine).compare(BASE, BASE),
+    /unclassified OpenAPI changes require review:[\s\S]*extension.change/
+  );
+});

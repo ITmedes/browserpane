@@ -48,3 +48,14 @@ test('rejects duplicate example names', async () => {
     /duplicate: duplicate example name/
   );
 });
+
+test('rejects malformed example catalog metadata and shape', () => {
+  assert.throws(
+    () => ExampleCatalog.fromDocument({ version: 2, contract: 'other', examples: [] }),
+    /must target bpane-control-v1/
+  );
+  assert.throws(
+    () => ExampleCatalog.fromDocument({ version: 1, contract: 'bpane-control-v1' }),
+    /must contain an examples array/
+  );
+});
