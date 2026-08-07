@@ -91,7 +91,13 @@ async fn import_browser_context(
 ) -> Result<(StatusCode, Json<BrowserContextResource>), (StatusCode, Json<ErrorResponse>)> {
     let principal = authorize_api_request(request.headers(), &state.auth_validator)
         .await
-        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+        .map_err(|error| {
+            warn!(
+                outcome = "authentication_rejected",
+                "browser context import rejected"
+            );
+            (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error }))
+        })?;
     let _import_permit = state
         .browser_context_import
         .try_acquire()
@@ -102,11 +108,17 @@ async fn import_browser_context(
     let body = to_bytes(body, max_body_bytes)
         .await
         .map_err(|_| browser_context_import_body_limit_error(limits.max_archive_bytes))?;
+    let archive_bytes = body.len();
     let archive = tokio::task::spawn_blocking(move || {
         parse_browser_context_import_archive(body.as_ref(), limits)
     })
     .await
     .map_err(|error| {
+        warn!(
+            outcome = "validation_task_failed",
+            error = %error,
+            "browser context import failed"
+        );
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse {
@@ -116,13 +128,27 @@ async fn import_browser_context(
     })?
     .map_err(map_browser_context_import_archive_error)?;
     let target_context_id = Uuid::now_v7();
+    let profile_archive_bytes = archive.profile_archive.as_ref().map_or(0, Vec::len);
     let target_request = browser_context_import_request_from_headers(
         &parts.headers,
         target_context_id,
         &archive.manifest,
-    )?;
-    SessionStore::validate_browser_context_request(&target_request)
-        .map_err(map_session_store_error)?;
+    )
+    .inspect_err(|_| {
+        warn!(
+            outcome = "metadata_rejected",
+            target_browser_context_id = %target_context_id,
+            "browser context import rejected"
+        );
+    })?;
+    SessionStore::validate_browser_context_request(&target_request).map_err(|error| {
+        warn!(
+            outcome = "metadata_rejected",
+            target_browser_context_id = %target_context_id,
+            "browser context import rejected"
+        );
+        map_session_store_error(error)
+    })?;
 
     state
         .session_manager
@@ -131,7 +157,14 @@ async fn import_browser_context(
             archive.profile_archive.as_deref(),
         )
         .await
-        .map_err(map_browser_context_import_runtime_error)?;
+        .map_err(|error| {
+            warn!(
+                outcome = "runtime_materialization_failed",
+                target_browser_context_id = %target_context_id,
+                "browser context import failed"
+            );
+            map_browser_context_import_runtime_error(error)
+        })?;
 
     let context = match state
         .session_store
@@ -140,6 +173,11 @@ async fn import_browser_context(
     {
         Ok(context) => context,
         Err(error) => {
+            warn!(
+                outcome = "metadata_persistence_failed",
+                target_browser_context_id = %target_context_id,
+                "browser context import failed"
+            );
             if let Err(cleanup_error) = state
                 .session_manager
                 .delete_browser_context_data(target_context_id)
@@ -154,6 +192,13 @@ async fn import_browser_context(
             return Err(map_session_store_error(error));
         }
     };
+    info!(
+        outcome = "created",
+        target_browser_context_id = %target_context_id,
+        archive_bytes,
+        profile_archive_bytes,
+        "browser context import completed"
+    );
 
     Ok((
         StatusCode::CREATED,
@@ -162,6 +207,10 @@ async fn import_browser_context(
 }
 
 fn browser_context_import_capacity_error() -> (StatusCode, Json<ErrorResponse>) {
+    warn!(
+        outcome = "capacity_rejected",
+        "browser context import rejected"
+    );
     (
         StatusCode::TOO_MANY_REQUESTS,
         Json(ErrorResponse {
@@ -173,6 +222,10 @@ fn browser_context_import_capacity_error() -> (StatusCode, Json<ErrorResponse>) 
 fn browser_context_import_body_limit_error(
     max_archive_bytes: u64,
 ) -> (StatusCode, Json<ErrorResponse>) {
+    warn!(
+        outcome = "request_size_rejected",
+        max_archive_bytes, "browser context import rejected"
+    );
     (
         StatusCode::PAYLOAD_TOO_LARGE,
         Json(ErrorResponse {
@@ -191,6 +244,12 @@ fn map_browser_context_import_archive_error(
     } else {
         StatusCode::BAD_REQUEST
     };
+    let outcome = if error.is_limit_exceeded() {
+        "archive_limit_rejected"
+    } else {
+        "archive_structure_rejected"
+    };
+    warn!(outcome, %status, "browser context import rejected");
     (
         status,
         Json(ErrorResponse {
