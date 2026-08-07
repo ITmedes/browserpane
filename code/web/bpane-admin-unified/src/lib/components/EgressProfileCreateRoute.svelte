@@ -15,7 +15,7 @@
 
   type EgressProfileCreateRouteProps = {
     readonly authContext: UnifiedAdminContext;
-    readonly navigateToProfile?: (profile: EgressProfileResource) => void;
+    readonly navigateToProfile?: (profile: EgressProfileResource) => void | Promise<void>;
   };
 
   let {
@@ -57,7 +57,7 @@
     try {
       const profile = await client().createEgressProfile(request);
       actionState = { status: 'success', message: 'Egress profile created.' };
-      navigateToProfile(profile);
+      await navigateToProfile(profile);
     } catch (error) {
       actionState = {
         status: 'error',
@@ -66,8 +66,8 @@
     }
   }
 
-  function defaultNavigateToProfile(profile: EgressProfileResource): void {
-    void goto(`/admin-new/egress/${encodeURIComponent(profile.id)}`);
+  async function defaultNavigateToProfile(profile: EgressProfileResource): Promise<void> {
+    await goto(`/admin-new/egress/${encodeURIComponent(profile.id)}`);
   }
 </script>
 

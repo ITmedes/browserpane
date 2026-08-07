@@ -9,6 +9,7 @@
   };
 
   let { authContext, children }: UnifiedAdminContextProviderProps = $props();
+  // svelte-ignore state_referenced_locally
   provideUnifiedAdminContext(authContext);
 </script>
 

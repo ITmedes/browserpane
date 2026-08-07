@@ -15,7 +15,7 @@
 
   type BrowserContextCreateRouteProps = {
     readonly authContext: UnifiedAdminContext;
-    readonly navigateToContext?: (context: BrowserContextResource) => void;
+    readonly navigateToContext?: (context: BrowserContextResource) => void | Promise<void>;
   };
 
   let {
@@ -57,7 +57,7 @@
     try {
       const context = await client().createBrowserContext(request);
       actionState = { status: 'success', message: 'Browser context created.' };
-      navigateToContext(context);
+      await navigateToContext(context);
     } catch (error) {
       actionState = {
         status: 'error',
@@ -66,8 +66,8 @@
     }
   }
 
-  function defaultNavigateToContext(context: BrowserContextResource): void {
-    void goto(`/admin-new/browser-contexts/${encodeURIComponent(context.id)}`);
+  async function defaultNavigateToContext(context: BrowserContextResource): Promise<void> {
+    await goto(`/admin-new/browser-contexts/${encodeURIComponent(context.id)}`);
   }
 </script>
 
