@@ -3,9 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   CredentialBindingCatalogClient,
   CredentialBindingCatalogError,
-  toCredentialBindingListResponse,
-  toCredentialBindingResource,
 } from './credential-binding-client';
+import { CredentialBindingWireMapper } from './credential-binding-wire-mapper';
 
 describe('CredentialBindingCatalogClient', () => {
   it('lists, creates, and reads bindings through authenticated requests', async () => {
@@ -53,16 +52,19 @@ describe('CredentialBindingCatalogClient', () => {
   });
 
   it('ignores unexpected secret fields in responses and rejects malformed metadata', () => {
-    const resource = toCredentialBindingResource({
+    const resource = CredentialBindingWireMapper.toResource({
       ...bindingPayload(),
       secret_payload: { password: 'must-not-leak' },
     });
     expect(JSON.stringify(resource)).not.toContain('must-not-leak');
-    expect(() => toCredentialBindingListResponse({ credential_bindings: {} })).toThrow(
+    expect(() => CredentialBindingWireMapper.toListResponse({ credential_bindings: {} })).toThrow(
       CredentialBindingCatalogError,
     );
     expect(() =>
-      toCredentialBindingResource({ ...bindingPayload(), injection_mode: 'unknown' }),
+      CredentialBindingWireMapper.toResource({
+        ...bindingPayload(),
+        injection_mode: 'unknown',
+      }),
     ).toThrow('must be one of');
   });
 

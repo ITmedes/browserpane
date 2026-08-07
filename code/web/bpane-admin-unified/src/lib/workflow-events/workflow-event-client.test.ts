@@ -1,10 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import {
-  WorkflowEventCatalogClient,
-  WorkflowEventCatalogError,
-  toWorkflowEventDeliveryListResponse,
-  toWorkflowEventSubscriptionListResponse,
-} from './workflow-event-client';
+import { WorkflowEventCatalogClient, WorkflowEventCatalogError } from './workflow-event-client';
+import { WorkflowEventWireMapper } from './workflow-event-wire-mapper';
 
 describe('WorkflowEventCatalogClient', () => {
   it('manages subscriptions and loads delivery diagnostics through authenticated requests', async () => {
@@ -46,15 +42,15 @@ describe('WorkflowEventCatalogClient', () => {
   });
 
   it('discards unexpected signing-secret fields and rejects malformed resources', () => {
-    const response = toWorkflowEventSubscriptionListResponse({
+    const response = WorkflowEventWireMapper.toSubscriptionList({
       subscriptions: [{ ...subscriptionPayload(), signing_secret: 'must-not-leak' }],
     });
     expect(JSON.stringify(response)).not.toContain('must-not-leak');
-    expect(() => toWorkflowEventSubscriptionListResponse({ subscriptions: {} })).toThrow(
+    expect(() => WorkflowEventWireMapper.toSubscriptionList({ subscriptions: {} })).toThrow(
       WorkflowEventCatalogError,
     );
     expect(() =>
-      toWorkflowEventDeliveryListResponse({
+      WorkflowEventWireMapper.toDeliveryList({
         deliveries: [{ ...deliveryPayload(), state: 'unknown' }],
       }),
     ).toThrow('must be one of');

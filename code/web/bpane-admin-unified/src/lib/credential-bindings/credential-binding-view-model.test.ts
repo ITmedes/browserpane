@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildCredentialBindingOverviewModel,
-  createCredentialBindingDraft,
   credentialBindingMatchesSearch,
-  validateCredentialBindingDraft,
 } from './credential-binding-view-model';
+import {
+  createCredentialBindingDraft,
+  validateCredentialBindingDraft,
+} from './credential-binding-form-model';
 import type { CredentialBindingResource } from './credential-binding-types';
 
 describe('credential binding view model', () => {
