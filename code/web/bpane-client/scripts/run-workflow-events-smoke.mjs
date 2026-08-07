@@ -8,6 +8,7 @@ import {
   cleanupWorkflowSmokeSessions,
   configurePage,
   createLogger,
+  deleteSession,
   ensureLoggedIn,
   fetchJson,
   getAccessToken,
@@ -147,6 +148,7 @@ async function main() {
   let context = null;
   let page = null;
   let accessToken = '';
+  let createdSessionId = '';
   let webhookReceiver = null;
 
   try {
@@ -187,12 +189,12 @@ async function main() {
 
     const createdRun = await createWorkflowRun(accessToken, options, workflow.id);
     const runId = createdRun.id ?? '';
-    const sessionId = createdRun.session_id ?? '';
-    if (!runId || !sessionId) {
+    createdSessionId = createdRun.session_id ?? '';
+    if (!runId || !createdSessionId) {
       throw new Error('Workflow run creation did not return run and session ids.');
     }
 
-    const automationAccess = await issueAutomationAccess(accessToken, options, sessionId);
+    const automationAccess = await issueAutomationAccess(accessToken, options, createdSessionId);
     const automationToken = automationAccess.token ?? '';
     if (!automationToken) {
       throw new Error('Automation access issuance did not return a token.');
@@ -264,7 +266,7 @@ async function main() {
       workflowId: workflow.id,
       workflowVersionId: version.id,
       runId,
-      sessionId,
+      sessionId: createdSessionId,
       subscriptionId: subscription.id,
       eventTypes,
       deliveryCount: deliveries.deliveries.length,
@@ -279,6 +281,9 @@ async function main() {
   } finally {
     if (accessToken) {
       await cleanupEventSubscriptions(accessToken, options).catch(() => {});
+    }
+    if (accessToken && createdSessionId) {
+      await deleteSession(accessToken, options, createdSessionId).catch(() => {});
     }
     await page?.close().catch(() => {});
     await context?.close().catch(() => {});
