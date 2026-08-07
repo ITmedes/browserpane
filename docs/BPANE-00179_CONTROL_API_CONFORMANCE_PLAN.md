@@ -245,7 +245,7 @@ optional field should pass without a manual exception.
 ## Evidence Record
 
 - Branch: `feature/BPANE-00179`
-- PR: pending
+- PR: [#194](https://github.com/ITmedes/browserpane/pull/194)
 - Implementation:
   - `7c35572` adds pinned contract tooling and generated operation evidence.
   - `b1cd228` adds semantic baseline comparison and controlled compatibility
