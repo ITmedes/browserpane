@@ -47,6 +47,15 @@ export function resolveAdminShellRoute(pathname: string): AdminShellRoute | null
   if (route.startsWith('/files/workspaces/')) {
     return { activeId: 'workspaces', title: 'BrowserPane File Workspace Details' };
   }
+  if (route === '/extensions') {
+    return { activeId: 'extensions', title: 'BrowserPane Approved Extensions' };
+  }
+  if (route === '/extensions/new') {
+    return { activeId: 'extensions', title: 'BrowserPane New Approved Extension' };
+  }
+  if (route.startsWith('/extensions/')) {
+    return { activeId: 'extensions', title: 'BrowserPane Extension Details' };
+  }
   if (route === '/workflows') {
     return { activeId: 'workflows', title: 'BrowserPane Workflows' };
   }
