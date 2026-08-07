@@ -339,6 +339,8 @@ treated as complete.
 5. Confirm access review updates.
 6. Confirm delegated-principal and unmapped-signal evidence remains visible.
 7. Confirm token claims are safe and do not expose raw tokens.
+8. Run `npm run smoke:admin-unified-identity -- --headless` from
+   `code/web/bpane-client` and confirm lifecycle cleanup succeeds.
 
 ## API Companion And Coverage
 

@@ -237,6 +237,10 @@ Validation:
 
 Priority: admin-new enterprise parity.
 
+Status: implemented for #157 scope on 2026-08-07, including CRUD lifecycle,
+delegation correlation, deep-link refresh, and compose-backed smoke evidence.
+Future role/grant enforcement remains #176.
+
 Why:
 
 - Backend identity/access-review and service-principal surfaces exist.
@@ -247,9 +251,9 @@ Why:
 Scope:
 
 1. Add `/admin-new/identity`.
-2. Start read-only if CRUD is too broad for the first slice.
-3. Include service-principal and mapping management as follow-up or within the
-   same route if contained.
+2. Present sanitized review evidence without raw claims or secret material.
+3. Manage service-principal and identity-mapping lifecycle in the same
+   contained route.
 
 Validation:
 

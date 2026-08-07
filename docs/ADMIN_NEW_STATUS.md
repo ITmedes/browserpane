@@ -29,7 +29,7 @@ evidence, but default promotion remains a Phase 1 gate owned by #163. Use
 | Workflow integration endpoints | Recommended future `/admin-new/workflow-endpoints`, `/new`, `/[endpoint_id]`, `/runs`, `/deliveries` | Missing, Phase N | Stable project-scoped BPM action endpoints, service-principal grants, typed contracts, immutable revision promotion/rollback, completion profiles, overload/readiness, and callback diagnostics are planned in `#172`; this is not an admin-new promotion blocker. |
 | Workflow Studio / Teach Mode | Recommended future `/admin-new/workflows/teach`, `/admin-new/workflow-training/[draft_id]` | Missing, Phase N | Semantic demonstration capture, candidate generation, replay, review, immutable publication, and controlled repair are planned in `#171`; this is not an admin-new promotion blocker. |
 | Workflow runs | `/admin-new/workflow-runs`, `/admin-new/workflow-runs/[run_id]`; `/admin-new/runs` aliases | Implemented | Catalog and stable detail route expose metadata, independently loaded logs/events/files, produced-file downloads, related links, and state-gated intervention/cancel controls. |
-| Identity | Navigation points to `/admin-new/identity` | Missing | No route-backed identity/access-review implementation in unified admin. |
+| Identity | `/admin-new/identity` | Implemented for #157 scope | Current principal, project/resource review, delegated principals, unmapped signals, and service-principal/identity-mapping create, edit, disable, and re-enable flows are route-backed and smoke-covered. Registry metadata remains distinct from future enforced RBAC grants in #176. |
 | API reference | Navigation points to `/admin-new/api` | Missing | No API companion route yet. |
 | Design memo/docs | Navigation points to `/admin-new/docs` | Missing | Navigation exists, route does not. |
 | API coverage | Navigation points to `/admin-new/coverage` | Missing | Navigation exists, route does not. |
@@ -53,7 +53,7 @@ evidence, but default promotion remains a Phase 1 gate owned by #163. Use
 | Step 11: Automation | MCP delegation, workflow associations, automation owner/delegate state, and worker-route separation. | Implemented for current API | `/automation` owns MCP authorize/revoke/default controls and shows only workflow runs bound to the selected session. |
 | Step 12: Browser policy | Local-file and File System Access guardrails, project restrictions, and runtime evidence. | Implemented as policy evidence | `/policy` separates effective session capabilities from optional project policy and labels managed-browser startup evidence as non-probe evidence. |
 | Step 13: Observability | Current state, admin event stream health, workflow/recording/file/MCP snapshots, and bounded local history. | Implemented for current event API | `/observability` uses short-lived initial-message WebSocket auth, selected-session projection, reconnect status, and a 40-entry in-memory timeline that is not presented as an audit log. |
-| Step 14: Remaining resource catalogs | Workflows, workflow runs, templates, extensions, credential bindings, event subscriptions, operation counters, identity/access review. | Partial | Workflow catalog/run launch and workflow-run catalog/detail exist; templates, extensions, credentials, event subscriptions, and identity remain. |
+| Step 14: Remaining resource catalogs | Workflows, workflow runs, templates, extensions, credential bindings, event subscriptions, operation counters, identity/access review. | Partial | Workflow catalog/run launch, workflow-run catalog/detail, and identity/access review exist; templates, extensions, credentials, event subscriptions, and operation-counter catalogs remain. |
 | Step 15: Dashboard | Read-only resource counts, recent operational activity, and links to active work. | Done for first pass | Dashboard overview exists and has smoke coverage. |
 | Step 16: Command palette | Global navigation/session join/common creation actions without a second hidden state model. | Missing | No implemented command palette route/component. |
 | Step 17: API reference/coverage companion | Copyable API examples, operation classification, OpenAPI link, compatibility separation. | Missing | Navigation planned but routes absent. |
@@ -72,6 +72,7 @@ Current `bpane-client` scripts include:
 - `smoke:admin-unified-sessions`
 - `smoke:admin-unified-workflows`
 - `smoke:admin-unified-workflow-runs`
+- `smoke:admin-unified-identity`
 
 These should remain mandatory for PRs that touch the unified admin app. #151
 must make the selected minimal checks enforceable in CI; the existence of local
@@ -83,7 +84,6 @@ The unified app is useful for manual testing and feature development, but it is
 not ready to become default because:
 
 1. Navigation advertises routes that are not implemented.
-2. Identity/access-review is absent from the new app despite being a core
-   enterprise control-plane surface.
-3. API companion and coverage routes are absent.
+2. API companion and coverage routes are absent.
+3. Remaining resource catalogs and command-palette behavior are incomplete.
 4. Some security cleanup slices still affect admin trust and production safety.

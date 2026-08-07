@@ -34,6 +34,11 @@ Operation metadata is generated into
 `openapi/bpane-control-v1.operations.json`. Classification is enforced against
 `openapi/bpane-control-v1.classifications.json` whenever the contract changes.
 
+The `ui-primary` identity family is implemented at `/admin-new/identity` with
+strict response mapping and lifecycle smoke coverage. The future #158 API
+companion must link to that operator route rather than duplicate its forms or
+maintain a second handwritten identity contract.
+
 The generated counts are inventory evidence. Redocly lint, OpenAPI Enforcer
 examples, semantic compatibility diffing, and the Rust Axum route contract add
 the enforceable #179 ratchet under #151 CI. Domain and Compose tests remain
