@@ -66,7 +66,7 @@
       loadCatalog('Egress profiles', '/admin-new/egress', async () => (await egressClient.listEgressProfiles()).profiles),
       loadCatalog('File workspaces', '/admin-new/files/workspaces', async () => (await workspaceClient.listFileWorkspaces()).workspaces),
       loadCatalog('Workflows', '/admin-new/workflows', async () => (await workflowClient.listDefinitions()).workflows),
-      loadCatalog('Workflow runs', '/admin-new/runs', async () => (await runClient.listRuns()).runs),
+      loadCatalog('Workflow runs', '/admin-new/workflow-runs', async () => (await runClient.listRuns()).runs),
     ]);
 
     const topLevelResults = [

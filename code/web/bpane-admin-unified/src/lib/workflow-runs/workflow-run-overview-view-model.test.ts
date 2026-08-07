@@ -78,6 +78,10 @@ function workflowRun(overrides: Partial<{
     output: null,
     error: overrides.error ?? null,
     artifact_refs: ['artifact-1'],
+    source_snapshot: null,
+    extensions: [],
+    credential_bindings: [],
+    workspace_inputs: [],
     produced_files: [{
       workspace_id: 'workspace-1',
       file_id: 'file-1',
@@ -88,6 +92,8 @@ function workflowRun(overrides: Partial<{
       content_path: '/api/v1/workflow-runs/run-1/produced-files/file-1/content',
       created_at: '2026-06-21T10:05:00.000Z',
     }],
+    recordings: [],
+    retention: { logs_expire_at: null, output_expire_at: null },
     project_admission: {
       state: overrides.projectAdmissionState ?? 'allowed',
       reason_code: 'policy_ok',

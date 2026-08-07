@@ -423,7 +423,10 @@ Required detail behavior:
 - cancel/resume/reject/input submit controls where supported,
 - related session connect/inspect links.
 
-Current status: overview exists at `/admin-new/runs`; detail is missing.
+Current status: implemented at canonical `/admin-new/workflow-runs` overview
+and detail routes, with `/admin-new/runs` compatibility aliases. The inspector
+includes independently loaded evidence, safe state-gated controls, produced
+file downloads, and related workflow/session links.
 
 ### Identity And Access
 

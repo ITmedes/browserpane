@@ -15,7 +15,12 @@ export async function createWorkflow(accessToken, rootUrl) {
   });
 }
 
-export async function createWorkflowVersion(accessToken, rootUrl, workflowId) {
+export async function createWorkflowVersion(
+  accessToken,
+  rootUrl,
+  workflowId,
+  { allowedFileWorkspaceIds = [] } = {},
+) {
   return await fetchJson(`${rootUrl}/api/v1/workflows/${workflowId}/versions`, {
     method: 'POST',
     headers: jsonAuthHeaders(accessToken),
@@ -23,6 +28,7 @@ export async function createWorkflowVersion(accessToken, rootUrl, workflowId) {
       version: 'v1',
       executor: 'manual',
       entrypoint: 'workflows/operator/run.mjs',
+      allowed_file_workspace_ids: allowedFileWorkspaceIds,
     }),
   });
 }

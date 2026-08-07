@@ -7,7 +7,7 @@ export const ADMIN_UNIFIED_ROUTE_MANIFEST = Object.freeze([
   Object.freeze({ name: 'egress', path: 'egress', readyTestId: 'egress-profiles-overview' }),
   Object.freeze({ name: 'file-workspaces', path: 'files/workspaces', readyTestId: 'file-workspaces-overview' }),
   Object.freeze({ name: 'workflows', path: 'workflows', readyTestId: 'workflows-overview' }),
-  Object.freeze({ name: 'workflow-runs', path: 'runs', readyTestId: 'workflow-runs-overview' }),
+  Object.freeze({ name: 'workflow-runs', path: 'workflow-runs', readyTestId: 'workflow-runs-overview' }),
   Object.freeze({ name: 'sessions', path: 'sessions', readyTestId: 'sessions-overview' }),
   Object.freeze({ name: 'recordings', path: 'recordings', readyTestId: 'recordings-overview' }),
 ]);
