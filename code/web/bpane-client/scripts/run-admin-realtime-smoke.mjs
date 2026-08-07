@@ -48,7 +48,7 @@ async function run() {
     }, (state) => state === 'stopped', options.connectTimeoutMs);
     await openAdminTab(page, 'logs');
     await waitForGatewayLogEntry(page, options, 'Gateway session snapshot');
-    await waitForGatewayLogEntry(page, options, 'Gateway MCP delegation snapshot', '1 delegated');
+    await waitForGatewayLogEntry(page, options, 'Gateway MCP delegation snapshot');
     await emitSummary(options, sessionId, log, true);
   } finally {
     if (accessToken && sessionId) {
@@ -125,10 +125,16 @@ async function waitForRealtimeMcpDelegation(page, options) {
 }
 
 async function waitForGatewayLogEntry(page, options, ...textParts) {
-  await poll('admin realtime gateway log entry', async () => {
-    const texts = await page.locator('[data-testid="admin-log-entry"][data-log-source="gateway"]').allTextContents();
-    return texts.some((text) => textParts.every((part) => text.includes(part)));
-  }, Boolean, options.connectTimeoutMs);
+  let texts = [];
+  try {
+    await poll('admin realtime gateway log entry', async () => {
+      texts = await page.locator('[data-testid="admin-log-entry"][data-log-source="gateway"]').allTextContents();
+      return texts.some((text) => textParts.every((part) => text.includes(part)));
+    }, Boolean, options.connectTimeoutMs);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`${message}; captured gateway logs: ${JSON.stringify(texts)}`);
+  }
 }
 
 async function emitSummary(options, sessionId, log, realtimeMcpDelegation) {

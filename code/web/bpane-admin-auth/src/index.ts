@@ -1,4 +1,31 @@
 export { AuthConfigClient, AuthConfigMapper } from './auth-config';
+export { AdminEventMapper } from './admin-events';
+export type {
+  AdminErrorEvent,
+  AdminEvent,
+  AdminEventType,
+  AdminMcpDelegationSnapshot,
+  AdminMcpDelegationSnapshotEvent,
+  AdminRecordingsSnapshot,
+  AdminRecordingsSnapshotEvent,
+  AdminSessionFilesSnapshot,
+  AdminSessionFilesSnapshotEvent,
+  AdminSessionMapper,
+  AdminSessionsSnapshotEvent,
+  AdminWorkflowRunSnapshot,
+  AdminWorkflowRunsSnapshotEvent,
+} from './admin-events';
+export { AdminEventStreamAccessMapper } from './admin-event-stream-access';
+export type { AdminEventStreamAccess } from './admin-event-stream-access';
+export { AdminEventStreamClient } from './admin-event-stream-client';
+export type {
+  AdminEventConnectionStatus,
+  AdminEventStreamClientOptions,
+  AdminEventStreamHandlers,
+  AdminEventSubscription,
+  AdminEventWebSocket,
+  AdminEventWebSocketFactory,
+} from './admin-event-stream-client';
 export type {
   AuthConfig,
   AuthConfigClientOptions,

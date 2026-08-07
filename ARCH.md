@@ -511,7 +511,8 @@ The default dev stack no longer uses a shared token file.
 - both admin consoles consume `code/web/bpane-admin-auth`; the package delegates
   OIDC discovery, PKCE, authorization-response validation, token grants,
   signature/claim validation, and JWKS rotation to the OpenID-certified
-  `oauth4webapi` implementation
+  `oauth4webapi` implementation and owns the validated admin-event access,
+  mapping, WebSocket handshake, and reconnect primitives shared by both apps
 - BrowserPane's auth adapter owns runtime config, a ten-minute login transaction,
   memory-only token lifetime, admin auth snapshots, redirects, and recovery
 - access, ID, and refresh tokens are never written to web storage; only the
@@ -523,7 +524,7 @@ The default dev stack no longer uses a shared token file.
 - docker-backed reusable browser contexts mount a context-scoped Chromium profile volume at the session profile path while keeping uploads, downloads, and session-file mounts in the session-scoped data volume; runtime admission allows only one active writer per reusable context
 - browser-context retention cleanup is metadata-driven per context and removes expired reusable profile data only when the runtime manager confirms there is no active writer
 - the console then mints a short-lived `session_connect_ticket` through `POST /api/v1/sessions/{id}/access-tokens`
-- the compatibility admin mints a short-lived `admin_event_access_token` through `POST /api/v1/admin/events/access-tokens`, opens `/api/v1/admin/events` without query credentials, and authenticates with the scoped token in the first WebSocket message; reconnects mint fresh tokens
+- both admin apps mint a short-lived `admin_event_access_token` through `POST /api/v1/admin/events/access-tokens`, open `/api/v1/admin/events` without query credentials, and authenticate with the scoped token in the first WebSocket message; reconnects mint fresh tokens, while admin-new projects selected-session evidence into a bounded in-memory observability timeline
 - connect, automation, and admin-event credentials use purpose-separated v2 HMAC domains derived from the configured root secret; a credential issued for one domain is rejected by the other validators
 - admin-created sessions currently request `idle_timeout_sec = 300`, and the gateway stops them automatically once they stay unused or idle for that timeout window
 - switching the selected session disconnects the embedded browser from the previous live session before selecting the new one

@@ -36,6 +36,30 @@ describe('SessionSubareaNavigation', () => {
     expect(byTestId(target, 'session-subarea-files').getAttribute('aria-current')).toBe('page');
   });
 
+  it('links the automation area after that route is enabled', () => {
+    const target = renderComponent(SessionSubareaNavigation, {
+      sessionId: 'session-1',
+      activeId: 'automation',
+      availableIds: ['overview', 'live', 'automation'],
+    });
+
+    expect(byTestId(target, 'session-subarea-automation').getAttribute('href'))
+      .toBe('/admin-new/sessions/session-1/automation');
+    expect(byTestId(target, 'session-subarea-automation').getAttribute('aria-current')).toBe('page');
+  });
+
+  it('links the policy area after that route is enabled', () => {
+    const target = renderComponent(SessionSubareaNavigation, {
+      sessionId: 'session-1',
+      activeId: 'policy',
+      availableIds: ['overview', 'live', 'automation', 'policy'],
+    });
+
+    expect(byTestId(target, 'session-subarea-policy').getAttribute('href'))
+      .toBe('/admin-new/sessions/session-1/policy');
+    expect(byTestId(target, 'session-subarea-policy').getAttribute('aria-current')).toBe('page');
+  });
+
   it('links the recordings area after that route is enabled', () => {
     const target = renderComponent(SessionSubareaNavigation, {
       sessionId: 'session-1',
@@ -58,5 +82,17 @@ describe('SessionSubareaNavigation', () => {
     expect(byTestId(target, 'session-subarea-network').getAttribute('href'))
       .toBe('/admin-new/sessions/session-1/network');
     expect(byTestId(target, 'session-subarea-network').getAttribute('aria-current')).toBe('page');
+  });
+
+  it('links the observability area after the full route set is enabled', () => {
+    const target = renderComponent(SessionSubareaNavigation, {
+      sessionId: 'session-1',
+      activeId: 'observability',
+      availableIds: ['overview', 'live', 'observability'],
+    });
+
+    expect(byTestId(target, 'session-subarea-observability').getAttribute('href'))
+      .toBe('/admin-new/sessions/session-1/observability');
+    expect(byTestId(target, 'session-subarea-observability').getAttribute('aria-current')).toBe('page');
   });
 });

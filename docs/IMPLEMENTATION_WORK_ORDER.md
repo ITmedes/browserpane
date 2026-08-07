@@ -401,6 +401,8 @@ Validation:
 
 Tier: P2 admin-new parity.
 
+Status: implemented and validated on `feature/BPANE-00156`, pending review.
+
 Why here:
 
 - Automation, policy, and observability are distinct operator tasks.

@@ -196,9 +196,10 @@ Preserve or deliberately replace current frontend aliases during API extraction:
   `downloadProducedFileContent`
 - MCP bridge client aliases: `getHealth`, `setControlSession`,
   `clearControlSession`
-- admin event lifecycle: preserve `subscribe`, reconnect status transitions,
-  and the current event-stream auth behavior until the token cleanup slice
-  replaces raw owner-token query auth
+- admin event lifecycle: both admin apps use the shared `admin-auth`
+  access-token validator, initial-message WebSocket handshake, event mapper,
+  reconnect status transitions, and fresh scoped access on reconnect; raw
+  owner tokens must never appear in WebSocket URLs
 
 Known OpenAPI operations without direct current frontend wrappers or with
 intentional non-operator classification:

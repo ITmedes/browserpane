@@ -181,24 +181,30 @@ treated as complete.
 1. Open a selected session policy area.
 2. Confirm local-file and File System Access policy state matches the old
    Policy panel.
-3. Copy the local-file CDP probe command and run it manually against a
-   docker-backed ready session.
-4. Confirm probe output can be interpreted without exposing local file content.
+3. Confirm docker-backed policy facts are labeled as managed-browser startup
+   evidence and are not presented as an active probe result.
+4. When active proof is required, run the separate browser-policy smoke or
+   approved CDP probe and confirm it does not expose local file content.
 5. For a project-scoped session, confirm template, egress, extension, context,
    file-workspace, upload/download, session-file, and manual-recording policy
    constraints are visible.
 
 ## Observability
 
-1. Attach to a session.
-2. Start and stop a metrics sample.
-3. Run a workflow or recording action.
-4. Confirm local events are visible and copyable.
-5. Confirm event stream status, reconnect/auth-probe state, session snapshots,
-   workflow snapshots, file snapshots, recording snapshots, MCP snapshots, and
-   admin errors are represented where available.
-6. Clear logs and confirm only local log state is cleared.
-7. Confirm local UI diagnostics are distinct from persisted gateway logs.
+1. Open `/admin-new/sessions/{session_id}/observability` and confirm current
+   REST-backed session and status facts remain visible while the stream opens.
+2. Confirm the owner-scoped event stream reaches `Live` without placing a
+   bearer credential in the WebSocket URL.
+3. Connect/disconnect a preview, authorize/revoke MCP, run a workflow, bind a
+   file, or change recording state.
+4. Confirm matching selected-session snapshot facts and timeline entries update
+   without a page refresh.
+5. Switch to another session and verify facts and timeline state from the first
+   session do not leak into the new route.
+6. Restart or interrupt the gateway and confirm reconnect state is visible and
+   a fresh scoped stream token is minted.
+7. Confirm the bounded local timeline is labeled as operational context rather
+   than a durable audit log.
 
 ## Create Session
 
