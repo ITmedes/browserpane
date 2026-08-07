@@ -143,14 +143,25 @@ treated as complete.
 ## Network And Egress
 
 1. Create or open sessions using no egress, forward-proxy egress, and
-   TLS-intercept egress profiles.
-2. Confirm effective network identity, profile, mode, and project scope are
-   visible.
-3. Run egress diagnostics/probe against a ready session.
-4. Confirm diagnostics do not expose requested URLs, credentials, CA material,
-   headers, payloads, or decrypted traffic.
-5. Confirm stopped sessions are not implicitly started by diagnostics.
-6. Open the related egress profile detail from the session network area.
+   TLS-intercept egress profiles, then open
+   `/admin-new/sessions/{session_id}/network` directly.
+2. Refresh the route and confirm requested identity, effective mode, profile,
+   runtime binding/assignment, proof level, and warnings retain session context.
+3. Open the related egress profile and return to the same session route.
+4. Confirm active probe is disabled for stopped, released, starting, and
+   otherwise unassigned runtimes and that no runtime is started as a side
+   effect.
+5. Start/connect the session, refresh until the runtime assignment is ready,
+   run the active probe, and confirm browser-observed public IP and TLS issuer
+   evidence appears.
+6. Confirm failed probes expose a sanitized reason and remain visible after
+   refresh.
+7. Make the diagnostics endpoint unavailable and confirm requested/effective
+   session identity remains visible with section-local feedback.
+8. Confirm the page never exposes requested URLs, proxy credentials, CA
+   material, headers, payloads, or decrypted traffic.
+9. Confirm the operator UI does not call the observer-only
+   `POST /api/v1/sessions/{id}/egress-usage` route.
 
 ## Automation And MCP
 

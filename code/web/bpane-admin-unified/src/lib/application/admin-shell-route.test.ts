@@ -20,6 +20,7 @@ describe('admin shell route metadata', () => {
     ['/admin-new/sessions/session-1/live', 'sessions', 'BrowserPane Live Session'],
     ['/admin-new/sessions/session-1/files', 'sessions', 'BrowserPane Session Files'],
     ['/admin-new/sessions/session-1/recordings', 'sessions', 'BrowserPane Session Recordings'],
+    ['/admin-new/sessions/session-1/network', 'sessions', 'BrowserPane Session Network'],
     ['/admin-new/recordings', 'recordings', 'BrowserPane Recordings'],
   ])('resolves %s', (pathname, activeId, title) => {
     expect(resolveAdminShellRoute(pathname)).toEqual({ activeId, title });

@@ -84,8 +84,8 @@ the route, download the available content, and verify blocked/empty states.
 
 ### 3. Recording Evidence
 
-Implementation status: complete in code; automated and Compose validation are
-the remaining gate before promotion of this checkpoint.
+Implementation status: complete; package tests/build and the expanded Compose
+session smoke are green.
 
 1. Load session recording policy, retained segments, and playback/export
    summary independently from the global recording catalog.
@@ -99,6 +99,10 @@ Manual checkpoint: enable recording, connect, interact, disconnect/stop, then
 verify segment state and download from the session recording route.
 
 ### 4. Network Evidence
+
+Implementation status: complete; model/component tests, package build, direct
+route/reload coverage, responsive checks, and the expanded Compose session
+smoke are green.
 
 1. Render requested and effective network identity separately.
 2. Show sanitized egress configuration, runtime launch/assignment correlation,

@@ -111,6 +111,7 @@ async function run() {
 
     await page.getByTestId('session-detail-refresh').click();
     await waitForContains(page, options, 'session-detail-action-success', 'refreshed');
+    await verifySessionSubareas(page, options, createdSessionId);
     await verifyMcpDelegation(page, options, createdSessionId, authConfig, accessToken);
     await verifySessionPreviewPopup(page, options);
     await verifyStoppedSessionCanStartWithPreview(page, options);
@@ -118,6 +119,7 @@ async function run() {
     console.log(JSON.stringify({
       sessionId: createdSessionId,
       detailVisible: true,
+      sessionSubareas: true,
       mcpDelegation: true,
       previewPopup: true,
       stoppedSessionRestarted: true,
@@ -134,6 +136,82 @@ async function run() {
     await context.close();
     await browser.close();
   }
+}
+
+async function verifySessionSubareas(page, options, sessionId) {
+  const subareas = [
+    {
+      id: 'live',
+      route: `sessions/${sessionId}/live`,
+      routeTestId: 'session-live-route',
+      readyTestId: 'session-live-panel',
+    },
+    {
+      id: 'files',
+      route: `sessions/${sessionId}/files`,
+      routeTestId: 'session-files-route',
+      readyTestId: 'session-transfer-files-panel',
+    },
+    {
+      id: 'recordings',
+      route: `sessions/${sessionId}/recordings`,
+      routeTestId: 'session-recordings-route',
+      readyTestId: 'session-recording-policy',
+    },
+    {
+      id: 'network',
+      route: `sessions/${sessionId}/network`,
+      routeTestId: 'session-network-route',
+      readyTestId: 'session-network-summary',
+    },
+  ];
+  for (const subarea of subareas) {
+    const href = await page.getByTestId(`session-subarea-${subarea.id}`).getAttribute('href');
+    const expectedPath = `/admin-new/${subarea.route}`;
+    if (href !== expectedPath) {
+      throw new Error(`Expected ${subarea.id} session route ${expectedPath}, got ${href}`);
+    }
+  }
+
+  for (const subarea of subareas) {
+    await page.goto(adminRouteUrl(options, subarea.route), { waitUntil: 'domcontentloaded' });
+    await page.getByTestId(subarea.routeTestId).waitFor({
+      state: 'visible',
+      timeout: options.connectTimeoutMs,
+    });
+    await page.getByTestId(subarea.readyTestId).waitFor({
+      state: 'visible',
+      timeout: options.connectTimeoutMs,
+    });
+    const active = await page.getByTestId(`session-subarea-${subarea.id}`).getAttribute('aria-current');
+    if (active !== 'page') {
+      throw new Error(`Expected ${subarea.id} session tab to be active, got ${active}`);
+    }
+    await assertNoBodyHorizontalOverflow(page, `unified session ${subarea.id}`);
+    await assertNoHorizontalOverflow(page, subarea.routeTestId, `unified session ${subarea.id} route`);
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.getByTestId(subarea.readyTestId).waitFor({
+      state: 'visible',
+      timeout: options.connectTimeoutMs,
+    });
+  }
+
+  const probeDisabled = await page.getByTestId('session-network-probe').isDisabled();
+  if (!probeDisabled) {
+    throw new Error('Expected active egress probe to remain disabled before the session runtime starts.');
+  }
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await assertNoBodyHorizontalOverflow(page, 'unified session network mobile');
+  await assertNoHorizontalOverflow(page, 'session-network-route', 'unified session network mobile route');
+  await page.setViewportSize({ width: 1440, height: 980 });
+
+  await page.goto(adminRouteUrl(options, `sessions/${sessionId}`), { waitUntil: 'domcontentloaded' });
+  await page.getByTestId('session-detail-route').waitFor({
+    state: 'visible',
+    timeout: options.connectTimeoutMs,
+  });
 }
 
 async function verifyMcpDelegation(page, options, sessionId, authConfig, accessToken) {

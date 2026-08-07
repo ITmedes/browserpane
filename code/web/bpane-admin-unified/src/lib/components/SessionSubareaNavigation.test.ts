@@ -47,4 +47,16 @@ describe('SessionSubareaNavigation', () => {
       .toBe('/admin-new/sessions/session-1/recordings');
     expect(byTestId(target, 'session-subarea-recordings').getAttribute('aria-current')).toBe('page');
   });
+
+  it('links the network area after the full route set is enabled', () => {
+    const target = renderComponent(SessionSubareaNavigation, {
+      sessionId: 'session-1',
+      activeId: 'network',
+      availableIds: ['overview', 'live', 'files', 'recordings', 'network'],
+    });
+
+    expect(byTestId(target, 'session-subarea-network').getAttribute('href'))
+      .toBe('/admin-new/sessions/session-1/network');
+    expect(byTestId(target, 'session-subarea-network').getAttribute('aria-current')).toBe('page');
+  });
 });

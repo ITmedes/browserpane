@@ -211,7 +211,7 @@
   <SessionSubareaNavigation
     sessionId={sessionId}
     activeId="recordings"
-    availableIds={['overview', 'live', 'files', 'recordings']}
+    availableIds={['overview', 'live', 'files', 'recordings', 'network']}
   />
 
   <ActionFeedback

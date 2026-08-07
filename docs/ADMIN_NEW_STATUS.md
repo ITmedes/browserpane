@@ -22,7 +22,7 @@ evidence, but default promotion remains a Phase 1 gate owned by #163. Use
 | File workspaces | `/admin-new/files/workspaces`, `/new`, `/[workspace_id]` | Implemented | Catalog, create/edit/detail, file visibility and workspace flows. |
 | Sessions catalog | `/admin-new/sessions` | Implemented | List, selected-session metadata, lifecycle actions, connect flow, MCP delegation visibility. |
 | Session create | `/admin-new/sessions/new` | Implemented | Project, template, context, egress, capability, recording, labels, idle timeout, and payload-preview path. |
-| Session detail | `/admin-new/sessions/[session_id]`, `/live`, `/files`, `/recordings` | Partial | Overview and operational actions remain on the base route. Live status/preview launch, files/workspace bindings, and recording evidence now have refresh-safe subroutes; the network subroute remains. |
+| Session detail | `/admin-new/sessions/[session_id]`, `/live`, `/files`, `/recordings`, `/network` | Implemented for #155 scope | Overview/actions remain on the base route. Live status/preview launch, files/workspace bindings, recording evidence, and network diagnostics have refresh-safe subroutes. Policy and observability remain separate future scope. |
 | Session preview | `/admin-new/sessions/[session_id]/preview` | Implemented | Popup preview, browser SDK loading, metrics drawer, connect/disconnect behavior. |
 | Recordings | `/admin-new/recordings`, `/admin-new/sessions/[session_id]/recordings` | Implemented for current API | Global catalog/download plus session-scoped policy, retained segments, independent playback summary, one-segment WebM, and multi-segment ZIP export are available. Manual Record/Stop controls remain intentionally outside admin-new. |
 | Workflows | `/admin-new/workflows`, `/admin-new/workflows/[workflow_id]` | Partial | Catalog, detail, source tree/code preview, workflow launch controls exist. Publishing/catalog management is still not complete. |
@@ -45,11 +45,11 @@ evidence, but default promotion remains a Phase 1 gate owned by #163. Use
 | Step 3: Resource foundation | Selector-grade browser context, egress profile, and file workspace catalogs/details. | Done for first pass | Core resource catalogs and detail/edit flows are implemented. |
 | Step 4: Create session flow | Session creation form with project/template/context/network/egress/capabilities/recording/payload preview. | Done | Session creation is implemented with selectors and payload preview. |
 | Step 5: Sessions catalog | Focused list plus selected-session metadata and explicit connect/disconnect/reconnect behavior. | Done | Catalog and selected-session metadata exist. |
-| Step 6: Session detail overview | Route-backed overview preserving lifecycle actions, queue state, connections, disconnect controls, and evidence facts. | Partial | Overview/actions exist; route-backed detail subareas still need to be split out. |
+| Step 6: Session detail overview | Route-backed overview preserving lifecycle actions, queue state, connections, disconnect controls, and evidence facts. | Implemented for current split | Overview/actions remain stable while live, files, recordings, and network have dedicated routes. Policy and observability are later route-completion work. |
 | Step 7: Live tab | Route-backed or equivalent live browser surface with browser SDK, container sizing, attach/detach, upload, mic, camera, display controls, and trust guidance. | Implemented as route plus popup | `/live` exposes refresh-safe connection evidence and explicitly launches the standalone `/preview` stream surface, which retains the browser SDK and media controls. |
 | Step 8: Session files | Session-specific file and file-binding surface with workspace-file binding and download behavior. | Implemented | `/admin-new/sessions/[session_id]/files` exposes retained uploads/downloads, exact downloads, project-policy-aware binding create/remove, workspace filtering, validation, and partial-error states. |
 | Step 9: Recordings | Session recording status, retained segments, downloads, playback manifest, and playback export. | Implemented for current API | `/admin-new/sessions/[session_id]/recordings` exposes policy mutation, independent segment/playback states, WebM download, and multi-segment playback export. |
-| Step 10: Network | Session network identity, effective egress, diagnostics, probes, and egress profile link. | Missing as session subroute | Egress profile resource exists, but session network/diagnostics route is missing. |
+| Step 10: Network | Session network identity, effective egress, diagnostics, probes, and egress profile link. | Implemented | `/admin-new/sessions/[session_id]/network` separates requested/effective identity, exposes sanitized proof and warnings, links profiles, and gates active probes to already-running runtimes. |
 | Step 11: Automation | MCP delegation, workflow associations, automation owner/delegate state, and worker-route separation. | Partial | MCP delegation is implemented in session detail; workflow associations and automation subroute remain incomplete. |
 | Step 12: Browser policy | Local-file and File System Access guardrails, probe command, and CDP endpoint evidence. | Missing as session subroute | Old admin/browser-policy smoke exists; unified route does not. |
 | Step 13: Observability | Logs, metrics summaries, admin event stream state, workflow/recording snapshots, and future placeholders. | Missing as session subroute | Metrics drawer exists in preview, but logs/events/admin stream route is missing. |
@@ -82,8 +82,7 @@ The unified app is useful for manual testing and feature development, but it is
 not ready to become default because:
 
 1. Navigation advertises routes that are not implemented.
-2. Session detail still lacks the planned network, policy, and observability
-   subareas.
+2. Session detail still lacks the planned policy and observability subareas.
 3. Identity/access-review is absent from the new app despite being a core
    enterprise control-plane surface.
 4. API companion and coverage routes are absent.

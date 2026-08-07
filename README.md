@@ -26,8 +26,8 @@ The current prototype includes the dashboard; project, browser-context,
 egress-profile, and file-workspace catalogs; session create/detail and popup
 preview flows; recording catalog/download; workflow source, version, and run
 launching; workflow-run catalog/detail; and refresh-safe session live, files,
-and recordings routes. Identity/access review, API/docs companions, and the
-session-detail network, policy, and observability subareas remain incomplete.
+recordings, and network routes. Identity/access review, API/docs companions,
+and the session-detail policy and observability subareas remain incomplete.
 See the
 [admin-new implementation status](docs/ADMIN_NEW_STATUS.md) for the maintained
 route-level matrix.
@@ -107,9 +107,9 @@ Current support and scope:
 - Admin console: `/admin-new/` is the target standard operator application. Its
   first-pass dashboard, primary resource catalogs, session creation/detail and
   popup preview, recording catalog/download, workflow launcher, workflow-run
-  catalog/detail, and session live/files/recordings routes are implemented.
-  Identity/access review, API/docs companions, and the
-  remaining session-specific network/policy/observability subareas are still
+  catalog/detail, and session live/files/recordings/network routes are
+  implemented. Identity/access review, API/docs companions, and the remaining
+  session-specific policy/observability subareas are still
   open; `/admin/` remains the compatibility fallback until
   [issue #163](https://github.com/ITmedes/browserpane/issues/163) completes the
   promotion and rollback gate.
