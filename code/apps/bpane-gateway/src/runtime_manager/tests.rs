@@ -77,7 +77,7 @@ fn browser_context_export_runtime_omits_links_and_special_entries() {
     assert!(script.contains("find . -xdev"));
     assert!(script.contains("-type f -o -type d"));
     assert!(script.contains("-print0"));
-    assert!(script.contains("tar --null --no-recursion --files-from=-"));
+    assert!(script.contains("tar --null --no-recursion --hard-dereference --files-from=-"));
 }
 
 fn test_principal(subject: &str) -> AuthenticatedPrincipal {
