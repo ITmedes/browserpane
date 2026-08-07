@@ -15,7 +15,7 @@
 
   type FileWorkspaceCreateRouteProps = {
     readonly authContext: UnifiedAdminContext;
-    readonly navigateToWorkspace?: (workspace: FileWorkspaceResource) => void;
+    readonly navigateToWorkspace?: (workspace: FileWorkspaceResource) => void | Promise<void>;
   };
 
   let {
@@ -57,7 +57,7 @@
     try {
       const workspace = await client().createFileWorkspace(request);
       actionState = { status: 'success', message: 'File workspace created.' };
-      navigateToWorkspace(workspace);
+      await navigateToWorkspace(workspace);
     } catch (error) {
       actionState = {
         status: 'error',
@@ -66,8 +66,8 @@
     }
   }
 
-  function defaultNavigateToWorkspace(workspace: FileWorkspaceResource): void {
-    void goto(`/admin-new/files/workspaces/${encodeURIComponent(workspace.id)}`);
+  async function defaultNavigateToWorkspace(workspace: FileWorkspaceResource): Promise<void> {
+    await goto(`/admin-new/files/workspaces/${encodeURIComponent(workspace.id)}`);
   }
 </script>
 

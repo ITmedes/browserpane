@@ -13,7 +13,7 @@
 
   type SessionCreateRouteProps = {
     readonly authContext: UnifiedAdminContext;
-    readonly navigateToSession?: (session: SessionResource) => void;
+    readonly navigateToSession?: (session: SessionResource) => void | Promise<void>;
   };
 
   let {
@@ -75,7 +75,7 @@
     try {
       const session = await sessionClient().createSession(request);
       actionState = { status: 'success', message: 'Session created.' };
-      navigateToSession(session);
+      await navigateToSession(session);
     } catch (error) {
       actionState = {
         status: 'error',
@@ -84,8 +84,8 @@
     }
   }
 
-  function defaultNavigateToSession(session: SessionResource): void {
-    void goto(`/admin-new/sessions/${encodeURIComponent(session.id)}`);
+  async function defaultNavigateToSession(session: SessionResource): Promise<void> {
+    await goto(`/admin-new/sessions/${encodeURIComponent(session.id)}`);
   }
 </script>
 

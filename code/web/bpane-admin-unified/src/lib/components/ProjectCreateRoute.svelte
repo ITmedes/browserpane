@@ -15,7 +15,7 @@
 
   type ProjectCreateRouteProps = {
     readonly authContext: UnifiedAdminContext;
-    readonly navigateToProject?: (project: ProjectResource) => void;
+    readonly navigateToProject?: (project: ProjectResource) => void | Promise<void>;
   };
 
   let {
@@ -57,7 +57,7 @@
     try {
       const project = await client().createProject(request);
       projectActionState = { status: 'success', message: 'Project created.' };
-      navigateToProject(project);
+      await navigateToProject(project);
     } catch (error) {
       projectActionState = {
         status: 'error',
@@ -66,8 +66,8 @@
     }
   }
 
-  function defaultNavigateToProject(project: ProjectResource): void {
-    void goto(`/admin-new/projects/${encodeURIComponent(project.id)}`);
+  async function defaultNavigateToProject(project: ProjectResource): Promise<void> {
+    await goto(`/admin-new/projects/${encodeURIComponent(project.id)}`);
   }
 </script>
 
