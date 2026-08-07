@@ -87,6 +87,18 @@ export function resolveAdminShellRoute(pathname: string): AdminShellRoute | null
   if (route === '/recordings') {
     return { activeId: 'recordings', title: 'BrowserPane Recordings' };
   }
+  if (route === '/identity') {
+    return { activeId: 'identity', title: 'BrowserPane Identity And Access' };
+  }
+  if (route === '/api') {
+    return { activeId: 'api', title: 'BrowserPane API Reference' };
+  }
+  if (route === '/docs') {
+    return { activeId: 'memo', title: 'BrowserPane Integration Guide' };
+  }
+  if (route === '/coverage') {
+    return { activeId: 'coverage', title: 'BrowserPane API Coverage' };
+  }
   return { activeId: 'dashboard', title: 'BrowserPane Admin' };
 }
 
