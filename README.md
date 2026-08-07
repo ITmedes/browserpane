@@ -1100,15 +1100,14 @@ BPMN/DAG engine.
 Local usage options:
 
 - UI: `/admin-new/workflows` provides the definition catalog and route-backed
-  source/version/run launcher; `/admin-new/runs` is currently a catalog rather
-  than a complete run-detail surface
+  source/version/run launcher; `/admin-new/workflow-runs` provides the run
+  catalog plus route-backed metadata, evidence, intervention controls, and
+  produced-file downloads. `/admin-new/runs` remains a compatibility alias.
 - CLI: use `code/web/bpane-client/scripts/workflow-cli.mjs`
 - raw API: use the OpenAPI contract in `openapi/bpane-control-v1.yaml`
 
-Use the CLI or raw API for complete run logs, events, produced files,
-intervention controls, and delivery diagnostics until
-[issue #154](https://github.com/ITmedes/browserpane/issues/154) adds the unified
-workflow-run detail route.
+Use the CLI or raw API for automation, bulk operations, and workflow event
+delivery diagnostics that do not belong in the run inspector.
 
 Unified admin workflow-run catalog smoke:
 
@@ -1131,10 +1130,12 @@ Typical local workflow path:
    Git source and publish/select an immutable version.
 5. Configure typed or JSON input, choose whether to create a session or use an
    existing session, then select `Start` or `Start and connect`.
-6. Track state and linked resources in `/admin-new/runs`. Use the CLI or API for
-   run-detail logs, events, produced files, and intervention controls.
-7. If the run pauses, submit input, resume, reject, or cancel through the CLI or
-   API until the unified run-detail route is implemented.
+6. Track state and linked resources in `/admin-new/workflow-runs`, then open a
+   run to inspect input/output, logs, events, source/runtime metadata, and
+   produced files.
+7. If the run pauses, submit input, resume, reject, or cancel from the run
+   detail. The backend remains authoritative when a concurrent state change
+   makes an operation invalid.
 
 Workflow run operations available to external systems:
 

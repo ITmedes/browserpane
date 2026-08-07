@@ -172,18 +172,20 @@ Validation:
 
 Priority: admin-new parity.
 
+Status: implemented on `feature/BPANE-00154`; validation evidence is recorded
+in `BPANE-00154_WORKFLOW_RUN_DETAIL_PLAN.md`.
+
 Why:
 
 - The old admin has workflow-run detail behavior.
-- `/admin-new/runs` is only an overview.
+- The run catalog previously had no route-backed inspector.
 - Operators need logs, events, produced files, run controls, intervention
   state, and related session links before `/admin-new` can replace `/admin/`.
 
 Scope:
 
-1. Add `/admin-new/runs/[run_id]`.
-2. Add `/admin-new/workflow-runs` alias or redirect if the route naming plan
-   still requires it.
+1. Use `/admin-new/workflow-runs` and `/admin-new/workflow-runs/[run_id]` as
+   canonical routes while retaining `/admin-new/runs` aliases.
 3. Show run metadata, state, timestamps, project/session/workflow references,
    logs, events, outputs, produced files, and errors.
 4. Add safe controls for cancel, resume, reject, and input submit where the API

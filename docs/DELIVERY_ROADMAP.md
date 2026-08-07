@@ -71,7 +71,7 @@ or capacity decision.
 | --- | --- | --- | --- | --- |
 | 1 | #179 | Done | #152 persistent behavior baseline | Control API conformance and compatibility governance merged through PR #194. |
 | 2 | #153 | Done | #179 Foundation Gate | Shared admin-new patterns merged through PR #195. |
-| 3 | #154 | In Progress | #153 shared admin-new patterns | Add route-backed workflow-run detail. |
+| 3 | #154 | Review | #153 shared admin-new patterns | Route-backed workflow-run detail is implemented and locally validated. |
 
 #151, #184, and #185 established and accelerated the required validation
 baseline. #145 is merged through
@@ -81,8 +81,8 @@ merged through PR #191. #150 merged through PR #192 after passing the canonical
 full 46-stage validation profile. #152 merged through PR #193 and the latest
 scheduled Compose run on that `main` commit passed. #179 merged through PR #194
 after all 40 fast and all 10 Compose validation stages passed. #153 has
-merged through PR #195 after all required checks passed. #154 is now the active
-bounded Operator Product slice.
+merged through PR #195 after all required checks passed. #154 is implemented
+on `feature/BPANE-00154` and is the active Operator Product review slice.
 
 ## Foundation Gate Sequence
 

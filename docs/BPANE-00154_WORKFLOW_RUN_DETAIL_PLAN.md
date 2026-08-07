@@ -3,7 +3,7 @@
 ## Metadata
 
 - Issue: [#154](https://github.com/ITmedes/browserpane/issues/154)
-- State: In Progress
+- State: Review
 - Owner: `thebackplane`
 - Lane: Operator Product
 - Target gate: Admin-New Phase 1 Promotion
@@ -206,4 +206,36 @@ fails, its terminal error and last intervention decision remain visible.
 
 ## Evidence Record
 
-- Pending implementation.
+- Implemented the complete safe workflow-run resource mapper and authenticated
+  detail/evidence/control/download client methods. Paths are constructed from
+  encoded run/file ids and all evidence requests retain global 401 handling.
+- Added canonical `/admin-new/workflow-runs` overview/detail routes and retained
+  `/admin-new/runs` aliases, with canonical navigation, dashboard, launcher,
+  and catalog links.
+- Added independently testable detail view models and inspector components for
+  metadata, source/runtime/intervention facts, input/output, logs, events,
+  produced files, recordings, workspace inputs, extension/credential metadata,
+  related links, local validation, and state-gated operations.
+- Focused component/client/view-model tests passed: 28 tests across six detail
+  files, in addition to client contract/error tests committed in Slice 1.
+- Full admin-new test suite passed: 111 files and 351 tests.
+- Admin-new coverage ratchet passed: 90.74% statements, 76.18% branches,
+  93.05% functions, and 88.43% lines.
+- Admin-new type check and production static build passed.
+- Browser client type check, 86-file/661-test suite, coverage ratchet, and
+  production build passed. Browser-client coverage was 92.88% statements,
+  87.57% branches, 93.19% functions, and 92.88% lines.
+- Rebuilt and deployed the Compose web image successfully.
+- `smoke:admin-unified-workflow-runs -- --headless` passed against real Compose
+  resources for awaiting-input, succeeded, and failed runs. It verified direct
+  and catalog navigation, refresh, invalid JSON, input submission, terminal
+  gating, events/logs, exact produced-file download bytes, related links,
+  `/runs` compatibility, and 390px overflow.
+- `smoke:admin-workflow-run-detail -- --headless` passed unchanged as a
+  compatibility-admin regression.
+- `node scripts/validate.mjs --profile fast` passed all 40 stages, including
+  repository documents, dependency policy, Rust checks/tests/coverage, all web
+  packages, integration packages, OpenAPI governance, and egress examples.
+- README and admin-new requirement/status/roadmap documents were synchronized.
+  `ARCH.md` was checked; no update is required because API ownership, runtime
+  topology, and subsystem boundaries did not change.
