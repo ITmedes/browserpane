@@ -931,6 +931,251 @@ describe('bpane operator CLI', () => {
     expect(calls).toHaveLength(0);
   });
 
+  it('manages file workspaces and exact file bytes through the CLI', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'bpane-cli-workspace-test-'));
+    const inputPath = path.join(tempDir, 'input.bin');
+    const outputPath = path.join(tempDir, 'nested', 'output.bin');
+    const inputBytes = Buffer.from([0x00, 0xff, 0x42, 0x50, 0x0a]);
+    await fs.writeFile(inputPath, inputBytes);
+
+    const { calls, fetchImpl } = createFetch(
+      jsonResponse({ id: 'workspace-1', name: 'pilot-inputs' }, 201),
+      jsonResponse({ workspaces: [{ id: 'workspace-1' }] }),
+      jsonResponse({ id: 'workspace/with space' }),
+      jsonResponse({ files: [] }),
+      jsonResponse({ id: 'file-1', byte_count: inputBytes.length }, 201),
+      binaryResponse(inputBytes, 'application/vnd.browserpane.fixture'),
+      jsonResponse({ id: 'file/with space', state: 'deleted' }),
+    );
+
+    try {
+      const workspaceCreateIo = createIo();
+      expect(await runBpaneCli(
+        [
+          'file-workspace',
+          'create',
+          'pilot-inputs',
+          '--project-id',
+          'project-1',
+          '--description',
+          'Pilot input files',
+          '--label',
+          'stage=pilot',
+        ],
+        { BPANE_ACCESS_TOKEN: 'token-1' },
+        workspaceCreateIo.io,
+        fetchImpl,
+      )).toBe(EXIT_CODES.ok);
+      expect(parseStdout(workspaceCreateIo)).toEqual({ id: 'workspace-1', name: 'pilot-inputs' });
+      expect(JSON.parse(calls[0].init.body)).toEqual({
+        name: 'pilot-inputs',
+        project_id: 'project-1',
+        description: 'Pilot input files',
+        labels: { stage: 'pilot' },
+      });
+
+      const listIo = createIo();
+      expect(await runBpaneCli(
+        ['file-workspace', 'list'],
+        { BPANE_ACCESS_TOKEN: 'token-1' },
+        listIo.io,
+        fetchImpl,
+      )).toBe(EXIT_CODES.ok);
+      expect(parseStdout(listIo).workspaces).toHaveLength(1);
+
+      const getIo = createIo();
+      expect(await runBpaneCli(
+        ['file-workspace', 'get', 'workspace/with space'],
+        { BPANE_ACCESS_TOKEN: 'token-1' },
+        getIo.io,
+        fetchImpl,
+      )).toBe(EXIT_CODES.ok);
+
+      const fileListIo = createIo();
+      expect(await runBpaneCli(
+        ['file-workspace', 'file', 'list', 'workspace/with space'],
+        { BPANE_ACCESS_TOKEN: 'token-1' },
+        fileListIo.io,
+        fetchImpl,
+      )).toBe(EXIT_CODES.ok);
+      expect(parseStdout(fileListIo)).toEqual({ files: [] });
+
+      const uploadIo = createIo();
+      expect(await runBpaneCli(
+        [
+          'file-workspace',
+          'file',
+          'upload',
+          'workspace/with space',
+          '--input',
+          inputPath,
+          '--file-name',
+          'evidence.bin',
+          '--media-type',
+          'application/vnd.browserpane.fixture',
+          '--provenance-json',
+          '{"source":"cli=test","sequence":1}',
+        ],
+        { BPANE_ACCESS_TOKEN: 'token-1' },
+        uploadIo.io,
+        fetchImpl,
+      )).toBe(EXIT_CODES.ok);
+      expect(parseStdout(uploadIo)).toEqual({ id: 'file-1', byte_count: inputBytes.length });
+      expect(Buffer.from(calls[4].init.body)).toEqual(inputBytes);
+      expect(calls[4].init.headers).toMatchObject({
+        Authorization: 'Bearer token-1',
+        'Content-Type': 'application/vnd.browserpane.fixture',
+        'x-bpane-file-name': 'evidence.bin',
+        'x-bpane-file-provenance': JSON.stringify({ source: 'cli=test', sequence: 1 }),
+      });
+
+      const downloadIo = createIo();
+      expect(await runBpaneCli(
+        [
+          'file-workspace',
+          'file',
+          'download',
+          'workspace/with space',
+          'file/with space',
+          '--output',
+          outputPath,
+        ],
+        { BPANE_ACCESS_TOKEN: 'token-1' },
+        downloadIo.io,
+        fetchImpl,
+      )).toBe(EXIT_CODES.ok);
+      expect(parseStdout(downloadIo)).toEqual({
+        workspace_id: 'workspace/with space',
+        file_id: 'file/with space',
+        output_path: outputPath,
+        byte_count: inputBytes.length,
+        content_type: 'application/vnd.browserpane.fixture',
+      });
+      expect(await fs.readFile(outputPath)).toEqual(inputBytes);
+
+      const deleteIo = createIo();
+      expect(await runBpaneCli(
+        ['file-workspace', 'file', 'delete', 'workspace/with space', 'file/with space'],
+        { BPANE_ACCESS_TOKEN: 'token-1' },
+        deleteIo.io,
+        fetchImpl,
+      )).toBe(EXIT_CODES.ok);
+
+      expect(calls.map((call) => [call.url, call.init.method])).toEqual([
+        ['http://localhost:8080/api/v1/file-workspaces', 'POST'],
+        ['http://localhost:8080/api/v1/file-workspaces', undefined],
+        ['http://localhost:8080/api/v1/file-workspaces/workspace%2Fwith%20space', undefined],
+        ['http://localhost:8080/api/v1/file-workspaces/workspace%2Fwith%20space/files', undefined],
+        ['http://localhost:8080/api/v1/file-workspaces/workspace%2Fwith%20space/files', 'POST'],
+        ['http://localhost:8080/api/v1/file-workspaces/workspace%2Fwith%20space/files/file%2Fwith%20space/content', 'GET'],
+        ['http://localhost:8080/api/v1/file-workspaces/workspace%2Fwith%20space/files/file%2Fwith%20space', 'DELETE'],
+      ]);
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('supports workspace body files and rejects unsafe workspace transfer input', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'bpane-cli-workspace-input-test-'));
+    const bodyPath = path.join(tempDir, 'workspace.json');
+    const invalidBodyPath = path.join(tempDir, 'invalid.json');
+    const inputPath = path.join(tempDir, 'input.txt');
+    await fs.writeFile(bodyPath, JSON.stringify({ name: 'from-file', labels: { source: 'body-file' } }));
+    await fs.writeFile(invalidBodyPath, '{invalid');
+    await fs.writeFile(inputPath, 'workspace input');
+    const { calls, fetchImpl } = createFetch(jsonResponse({ id: 'workspace-1' }, 201));
+
+    try {
+      const bodyIo = createIo();
+      expect(await runBpaneCli(
+        ['file-workspace', 'create', '--body-file', bodyPath],
+        { BPANE_ACCESS_TOKEN: 'token-1' },
+        bodyIo.io,
+        fetchImpl,
+      )).toBe(EXIT_CODES.ok);
+      expect(JSON.parse(calls[0].init.body)).toEqual({
+        name: 'from-file',
+        labels: { source: 'body-file' },
+      });
+
+      const cases = [
+        {
+          args: ['file-workspace', 'create'],
+          expected: 'requires --name',
+        },
+        {
+          args: ['file-workspace', 'create', '--body-file', invalidBodyPath],
+          expected: 'Invalid JSON for --body-file',
+        },
+        {
+          args: ['file-workspace', 'create', '--body-file', bodyPath, '--body-json', '{}'],
+          expected: 'Use only one',
+        },
+        {
+          args: ['file-workspace', 'file', 'upload', 'workspace-1'],
+          expected: 'requires --input',
+        },
+        {
+          args: ['file-workspace', 'file', 'upload', 'workspace-1', '--input', '/missing/input.bin'],
+          expected: 'Failed to read --input',
+        },
+        {
+          args: [
+            'file-workspace',
+            'file',
+            'upload',
+            'workspace-1',
+            '--input',
+            inputPath,
+            '--provenance-json',
+            '[]',
+          ],
+          expected: '--provenance-json must contain a JSON object',
+        },
+        {
+          args: [
+            'file-workspace',
+            'file',
+            'upload',
+            'workspace-1',
+            '--input',
+            inputPath,
+            '--file-name',
+            'unsafe\nname.txt',
+          ],
+          expected: '--file-name must be a non-empty single-line value',
+        },
+        {
+          args: ['file-workspace', 'file', 'download', 'workspace-1', 'file-1'],
+          expected: 'requires --output',
+        },
+      ];
+
+      for (const testCase of cases) {
+        const io = createIo();
+        expect(await runBpaneCli(
+          testCase.args,
+          { BPANE_ACCESS_TOKEN: 'token-1' },
+          io.io,
+          fetchImpl,
+        )).toBe(EXIT_CODES.usage);
+        expect(parseStderr(io).error).toContain(testCase.expected);
+      }
+
+      const authIo = createIo();
+      expect(await runBpaneCli(
+        ['file-workspace', 'list'],
+        {},
+        authIo.io,
+        fetchImpl,
+      )).toBe(EXIT_CODES.auth);
+      expect(parseStderr(authIo).code).toBe('AUTH_REQUIRED');
+      expect(calls).toHaveLength(1);
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it('creates session templates with structured defaults', async () => {
     const io = createIo();
     const { calls, fetchImpl } = createFetch(jsonResponse({ id: 'template-1' }, 201));
