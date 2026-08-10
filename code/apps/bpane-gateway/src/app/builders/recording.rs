@@ -38,6 +38,7 @@ impl RecordingServices {
         let observability = Arc::new(RecordingObservability::default());
         let artifact_store = Arc::new(RecordingArtifactStore::local_fs(
             config.storage.recording_artifact_local_root.clone(),
+            config.recording.recording_worker_output_root.clone(),
         ));
 
         if config.recording.recording_artifact_cleanup_interval_secs > 0 {

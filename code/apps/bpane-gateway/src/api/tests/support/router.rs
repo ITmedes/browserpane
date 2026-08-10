@@ -458,7 +458,30 @@ pub(crate) async fn test_router_with_docker_pool() -> (Router, String) {
 
 pub(crate) fn test_artifact_store() -> Arc<RecordingArtifactStore> {
     let root = std::env::temp_dir().join(format!("bpane-artifacts-test-{}", uuid::Uuid::now_v7()));
-    Arc::new(RecordingArtifactStore::local_fs(root))
+    Arc::new(RecordingArtifactStore::local_fs(
+        root,
+        test_artifact_staging_root(),
+    ))
+}
+
+pub(crate) fn stage_recording_artifact(
+    session_id: impl ToString,
+    recording_id: impl ToString,
+    bytes: &[u8],
+) -> std::path::PathBuf {
+    let path = test_artifact_staging_root()
+        .join(session_id.to_string())
+        .join(format!("{}.webm", recording_id.to_string()));
+    std::fs::create_dir_all(path.parent().expect("staged artifact should have a parent")).unwrap();
+    std::fs::write(&path, bytes).unwrap();
+    path
+}
+
+fn test_artifact_staging_root() -> std::path::PathBuf {
+    std::env::temp_dir().join(format!(
+        "bpane-recording-staging-test-{}",
+        std::process::id()
+    ))
 }
 
 pub(crate) fn test_admin_event_access_token_manager() -> Arc<AdminEventAccessTokenManager> {

@@ -322,9 +322,7 @@ async fn creates_lists_gets_and_stops_session_recording_metadata() {
     assert_eq!(stopped_recording["state"], "finalizing");
     assert_eq!(stopped_recording["termination_reason"], "manual_stop");
 
-    let temp_dir = tempfile::tempdir().unwrap();
-    let artifact_path = temp_dir.path().join("recording.webm");
-    std::fs::write(&artifact_path, b"webm-bytes").unwrap();
+    let artifact_path = stage_recording_artifact(&session_id, &recording_id, b"webm-bytes");
 
     let complete_recording_response = app
         .clone()
@@ -490,9 +488,7 @@ async fn automation_access_cannot_finalize_or_fail_session_recordings() {
         .unwrap();
     assert_eq!(stop_recording_response.status(), StatusCode::OK);
 
-    let temp_dir = tempfile::tempdir().unwrap();
-    let artifact_path = temp_dir.path().join("recording.webm");
-    std::fs::write(&artifact_path, b"automation-webm").unwrap();
+    let artifact_path = stage_recording_artifact(&session_id, &recording_id, b"automation-webm");
 
     let complete_recording_response = app
         .clone()
@@ -603,9 +599,7 @@ async fn recording_worker_access_must_match_session_and_recording() {
         .unwrap();
     assert_eq!(stop_response.status(), StatusCode::OK);
 
-    let temp_dir = tempfile::tempdir().unwrap();
-    let artifact_path = temp_dir.path().join("recording.webm");
-    std::fs::write(&artifact_path, b"worker-scoped-webm").unwrap();
+    let artifact_path = stage_recording_artifact(&session_id, &recording_id, b"worker-scoped-webm");
     let completion_body = json!({
         "source_path": artifact_path.to_string_lossy(),
         "mime_type": "video/webm",
@@ -679,9 +673,7 @@ async fn recording_worker_cannot_complete_an_active_recording() {
         .unwrap();
     let recording = response_json(create_recording_response).await;
     let recording_id = recording["id"].as_str().unwrap().to_string();
-    let temp_dir = tempfile::tempdir().unwrap();
-    let artifact_path = temp_dir.path().join("recording.webm");
-    std::fs::write(&artifact_path, b"active-recording").unwrap();
+    let artifact_path = stage_recording_artifact(&session_id, &recording_id, b"active-recording");
 
     let response = app
         .oneshot(
@@ -710,6 +702,136 @@ async fn recording_worker_cannot_complete_an_active_recording() {
         .unwrap();
     assert_eq!(response.status(), StatusCode::CONFLICT);
     assert!(artifact_path.exists());
+}
+
+#[tokio::test]
+async fn recording_completion_preserves_staged_artifact_after_validation_failure() {
+    let (app, token) = test_router();
+    let create_session_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/sessions")
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "recording": {
+                          "mode": "manual",
+                          "format": "webm"
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let session = response_json(create_session_response).await;
+    let session_id = session["id"].as_str().unwrap().to_string();
+    let create_recording_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/sessions/{session_id}/recordings"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let recording = response_json(create_recording_response).await;
+    let recording_id = recording["id"].as_str().unwrap().to_string();
+    let stop_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!(
+                    "/api/v1/sessions/{session_id}/recordings/{recording_id}/stop"
+                ))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(stop_response.status(), StatusCode::OK);
+
+    let artifact_path =
+        stage_recording_artifact(&session_id, &recording_id, b"authoritative-bytes");
+    let worker_token = recording_worker_access_token(&session_id, &recording_id);
+    let mismatch_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!(
+                    "/api/v1/sessions/{session_id}/recordings/{recording_id}/complete"
+                ))
+                .header(RECORDING_WORKER_ACCESS_TOKEN_HEADER, &worker_token)
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "source_path": artifact_path.to_string_lossy(),
+                        "mime_type": "video/webm",
+                        "bytes": 1,
+                        "duration_ms": 1200
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(mismatch_response.status(), StatusCode::BAD_REQUEST);
+    assert!(artifact_path.exists());
+
+    let recording_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/v1/sessions/{session_id}/recordings/{recording_id}"
+                ))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let finalizing = response_json(recording_response).await;
+    assert_eq!(finalizing["state"], "finalizing");
+    assert_eq!(finalizing["artifact_available"], false);
+
+    let complete_response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!(
+                    "/api/v1/sessions/{session_id}/recordings/{recording_id}/complete"
+                ))
+                .header(RECORDING_WORKER_ACCESS_TOKEN_HEADER, worker_token)
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "source_path": artifact_path.to_string_lossy(),
+                        "mime_type": "video/webm",
+                        "duration_ms": 1200
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(complete_response.status(), StatusCode::OK);
+    let completed = response_json(complete_response).await;
+    assert_eq!(completed["state"], "ready");
+    assert_eq!(completed["bytes"], 19);
+    assert_eq!(completed["artifact_available"], true);
 }
 
 #[tokio::test]

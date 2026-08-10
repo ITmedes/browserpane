@@ -123,13 +123,15 @@ pub(super) fn map_recording_artifact_store_error(
 ) -> (StatusCode, Json<ErrorResponse>) {
     match error {
         RecordingArtifactStoreError::InvalidSourcePath(_)
-        | RecordingArtifactStoreError::InvalidReference(_) => (
+        | RecordingArtifactStoreError::InvalidReference(_)
+        | RecordingArtifactStoreError::ByteCountMismatch { .. } => (
             StatusCode::BAD_REQUEST,
             Json(ErrorResponse {
                 error: error.to_string(),
             }),
         ),
-        RecordingArtifactStoreError::Backend(_) => (
+        RecordingArtifactStoreError::InvalidConfiguration(_)
+        | RecordingArtifactStoreError::Backend(_) => (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(ErrorResponse {
                 error: error.to_string(),

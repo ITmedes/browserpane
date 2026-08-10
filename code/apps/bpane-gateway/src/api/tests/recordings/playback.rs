@@ -106,9 +106,7 @@ async fn playback_manifest_and_export_bundle_follow_ready_segments() {
         .unwrap();
     assert_eq!(stop_first_recording.status(), StatusCode::OK);
 
-    let temp_dir = tempfile::tempdir().unwrap();
-    let artifact_path = temp_dir.path().join("segment-1.webm");
-    std::fs::write(&artifact_path, b"segment-one").unwrap();
+    let artifact_path = stage_recording_artifact(&session_id, &first_recording_id, b"segment-one");
     let complete_first_recording = app
         .clone()
         .oneshot(

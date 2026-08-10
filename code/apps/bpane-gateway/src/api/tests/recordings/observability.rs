@@ -104,9 +104,7 @@ async fn recording_operations_snapshot_tracks_finalize_playback_and_failures() {
         .await
         .unwrap();
 
-    let temp_dir = tempfile::tempdir().unwrap();
-    let artifact_path = temp_dir.path().join("segment.webm");
-    std::fs::write(&artifact_path, b"segment").unwrap();
+    let artifact_path = stage_recording_artifact(&session_id, &recording_id, b"segment");
     let _ = app
         .clone()
         .oneshot(
