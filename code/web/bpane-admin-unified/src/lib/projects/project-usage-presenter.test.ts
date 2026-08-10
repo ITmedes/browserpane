@@ -41,6 +41,8 @@ describe('ProjectUsagePresenter', () => {
     expect(metric(model, 'session_creations').description).toContain('advisory');
     expect(egress.displayValue).toBe('3.0 KB / 4.0 KB');
     expect(egress.description).toContain('URLs, headers, credentials, and payloads');
+    expect(model.egressReceiveLabel).toBe('1.0 KB');
+    expect(model.egressTransmitLabel).toBe('2.0 KB');
     expect(model.alerts).toHaveLength(1);
   });
 

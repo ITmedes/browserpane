@@ -3,7 +3,7 @@
 ## Metadata
 
 - Issue: `#161`
-- State: Ready for implementation
+- State: In progress; implementation slices 1-2 complete
 - Lane: Operator Product
 - Target gate: admin-new project governance parity
 - Depends on: admin-new shared patterns and session subareas merged through
@@ -160,11 +160,11 @@ admission reason, count/limit snapshot, queue timestamp, and project link.
 
 ## Implementation Slices
 
-1. **Governance model and selector identity**: preserve selector `projectId`,
+1. **Governance model and selector identity** (complete): preserve selector `projectId`,
    add pure limit/policy/scope/relation models, and cover unrestricted,
    restricted, stale-reference, archived, cross-project, warning, blocking, and
    queue-pressure cases. Commit boundary: shared governance semantics.
-2. **Project operational evidence**: independently load related sessions and
+2. **Project operational evidence** (complete): independently load related sessions and
    workflow runs; add responsive governance summary, policy impact, related
    work links, partial errors, usage refresh, and sanitized egress evidence.
    Commit boundary: project detail operations view.

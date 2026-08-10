@@ -79,6 +79,8 @@ export type ProjectUsageGovernanceModel = {
   readonly enforcement: 'warning_only' | 'block_session_creation';
   readonly enforcementLabel: string;
   readonly metrics: readonly ProjectUsagePressure[];
+  readonly egressReceiveLabel: string;
+  readonly egressTransmitLabel: string;
   readonly alerts: readonly ProjectUsageAlertResource[];
   readonly observedAt: string;
 };

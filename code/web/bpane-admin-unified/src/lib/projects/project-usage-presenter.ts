@@ -77,6 +77,8 @@ export class ProjectUsagePresenter {
           description: () => 'New retained artifacts are rejected when this enforced storage quota would be exceeded.',
         }),
       ],
+      egressReceiveLabel: formatBytes(usage.egress_rx_bytes) ?? '0 B',
+      egressTransmitLabel: formatBytes(usage.egress_tx_bytes) ?? '0 B',
       alerts: usage.alerts,
       observedAt: formatDateTime(usage.observed_at),
     };

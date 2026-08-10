@@ -34,8 +34,10 @@ describe('ProjectInspector', () => {
       },
     });
     expect(byTestId(target, 'project-inspector').textContent).toContain('Support');
+    expect(byTestId(target, 'project-governance-evidence').textContent).toContain('Operational governance');
+    expect(byTestId(target, 'project-usage-evidence').textContent).toContain('Active sessions');
     expect(byTestId(target, 'project-edit-form').textContent).toContain('Project settings');
-    expect(byTestId(target, 'project-status-summary').textContent).toContain('Current usage');
+    expect(target.querySelector('[data-testid="project-status-summary"]')).toBeNull();
     expect(target.querySelector('[data-testid="project-readonly-details"]')).toBeNull();
   });
 

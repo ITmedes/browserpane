@@ -4,6 +4,8 @@
     ProjectActionState,
     ProjectDetailLoadState,
     ProjectPolicyOptionsLoadState,
+    ProjectRelatedSessionsLoadState,
+    ProjectRelatedWorkflowRunsLoadState,
   } from '$lib/projects/project-detail-state';
   import { buildProjectInspectorModel } from '$lib/projects/project-inspector-view-model';
   import type { UpsertProjectRequest } from '$lib/projects/project-types';
@@ -11,13 +13,17 @@
   import AdminMessage from './AdminMessage.svelte';
   import ActionFeedback from './ActionFeedback.svelte';
   import ProjectEditForm from './ProjectEditForm.svelte';
+  import ProjectGovernanceEvidence from './ProjectGovernanceEvidence.svelte';
 
   type ProjectInspectorProps = {
     readonly state: ProjectDetailLoadState;
     readonly actionState?: ProjectActionState;
     readonly policyOptionsState?: ProjectPolicyOptionsLoadState;
+    readonly relatedSessionsState?: ProjectRelatedSessionsLoadState;
+    readonly relatedWorkflowRunsState?: ProjectRelatedWorkflowRunsLoadState;
     readonly onRefreshProject?: () => void | Promise<void>;
     readonly onRefreshUsage?: () => void | Promise<void>;
+    readonly onRefreshRelatedWork?: () => void | Promise<void>;
     readonly onSaveProject?: (request: UpsertProjectRequest) => void | Promise<void>;
   };
 
@@ -25,8 +31,11 @@
     state,
     actionState = { status: 'idle' },
     policyOptionsState = { status: 'idle' },
+    relatedSessionsState = { status: 'idle' },
+    relatedWorkflowRunsState = { status: 'idle' },
     onRefreshProject,
     onRefreshUsage,
+    onRefreshRelatedWork,
     onSaveProject,
   }: ProjectInspectorProps = $props();
 
@@ -43,6 +52,10 @@
 
   function saveProject(request: UpsertProjectRequest): void {
     void onSaveProject?.(request);
+  }
+
+  function refreshRelatedWork(): void {
+    void onRefreshRelatedWork?.();
   }
 
   async function copyProjectId(projectId: string): Promise<void> {
@@ -128,6 +141,13 @@
     </div>
 
     <div class="grid gap-4 p-4">
+      <ProjectGovernanceEvidence
+        project={state.project}
+        {policyOptionsState}
+        {relatedSessionsState}
+        {relatedWorkflowRunsState}
+        onRefreshRelatedWork={refreshRelatedWork}
+      />
       {#key `${state.project.id}:${state.project.updated_at}`}
         <ProjectEditForm
           project={state.project}
