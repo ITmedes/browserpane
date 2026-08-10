@@ -9,6 +9,7 @@ import {
   adminRouteUrl,
   assertNoBodyHorizontalOverflow,
   assertNoHorizontalOverflow,
+  authJsonHeaders,
   waitForContains,
 } from './admin-unified-smoke-lib.mjs';
 import { createWorkflow, createWorkflowVersion } from './admin-workflow-smoke-lib.mjs';
@@ -17,6 +18,7 @@ import {
   apiOrigin,
   createLogger,
   deleteSession,
+  fetchJson,
   launchChrome,
   parseSmokeArgs,
   poll,
@@ -35,6 +37,7 @@ async function run() {
   let accessToken = '';
   let createdRunId = '';
   let createdSessionId = '';
+  let createdProject = null;
 
   try {
     log(`Opening ${options.pageUrl}`);
@@ -46,6 +49,7 @@ async function run() {
 
     const hiddenWorkflow = await createWorkflow(accessToken, apiOrigin(options));
     await createWorkflowVersion(accessToken, apiOrigin(options), hiddenWorkflow.id);
+    createdProject = await createWorkflowSmokeProject(accessToken, options);
 
     await page.goto(adminRouteUrl(options, 'workflows'), { waitUntil: 'domcontentloaded' });
     await page.getByTestId('workflows-overview').waitFor({
@@ -94,7 +98,7 @@ async function run() {
     await page.locator(sourceTreeSelector('dev/web-fixtures/test-embed.html')).click();
     await waitForContains(page, options, 'workflow-code-preview-entrypoint', 'dev/web-fixtures/test-embed.html');
     await waitForContains(page, options, 'workflow-code-preview-code', 'BrowserPane Test Embed');
-    const launch = await verifyWorkflowRunLauncher(page, options);
+    const launch = await verifyWorkflowRunLauncher(page, options, createdProject);
     createdRunId = launch.runId;
     createdSessionId = launch.sessionId;
     await assertNoBodyHorizontalOverflow(page, 'unified workflow detail');
@@ -102,7 +106,7 @@ async function run() {
 
     await verifyResponsiveDetailLayout(page, options);
     await verifySourceEditor(page, options, log, hiddenWorkflow.id);
-    await verifyCreatedRunCatalog(page, options, createdRunId);
+    await verifyCreatedRunCatalog(page, options, createdRunId, createdProject.id);
 
     summary = {
       pageUrl: options.pageUrl,
@@ -110,6 +114,7 @@ async function run() {
       catalogTemplate: 'BrowserPane Tour',
       createdRunId,
       createdSessionId,
+      projectId: createdProject.id,
       detailVisible: true,
     };
     await emitSummary(options, summary, log);
@@ -118,6 +123,9 @@ async function run() {
       await deleteSession(accessToken, options, createdSessionId).catch((error) => {
         log(`cleanup warning: failed to delete session ${createdSessionId}: ${error instanceof Error ? error.message : String(error)}`);
       });
+    }
+    if (accessToken && createdProject) {
+      await archiveProject(accessToken, options, createdProject, log);
     }
     await context.close();
     await browser.close();
@@ -182,11 +190,14 @@ async function verifySourceEditor(page, options, log, workflowId) {
   await assertNoHorizontalOverflow(page, 'workflow-definition-detail-route', 'unified workflow source editor route');
 }
 
-async function verifyWorkflowRunLauncher(page, options) {
+async function verifyWorkflowRunLauncher(page, options, project) {
   await page.getByTestId('workflow-run-launcher').waitFor({
     state: 'visible',
     timeout: options.connectTimeoutMs,
   });
+  await page.getByTestId('workflow-run-project-id').selectOption(project.id);
+  await waitForContains(page, options, 'workflow-run-project-governance', project.name);
+  await waitForContains(page, options, 'workflow-run-project-governance', 'Active runs: 0 / 1');
   await page.getByTestId('workflow-run-input-scroll_delay_ms').fill('30');
   await page.getByTestId('workflow-run-input-scroll_step_px').fill('480');
   await page.getByTestId('workflow-run-input-max_scroll_steps').fill('2');
@@ -218,7 +229,7 @@ async function waitForWorkflowLaunch(page, options) {
   ]);
 }
 
-async function verifyCreatedRunCatalog(page, options, runId) {
+async function verifyCreatedRunCatalog(page, options, runId, projectId) {
   await page.goto(adminRouteUrl(options, 'workflow-runs'), { waitUntil: 'domcontentloaded' });
   await page.getByTestId('workflow-runs-overview').waitFor({
     state: 'visible',
@@ -226,17 +237,85 @@ async function verifyCreatedRunCatalog(page, options, runId) {
   });
   await waitForContains(page, options, 'workflow-runs-integration-panel', 'Start workflow runs from outside');
   await page.getByTestId('workflow-runs-search').fill(runId);
-  await poll(
+  const row = await poll(
     `created workflow run row ${runId}`,
     async () => {
       const row = page.getByTestId('workflow-runs-list-row').filter({ hasText: runId.slice(0, 12) }).first();
-      return await row.isVisible().catch(() => false);
+      return await row.isVisible().catch(() => false) ? row : null;
     },
-    Boolean,
+    (candidate) => candidate !== null,
     options.connectTimeoutMs,
   );
   await assertNoBodyHorizontalOverflow(page, 'unified workflow run catalog after launch');
   await assertNoHorizontalOverflow(page, 'workflow-runs-overview', 'unified workflow run catalog after launch');
+  await row.getByTestId('workflow-runs-detail-link').click();
+  await page.getByTestId('workflow-run-detail-route').waitFor({
+    state: 'visible',
+    timeout: options.connectTimeoutMs,
+  });
+  await page.getByTestId('workflow-run-admission-evidence').waitFor({
+    state: 'visible',
+    timeout: options.connectTimeoutMs,
+  });
+  const admissionMessage = page.getByTestId('workflow-run-admission-message');
+  if (await admissionMessage.count() === 0) {
+    throw new Error(`Expected project admission evidence, got ${(await page.getByTestId('workflow-run-admission-evidence').textContent())?.trim()}`);
+  }
+  if (!(await admissionMessage.textContent())?.trim()) {
+    throw new Error('Expected the workflow run project admission message to be non-empty.');
+  }
+  await waitForContains(page, options, 'workflow-run-admission-active-workflows', ' / 1');
+  const projectHref = await page.getByTestId('workflow-run-detail-project-link').getAttribute('href');
+  if (projectHref !== `/admin-new/projects/${projectId}`) {
+    throw new Error(`Expected workflow run project link for ${projectId}, got ${projectHref}`);
+  }
+  await page.setViewportSize({ width: 390, height: 900 });
+  await assertNoHorizontalOverflow(page, 'workflow-run-detail-route', 'mobile workflow run detail route');
+  await page.setViewportSize({ width: 1440, height: 980 });
+}
+
+async function createWorkflowSmokeProject(accessToken, options) {
+  const runLabel = `admin-unified-workflows-smoke-${Date.now()}`;
+  return await fetchJson(`${apiOrigin(options)}/api/v1/projects`, {
+    method: 'POST',
+    headers: authJsonHeaders(accessToken),
+    body: JSON.stringify({
+      name: `Workflow smoke project ${runLabel}`,
+      description: 'Bounded project for unified workflow launch and admission evidence.',
+      labels: { suite: 'admin-unified-workflows-smoke', run: runLabel },
+      state: 'active',
+      quotas: { max_active_workflow_runs: 1 },
+      policy: {
+        allowed_session_template_ids: [],
+        allowed_egress_profile_ids: [],
+        allowed_extension_ids: [],
+        allowed_browser_context_ids: [],
+        allowed_file_workspace_ids: [],
+        allow_browser_uploads: true,
+        allow_browser_downloads: true,
+        allow_session_file_bindings: true,
+        allow_manual_recordings: true,
+        usage_budget_enforcement: 'warning_only',
+      },
+    }),
+  });
+}
+
+async function archiveProject(accessToken, options, project, log) {
+  await fetchJson(`${apiOrigin(options)}/api/v1/projects/${project.id}`, {
+    method: 'PUT',
+    headers: authJsonHeaders(accessToken),
+    body: JSON.stringify({
+      name: project.name,
+      description: project.description,
+      labels: project.labels ?? {},
+      quotas: project.quotas ?? {},
+      policy: project.policy ?? {},
+      state: 'archived',
+    }),
+  }).catch((error) => {
+    log(`Project cleanup for ${project.id} failed: ${error.message}`);
+  });
 }
 
 async function emitSummary(options, summary, log) {

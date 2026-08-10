@@ -1,4 +1,8 @@
-import { formatDateTime, type ProjectTone } from '$lib/projects/project-formatters';
+import {
+  formatDateTime,
+  formatDuration,
+  type ProjectTone,
+} from '$lib/projects/project-formatters';
 import type {
   WorkflowRunEventResource,
   WorkflowRunLogResource,
@@ -38,18 +42,32 @@ export type WorkflowRunDetailFact = {
 export type WorkflowRunDetailModel = {
   readonly stateTone: ProjectTone;
   readonly projectLabel: string;
+  readonly projectHref: string | null;
   readonly sourceLabel: string;
   readonly runtimeLabel: string;
   readonly admissionLabel: string;
+  readonly admissionEvidence: WorkflowRunAdmissionEvidence;
   readonly facts: readonly WorkflowRunDetailFact[];
   readonly controls: WorkflowRunControlAvailability;
+};
+
+export type WorkflowRunAdmissionEvidence = {
+  readonly state: string | null;
+  readonly tone: ProjectTone;
+  readonly reasonCode: string | null;
+  readonly message: string | null;
+  readonly checkedAt: string | null;
+  readonly facts: readonly WorkflowRunDetailFact[];
+  readonly queueReason: string | null;
+  readonly queuedAt: string | null;
 };
 
 const CANCELLABLE_STATES = new Set(['pending', 'queued', 'starting', 'running', 'awaiting_input']);
 const TERMINAL_STATES = new Set(['succeeded', 'failed', 'cancelled', 'timed_out']);
 
 export function buildWorkflowRunDetailModel(run: WorkflowRunResource): WorkflowRunDetailModel {
-  const projectLabel = run.project?.name ?? run.project_id ?? 'Owner scoped';
+  const projectId = run.project?.id ?? run.project_id ?? run.project_admission?.project_id ?? null;
+  const projectLabel = run.project?.name ?? projectId ?? 'Owner scoped';
   const sourceLabel = [
     run.source_system ?? 'manual',
     run.source_reference ?? run.client_request_id ?? 'No source reference',
@@ -65,9 +83,11 @@ export function buildWorkflowRunDetailModel(run: WorkflowRunResource): WorkflowR
   return {
     stateTone: workflowRunDetailTone(run.state),
     projectLabel,
+    projectHref: projectId ? workflowRunProjectHref(projectId) : null,
     sourceLabel,
     runtimeLabel,
     admissionLabel,
+    admissionEvidence: workflowRunAdmissionEvidence(run),
     controls: workflowRunControlAvailability(run),
     facts: [
       fact('State', run.state, 'workflow-run-detail-state'),
@@ -77,6 +97,42 @@ export function buildWorkflowRunDetailModel(run: WorkflowRunResource): WorkflowR
       fact('Created', formatDateTime(run.created_at), 'workflow-run-detail-created-at'),
       fact('Updated', formatDateTime(run.updated_at), 'workflow-run-detail-updated-at'),
     ],
+  };
+}
+
+export function workflowRunAdmissionEvidence(
+  run: WorkflowRunResource,
+): WorkflowRunAdmissionEvidence {
+  const admission = run.project_admission;
+  const facts: WorkflowRunDetailFact[] = [];
+  if (admission) {
+    addAdmissionFact(facts, 'Active workflow runs', admission.active_workflow_runs,
+      admission.max_active_workflow_runs, 'workflow-run-admission-active-workflows');
+    addAdmissionFact(facts, 'Active sessions', admission.active_sessions,
+      admission.max_active_sessions, 'workflow-run-admission-active-sessions');
+    addAdmissionFact(facts, 'Session creations', admission.session_creations,
+      admission.max_session_creations, 'workflow-run-admission-session-creations');
+    addAdmissionFact(facts, 'Creation window', admission.session_creations_in_window,
+      admission.max_session_creations_per_window, 'workflow-run-admission-creation-window',
+      admission.session_creation_window_sec ? ` / ${admission.session_creation_window_sec}s` : '');
+    if ((admission.runtime_usage_ms !== null && admission.runtime_usage_ms !== undefined)
+      || (admission.max_runtime_usage_ms !== null && admission.max_runtime_usage_ms !== undefined)) {
+      facts.push(fact(
+        'Runtime usage',
+        `${formatDuration(admission.runtime_usage_ms) ?? 'Unknown'} / ${formatDuration(admission.max_runtime_usage_ms) ?? 'Unbounded'}`,
+        'workflow-run-admission-runtime-usage',
+      ));
+    }
+  }
+  return {
+    state: admission?.state ?? null,
+    tone: admissionStateTone(admission?.state ?? null),
+    reasonCode: admission?.reason_code ?? null,
+    message: admission?.message ?? null,
+    checkedAt: admission ? formatDateTime(admission.checked_at) : null,
+    facts,
+    queueReason: run.admission?.reason ?? null,
+    queuedAt: run.admission ? formatDateTime(run.admission.queued_at) : null,
   };
 }
 
@@ -146,6 +202,10 @@ export function workflowRunDefinitionHref(workflowId: string): string {
   return `/admin-new/workflows/${encodeURIComponent(workflowId)}`;
 }
 
+export function workflowRunProjectHref(projectId: string): string {
+  return `/admin-new/projects/${encodeURIComponent(projectId)}`;
+}
+
 export function formatWorkflowRunJson(value: unknown): string {
   if (value === undefined) {
     return 'Not provided';
@@ -165,4 +225,27 @@ export function formatWorkflowRunBytes(value: number): string {
 
 function fact(label: string, value: string, testId: string): WorkflowRunDetailFact {
   return { label, value, testId };
+}
+
+function admissionStateTone(state: string | null): ProjectTone {
+  if (state === 'allowed') return 'success';
+  if (state === 'queued') return 'warning';
+  if (state === 'rejected') return 'danger';
+  return 'neutral';
+}
+
+function addAdmissionFact(
+  facts: WorkflowRunDetailFact[],
+  label: string,
+  current: number | null | undefined,
+  limit: number | null | undefined,
+  testId: string,
+  suffix = '',
+): void {
+  if (current === null || current === undefined) {
+    if (limit === null || limit === undefined) return;
+    facts.push(fact(label, `Unknown / ${limit}${suffix}`, testId));
+    return;
+  }
+  facts.push(fact(label, `${current} / ${limit ?? 'Unbounded'}${suffix}`, testId));
 }

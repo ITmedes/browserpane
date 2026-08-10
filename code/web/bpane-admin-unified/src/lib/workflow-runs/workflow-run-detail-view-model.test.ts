@@ -7,6 +7,7 @@ import {
   workflowRunDefinitionHref,
   workflowRunDetailHref,
   workflowRunIdFromPathname,
+  workflowRunProjectHref,
   workflowRunSessionHref,
   workflowRunSessionPreviewHref,
 } from './workflow-run-detail-view-model';
@@ -20,8 +21,45 @@ describe('workflow run detail view model', () => {
     expect(model.sourceLabel).toBe('external_scheduler / ticket-42');
     expect(model.runtimeLabel).toContain('live_runtime');
     expect(model.admissionLabel).toBe('allowed: policy_ok');
+    expect(model.projectHref).toBe('/admin-new/projects/project-1');
+    expect(model.admissionEvidence).toMatchObject({
+      state: 'allowed',
+      reasonCode: 'policy_ok',
+      message: 'Workflow run allowed.',
+      checkedAt: expect.stringContaining('2026'),
+    });
+    expect(model.admissionEvidence.facts).toContainEqual(expect.objectContaining({
+      testId: 'workflow-run-admission-active-workflows',
+      value: '1 / 4',
+    }));
     expect(model.facts.map((fact) => fact.testId)).toContain('workflow-run-detail-state');
     expect(model.stateTone).toBe('warning');
+  });
+
+  it('keeps generic queue evidence alongside the project admission snapshot', () => {
+    const model = buildWorkflowRunDetailModel(workflowRun({
+      state: 'queued',
+      projectAdmission: {
+        state: 'queued',
+        reason_code: 'workflow_capacity_reached',
+        message: 'Workflow run queued until project capacity is available.',
+        active_workflow_runs: 4,
+        max_active_workflow_runs: 4,
+        checked_at: '2026-08-07T10:00:00.000Z',
+      },
+      admission: {
+        state: 'queued',
+        reason: 'project_workflow_concurrency_limit',
+        queued_at: '2026-08-07T10:00:01.000Z',
+      },
+    }));
+
+    expect(model.admissionEvidence).toMatchObject({
+      state: 'queued',
+      tone: 'warning',
+      queueReason: 'project_workflow_concurrency_limit',
+      queuedAt: expect.stringContaining('2026'),
+    });
   });
 
   it.each([
@@ -59,6 +97,7 @@ describe('workflow run detail view model', () => {
   it('builds encoded canonical links', () => {
     expect(workflowRunDetailHref('run/1')).toBe('/admin-new/workflow-runs/run%2F1');
     expect(workflowRunDefinitionHref('workflow/1')).toBe('/admin-new/workflows/workflow%2F1');
+    expect(workflowRunProjectHref('project/1')).toBe('/admin-new/projects/project%2F1');
     expect(workflowRunSessionHref('session/1')).toBe('/admin-new/sessions/session%2F1');
     expect(workflowRunSessionPreviewHref('session/1'))
       .toBe('/admin-new/sessions/session%2F1/preview');
@@ -77,6 +116,8 @@ describe('workflow run detail view model', () => {
 function workflowRun(overrides: {
   readonly state?: string;
   readonly pendingRequest?: boolean;
+  readonly projectAdmission?: WorkflowRunResource['project_admission'];
+  readonly admission?: WorkflowRunResource['admission'];
 } = {}): WorkflowRunResource {
   return {
     id: 'run-1',
@@ -102,13 +143,15 @@ function workflowRun(overrides: {
     produced_files: [],
     recordings: [],
     retention: { logs_expire_at: null, output_expire_at: null },
-    project_admission: {
+    project_admission: overrides.projectAdmission ?? {
       state: 'allowed',
       reason_code: 'policy_ok',
       message: 'Workflow run allowed.',
+      active_workflow_runs: 1,
+      max_active_workflow_runs: 4,
       checked_at: '2026-08-07T10:00:00.000Z',
     },
-    admission: null,
+    admission: overrides.admission ?? null,
     intervention: {
       pending_request: overrides.pendingRequest === false ? null : {
         request_id: 'intervention-1',

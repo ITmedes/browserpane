@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { projectResourceFixture } from '$lib/test-utils/project-fixture';
 
 import {
   defaultSessionMode,
@@ -96,6 +97,26 @@ describe('workflow-run-launcher-view-model', () => {
       existingSessionId: '',
       projectId: '',
     })).toContain('"workflow_id": "workflow-1"');
+  });
+
+  it('rejects unavailable and archived project selections when a catalog is loaded', () => {
+    const base = {
+      workflowId: 'workflow-1',
+      version: 'v1',
+      inputText: '{}',
+      sessionMode: 'create_session' as const,
+      existingSessionId: '',
+      projectOptions: [projectResourceFixture({
+        id: 'project-archived',
+        name: 'Archived support',
+        state: 'archived',
+      })],
+    };
+
+    expect(validateWorkflowRunLaunch({ ...base, projectId: 'project-missing' }))
+      .toMatchObject({ ok: false, message: 'Selected project is not available.' });
+    expect(validateWorkflowRunLaunch({ ...base, projectId: 'project-archived' }))
+      .toMatchObject({ ok: false, message: expect.stringContaining('archived') });
   });
 });
 

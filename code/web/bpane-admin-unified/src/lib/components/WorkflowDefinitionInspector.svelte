@@ -16,6 +16,7 @@
     WorkflowSourceFileListState,
     WorkflowSourcePreviewState,
   } from '$lib/workflows/workflow-detail-state';
+  import type { WorkflowRunProjectOptionsLoadState } from '$lib/workflows/workflow-run-launcher-view-model';
   import {
     buildWorkflowDefinitionDetailModel,
     labelSummary,
@@ -34,6 +35,7 @@
     readonly actionState?: WorkflowActionState;
     readonly sourceFilesState?: WorkflowSourceFileListState;
     readonly sourcePreviewState?: WorkflowSourcePreviewState;
+    readonly projectOptionsState?: WorkflowRunProjectOptionsLoadState;
     readonly onRefreshWorkflow?: () => void | Promise<void>;
     readonly onSelectVersion?: (version: string) => void | Promise<void>;
     readonly onSelectSourceFile?: (path: string) => void | Promise<void>;
@@ -52,6 +54,7 @@
     actionState = { status: 'idle' },
     sourceFilesState = { status: 'idle' },
     sourcePreviewState = { status: 'idle' },
+    projectOptionsState = { status: 'idle' },
     onRefreshWorkflow,
     onSelectVersion,
     onSelectSourceFile,
@@ -299,6 +302,7 @@
       <WorkflowRunLauncher
         workflowId={loadState.definition.id}
         selectedVersion={selectedVersionResource}
+        {projectOptionsState}
         disabled={busy}
         onStartRun={onStartWorkflowRun}
       />
