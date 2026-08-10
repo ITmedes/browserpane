@@ -9,7 +9,10 @@ use tracing::info;
 use uuid::Uuid;
 
 use crate::auth::{AuthValidator, AuthenticatedPrincipal};
-use crate::session_access::{SessionAutomationAccessTokenManager, SessionConnectTicketManager};
+use crate::session_access::{
+    RecordingWorkerAccessTokenManager, SessionAutomationAccessTokenManager,
+    SessionConnectTicketManager,
+};
 use crate::session_control::{
     FailSessionRecordingRequest, PersistedSessionRecordingWorkerAssignment, SessionRecordingMode,
     SessionRecordingTerminationReason, SessionRecordingWorkerAssignmentStatus, SessionStore,
@@ -79,6 +82,7 @@ struct RecordingLifecycleInner {
     auth_validator: Arc<AuthValidator>,
     connect_ticket_manager: Arc<SessionConnectTicketManager>,
     automation_access_token_manager: Arc<SessionAutomationAccessTokenManager>,
+    recording_worker_access_token_manager: Arc<RecordingWorkerAccessTokenManager>,
     session_store: SessionStore,
     launched: Mutex<HashMap<Uuid, LaunchedRecordingWorker>>,
 }
@@ -93,6 +97,7 @@ impl RecordingLifecycleManager {
         auth_validator: Arc<AuthValidator>,
         connect_ticket_manager: Arc<SessionConnectTicketManager>,
         automation_access_token_manager: Arc<SessionAutomationAccessTokenManager>,
+        recording_worker_access_token_manager: Arc<RecordingWorkerAccessTokenManager>,
         session_store: SessionStore,
     ) -> Result<Self, RecordingLifecycleError> {
         let Some(config) = config else {
@@ -105,6 +110,7 @@ impl RecordingLifecycleManager {
                 auth_validator,
                 connect_ticket_manager,
                 automation_access_token_manager,
+                recording_worker_access_token_manager,
                 session_store,
                 launched: Mutex::new(HashMap::new()),
             })),

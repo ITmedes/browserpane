@@ -54,11 +54,6 @@ pub struct LocalWorkflowRepo {
     pub commit: String,
 }
 
-pub struct ComposeVisibleFile {
-    _temp_dir: TempDir,
-    pub container_path: String,
-}
-
 pub struct ComposeServicePrincipal {
     pub client_id: String,
     pub client_secret: String,
@@ -495,7 +490,6 @@ impl ComposeHarness {
                 continue;
             }
             let session_id = json_id(session, "id")?;
-            self.clear_active_recording_blockers(&session_id).await?;
             let _ = self.stop_session_eventually(&session_id).await?;
         }
 
@@ -582,39 +576,6 @@ impl ComposeHarness {
             },
         )
         .await?;
-        Ok(())
-    }
-
-    async fn clear_active_recording_blockers(&self, session_id: &str) -> Result<()> {
-        let recordings = self
-            .get_json(&format!("/api/v1/sessions/{session_id}/recordings"))
-            .await?;
-        for recording in json_array(&recordings, "recordings")? {
-            let state = recording
-                .get("state")
-                .and_then(Value::as_str)
-                .unwrap_or_default();
-            if !matches!(state, "starting" | "recording" | "finalizing") {
-                continue;
-            }
-            let recording_id = json_id(recording, "id")?;
-            let failed = self
-                .post_json_outcome(
-                    &format!("/api/v1/sessions/{session_id}/recordings/{recording_id}/fail"),
-                    json!({
-                        "error": "compose e2e cleanup cleared active recording blocker",
-                        "termination_reason": "worker_exit"
-                    }),
-                )
-                .await?;
-            if failed.status != StatusCode::OK && failed.status != StatusCode::CONFLICT {
-                return Err(anyhow!(
-                    "recording cleanup for {recording_id} returned {}: {}",
-                    failed.status,
-                    failed.body
-                ));
-            }
-        }
         Ok(())
     }
 
@@ -747,28 +708,6 @@ impl ComposeHarness {
             _temp_dir: temp_dir,
             repository_url,
             commit,
-        })
-    }
-
-    pub fn create_compose_visible_file(
-        &self,
-        file_name: &str,
-        bytes: &[u8],
-    ) -> Result<ComposeVisibleFile> {
-        let temp_root = self.repo_root().join(".tmp");
-        std::fs::create_dir_all(&temp_root)
-            .with_context(|| format!("failed to create temp root {}", temp_root.display()))?;
-        let temp_dir = Builder::new()
-            .prefix("bpane-gateway-compose-file-")
-            .tempdir_in(&temp_root)
-            .context("failed to create compose visible temp dir")?;
-        let file_path = temp_dir.path().join(file_name);
-        std::fs::write(&file_path, bytes)
-            .with_context(|| format!("failed to write {}", file_path.display()))?;
-        let container_path = self.container_visible_path(&file_path)?;
-        Ok(ComposeVisibleFile {
-            _temp_dir: temp_dir,
-            container_path,
         })
     }
 

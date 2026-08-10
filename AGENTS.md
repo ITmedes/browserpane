@@ -93,7 +93,7 @@ Current product shape:
   - `workspaces/model.rs`: owner-scoped file workspace and workspace-file resource shapes persisted by the control plane.
   - `workspaces/file_store.rs`: workspace file content storage boundary. `local_fs` is the current implementation; workspace files carry opaque artifact refs plus optional provenance metadata instead of raw filesystem paths.
   - `session_files/`: session-scoped file binding resource shapes. Owners can bind workspace files to relative session mount paths; automation access can read/list those bindings before runtime materialization.
-  - `recording/artifact_store.rs`: recording artifact storage boundary. `local_fs` is the current implementation; the gateway persists opaque artifact refs instead of raw filesystem paths.
+  - `recording/artifact_store.rs`: recording artifact storage boundary. `local_fs` accepts only the deterministic regular file under the configured recorder staging root, rejects aliases and symlinks, derives retained bytes from file metadata, and persists opaque artifact refs instead of raw filesystem paths.
   - `recording_lifecycle.rs`: recorder-worker launch, persisted assignment tracking, and restart reconciliation for session-scoped recording, including `recording.mode=always`. Recording resources are contiguous segments; restart recovery fails the stale in-flight segment and starts a linked fresh one instead of pretending the artifact is continuous.
   - `recording/playback/`: derives session-level playback/export resources from retained recording segments and packages a zipped playback bundle with manifest + player + included media files.
   - `recording/observability.rs`: gateway-local counters/timestamps for recording finalization, playback export generation, and retention passes.
@@ -148,7 +148,7 @@ Current product shape:
   - Can resolve an explicit control-plane session via `/api/v1/sessions`, accepts delegated-session assignment through its bridge-local `/control-session` compatibility API, supports per-connection session routing through `/sessions/{session_id}/mcp` and `/sessions/{session_id}/sse`, resolves the managed session's runtime CDP endpoint from the session resource, and uses session-scoped `status` / `mcp-owner` APIs when a managed session is configured, including in `docker_pool` mode. In local compose, browser/admin callers mutate the bridge-global control session through the authenticated gateway proxy at `/api/v1/mcp-bridge/control-session`; the direct bridge-local control target is protected by an internal bearer token.
 - `code/integrations/recording-worker`
   - Playwright-driven recorder worker that attaches as a `recorder` browser client through the control plane.
-  - Creates or adopts session recording resources via `/api/v1/sessions/{id}/recordings`, waits for stop/finalize signals, then hands a temporary local file path back to the gateway for artifact-store finalization.
+  - Creates or adopts session recording resources via `/api/v1/sessions/{id}/recordings`, waits for stop/finalize signals, writes the deterministic staged WebM, and uses a gateway-issued session/recording-bound worker capability for completion or failure. Ordinary session automation credentials cannot finalize artifacts.
 - `code/integrations/workflow-worker`
   - One-off workflow executor worker for owner-scoped workflow runs with git-backed source snapshots.
   - Loads the workflow run through the gateway using an owner bearer token, mints session automation access, downloads the run source snapshot and workspace inputs, materializes them locally, uploads produced files back through run-scoped artifact APIs, and executes the pinned Playwright entrypoint against the bound BrowserPane session.
@@ -158,7 +158,7 @@ Current product shape:
   - Local session-control persistence in compose is Postgres on `:5433`.
   - Local workflow credential binding dev/testing uses HashiCorp Vault dev mode on `:8200`.
   - Local compose defaults to `docker_pool` for browser-session workers, with a shared socket-only runtime volume and per-session browser data volumes; `mcp-bridge` resolves the delegated session's runtime endpoint dynamically in that mode.
-  - Local compose uses a one-shot helper to build the `deploy-recording-worker` image and configures the gateway to launch short-lived recorder containers for `recording.mode=always`; artifact handoff uses the `bpane-recordings` volume and finalized artifacts use the gateway recording artifact store.
+  - Local compose uses a one-shot helper to build the `deploy-recording-worker` image and configures the gateway to launch short-lived recorder containers for `recording.mode=always`; artifact handoff uses the trusted `bpane-recordings` staging volume and finalized artifacts use the separate `bpane-recording-artifacts` gateway store.
   - The gateway is configured to auto-launch workflow workers against the `deploy-workflow-worker` image on the compose network. Build that image before workflow-run smoke tests or local workflow execution.
   - The gateway mounts the repo at `/workspace:ro` so local git-backed workflow sources can be resolved and materialized during development smokes.
 - `deploy/examples/egress-observer`

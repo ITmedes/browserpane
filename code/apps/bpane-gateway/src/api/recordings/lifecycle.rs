@@ -95,10 +95,16 @@ pub(super) async fn complete_session_recording(
     State(state): State<Arc<ApiState>>,
     Json(request): Json<CompleteSessionRecordingRequest>,
 ) -> Result<Json<SessionRecordingResource>, (StatusCode, Json<ErrorResponse>)> {
-    let _session =
-        authorize_visible_session_request_with_automation_access(&headers, &state, session_id)
-            .await?;
+    authorize_recording_worker_request(&headers, &state, session_id, recording_id)?;
     let recording = load_session_recording(&state, session_id, recording_id).await?;
+    if recording.state != SessionRecordingState::Finalizing {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(ErrorResponse {
+                error: format!("recording {recording_id} is not awaiting artifact finalization"),
+            }),
+        ));
+    }
     let CompleteSessionRecordingRequest {
         source_path,
         mime_type,
@@ -115,6 +121,7 @@ pub(super) async fn complete_session_recording(
             recording_id,
             format: recording.format,
             source_path,
+            expected_bytes: bytes,
         })
         .await
         .map_err(|error| {
@@ -131,7 +138,7 @@ pub(super) async fn complete_session_recording(
             PersistCompletedSessionRecordingRequest {
                 artifact_ref: stored_artifact.artifact_ref.clone(),
                 mime_type,
-                bytes,
+                bytes: Some(stored_artifact.bytes),
                 duration_ms,
             },
         )
@@ -177,9 +184,7 @@ pub(super) async fn fail_session_recording(
     State(state): State<Arc<ApiState>>,
     Json(request): Json<FailSessionRecordingRequest>,
 ) -> Result<Json<SessionRecordingResource>, (StatusCode, Json<ErrorResponse>)> {
-    let _session =
-        authorize_visible_session_request_with_automation_access(&headers, &state, session_id)
-            .await?;
+    authorize_recording_worker_request(&headers, &state, session_id, recording_id)?;
     let recording = state
         .session_store
         .fail_recording_for_session(session_id, recording_id, request)
@@ -197,4 +202,35 @@ pub(super) async fn fail_session_recording(
         })?;
     state.recording_observability.record_recording_failure();
     Ok(Json(recording.to_resource()))
+}
+
+fn authorize_recording_worker_request(
+    headers: &HeaderMap,
+    state: &ApiState,
+    session_id: Uuid,
+    recording_id: Uuid,
+) -> Result<(), (StatusCode, Json<ErrorResponse>)> {
+    let token = headers
+        .get(RECORDING_WORKER_ACCESS_TOKEN_HEADER)
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(recording_worker_unauthorized)?;
+    let claims = state
+        .recording_worker_access_token_manager
+        .validate_token(token)
+        .map_err(|_| recording_worker_unauthorized())?;
+    if claims.session_id != session_id || claims.recording_id != recording_id {
+        return Err(recording_worker_unauthorized());
+    }
+    Ok(())
+}
+
+fn recording_worker_unauthorized() -> (StatusCode, Json<ErrorResponse>) {
+    (
+        StatusCode::UNAUTHORIZED,
+        Json(ErrorResponse {
+            error: "valid recording worker authorization is required".to_string(),
+        }),
+    )
 }

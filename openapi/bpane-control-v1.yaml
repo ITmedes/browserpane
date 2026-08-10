@@ -2648,8 +2648,17 @@ paths:
       - $ref: '#/components/parameters/RecordingId'
     post:
       tags: [Session Recordings]
-      summary: Finalize recording metadata with artifact details
+      summary: Finalize a worker-produced recording artifact
       operationId: completeSessionRecording
+      security:
+        - recordingWorkerAccessToken: []
+      description: >
+        Internal recorder-worker operation. The worker capability is bound to
+        the route session and recording. source_path must be the exact regular
+        file at the configured recorder staging root for those identifiers and
+        must not contain aliases or symbolic links. The recording must already
+        be finalizing. When bytes is supplied, it is an integrity assertion;
+        the retained byte count always comes from the staged file.
       requestBody:
         required: true
         content:
@@ -2679,8 +2688,14 @@ paths:
       - $ref: '#/components/parameters/RecordingId'
     post:
       tags: [Session Recordings]
-      summary: Mark a recording resource as failed
+      summary: Report a recorder-worker failure
       operationId: failSessionRecording
+      security:
+        - recordingWorkerAccessToken: []
+      description: >
+        Internal recorder-worker operation. The worker capability is bound to
+        the route session and recording and grants no owner, session-connect,
+        or general session-automation authority.
       requestBody:
         required: true
         content:
@@ -3246,6 +3261,14 @@ components:
       type: apiKey
       in: header
       name: x-bpane-automation-access-token
+    recordingWorkerAccessToken:
+      type: apiKey
+      in: header
+      name: x-bpane-recording-worker-token
+      description: >
+        Short-lived internal capability issued by the gateway to one recorder
+        worker and bound to one session and recording. Never place this value in
+        a URL, request body, log, or retained resource.
   parameters:
     SessionId:
       name: session_id
@@ -8074,6 +8097,11 @@ components:
       properties:
         source_path:
           type: string
+          description: >
+            Internal compatibility field. Must equal
+            <recording-worker-output-root>/<session-id>/<recording-id>.webm.
+            Arbitrary absolute paths, aliases, directories, special files, and
+            symbolic links are rejected.
         mime_type:
           type: string
           nullable: true
@@ -8081,6 +8109,9 @@ components:
           type: integer
           nullable: true
           minimum: 0
+          description: >
+            Optional integrity assertion. When present it must match the staged
+            file size; the persisted byte count is always filesystem-derived.
         duration_ms:
           type: integer
           nullable: true

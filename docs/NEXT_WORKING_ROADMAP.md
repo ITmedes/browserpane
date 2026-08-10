@@ -56,9 +56,9 @@ Review reconciliation update:
   #146; webhook SSRF controls are implemented by #147; gateway graceful
   shutdown/readiness is implemented by #150; browser-context import limits
   remain confirmed-open,
-- recording artifact finalization remains a valid cleanup item, but it should
-  not displace confirmed-open token/auth/webhook/import/lifecycle findings when
-  choosing the next security-driven slice.
+- recording artifact finalization is review-ready on
+  `feature/BPANE-00149-recording-artifact-finalization`, with the remaining
+  generalized artifact and worker-test gaps retained under #21 and #165.
 
 ### Slice A: Token Domain Separation And URL Credential Cleanup
 
@@ -132,6 +132,9 @@ Validation:
 - security-header checks.
 
 ### Slice C: Recording Artifact Finalization Boundary
+
+State: implemented, battle-tested, and review-ready on
+`feature/BPANE-00149-recording-artifact-finalization`.
 
 Priority: medium/high security/runtime cleanup.
 

@@ -17,6 +17,7 @@ async fn expired_recording_artifacts_return_gone() {
             vec![6; 32],
             Duration::from_secs(300),
         )),
+        recording_worker_access_token_manager: test_recording_worker_access_token_manager(),
         session_store: session_store.clone(),
         session_manager: Arc::new(
             SessionManager::new(SessionManagerConfig::StaticSingle {
@@ -103,9 +104,7 @@ async fn expired_recording_artifacts_return_gone() {
         .await
         .unwrap();
 
-    let temp_dir = tempfile::tempdir().unwrap();
-    let artifact_path = temp_dir.path().join("expired-segment.webm");
-    std::fs::write(&artifact_path, b"expired-segment").unwrap();
+    let artifact_path = stage_recording_artifact(session_uuid, recording_uuid, b"expired-segment");
     let _ = app
         .clone()
         .oneshot(
@@ -115,6 +114,10 @@ async fn expired_recording_artifacts_return_gone() {
                     "/api/v1/sessions/{session_uuid}/recordings/{recording_uuid}/complete"
                 ))
                 .header("authorization", bearer(&token))
+                .header(
+                    RECORDING_WORKER_ACCESS_TOKEN_HEADER,
+                    recording_worker_access_token(session_uuid, recording_uuid),
+                )
                 .header("content-type", "application/json")
                 .body(Body::from(
                     json!({

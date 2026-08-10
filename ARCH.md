@@ -346,7 +346,12 @@ service.
   buffer, zero-copy frame slicing with `Bytes`
 - **Recording lifecycle** (`recording_lifecycle.rs`, `recording/retention.rs`, `recording/artifact_store.rs`):
   - starts/stops passive recorder workers for `recording.mode=always`
-  - launches recorder workers with session-scoped connect tickets and a shared artifact handoff path
+  - launches recorder workers with session-scoped connect tickets, ordinary
+    read/connect automation access, and a separate completion/failure
+    capability bound to one session and recording
+  - accepts only the deterministic regular WebM under the configured shared
+    staging root, rejects path aliases and symlinks, and derives retained bytes
+    from the staged artifact before moving it into the separate managed store
   - persists per-segment metadata, linkage, termination reasons, and artifact refs
   - enforces retention and playback/export visibility through the control plane
 - **Browser context lifecycle** (`browser_contexts/retention.rs`, `runtime_manager.rs`, `session_control.rs`):
@@ -508,6 +513,9 @@ Gateway-supervised passive session recorder.
 - Finalizes recording segments back into gateway-managed artifact storage
 - Supports manual session recordings and `recording.mode=always` auto-recording
 - Reports completion/failure into the control plane so playback/export reflects real segment state
+- Sends the dedicated recording-worker capability only on internal
+  completion/failure requests; ordinary owner or session-automation access
+  cannot finalize artifacts
 
 ---
 

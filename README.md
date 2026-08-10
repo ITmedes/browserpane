@@ -1025,6 +1025,10 @@ BrowserPane session recording is now a control-plane feature rather than only a 
   `/admin-new/recordings` catalog or the session-specific
   `/admin-new/sessions/{id}/recordings` route, as well as through the v1 API.
 - Playback/export is modeled separately from raw recording segments, so multi-segment sessions stay explicit.
+- Recorder completion/failure uses a gateway-issued capability bound to one
+  session and recording. The worker can finalize only the deterministic regular
+  WebM in the shared staging volume; retained byte counts come from the file,
+  with any supplied byte count treated only as an integrity assertion.
 - Project policy can set `allow_manual_recordings=false` to block ad-hoc manual
   recording starts for project sessions. The unified admin session form uses
   `recording.mode=always` for automatic backend recording when the session

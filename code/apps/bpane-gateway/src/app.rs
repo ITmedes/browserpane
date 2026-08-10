@@ -75,6 +75,7 @@ impl GatewayApp {
             auth_services.auth_validator.clone(),
             auth_services.connect_ticket_manager.clone(),
             auth_services.automation_access_token_manager.clone(),
+            auth_services.recording_worker_access_token_manager.clone(),
             runtime_services.session_store.clone(),
         )
         .await?;
@@ -128,6 +129,8 @@ impl GatewayApp {
             admin_event_access_token_manager: auth_services.admin_event_access_token_manager,
             connect_ticket_manager: auth_services.connect_ticket_manager,
             automation_access_token_manager: auth_services.automation_access_token_manager,
+            recording_worker_access_token_manager: auth_services
+                .recording_worker_access_token_manager,
             session_store,
             session_manager,
             credential_provider,

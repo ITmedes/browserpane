@@ -1,5 +1,7 @@
 use anyhow::{anyhow, Result};
+use reqwest::StatusCode;
 use serde_json::json;
+use uuid::Uuid;
 
 use super::support::{json_array, json_id, label_map, recording_policy, ComposeHarness};
 
@@ -93,57 +95,27 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
         return Err(anyhow!("session automation access token was not issued"));
     }
 
-    let recording = harness
-        .post_json(
-            &format!("/api/v1/sessions/{session_id}/recordings"),
-            json!({}),
-        )
-        .await?;
-    let recording_id = json_id(&recording, "id")?;
-
     let recordings = harness
         .get_json(&format!("/api/v1/sessions/{session_id}/recordings"))
         .await?;
     let recordings = json_array(&recordings, "recordings")?;
-    if recordings.is_empty() {
+    if !recordings.is_empty() {
         return Err(anyhow!(
-            "session recording list is empty after recording creation"
+            "new session recording list was not empty: {recordings:?}"
         ));
     }
 
-    let fetched_recording = harness
-        .get_json(&format!(
-            "/api/v1/sessions/{session_id}/recordings/{recording_id}"
+    let missing_recording_id = Uuid::now_v7();
+    let missing_recording = harness
+        .get_json_outcome(&format!(
+            "/api/v1/sessions/{session_id}/recordings/{missing_recording_id}"
         ))
         .await?;
-    if fetched_recording["id"] != json!(recording_id) {
-        return Err(anyhow!("recording lookup returned the wrong resource"));
-    }
-
-    let stopped_recording = harness
-        .post_json(
-            &format!("/api/v1/sessions/{session_id}/recordings/{recording_id}/stop"),
-            json!({}),
-        )
-        .await?;
-    if stopped_recording["state"] != json!("finalizing") {
+    if missing_recording.status != StatusCode::NOT_FOUND {
         return Err(anyhow!(
-            "recording stop did not transition to finalizing: {stopped_recording}"
-        ));
-    }
-
-    let failed_recording = harness
-        .post_json(
-            &format!("/api/v1/sessions/{session_id}/recordings/{recording_id}/fail"),
-            json!({
-                "error": "compose e2e synthetic recorder finalization",
-                "termination_reason": "worker_exit",
-            }),
-        )
-        .await?;
-    if failed_recording["state"] != json!("failed") {
-        return Err(anyhow!(
-            "recording fail did not transition to failed: {failed_recording}"
+            "missing recording lookup returned {}: {}",
+            missing_recording.status,
+            missing_recording.body
         ));
     }
 

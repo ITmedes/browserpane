@@ -42,6 +42,14 @@ impl RecordingLifecycleInner {
                     "failed to issue recorder automation token for session {session_id}: {error}"
                 ))
             })?;
+        let recording_worker_access_token = self
+            .recording_worker_access_token_manager
+            .issue_token(session_id, recording_id)
+            .map_err(|error| {
+                RecordingLifecycleError::LaunchFailed(format!(
+                    "failed to issue recorder worker token for recording {recording_id}: {error}"
+                ))
+            })?;
 
         let mut command = Command::new(&self.config.bin);
         command.args(&self.config.args);
@@ -59,6 +67,10 @@ impl RecordingLifecycleInner {
         command.env(
             "BPANE_SESSION_AUTOMATION_ACCESS_TOKEN",
             automation_access_token.token,
+        );
+        command.env(
+            "BPANE_RECORDING_WORKER_ACCESS_TOKEN",
+            recording_worker_access_token.token,
         );
         command.env(
             "BPANE_RECORDING_CONNECT_TIMEOUT_MS",
