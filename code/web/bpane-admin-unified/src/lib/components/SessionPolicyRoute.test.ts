@@ -51,6 +51,8 @@ describe('SessionPolicyRoute', () => {
       .toContain('project blocks browser uploads');
     expect(byTestId(target, 'session-policy-browser-upload').textContent).toContain('Blocked');
     expect(byTestId(target, 'session-policy-local-file-mode').textContent).toContain('Startup-enforced');
+    expect(byTestId(target, 'session-policy-project-link').getAttribute('href'))
+      .toBe('/admin-new/projects/project-1');
   });
 
   it('keeps effective session facts visible when project evidence is unavailable', async () => {
@@ -77,7 +79,10 @@ describe('SessionPolicyRoute', () => {
       expect(byTestId(target, 'session-policy-project-warning').textContent).toContain('unavailable');
     });
     expect(byTestId(target, 'session-policy-capability-browser_input').textContent).toContain('Enabled');
-    expect(byTestId(target, 'session-policy-scope').textContent).toContain('Owner-scoped defaults');
+    expect(byTestId(target, 'session-policy-scope').textContent).toContain('Support policy unavailable');
+    expect(byTestId(target, 'session-policy-browser-upload').textContent).toContain('Unavailable');
+    expect(byTestId(target, 'session-policy-project-link').getAttribute('href'))
+      .toBe('/admin-new/projects/project-1');
   });
 
   it('delegates authentication failures to the shared shell handler', async () => {

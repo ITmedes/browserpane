@@ -23,6 +23,7 @@ describe('session policy view model', () => {
     expect(findFact(model, 'session-policy-browser-upload')).toMatchObject({
       value: 'Blocked',
       tone: 'warning',
+      description: 'The project blocks browser uploads for its sessions.',
     });
     expect(findFact(model, 'session-policy-browser-download')).toMatchObject({
       value: 'Allowed',
@@ -46,6 +47,7 @@ describe('session policy view model', () => {
     );
 
     expect(model.scopeLabel).toBe('Owner-scoped defaults');
+    expect(model.projectHref).toBeNull();
     expect(findFact(model, 'session-policy-browser-upload')).toMatchObject({
       value: 'Owner scope',
       tone: 'neutral',
@@ -63,6 +65,32 @@ describe('session policy view model', () => {
     });
     expect(model.sections.find((section) => section.testId === 'session-policy-browser-runtime')?.description)
       .toContain('not an active browser probe');
+  });
+
+  it('keeps project scope visible when evidence is unavailable and marks rejected admission as danger', () => {
+    const session = sessionResource({ admissionState: 'rejected' });
+    const status = {
+      ...sessionStatus(),
+      admission: {
+        state: 'rejected',
+        reason_code: 'project_active_session_limit_reached',
+        message: 'Project admission rejected the session.',
+        checked_at: '2026-08-07T10:00:00Z',
+      },
+    };
+    const model = buildSessionPolicyModel(session, status, null);
+
+    expect(model.scopeLabel).toBe('Support policy unavailable');
+    expect(model.scopeTone).toBe('warning');
+    expect(model.projectHref).toBe('/admin-new/projects/project-1');
+    expect(findFact(model, 'session-policy-browser-upload')).toMatchObject({
+      value: 'Unavailable',
+      tone: 'warning',
+    });
+    expect(findFact(model, 'session-policy-admission-decision')).toMatchObject({
+      value: 'rejected: project_active_session_limit_reached',
+      tone: 'danger',
+    });
   });
 });
 

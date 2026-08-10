@@ -42,6 +42,9 @@ describe('SessionRecordingsRoute', () => {
       if (url.endsWith('/api/v1/sessions/session-1')) {
         return jsonResponse(sessionPayload({ state: 'stopped', totalClients: 0, recordingMode }));
       }
+      if (url.endsWith('/api/v1/projects/project-1')) {
+        return jsonResponse(projectPayload({ allow_manual_recordings: false }));
+      }
       return new Response('not found', { status: 404 });
     });
     vi.stubGlobal('fetch', fetchImpl);
@@ -59,6 +62,12 @@ describe('SessionRecordingsRoute', () => {
     expect(byTestId(target, 'session-subarea-recordings').getAttribute('aria-current')).toBe('page');
     expect(byTestId(target, 'session-recording-policy-value').textContent).toContain('disabled');
     expect(byTestId(target, 'session-recording-download').textContent).toContain('Download WebM');
+    expect(byTestId(target, 'session-recording-manual-policy-state').textContent).toContain('Blocked');
+    expect(byTestId(target, 'session-recording-manual-policy-reason').textContent)
+      .toContain('project blocks manual recording starts');
+    expect(byTestId(target, 'session-recording-project-link').getAttribute('href'))
+      .toBe('/admin-new/projects/project-1');
+    expect((byTestId(target, 'session-recording-enable') as HTMLButtonElement).disabled).toBe(false);
 
     byTestId(target, 'session-recording-enable').click();
     await vi.waitFor(() => {
@@ -132,6 +141,9 @@ describe('SessionRecordingsRoute', () => {
       if (url.endsWith('/api/v1/sessions/session-1')) {
         return jsonResponse(sessionPayload({ totalClients: 0 }));
       }
+      if (url.endsWith('/api/v1/projects/project-1')) {
+        return new Response('project unavailable', { status: 503 });
+      }
       return new Response('not found', { status: 404 });
     });
     vi.stubGlobal('fetch', fetchImpl);
@@ -142,6 +154,8 @@ describe('SessionRecordingsRoute', () => {
     });
     expect(target.querySelectorAll('[data-testid="session-recording-segment-row"]')).toHaveLength(1);
     expect(byTestId(target, 'session-recording-download').textContent).toContain('Download WebM');
+    expect(byTestId(target, 'session-recording-project-warning').textContent).toContain('HTTP 503');
+    expect((byTestId(target, 'session-recording-enable') as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('keeps playback evidence available when segment loading fails', async () => {
@@ -247,6 +261,34 @@ function playbackPayload(overrides: Readonly<Record<string, unknown>> = {}): Rec
     export_path: '/api/v1/sessions/session-1/recording-playback/export',
     generated_at: '2026-08-07T10:00:00Z',
     ...overrides,
+  };
+}
+
+function projectPayload(policy: Readonly<Record<string, unknown>> = {}): Record<string, unknown> {
+  return {
+    id: 'project-1',
+    name: 'Support',
+    description: 'Support browser work',
+    labels: {},
+    quotas: {},
+    policy,
+    state: 'active',
+    usage: {
+      project_id: 'project-1',
+      active_sessions: 1,
+      queued_sessions: 0,
+      session_creations: 1,
+      active_workflow_runs: 0,
+      runtime_usage_ms: 30_000,
+      egress_rx_bytes: 0,
+      egress_tx_bytes: 0,
+      egress_total_bytes: 0,
+      retained_storage_bytes: 0,
+      alerts: [],
+      observed_at: '2026-08-07T10:00:00Z',
+    },
+    created_at: '2026-08-07T09:00:00Z',
+    updated_at: '2026-08-07T10:00:00Z',
   };
 }
 
