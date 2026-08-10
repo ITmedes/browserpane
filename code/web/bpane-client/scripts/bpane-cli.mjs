@@ -164,6 +164,18 @@ function usageText() {
     '  bpane session list [options]',
     '  bpane session get <session-id> [options]',
     '  bpane session status <session-id> [options]',
+    '  bpane session file list <session-id> [options]',
+    '  bpane session file get <session-id> <file-id> [options]',
+    '  bpane session file download <session-id> <file-id> --output <path> [options]',
+    '  bpane session file-binding list <session-id> [options]',
+    '  bpane session file-binding get <session-id> <binding-id> [options]',
+    '  bpane session file-binding download <session-id> <binding-id> --output <path> [options]',
+    '  bpane session recording list <session-id> [options]',
+    '  bpane session recording get <session-id> <recording-id> [options]',
+    '  bpane session recording download <session-id> <recording-id> --output <path> [options]',
+    '  bpane session playback get <session-id> [options]',
+    '  bpane session playback manifest <session-id> [options]',
+    '  bpane session playback export <session-id> --output <path> [options]',
     '  bpane session egress-diagnostics <session-id> [options]',
     '  bpane session egress-diagnostics probe <session-id> [options]',
     '  bpane session egress-usage report <session-id> [options]',
@@ -940,6 +952,28 @@ async function requestGatewayBinary(config, path, init = {}) {
   return {
     bytes: buffer,
     contentType: response.headers?.get?.('content-type') ?? null,
+  };
+}
+
+async function downloadGatewayBinary(
+  config,
+  resourcePath,
+  outputPath,
+  summary,
+  accept = '*/*',
+) {
+  const resolvedOutputPath = expandHome(outputPath);
+  const { bytes, contentType } = await requestGatewayBinary(config, resourcePath, {
+    method: 'GET',
+    headers: { Accept: accept },
+  });
+  await fs.mkdir(path.dirname(resolvedOutputPath), { recursive: true });
+  await fs.writeFile(resolvedOutputPath, bytes);
+  return {
+    ...summary,
+    output_path: resolvedOutputPath,
+    byte_count: bytes.length,
+    content_type: contentType,
   };
 }
 
@@ -2842,6 +2876,147 @@ async function repairMcpDelegation(config, sessionId) {
   }, failureCount > 0 || !diagnostics.ok ? EXIT_CODES.api : EXIT_CODES.ok);
 }
 
+function requiredOutputPath(options, commandLabel) {
+  const outputPath = getOption(options, 'output');
+  if (!outputPath) {
+    throw new CliError(
+      'USAGE',
+      `${commandLabel} requires --output <path>.`,
+      EXIT_CODES.usage,
+    );
+  }
+  return outputPath;
+}
+
+async function handleSessionFileCommand(config, positionals, options) {
+  const action = positionals[2];
+  const names = action === 'list' ? ['session-id'] : ['session-id', 'file-id'];
+  const [sessionId, fileId] = requiredWorkflowPositionals(
+    positionals,
+    `session file ${action ?? '<action>'}`,
+    names,
+    3,
+  );
+  const basePath = `/api/v1/sessions/${encodeURIComponent(sessionId)}/files`;
+  if (action === 'list') {
+    return await requestGateway(config, basePath);
+  }
+  const filePath = `${basePath}/${encodeURIComponent(fileId)}`;
+  if (action === 'get') {
+    return await requestGateway(config, filePath);
+  }
+  if (action === 'download') {
+    return await downloadGatewayBinary(
+      config,
+      `${filePath}/content`,
+      requiredOutputPath(options, 'session file download'),
+      { session_id: sessionId, file_id: fileId },
+    );
+  }
+  throw new CliError(
+    'USAGE',
+    `Unknown session file command: ${action ?? ''}`.trim(),
+    EXIT_CODES.usage,
+  );
+}
+
+async function handleSessionFileBindingCommand(config, positionals, options) {
+  const action = positionals[2];
+  const names = action === 'list' ? ['session-id'] : ['session-id', 'binding-id'];
+  const [sessionId, bindingId] = requiredWorkflowPositionals(
+    positionals,
+    `session file-binding ${action ?? '<action>'}`,
+    names,
+    3,
+  );
+  const basePath =
+    `/api/v1/sessions/${encodeURIComponent(sessionId)}/file-bindings`;
+  if (action === 'list') {
+    return await requestGateway(config, basePath);
+  }
+  const bindingPath = `${basePath}/${encodeURIComponent(bindingId)}`;
+  if (action === 'get') {
+    return await requestGateway(config, bindingPath);
+  }
+  if (action === 'download') {
+    return await downloadGatewayBinary(
+      config,
+      `${bindingPath}/content`,
+      requiredOutputPath(options, 'session file-binding download'),
+      { session_id: sessionId, binding_id: bindingId },
+    );
+  }
+  throw new CliError(
+    'USAGE',
+    `Unknown session file-binding command: ${action ?? ''}`.trim(),
+    EXIT_CODES.usage,
+  );
+}
+
+async function handleSessionRecordingCommand(config, positionals, options) {
+  const action = positionals[2];
+  const names = action === 'list' ? ['session-id'] : ['session-id', 'recording-id'];
+  const [sessionId, recordingId] = requiredWorkflowPositionals(
+    positionals,
+    `session recording ${action ?? '<action>'}`,
+    names,
+    3,
+  );
+  const basePath = `/api/v1/sessions/${encodeURIComponent(sessionId)}/recordings`;
+  if (action === 'list') {
+    return await requestGateway(config, basePath);
+  }
+  const recordingPath = `${basePath}/${encodeURIComponent(recordingId)}`;
+  if (action === 'get') {
+    return await requestGateway(config, recordingPath);
+  }
+  if (action === 'download') {
+    return await downloadGatewayBinary(
+      config,
+      `${recordingPath}/content`,
+      requiredOutputPath(options, 'session recording download'),
+      { session_id: sessionId, recording_id: recordingId },
+    );
+  }
+  throw new CliError(
+    'USAGE',
+    `Unknown session recording command: ${action ?? ''}`.trim(),
+    EXIT_CODES.usage,
+  );
+}
+
+async function handleSessionPlaybackCommand(config, positionals, options) {
+  const action = positionals[2];
+  const [sessionId] = requiredWorkflowPositionals(
+    positionals,
+    `session playback ${action ?? '<action>'}`,
+    ['session-id'],
+    3,
+  );
+  const playbackPath =
+    `/api/v1/sessions/${encodeURIComponent(sessionId)}/recording-playback`;
+  if (action === 'get') {
+    return await requestGateway(config, playbackPath);
+  }
+  if (action === 'manifest') {
+    return await requestGateway(config, `${playbackPath}/manifest`);
+  }
+  if (action === 'export') {
+    return await downloadGatewayBinary(
+      config,
+      `${playbackPath}/export`,
+      requiredOutputPath(options, 'session playback export'),
+      { session_id: sessionId },
+      'application/zip',
+    );
+  }
+  throw new CliError(
+    'USAGE',
+    `Unknown session playback command: ${action ?? ''}`.trim(),
+    EXIT_CODES.usage,
+  );
+}
+
 async function handleSessionCommand(config, positionals, options) {
   const action = positionals[1];
   if (action === 'create' && positionals.length === 2) {
@@ -2872,6 +3047,18 @@ async function handleSessionCommand(config, positionals, options) {
       config,
       `/api/v1/sessions/${encodeURIComponent(sessionId)}/status`,
     );
+  }
+  if (action === 'file') {
+    return await handleSessionFileCommand(config, positionals, options);
+  }
+  if (action === 'file-binding') {
+    return await handleSessionFileBindingCommand(config, positionals, options);
+  }
+  if (action === 'recording') {
+    return await handleSessionRecordingCommand(config, positionals, options);
+  }
+  if (action === 'playback') {
+    return await handleSessionPlaybackCommand(config, positionals, options);
   }
   if (action === 'egress-diagnostics') {
     if (positionals[2] === 'probe') {

@@ -666,6 +666,32 @@ Common session operations:
 ./scripts/bpane session kill <session-id>
 ```
 
+Session evidence inspection and downloads:
+
+```bash
+./scripts/bpane session file list <session-id>
+./scripts/bpane session file get <session-id> <file-id>
+./scripts/bpane session file download <session-id> <file-id> \
+  --output ./session-file.bin
+./scripts/bpane session file-binding list <session-id>
+./scripts/bpane session file-binding get <session-id> <binding-id>
+./scripts/bpane session file-binding download <session-id> <binding-id> \
+  --output ./bound-input.bin
+./scripts/bpane session recording list <session-id>
+./scripts/bpane session recording get <session-id> <recording-id>
+./scripts/bpane session recording download <session-id> <recording-id> \
+  --output ./recording.webm
+./scripts/bpane session playback get <session-id>
+./scripts/bpane session playback manifest <session-id>
+./scripts/bpane session playback export <session-id> \
+  --output ./session-playback.zip
+```
+
+Evidence downloads require an explicit `--output`, preserve the response bytes,
+and emit path, byte-count, and media-type metadata as JSON. These commands are
+read-only: session-file binding mutations, recording policy changes, and
+recorder-worker completion/failure remain API or internal worker operations.
+
 Common identity and access-review operations:
 
 ```bash
