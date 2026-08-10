@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { execFileSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
 import { testEmbedPageUrl } from './workflow-smoke-lib.mjs';
@@ -300,7 +301,7 @@ async function createWorkspace(accessToken, options, name = 'workflow-workspace-
   });
 }
 
-async function createProject(accessToken, options, allowedWorkspaceId) {
+async function createProject(accessToken, options, allowedWorkspaceId, name) {
   return await fetchJson(`${options.pageUrl}/api/v1/projects`, {
     method: 'POST',
     headers: {
@@ -308,7 +309,7 @@ async function createProject(accessToken, options, allowedWorkspaceId) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      name: 'workflow-workspace-smoke-project',
+      name,
       description: 'Project policy for workflow workspace smoke',
       labels: {
         suite: 'workflow-workspace-smoke',
@@ -349,7 +350,7 @@ async function uploadWorkspaceFile(accessToken, options, workspaceId, bytes) {
   });
 }
 
-async function createWorkflow(accessToken, options) {
+async function createWorkflow(accessToken, options, name) {
   return await fetchJson(`${options.pageUrl}/api/v1/workflows`, {
     method: 'POST',
     headers: {
@@ -357,7 +358,7 @@ async function createWorkflow(accessToken, options) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      name: 'workflow-workspace-smoke',
+      name,
       description: 'Validate workflow workspace inputs',
       labels: {
         suite: 'workflow-workspace-smoke',
@@ -560,15 +561,20 @@ async function main() {
       throw new Error('Failed to acquire an access token from the test page.');
     }
 
+    const fixturePrefix = `workflow-workspace-smoke-${randomUUID()}`;
     log('Preparing reusable workspace input file');
-    const workspace = await createWorkspace(accessToken, options, 'workflow-workspace-smoke-allowed');
+    const workspace = await createWorkspace(accessToken, options, `${fixturePrefix}-allowed`);
     const uploadedFile = await uploadWorkspaceFile(
       accessToken,
       options,
       workspace.id,
       Buffer.from('month,total\n2026-03,42\n', 'utf8'),
     );
-    const disallowedWorkspace = await createWorkspace(accessToken, options, 'workflow-workspace-smoke-disallowed');
+    const disallowedWorkspace = await createWorkspace(
+      accessToken,
+      options,
+      `${fixturePrefix}-disallowed`,
+    );
     const disallowedFile = await uploadWorkspaceFile(
       accessToken,
       options,
@@ -583,7 +589,7 @@ async function main() {
     buildWorkflowWorkerImage();
 
     log('Creating workflow definition and immutable version');
-    const workflow = await createWorkflow(accessToken, options);
+    const workflow = await createWorkflow(accessToken, options, `${fixturePrefix}-workflow`);
     const version = await createWorkflowVersion(
       accessToken,
       options,
@@ -596,7 +602,12 @@ async function main() {
     }
 
     log('Validating project file-workspace policy rejection');
-    const project = await createProject(accessToken, options, workspace.id);
+    const project = await createProject(
+      accessToken,
+      options,
+      workspace.id,
+      `${fixturePrefix}-project`,
+    );
     if (project.policy?.allowed_file_workspace_ids?.[0] !== workspace.id) {
       throw new Error(`Project did not persist the allowed workspace policy: ${JSON.stringify(project)}`);
     }
