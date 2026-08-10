@@ -662,6 +662,7 @@ Common session operations:
 ./scripts/bpane session access-token <session-id>
 ./scripts/bpane session automation-access <session-id>
 ./scripts/bpane session disconnect-all <session-id>
+./scripts/bpane session release <session-id>
 ./scripts/bpane session stop <session-id>
 ./scripts/bpane session kill <session-id>
 ```

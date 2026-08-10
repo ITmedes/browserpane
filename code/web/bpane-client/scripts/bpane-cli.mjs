@@ -182,6 +182,7 @@ function usageText() {
     '  bpane session access-token <session-id> [options]',
     '  bpane session automation-access <session-id> [options]',
     '  bpane session disconnect-all <session-id> [options]',
+    '  bpane session release <session-id> [options]',
     '  bpane session stop <session-id> [options]',
     '  bpane session cancel <session-id> [options]',
     '  bpane session kill <session-id> [options]',
@@ -3127,6 +3128,14 @@ async function handleSessionCommand(config, positionals, options) {
     return await requestGateway(config, `/api/v1/sessions/${encodeURIComponent(sessionId)}/stop`, {
       method: 'POST',
     });
+  }
+  if (action === 'release') {
+    const sessionId = requiredSessionId(positionals, 'session release');
+    return await requestGateway(
+      config,
+      `/api/v1/sessions/${encodeURIComponent(sessionId)}/release`,
+      { method: 'POST' },
+    );
   }
   if (action === 'cancel') {
     const sessionId = requiredSessionId(positionals, 'session cancel');
