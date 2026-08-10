@@ -3,7 +3,7 @@
 ## Metadata
 
 - Issue: [#149](https://github.com/ITmedes/browserpane/issues/149)
-- State: In Progress
+- State: Review Ready
 - Lane: Foundation with a conditional Phase 0 dependency
 - Target gate: Foundation Gate; required before recordings are accepted as
   Phase 0 evidence
@@ -325,5 +325,60 @@ authorization or validation error and no file is moved or exposed.
 
 ## Evidence Record
 
-Implementation has not started. Baseline analysis confirms the current
-absolute-path and ordinary-automation finalization boundary described above.
+Implementation is complete on
+`feature/BPANE-00149-recording-artifact-finalization`.
+
+### Commit Boundaries
+
+- `74c23a2d`: issue and transport a purpose-scoped recorder-worker capability.
+- `ba9d00aa`: enforce worker-only, session/recording-bound complete/fail routes.
+- `65fa1b67`: constrain finalization to the exact regular staged WebM and derive
+  retained bytes from the file.
+- `c7496134`: align OpenAPI, generated classifications, README, ARCH, AGENTS,
+  and deployment documentation.
+- `216d602b`: prove project retained-storage accounting uses staged bytes.
+- `b6964e8f`, `55e59ee3`, `f383f482`: replace privileged Compose fixtures with
+  deployed authorization checks and real worker/admin/CLI recording journeys.
+
+### Automated Evidence
+
+- Gateway unit/integration: `cargo test -p bpane-gateway` passed 424 tests with
+  one environment-gated Postgres contract test ignored; focused recording API,
+  lifecycle, retention, artifact-store, health, and quota tests passed.
+- Rust quality: `cargo fmt --all -- --check` and gateway clippy with
+  `-D warnings` passed.
+- Compose: `scripts/run-gateway-compose-e2e.sh --suite all` passed 17 API
+  surface tests and 4 Docker-pool capacity/restart tests. The deployed owner
+  complete/fail boundary returns `401` without creating an orphaned recording.
+- Recorder path: `npm run smoke:recording -- --headless` produced a ready
+  1,387,816-byte WebM, verified exact CLI/UI downloads, and generated a
+  1,393,704-byte playback ZIP with one included segment.
+- Admin surfaces: `smoke:admin-unified-recordings` downloaded a non-empty
+  worker artifact and passed responsive checks; `smoke:admin-recording`
+  validated browser-local capture plus the separate retained worker artifact.
+- Web regressions: browser-client coverage passed 86 files / 674 tests at
+  92.88% statements; admin-new coverage passed 196 files / 620 tests at 92.28%
+  statements and 90.43% lines. Typecheck/build gates passed for affected web
+  packages.
+- Gateway coverage: 425 tests ran under `cargo llvm-cov`. The changed artifact
+  store reached 91.44% line / 90.52% region coverage, recording-worker token
+  handling 85.71% line / 82.89% region coverage, and recording API lifecycle
+  79.18% line / 83.62% region coverage. Process-launch failure branches remain
+  primarily E2E-covered.
+- Contract/docs: all 28 OpenAPI governance tests, Redocly lint, 19 executable
+  examples, 131-operation inventory, 14 compatibility surfaces, semantic
+  compatibility against `origin/main`, and repository baseline checks passed.
+- Dependency safety: recording-worker production audit found zero
+  vulnerabilities. The canonical repository dependency-safety stage passed and
+  applied the existing time-bounded `rsa` advisory exception through
+  2026-11-01; no dependency changed in this slice.
+
+### Residual Boundaries
+
+- `recording-worker` still has no package-local unit-test script. Its build,
+  gateway token tests, deployed negative API tests, and three real browser
+  smokes cover this slice; the broader worker unit-test floor remains owned by
+  #165 / R-018.
+- Generalized/object-backed artifact storage remains #21. This slice hardens
+  the current local filesystem staging/finalization contract without promoting
+  recordings beyond Prototype maturity.
