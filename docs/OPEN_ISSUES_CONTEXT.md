@@ -1,7 +1,7 @@
 # Open GitHub Issues Context
 
 Created: 2026-07-10
-Revalidated: 2026-08-07 for the active #179 slice
+Revalidated: 2026-08-10 for the active #163 promotion slice
 
 This document maps the current `docs/` workspace to the live open GitHub
 issues for `ITmedes/browserpane`. It is the bridge between the consolidated
@@ -105,9 +105,9 @@ dedicated open issue ownership.
 | 14. API companion, coverage, and docs routes | `#158` Add admin-new API companion, coverage, and docs routes | Merged through PR #200; `IMPLEMENTATION_WORK_ORDER.md`, `NEXT_WORKING_ROADMAP.md`, `ADMIN_NEW_API_COVERAGE.md` |
 | 15. Missing resource catalogs except session templates | `#159` Add admin-new catalogs for extensions, credential bindings, and workflow event subscriptions | Merged through PR #201; `IMPLEMENTATION_WORK_ORDER.md`, `ADMIN_NEW_MANUAL_CHECKPOINTS.md`, `RESOURCE_LIFECYCLE_REQUIREMENTS.md`; session templates remain `#124` |
 | 16. Browser context clone/import/export UI parity | `#160` Add browser context clone, import, and export admin-new parity | Merged through PR #203; `BPANE-00160_ADMIN_NEW_BROWSER_CONTEXT_LIFECYCLE_PLAN.md`, `IMPLEMENTATION_WORK_ORDER.md`, `RESOURCE_LIFECYCLE_REQUIREMENTS.md`, `ADMIN_NEW_MANUAL_CHECKPOINTS.md` |
-| 17. Project governance evidence and cross-resource policy UX | `#161` Add project governance evidence and cross-resource policy UX | Active on `feature/BPANE-00161`; `BPANE-00161_PROJECT_GOVERNANCE_EVIDENCE_PLAN.md`, `IMPLEMENTATION_WORK_ORDER.md`, `PROJECT_GOVERNANCE_REQUIREMENTS.md`, `ADMIN_NEW_REQUIREMENTS.md` |
-| 18. Operator CLI resource parity and local setup docs | `#162` Add operator CLI resource parity and local setup diagnostics docs | `IMPLEMENTATION_WORK_ORDER.md`, `RUNTIME_OPERATOR_REQUIREMENTS.md`, `VALIDATION_MATRIX.md` |
-| 19. Admin-new promotion gate | `#163` Define admin-new promotion gate and fallback plan | `IMPLEMENTATION_WORK_ORDER.md`, `ADMIN_NEW_STATUS.md`, `ADMIN_NEW_MANUAL_CHECKPOINTS.md` |
+| 17. Project governance evidence and cross-resource policy UX | `#161` Add project governance evidence and cross-resource policy UX | Merged through PR #204; `BPANE-00161_PROJECT_GOVERNANCE_EVIDENCE_PLAN.md`, `IMPLEMENTATION_WORK_ORDER.md`, `PROJECT_GOVERNANCE_REQUIREMENTS.md`, `ADMIN_NEW_REQUIREMENTS.md` |
+| 18. Operator CLI resource parity and local setup docs | `#162` Add operator CLI resource parity and local setup diagnostics docs | Merged through PR #209; `BPANE-00162_OPERATOR_CLI_PARITY_PLAN.md`, `IMPLEMENTATION_WORK_ORDER.md`, `RUNTIME_OPERATOR_REQUIREMENTS.md`, `VALIDATION_MATRIX.md` |
+| 19. Admin-new promotion gate | `#163` Define admin-new promotion gate and fallback plan | Active; validation foundation merged through PR #210 and routing continues on `feature/BPANE-00163-admin-new-promotion-routing`; `BPANE-00163_ADMIN_NEW_PROMOTION_PLAN.md`, `IMPLEMENTATION_WORK_ORDER.md`, `ADMIN_NEW_STATUS.md`, `ADMIN_NEW_MANUAL_CHECKPOINTS.md` |
 | 20. Admin and session catalog scalability | `#164` Improve admin and session catalog scalability | `IMPLEMENTATION_WORK_ORDER.md`, `SECURITY_RUNTIME_ROADMAP.md`, `REVIEW_FINDINGS_COVERAGE_AUDIT.md` |
 | 21. Worker and archive runtime hygiene | `#165` Harden worker logs, polling, and archive runtime behavior | `IMPLEMENTATION_WORK_ORDER.md`, `SECURITY_RUNTIME_ROADMAP.md`, `REVIEW_FINDINGS_RECONCILIATION.md` |
 | 22. Documentation accuracy and production references | `#166` Update documentation accuracy and production references | `IMPLEMENTATION_WORK_ORDER.md`, `SECURITY_RUNTIME_ROADMAP.md`, `REVIEW_FINDINGS_COVERAGE_AUDIT.md` |

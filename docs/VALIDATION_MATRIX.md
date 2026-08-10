@@ -61,9 +61,8 @@ Verified catalog on 2026-08-10:
 
 - the fast profile contains 40 stages, including Rust, browser-client, and
   admin-new coverage ratchets,
-- the compose profile contains 15 bounded stages, including the admin-new API
-  companion, session-file evidence, workflow CLI, workflow workspace, and
-  workflow event smokes,
+- the compose profile contains 33 bounded stages, including 24 admin promotion
+  stages plus API, CLI, MCP, recording, session-file, and workflow evidence,
 - the compose gateway stage passes 17 default API and four docker-pool cases,
 - representative admin-new, compatibility-admin, CLI, MCP, recording, and
   workflow admission journeys pass against the running stack,
@@ -78,10 +77,10 @@ fixed runner images, job timeouts, lockfile-derived cache keys, and bounded
 artifact paths. `main` branch protection requires those nine BrowserPane jobs
 in strict mode and binds them to the GitHub Actions app.
 
-`Compose / Representative compose smoke` runs on pushes to `main`, a weekday
-schedule, and manual dispatch. It is not a pull-request gate until hosted-runner
-reliability is demonstrated. The split jobs execute all 15 representative
-compose stages, including the promoted CLI evidence journeys, capture only
+The `Compose` workflow runs on pushes to `main`, a weekday schedule, and manual
+dispatch. It is not a pull-request gate until hosted-runner reliability is
+demonstrated. Split gateway, browser-integration, unified-admin, and
+compatibility-admin jobs execute the canonical evidence journeys, capture only
 selected control-plane status/log tails after a failure, redact credential and
 identity material before upload, and always remove BrowserPane containers and
 compose volumes.
@@ -196,6 +195,7 @@ Run from `code/web/bpane-client` against local compose:
 
 ```bash
 npm run smoke:admin-unified-dashboard -- --headless
+npm run smoke:admin-unified-promotion -- --headless --connect-timeout-ms 60000
 npm run smoke:admin-unified-projects -- --headless
 npm run smoke:admin-unified-browser-contexts -- --headless
 npm run smoke:admin-unified-egress-profiles -- --headless
@@ -204,6 +204,8 @@ npm run smoke:admin-unified-sessions -- --headless --connect-timeout-ms 60000
 npm run smoke:admin-unified-workflows -- --headless
 npm run smoke:admin-unified-workflow-runs -- --headless
 npm run smoke:admin-unified-identity -- --headless
+npm run smoke:admin-unified-recordings -- --headless
+npm run smoke:admin-unified-resource-catalogs -- --headless --connect-timeout-ms 60000
 npm run smoke:admin-unified-api-companion -- --headless --connect-timeout-ms 60000
 ```
 
@@ -660,7 +662,7 @@ data profile.
 
 ## Manual Promotion Gate
 
-Before `/admin-new` can become default:
+To complete the `/admin-new` promotion gate after the root-route switch:
 
 1. Verify every visible navigation route exists or is intentionally hidden.
 2. Run all current old-admin smokes for migrated behavior.
@@ -674,4 +676,4 @@ Before `/admin-new` can become default:
    - file workspace upload/download,
    - egress profile edit/probe,
    - identity/access review once implemented.
-5. Keep `/admin/` as fallback until a dated removal gate is accepted.
+5. Keep `/admin/` directly available until a dated removal gate is accepted.

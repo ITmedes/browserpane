@@ -9,7 +9,7 @@
 - Depends on: admin-new route and resource parity through `#153`-`#162`,
   control API conformance through `#179`, and the shared admin security baseline
   through `#146`
-- Branch: `feature/BPANE-00163-admin-new-promotion`
+- Branch: `feature/BPANE-00163-admin-new-promotion-routing`
 - Baseline: `main` at `b1428e8a89566478f02e940c39a55a6c43df0e2c`,
   2026-08-10
 
@@ -41,13 +41,12 @@ see exactly which new-admin and fallback journeys passed.
   to a route-backed SvelteKit page.
 - `/admin/` and `/admin-new/` are built and served side by side with the same
   shared OIDC and browser-security baseline.
-- The canonical Compose profile currently runs only five of the twelve
-  `smoke:admin-unified-*` scripts.
-- No executable contract currently proves that visible navigation routes have
-  route files, that the web root selects the intended default app, or that the
-  compatibility route remains available.
-- Root `/` still serves the development fixture instead of selecting the target
-  operator application.
+- All twelve `smoke:admin-unified-*` scripts are represented by independently
+  rerunnable canonical Compose stages.
+- The executable promotion contract proves visible navigation route coverage,
+  the promoted root, and the directly reachable compatibility route.
+- Root `/` redirects to `/admin-new/`; `/admin/` and explicit development
+  fixtures remain directly reachable.
 - Session-template catalog management (`#124`), command palette behavior, and
   operation-counter presentation are not advertised navigation routes. They
   remain explicit post-promotion gaps rather than hidden parity claims.
@@ -102,15 +101,18 @@ see exactly which new-admin and fallback journeys passed.
 1. **Executable promotion contract (complete through `ac54d8d`):** validate
    navigation-to-route coverage, define the mandatory unified and compatibility
    smoke inventory, and protect the inventory with focused tests.
-2. **Canonical browser regression stages (in progress through `3861bd6`):** add
+2. **Canonical browser regression stages (complete through PR `#210`):** add
    the missing unified-admin Compose stages, add the promotion/fallback browser
    journey, and require all stages in isolated hosted promotion lanes.
-3. **Default-route promotion (pending):** redirect root `/` to `/admin-new/`, preserve
+3. **Default-route promotion (complete through `e166325` and `5d785ec`):**
+   redirect root `/` to `/admin-new/`, preserve
    explicit fixture and legacy routes, and cover Nginx behavior with static and
    live tests.
-4. **Documentation and decision evidence (pending):** align README, ARCH,
-   AGENTS, status, manual checkpoints, validation matrix, delivery roadmap, and
-   issue state; run the full gate and record residual risks and rollback steps.
+4. **Documentation and automated decision evidence (complete through
+   `3497382`):** align README, ARCH, AGENTS, status, manual checkpoints,
+   validation matrix, delivery roadmap, and issue state; run the full gate and
+   record residual risks and rollback steps. The final human checkpoint remains
+   explicitly separate from the automated gate.
 
 Each completed slice is committed independently. No slice may remove or alias
 the compatibility application.
@@ -203,7 +205,7 @@ the compatibility application.
 - All 16 visible navigation entries resolve to route-backed SvelteKit pages.
 - The promotion contract includes every current `smoke:admin-unified-*` package
   script and 11 selected compatibility journeys.
-- The canonical Compose catalog exposes 23 independently rerunnable admin
+- The canonical Compose catalog exposes 24 independently rerunnable admin
   promotion stages.
 - Hosted validation runs unified and compatibility promotion surfaces in two
   parallel jobs instead of extending the existing browser-integration critical
@@ -216,6 +218,44 @@ the compatibility application.
   3 workflows.
 - Root routing and README behavior remain unchanged until the dedicated live
   promotion/fallback smoke is implemented.
+
+### 2026-08-10: Default Route And Live Fallback Evidence
+
+- Exact root `/` returns a non-cacheable `302` to same-origin `/admin-new/` and
+  carries the shared admin response-security policy.
+- `/admin/` remains directly reachable and explicit fixture URLs such as
+  `/index.html` remain served.
+- The live promotion smoke completed Keycloak authentication at the promoted
+  root, loaded and reloaded `/admin-new/sessions`, opened the compatibility
+  console, and returned to the unified dashboard.
+- `compose-admin-new-promotion` passed against a rebuilt local web image in
+  3.1 seconds.
+- Browser-client typecheck and all 674 unit tests passed before live execution;
+  20 focused promotion, workflow, stage-catalog, and Nginx contract tests also
+  passed.
+- README, ARCH, AGENTS, admin status/manual checkpoints, validation matrix,
+  delivery roadmap, and issue context now describe `/admin-new/` as the local
+  default while retaining `/admin/` as fallback.
+- Default routing does not authorize legacy app removal; the final manual
+  regression record remains a separate promotion checkpoint.
+
+### 2026-08-10: Full Promotion Inventory
+
+- `node scripts/run-admin-promotion-validation.mjs all` passed all 24 stages in
+  one uninterrupted run against the rebuilt local Compose stack in 16 minutes
+  47 seconds.
+- The run covered all 13 unified stages and 11 compatibility regressions,
+  including authentication recovery, resource CRUD, session lifecycle and
+  reconnect, event-stream recovery, egress, session files, MCP delegation,
+  browser-local recording, retained recording export, workflow execution, and
+  workflow-run detail evidence.
+- The compatibility recording stage passed at its normal late-suite position
+  and produced a 244,646-byte WebM. The smoke now gives the browser encoder a
+  2.5-second capture window while retaining strict non-empty artifact, exact
+  retained-byte, realtime-refresh, and playback-ZIP assertions.
+- Every automated promotion stage has passed both individually where needed and
+  as part of the complete ordered inventory. No automated promotion blocker
+  remains.
 
 ## Completion Criteria
 

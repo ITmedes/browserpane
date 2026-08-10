@@ -16,6 +16,8 @@ import {
 import { createRecordingSession, seedRetainedRecording } from './admin-recording-smoke-lib.mjs';
 import { DEFAULTS, createLogger, launchChrome, parseSmokeArgs, poll, sleep } from './workflow-smoke-lib.mjs';
 
+const RECORDING_CAPTURE_WINDOW_MS = 2_500;
+
 async function run() {
   const options = parseSmokeArgs(process.argv.slice(2), 'run-admin-recording-smoke.mjs');
   if (options.pageUrl === DEFAULTS.pageUrl) options.pageUrl = `${DEFAULTS.pageUrl}/admin/`;
@@ -77,7 +79,7 @@ async function captureLocalRecording(page, options, tempDir, sessionId) {
   await waitForEnabled(page.getByTestId('recording-start'), options, 'recording start');
   await page.getByTestId('recording-start').click();
   await waitForRecordingStarted(page, options);
-  await sleep(1800);
+  await sleep(RECORDING_CAPTURE_WINDOW_MS);
   await waitForEnabled(page.getByTestId('recording-stop'), options, 'recording stop');
   await page.getByTestId('recording-stop').click();
   await waitForRecordingDownloadReady(page, options, 'recording download');
@@ -99,7 +101,7 @@ async function verifyRecordingStateSurvivesOverlayToggle(page, options) {
   await ensureAdminOverlayOpen(page);
   await page.getByTestId('workspace-panel-recording').waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
   await waitForRecordingStarted(page, options);
-  await sleep(1200);
+  await sleep(RECORDING_CAPTURE_WINDOW_MS);
   await waitForEnabled(page.getByTestId('recording-stop'), options, 'recording stop after overlay toggle');
   await page.getByTestId('recording-stop').click();
   await waitForRecordingDownloadReady(page, options, 'recording stopped after overlay toggle');
