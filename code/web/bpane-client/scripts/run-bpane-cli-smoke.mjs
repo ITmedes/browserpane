@@ -15,7 +15,9 @@ import {
 import {
   DEFAULTS,
   apiOrigin,
+  configurePage,
   createLogger,
+  ensureLoggedIn,
   fetchAuthConfig,
   launchChrome,
   parseSmokeArgs,
@@ -32,8 +34,10 @@ async function run() {
   const browser = await launchChrome(chromium, options);
   const context = await browser.newContext({ viewport: { width: 1360, height: 920 } });
   const page = await context.newPage();
+  let releasePage = null;
   let accessToken = '';
   let sessionId = '';
+  let releaseSessionId = '';
   let projectId = '';
   let contextId = '';
   let clonedContextId = '';
@@ -991,6 +995,82 @@ async function run() {
       throw new Error('CLI session disconnect-all did not return session status.');
     }
 
+    const releaseSession = runBpaneCli([
+      'session',
+      'create',
+      '--template-id',
+      templateId,
+      '--project-id',
+      projectId,
+      '--label',
+      'suite=bpane-cli-smoke',
+      '--label',
+      `run_id=${runLabel}`,
+      '--label',
+      'purpose=runtime-release',
+    ], cliEnv);
+    releaseSessionId = releaseSession.id;
+    if (!releaseSessionId || releaseSession.status?.runtime_state !== 'not_started') {
+      throw new Error(`CLI release smoke session create returned unexpected data: ${JSON.stringify(releaseSession)}`);
+    }
+    const releaseStartTicket = runBpaneCli([
+      'session',
+      'access-token',
+      releaseSessionId,
+    ], cliEnv);
+    if (
+      releaseStartTicket.session_id !== releaseSessionId
+      || releaseStartTicket.token_type !== 'session_connect_ticket'
+    ) {
+      throw new Error(`CLI release smoke did not mint a connect ticket: ${JSON.stringify(releaseStartTicket)}`);
+    }
+    releasePage = await context.newPage();
+    await configurePage(releasePage, { ...options, pageUrl: apiOrigin(options) });
+    await ensureLoggedIn(releasePage, { ...options, pageUrl: apiOrigin(options) });
+    await connectHarnessSession(releasePage, releaseSessionId, options);
+    const releaseStatus = runBpaneCli(['session', 'status', releaseSessionId], cliEnv);
+    if (releaseStatus.runtime_state !== 'running') {
+      throw new Error(`CLI release smoke runtime was not running: ${JSON.stringify(releaseStatus)}`);
+    }
+    await disconnectHarnessSession(releasePage, options);
+    runBpaneCli(['session', 'disconnect-all', releaseSessionId], cliEnv);
+    const released = runBpaneCli(['session', 'release', releaseSessionId], cliEnv);
+    if (
+      released.id !== releaseSessionId
+      || released.state !== 'released'
+      || released.status?.runtime_state !== 'released'
+      || released.status?.runtime_resume_mode !== 'released'
+      || !released.runtime_released_at
+      || released.stopped_at !== null
+    ) {
+      throw new Error(`CLI session release returned unexpected data: ${JSON.stringify(released)}`);
+    }
+    const releaseReconnectTicket = runBpaneCli([
+      'session',
+      'access-token',
+      releaseSessionId,
+    ], cliEnv);
+    await connectHarnessSession(releasePage, releaseSessionId, options);
+    const releaseReconnected = runBpaneCli(['session', 'get', releaseSessionId], cliEnv);
+    if (
+      releaseReconnectTicket.token_type !== 'session_connect_ticket'
+      || releaseReconnected.status?.runtime_state !== 'running'
+      || releaseReconnected.status?.runtime_resume_mode !== 'profile_restart'
+      || !releaseReconnected.runtime_released_at
+    ) {
+      throw new Error(`CLI released-session reconnect was not profile-backed: ${JSON.stringify(releaseReconnected)}`);
+    }
+    await disconnectHarnessSession(releasePage, options);
+    runBpaneCli(['session', 'disconnect-all', releaseSessionId], cliEnv);
+    const stoppedReleaseSession = runBpaneCli([
+      'session',
+      'stop',
+      releaseSessionId,
+    ], cliEnv);
+    if (stoppedReleaseSession.id !== releaseSessionId || stoppedReleaseSession.state !== 'stopped') {
+      throw new Error(`CLI release smoke session did not stop cleanly: ${JSON.stringify(stoppedReleaseSession)}`);
+    }
+
     const health = runBpaneCli(['mcp', 'health'], cliEnv);
     if (health.status !== 'ok') {
       throw new Error(`CLI MCP health returned ${health.status ?? 'no status'}.`);
@@ -1093,6 +1173,7 @@ async function run() {
       throw new Error(`CLI session cleanup confirm did not execute cleanup operations: ${JSON.stringify(cleanupConfirmed)}`);
     }
     sessionId = '';
+    releaseSessionId = '';
     const deletedCloneContext = runBpaneCli(['browser-context', 'delete', clonedContextId], cliEnv);
     if (deletedCloneContext.id !== clonedContextId || deletedCloneContext.state !== 'deleted') {
       throw new Error(`CLI browser-context delete did not soft-delete the cloned context: ${JSON.stringify(deletedCloneContext)}`);
@@ -1187,6 +1268,15 @@ async function run() {
         headers: { Authorization: `Bearer ${accessToken}` },
       }).catch(() => {});
     }
+    if (releaseSessionId && accessToken) {
+      if (releasePage) {
+        await disconnectHarnessSession(releasePage, options).catch(() => {});
+      }
+      await fetch(`${apiOrigin(options)}/api/v1/sessions/${releaseSessionId}/kill`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }).catch(() => {});
+    }
     if (projectId && accessToken) {
       await archiveProject(options, accessToken, projectId).catch(() => {});
     }
@@ -1194,9 +1284,41 @@ async function run() {
     if (configDir) {
       await fs.rm(configDir, { recursive: true, force: true }).catch(() => {});
     }
+    if (releasePage) {
+      await releasePage.close().catch(() => {});
+    }
     await context.close();
     await browser.close();
   }
+}
+
+async function connectHarnessSession(page, sessionId, options) {
+  await page.waitForFunction(() => Boolean(window.__bpaneControl?.connectSelected));
+  await page.evaluate(async (id) => {
+    await window.__bpaneControl.selectSession(id);
+    await window.__bpaneControl.connectSelected({ clientRole: 'interactive' });
+  }, sessionId);
+  await page.waitForFunction(
+    (id) => {
+      const state = window.__bpaneControl?.getState?.();
+      return state?.connected === true && state?.sessionId === id;
+    },
+    sessionId,
+    { timeout: options.connectTimeoutMs },
+  );
+}
+
+async function disconnectHarnessSession(page, options) {
+  await page.evaluate(async () => {
+    if (window.__bpaneControl?.getState?.()?.connected) {
+      await window.__bpaneControl.disconnect();
+    }
+  });
+  await page.waitForFunction(
+    () => window.__bpaneControl?.getState?.()?.connected !== true,
+    null,
+    { timeout: options.connectTimeoutMs },
+  );
 }
 
 async function loadMcpBridgeConfig(options) {
