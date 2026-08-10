@@ -1,11 +1,4 @@
-import fs from 'node:fs/promises';
-import path from 'node:path';
-import process from 'node:process';
-import { execFile as execFileCallback } from 'node:child_process';
-import { promisify } from 'node:util';
 import { fetchJson } from './workflow-smoke-lib.mjs';
-
-const execFile = promisify(execFileCallback);
 
 export async function createRecordingSession(accessToken, rootUrl) {
   return await fetchJson(`${rootUrl}/api/v1/sessions`, {
@@ -14,49 +7,74 @@ export async function createRecordingSession(accessToken, rootUrl) {
     body: JSON.stringify({
       owner_mode: 'collaborative',
       idle_timeout_sec: 300,
-      recording: { mode: 'manual', format: 'webm' },
+      recording: { mode: 'always', format: 'webm' },
       labels: { suite: 'admin-recording-smoke' },
     }),
   });
 }
 
-export async function seedRetainedRecording(accessToken, rootUrl, sessionId, sourcePath, bytes) {
-  const recording = await fetchJson(`${rootUrl}/api/v1/sessions/${sessionId}/recordings`, {
+export async function waitForActiveRecording(
+  accessToken,
+  rootUrl,
+  sessionId,
+  timeoutMs,
+) {
+  return await pollRecording(
+    accessToken,
+    rootUrl,
+    sessionId,
+    timeoutMs,
+    (recording) => ['starting', 'recording'].includes(recording.state),
+    'active recorder-worker segment',
+  );
+}
+
+export async function disconnectAndWaitForRetainedRecording(
+  accessToken,
+  rootUrl,
+  sessionId,
+  timeoutMs,
+) {
+  await fetchJson(`${rootUrl}/api/v1/sessions/${sessionId}/connections/disconnect-all`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}` },
   });
-  await fetchJson(`${rootUrl}/api/v1/sessions/${sessionId}/recordings/${recording.id}/stop`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  const stageTarget = resolveGatewayVisiblePath(sessionId, recording.id);
-  await stageFileForGateway(sourcePath, stageTarget);
-  return await fetchJson(`${rootUrl}/api/v1/sessions/${sessionId}/recordings/${recording.id}/complete`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ source_path: stageTarget.gatewayPath, mime_type: 'video/webm', bytes, duration_ms: 1800 }),
-  });
+  return await pollRecording(
+    accessToken,
+    rootUrl,
+    sessionId,
+    timeoutMs,
+    (recording) => recording.state === 'ready' && recording.artifact_available === true,
+    'retained recorder-worker segment',
+  );
 }
 
-function resolveGatewayVisiblePath(sessionId, recordingId) {
-  const hostRoot = process.env.BPANE_RECORDING_GATEWAY_STAGE_ROOT;
-  const gatewayRoot = process.env.BPANE_RECORDING_GATEWAY_SOURCE_ROOT;
-  const fileName = `browserpane-${sessionId}-${recordingId}-admin.webm`;
-  if (hostRoot && gatewayRoot) {
-    return {
-      hostPath: path.join(hostRoot, 'admin-recording-smoke', fileName),
-      gatewayPath: path.posix.join(gatewayRoot, 'admin-recording-smoke', fileName),
-    };
+async function pollRecording(
+  accessToken,
+  rootUrl,
+  sessionId,
+  timeoutMs,
+  predicate,
+  description,
+) {
+  const deadline = Date.now() + timeoutMs;
+  let lastRecordings = [];
+  while (Date.now() < deadline) {
+    const catalog = await fetchJson(`${rootUrl}/api/v1/sessions/${sessionId}/recordings`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    lastRecordings = Array.isArray(catalog.recordings) ? catalog.recordings : [];
+    const failed = lastRecordings.find((recording) => recording.state === 'failed');
+    if (failed) {
+      throw new Error(
+        `Recorder worker failed for ${sessionId}: ${failed.error ?? 'unknown recording failure'}`,
+      );
+    }
+    const match = lastRecordings.find(predicate);
+    if (match) return match;
+    await new Promise((resolve) => setTimeout(resolve, 500));
   }
-  return { gatewayPath: path.posix.join('/run/bpane', 'admin-recording-smoke', fileName) };
-}
-
-async function stageFileForGateway(sourcePath, target) {
-  if (target.hostPath) {
-    await fs.mkdir(path.dirname(target.hostPath), { recursive: true });
-    await fs.copyFile(sourcePath, target.hostPath);
-    return;
-  }
-  await execFile('docker', ['exec', 'deploy-gateway-1', 'mkdir', '-p', path.posix.dirname(target.gatewayPath)]);
-  await execFile('docker', ['cp', sourcePath, `deploy-gateway-1:${target.gatewayPath}`]);
+  throw new Error(
+    `Timed out waiting for ${description} for ${sessionId}: ${JSON.stringify(lastRecordings)}`,
+  );
 }

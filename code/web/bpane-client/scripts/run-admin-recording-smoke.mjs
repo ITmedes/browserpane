@@ -13,7 +13,11 @@ import {
   openAdminTab,
   waitForBrowserConnected,
 } from './admin-smoke-lib.mjs';
-import { createRecordingSession, seedRetainedRecording } from './admin-recording-smoke-lib.mjs';
+import {
+  createRecordingSession,
+  disconnectAndWaitForRetainedRecording,
+  waitForActiveRecording,
+} from './admin-recording-smoke-lib.mjs';
 import { DEFAULTS, createLogger, launchChrome, parseSmokeArgs, poll, sleep } from './workflow-smoke-lib.mjs';
 
 const RECORDING_CAPTURE_WINDOW_MS = 2_500;
@@ -41,14 +45,22 @@ async function run() {
     await selectSession(page, options, sessionId);
     log(`Connecting embedded browser for ${sessionId}.`);
     await connectBrowser(page, options);
+    await waitForActiveRecording(accessToken, rootUrl, sessionId, options.connectTimeoutMs);
 
     log('Capturing a local WebM through the admin recording controls.');
     const localRecording = await captureLocalRecording(page, options, tempDir, sessionId);
-    await openAdminTab(page, 'recording');
-    log(`Seeding retained recording metadata for ${sessionId}.`);
-    const retained = await seedRetainedRecording(accessToken, rootUrl, sessionId, localRecording.path, localRecording.bytes);
+    log(`Disconnecting ${sessionId} and waiting for the recorder-worker artifact.`);
+    const retained = await disconnectAndWaitForRetainedRecording(
+      accessToken,
+      rootUrl,
+      sessionId,
+      options.connectTimeoutMs * 2,
+    );
+    if (!retained.bytes || retained.bytes <= 1024) {
+      throw new Error(`Retained worker recording was unexpectedly small (${retained.bytes ?? 0} bytes).`);
+    }
     log('Verifying retained segment and playback export downloads from the admin library.');
-    await verifyRecordingLibrary(page, options, tempDir, sessionId, retained, localRecording.bytes);
+    await verifyRecordingLibrary(page, options, tempDir, sessionId, retained, retained.bytes);
     await emitSummary(options, { sessionId, localRecording, retained, realtimeRecordingRefresh: true }, log);
   } finally {
     await cleanupAdminSmoke(page, options, log);
