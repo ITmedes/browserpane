@@ -616,7 +616,10 @@ The workflow layer sits on top of the owner-scoped session APIs.
 - the gateway persists run logs, events, outputs, produced files, linked recordings, and retention metadata
 - owner actions now include durable `submit-input`, `resume`, `reject`, and `cancel` transitions on workflow runs
 - workflow lifecycle subscriptions provide signed outbound delivery plus persisted delivery diagnostics for external systems
-- local workflow CLI commands live in `code/web/bpane-client/scripts/workflow-cli.mjs` and exercise the same v1 HTTP routes as the browser UI
+- canonical local workflow CLI commands use `./scripts/bpane workflow` and
+  exercise the same v1 HTTP routes as the browser UI; the package-level
+  `workflow-cli.mjs` entrypoint is a temporary compatibility wrapper around the
+  same implementation
 - workflow source listing and snapshot materialization enforce configurable file
   count and byte limits before workflow workers receive source archives
 - workflow source resolution and materialization errors are structured with a

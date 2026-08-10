@@ -116,8 +116,9 @@ async function transitionRun(automationToken, options, runId, body) {
   });
 }
 
-function runWorkflowCli({ args, cwd, env }) {
-  const cliPath = path.join(cwd, 'scripts', 'workflow-cli.mjs');
+function runWorkflowCli({ args, cwd, env, compatibility = false }) {
+  const scriptName = compatibility ? 'workflow-cli.mjs' : 'bpane-cli.mjs';
+  const cliPath = path.join(cwd, 'scripts', scriptName);
   const result = spawnSync(process.execPath, [cliPath, ...args], {
     cwd,
     env,
@@ -131,6 +132,28 @@ function runWorkflowCli({ args, cwd, env }) {
   }
   const stdout = result.stdout.trim();
   return stdout ? JSON.parse(stdout) : null;
+}
+
+async function cleanupWithTimeout(label, cleanup, timeoutMs = 10_000) {
+  let timeoutHandle;
+  const timedOut = Symbol('timed-out');
+  try {
+    const result = await Promise.race([
+      cleanup().then(() => null),
+      new Promise((resolve) => {
+        timeoutHandle = setTimeout(() => resolve(timedOut), timeoutMs);
+      }),
+    ]);
+    if (result === timedOut) {
+      log(`${label} cleanup exceeded ${timeoutMs}ms; continuing teardown`);
+    }
+  } catch (error) {
+    log(
+      `${label} cleanup failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  } finally {
+    clearTimeout(timeoutHandle);
+  }
 }
 
 async function main() {
@@ -245,6 +268,18 @@ async function main() {
     });
     if (workflowLookup.id !== workflow.id) {
       throw new Error('Workflow CLI smoke failed to load the created workflow.');
+    }
+
+    const compatibilityLookup = runWorkflowCli({
+      cwd: cliCwd,
+      env: cliEnv,
+      compatibility: true,
+      args: ['workflow', 'get', workflow.id],
+    });
+    if (compatibilityLookup.id !== workflow.id) {
+      throw new Error(
+        'Workflow CLI compatibility entrypoint returned a different workflow.',
+      );
     }
 
     const clientRequestId = `workflow-cli-smoke-job-${crypto.randomUUID()}`;
@@ -628,6 +663,7 @@ async function main() {
       outputTitle: waitedRun.output?.title ?? null,
       interventionRunId: manualRun.id,
       interventionFinalState: rejectedRun.state,
+      compatibilityEntrypoint: 'passed',
     };
 
     if (options.outputPath) {
@@ -637,10 +673,14 @@ async function main() {
 
     console.log(JSON.stringify(summary, null, 2));
   } finally {
-    await context?.close().catch(() => {});
-    await browser.close().catch(() => {});
+    await cleanupWithTimeout('browser context', async () => {
+      await context?.close();
+    });
+    await cleanupWithTimeout('browser', async () => {
+      await browser.close();
+    });
     if (localWorkflowSource?.cleanup) {
-      await localWorkflowSource.cleanup().catch(() => {});
+      await cleanupWithTimeout('workflow source', localWorkflowSource.cleanup);
     }
   }
 }
