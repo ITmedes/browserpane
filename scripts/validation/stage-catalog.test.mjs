@@ -35,6 +35,16 @@ test('catalog exposes stable, unique fast and compose profiles', () => {
   }
 });
 
+test('promotion surface runner remains part of validation tooling tests', () => {
+  const tooling = new ValidationStageCatalog('/repo')
+    .forProfile('fast')
+    .find((stage) => stage.id === 'validation-tool-tests');
+
+  assert.ok(tooling);
+  assert.ok(tooling.args.includes('scripts/validation/admin-promotion-contract.test.mjs'));
+  assert.ok(tooling.args.includes('scripts/validation/admin-promotion-runner.test.mjs'));
+});
+
 test('catalog selects requested stages in caller order and rejects out-of-profile ids', () => {
   const catalog = new ValidationStageCatalog('/repo');
 
