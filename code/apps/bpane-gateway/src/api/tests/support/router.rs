@@ -203,12 +203,15 @@ pub(crate) fn test_router_with_recording_lifecycle(
         vec![6; 32],
         Duration::from_secs(300),
     ));
+    let recording_worker_access_token_manager =
+        Arc::new(crate::session_access::RecordingWorkerAccessTokenManager::new([7; 32]));
     let recording_lifecycle = Arc::new(
         RecordingLifecycleManager::new(
             Some(config),
             auth_validator.clone(),
             connect_ticket_manager.clone(),
             automation_access_token_manager.clone(),
+            recording_worker_access_token_manager,
             session_store.clone(),
         )
         .expect("recording lifecycle test config should be valid"),
