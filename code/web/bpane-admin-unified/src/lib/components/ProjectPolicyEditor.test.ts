@@ -79,6 +79,7 @@ function options(): ProjectPolicyOptions {
   return {
     sessionTemplates: [{
       id: 'template-support',
+      projectId: null,
       name: 'Support Browser',
       description: 'Approved template',
       state: 'v1',
@@ -86,6 +87,7 @@ function options(): ProjectPolicyOptions {
     }],
     browserContexts: [{
       id: '22222222-2222-4222-8222-222222222222',
+      projectId: null,
       name: 'Support Context',
       description: null,
       state: 'ready',

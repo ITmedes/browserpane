@@ -4,6 +4,7 @@ export type ProjectUsageBudgetEnforcement = 'warning_only' | 'block_session_crea
 
 export type ProjectPolicyOption = {
   readonly id: string;
+  readonly projectId: string | null;
   readonly name: string;
   readonly description: string | null;
   readonly state: string | null;

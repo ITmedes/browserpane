@@ -1,4 +1,5 @@
 import type { CreateWorkflowRunRequest } from '$lib/workflow-runs/workflow-run-types';
+import type { ProjectResource } from '$lib/projects/project-types';
 import type { WorkflowDefinitionVersionResource } from './workflow-types';
 
 export type WorkflowRunSessionMode = 'version_default' | 'create_session' | 'existing_session';
@@ -25,7 +26,13 @@ export type WorkflowRunLaunchDraft = {
   readonly sessionMode: WorkflowRunSessionMode;
   readonly existingSessionId: string;
   readonly projectId: string;
+  readonly projectOptions?: readonly ProjectResource[];
 };
+
+export type WorkflowRunProjectOptionsLoadState =
+  | { readonly status: 'idle' | 'loading' }
+  | { readonly status: 'error'; readonly message: string }
+  | { readonly status: 'ready'; readonly projects: readonly ProjectResource[] };
 
 type JsonSchemaObject = {
   readonly type?: unknown;
@@ -86,6 +93,15 @@ export function validateWorkflowRunLaunch(draft: WorkflowRunLaunchDraft): Workfl
     return { ok: false, message: schemaValidation };
   }
   const projectId = draft.projectId.trim();
+  if (projectId && draft.projectOptions) {
+    const project = draft.projectOptions.find((candidate) => candidate.id === projectId);
+    if (!project) {
+      return { ok: false, message: 'Selected project is not available.' };
+    }
+    if (project.state !== 'active') {
+      return { ok: false, message: `${project.name} is ${project.state} and cannot accept new workflow runs.` };
+    }
+  }
   let session: CreateWorkflowRunRequest['session'] | undefined;
   if (draft.sessionMode === 'create_session') {
     session = {

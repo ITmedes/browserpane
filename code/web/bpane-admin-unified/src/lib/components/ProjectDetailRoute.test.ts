@@ -1,15 +1,22 @@
 import { tick } from 'svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { UnifiedAdminContext } from '$lib/auth/unified-admin-context';
 import {
   byTestId,
   cleanupRenderedComponents,
   renderComponent,
 } from '$lib/test-utils/svelte-component-test';
+import {
+  projectDetailAuthContext as authContext,
+  projectDetailJsonResponse as jsonResponse,
+  projectDetailPayload as projectPayloadFor,
+} from '$lib/test-utils/project-detail-route-support';
+import { sessionPayload } from '$lib/test-utils/session-fixtures';
+import { workflowRunFixture } from '$lib/test-utils/workflow-run-fixture';
 import ProjectDetailRoute from './ProjectDetailRoute.svelte';
 
 const PROJECT_ID = '11111111-1111-4111-8111-111111111111';
+const projectPayload = () => projectPayloadFor(PROJECT_ID);
 
 beforeEach(() => {
   window.history.replaceState(null, '', `http://localhost:3000/admin-new/projects/${PROJECT_ID}`);
@@ -35,6 +42,24 @@ describe('ProjectDetailRoute', () => {
         return jsonResponse({
           ...projectPayload().usage,
           session_creations: 2,
+        }, 200);
+      }
+      if (url.endsWith('/api/v1/sessions')) {
+        return jsonResponse({
+          sessions: [{
+            ...sessionPayload({ id: 'session-project' }),
+            project_id: PROJECT_ID,
+            project: { id: PROJECT_ID, name: 'Support', state: 'active' },
+          }],
+        }, 200);
+      }
+      if (url.endsWith('/api/v1/workflow-runs')) {
+        return jsonResponse({
+          runs: [workflowRunFixture({
+            id: 'run-project',
+            project_id: PROJECT_ID,
+            project: { id: PROJECT_ID, name: 'Support', state: 'active' },
+          })],
         }, 200);
       }
       if (url.endsWith('/session-templates')) {
@@ -91,6 +116,8 @@ describe('ProjectDetailRoute', () => {
 
     await vi.waitFor(() => {
       expect(byTestId(target, 'project-detail-route').textContent).toContain('Project settings');
+      expect(byTestId(target, 'project-related-sessions').textContent).toContain('session-project');
+      expect(byTestId(target, 'project-related-workflow-runs').textContent).toContain('run-project');
     });
     byTestId(target, 'project-refresh-usage').click();
     await vi.waitFor(() => {
@@ -136,64 +163,24 @@ describe('ProjectDetailRoute', () => {
     });
     expect(onAuthenticationFailure).toHaveBeenCalled();
   });
-});
 
-function authContext(
-  overrides: Partial<Pick<UnifiedAdminContext, 'accessTokenProvider' | 'onAuthenticationFailure'>> = {},
-): UnifiedAdminContext {
-  return {
-    auth: {
-      configured: true,
-      authenticated: true,
-      username: 'demo',
-      accessToken: 'token',
-      claims: null,
-    },
-    authConfig: null,
-    accessTokenProvider: overrides.accessTokenProvider ?? (async () => 'token'),
-    onAuthenticationFailure: overrides.onAuthenticationFailure ?? vi.fn(),
-    login: async () => {},
-    logout: async () => {},
-  };
-}
+  it('keeps project editing and successful work evidence available after a partial failure', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async (input) => {
+      const url = input.toString();
+      if (url.endsWith('/api/v1/sessions')) {
+        return new Response('session catalog unavailable', { status: 503 });
+      }
+      if (url.endsWith('/api/v1/workflow-runs')) {
+        return jsonResponse({ runs: [workflowRunFixture({ project_id: PROJECT_ID })] }, 200);
+      }
+      return jsonResponse(projectPayload(), 200);
+    }));
+    const target = renderComponent(ProjectDetailRoute, { authContext: authContext() });
 
-function jsonResponse(payload: unknown, status: number): Response {
-  return new Response(JSON.stringify(payload), {
-    status,
-    headers: { 'content-type': 'application/json' },
+    await vi.waitFor(() => {
+      expect(byTestId(target, 'project-edit-form').textContent).toContain('Project settings');
+      expect(byTestId(target, 'project-related-sessions').textContent).toContain('unavailable');
+      expect(byTestId(target, 'project-related-workflow-runs').textContent).toContain('run-1');
+    });
   });
-}
-
-function projectPayload() {
-  return {
-    id: PROJECT_ID,
-    name: 'Support',
-    description: 'Support browser work',
-    labels: {},
-    quotas: {},
-    policy: {},
-    state: 'active',
-    usage: {
-      project_id: PROJECT_ID,
-      active_sessions: 1,
-      queued_sessions: 0,
-      session_creations: 1,
-      max_session_creations: null,
-      max_active_sessions: null,
-      active_workflow_runs: 0,
-      max_active_workflow_runs: null,
-      runtime_usage_ms: 30_000,
-      max_runtime_usage_ms: null,
-      egress_rx_bytes: 0,
-      egress_tx_bytes: 0,
-      egress_total_bytes: 0,
-      max_egress_total_bytes: null,
-      retained_storage_bytes: 0,
-      max_retained_storage_bytes: null,
-      alerts: [],
-      observed_at: '2026-06-11T10:00:00.000Z',
-    },
-    created_at: '2026-06-11T09:00:00.000Z',
-    updated_at: '2026-06-11T10:00:00.000Z',
-  };
-}
+});

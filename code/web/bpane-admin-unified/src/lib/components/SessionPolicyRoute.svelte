@@ -188,9 +188,16 @@
           <h2 class="m-0 text-base font-semibold text-admin-ink">Effective policy evidence</h2>
           <p class="m-0 mt-1 text-sm text-admin-muted">Configured restrictions and runtime-effective session facts are shown separately.</p>
         </div>
-        <span class={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ${projectToneClass(model.scopeTone)}`} data-testid="session-policy-scope">
-          {model.scopeLabel}
-        </span>
+        <div class="flex shrink-0 flex-wrap items-center justify-end gap-3">
+          <span class={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ${projectToneClass(model.scopeTone)}`} data-testid="session-policy-scope">
+            {model.scopeLabel}
+          </span>
+          {#if model.projectHref}
+            <a class="text-xs font-semibold text-admin-accent hover:underline" href={model.projectHref} data-testid="session-policy-project-link">
+              Project details
+            </a>
+          {/if}
+        </div>
       </div>
     </section>
 

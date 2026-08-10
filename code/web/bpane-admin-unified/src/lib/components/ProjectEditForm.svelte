@@ -7,13 +7,11 @@
     validateProjectEdit,
     type ProjectEditDraft,
   } from '$lib/projects/project-edit-view-model';
-  import { buildProjectInspectorModel } from '$lib/projects/project-inspector-view-model';
   import type { ProjectPolicyOptionsLoadState } from '$lib/projects/project-detail-state';
   import type { ProjectResource, UpsertProjectRequest } from '$lib/projects/project-types';
   import AdminMessage from './AdminMessage.svelte';
   import ProjectPolicyEditor from './ProjectPolicyEditor.svelte';
   import ProjectQuotaEditor from './ProjectQuotaEditor.svelte';
-  import ProjectStatusSummary from './ProjectStatusSummary.svelte';
 
   type ProjectEditFormMode = 'edit' | 'create';
 
@@ -38,7 +36,6 @@
   const validation = $derived(validateProjectEdit(project ?? null, draft));
   const createMode = $derived(mode === 'create');
   const changed = $derived(createMode ? hasNewProjectEditChanges(draft) : project ? hasProjectEditChanges(project, draft) : false);
-  const statusModel = $derived(project ? buildProjectInspectorModel(project) : null);
   const title = $derived(createMode ? 'New project settings' : 'Project settings');
   const description = $derived(createMode
     ? 'Define metadata, policy, resource allow-lists, and quotas before creating the project.'
@@ -97,10 +94,6 @@
   </div>
 
   <div class="mt-5 grid gap-4">
-    {#if statusModel}
-      <ProjectStatusSummary model={statusModel} />
-    {/if}
-
     <section class="rounded-md border border-admin-border bg-admin-soft/50 p-4" data-testid="project-metadata-editor">
       <div class="border-b border-admin-border pb-3">
         <h4 class="m-0 text-sm font-semibold text-admin-ink">Metadata</h4>

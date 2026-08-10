@@ -33,6 +33,11 @@ describe('WorkflowRunDetailRoute', () => {
       expect(byTestId(target, 'workflow-run-detail-log-count').textContent).toContain('1');
       expect(byTestId(target, 'workflow-run-detail-produced-file-count').textContent).toContain('1');
     });
+    expect(byTestId(target, 'workflow-run-detail-project-link').getAttribute('href'))
+      .toBe('/admin-new/projects/project-1');
+    expect(byTestId(target, 'workflow-run-admission-message').textContent)
+      .toContain('Workflow run allowed');
+    expect(byTestId(target, 'workflow-run-admission-active-workflows').textContent).toBe('1 / 4');
     expect(fetchImpl).toHaveBeenCalledTimes(4);
     for (const [, init] of fetchImpl.mock.calls) {
       expect((init?.headers as Headers).get('authorization')).toBe('Bearer shell-token');
@@ -105,6 +110,35 @@ describe('WorkflowRunDetailRoute', () => {
 
     await vi.waitFor(() => {
       expect(byTestId(target, 'workflow-run-detail-error').textContent).toContain('missing or invalid');
+    });
+  });
+
+  it('renders authoritative queue reason and timestamp for a queued project run', async () => {
+    window.history.replaceState({}, '', '/admin-new/workflow-runs/run-1');
+    const queuedRun = workflowRunFixture({
+      state: 'queued',
+      project_admission: {
+        state: 'queued',
+        reason_code: 'workflow_capacity_reached',
+        message: 'Workflow run queued until project capacity is available.',
+        active_workflow_runs: 4,
+        max_active_workflow_runs: 4,
+        checked_at: '2026-08-07T10:00:00.000Z',
+      },
+      admission: {
+        state: 'queued',
+        reason: 'project_workflow_concurrency_limit',
+        queued_at: '2026-08-07T10:00:01.000Z',
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(workflowRunFetch(() => queuedRun)));
+    const target = renderComponent(WorkflowRunDetailRoute, { authContext: authContext() });
+
+    await vi.waitFor(() => {
+      expect(byTestId(target, 'workflow-run-admission-state').textContent).toContain('queued');
+      expect(byTestId(target, 'workflow-run-queue-reason').textContent)
+        .toContain('project_workflow_concurrency_limit');
+      expect(byTestId(target, 'workflow-run-queued-at').textContent).toContain('Queued');
     });
   });
 });

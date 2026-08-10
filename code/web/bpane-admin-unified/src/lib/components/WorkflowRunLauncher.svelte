@@ -11,14 +11,17 @@
     validateWorkflowRunLaunch,
     workflowRunRequestPreview,
     type WorkflowInputParameter,
+    type WorkflowRunProjectOptionsLoadState,
     type WorkflowRunSessionMode,
   } from '$lib/workflows/workflow-run-launcher-view-model';
   import type { WorkflowDefinitionVersionResource } from '$lib/workflows/workflow-types';
   import AdminMessage from './AdminMessage.svelte';
+  import WorkflowRunProjectEvidence from './WorkflowRunProjectEvidence.svelte';
 
   type WorkflowRunLauncherProps = {
     readonly workflowId: string;
     readonly selectedVersion?: WorkflowDefinitionVersionResource | null;
+    readonly projectOptionsState?: WorkflowRunProjectOptionsLoadState;
     readonly disabled?: boolean;
     readonly onStartRun?: (
       request: CreateWorkflowRunRequest,
@@ -36,6 +39,7 @@
   let {
     workflowId,
     selectedVersion = null,
+    projectOptionsState = { status: 'idle' },
     disabled = false,
     onStartRun,
   }: WorkflowRunLauncherProps = $props();
@@ -49,6 +53,10 @@
   let submitState = $state<SubmitState>({ status: 'idle' });
 
   const inputParameters = $derived(inputParametersFromSchema(selectedVersion?.input_schema));
+  const projectOptions = $derived(projectOptionsState.status === 'ready'
+    ? projectOptionsState.projects
+    : []);
+  const selectedProject = $derived(projectOptions.find((project) => project.id === projectId) ?? null);
   const launchDisabled = $derived(disabled || !selectedVersion || submitState.status === 'running');
   const requestDraft = $derived({
     workflowId,
@@ -58,6 +66,7 @@
     sessionMode,
     existingSessionId,
     projectId,
+    ...(projectOptionsState.status === 'ready' ? { projectOptions } : {}),
   });
   const payloadPreview = $derived(workflowRunRequestPreview(requestDraft));
 
@@ -284,15 +293,31 @@
             </label>
 
             <label class="grid min-w-0 gap-1 text-sm text-admin-ink">
-              <span class="font-semibold">Project id</span>
-              <input
-                class="h-10 min-w-0 rounded-md border border-admin-border bg-white px-3 font-mono text-sm text-admin-ink outline-none placeholder:text-admin-muted focus:border-admin-accent"
-                type="text"
-                placeholder="Optional project id"
+              <span class="font-semibold">Project</span>
+              <select
+                class="h-10 min-w-0 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink outline-none focus:border-admin-accent disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
                 bind:value={projectId}
+                disabled={disabled || submitState.status === 'running' || projectOptionsState.status === 'loading'}
                 data-testid="workflow-run-project-id"
-              />
+              >
+                <option value="">Owner scoped</option>
+                {#each projectOptions as project}
+                  <option value={project.id} disabled={project.state !== 'active'}>{project.name} - {project.state}</option>
+                {/each}
+              </select>
             </label>
+
+            {#if projectOptionsState.status === 'loading'}
+              <AdminMessage tone="loading" density="compact" title="Loading projects" testId="workflow-run-project-options-loading" />
+            {:else if projectOptionsState.status === 'error'}
+              <AdminMessage
+                tone="warning"
+                density="compact"
+                title="Project catalog unavailable"
+                message={`${projectOptionsState.message} Owner-scoped launch remains available.`}
+                testId="workflow-run-project-options-error"
+              />
+            {/if}
 
             {#if sessionMode === 'existing_session'}
               <label class="grid min-w-0 gap-1 text-sm text-admin-ink">
@@ -307,6 +332,10 @@
               </label>
             {/if}
           </div>
+
+          {#if selectedProject}
+            <WorkflowRunProjectEvidence project={selectedProject} />
+          {/if}
         </section>
 
         <section class="min-w-0 rounded-md border border-admin-border bg-admin-panel p-3" data-testid="workflow-run-payload-preview-panel">

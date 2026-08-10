@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { UnifiedAdminContext } from '$lib/auth/unified-admin-context';
+import { projectResourceFixture } from '$lib/test-utils/project-fixture';
 import {
   byTestId,
   cleanupRenderedComponents,
@@ -25,6 +26,9 @@ describe('WorkflowDefinitionDetailRoute', () => {
       const url = String(input);
       if (url.endsWith('/api/v1/workflows/workflow-1')) {
         return jsonResponse(workflowPayload(), 200);
+      }
+      if (url.endsWith('/api/v1/projects')) {
+        return jsonResponse({ projects: [projectResourceFixture()] }, 200);
       }
       if (url.endsWith('/api/v1/workflows/workflow-1/versions')) {
         return jsonResponse({ versions: [versionPayload()] }, 200);
@@ -71,6 +75,13 @@ describe('WorkflowDefinitionDetailRoute', () => {
     });
     expect(byTestId(target, 'workflow-code-preview-code-language').className).toContain('language-typescript');
     expect(byTestId(target, 'workflow-code-file-list').textContent).toContain('helper.ts');
+    await vi.waitFor(() => {
+      expect((byTestId(target, 'workflow-run-project-id') as HTMLSelectElement).options.length).toBe(2);
+    });
+    setSelectValue(byTestId(target, 'workflow-run-project-id'), 'project-1');
+    await vi.waitFor(() => {
+      expect(byTestId(target, 'workflow-run-project-governance').textContent).toContain('Support');
+    });
     (target.querySelector('[data-source-path="dev/workflows/browserpane-tour/helper.ts"]') as HTMLButtonElement).click();
     await vi.waitFor(() => {
       expect(byTestId(target, 'workflow-code-preview-code').textContent).toContain('helperValue');
@@ -84,7 +95,13 @@ describe('WorkflowDefinitionDetailRoute', () => {
     expect(JSON.parse(String(createRunCall?.[1]?.body))).toMatchObject({
       workflow_id: 'workflow-1',
       version: 'v1',
-      session: { create_session: { labels: { origin: 'admin-unified-workflow-run' } } },
+      project_id: 'project-1',
+      session: {
+        create_session: {
+          project_id: 'project-1',
+          labels: { origin: 'admin-unified-workflow-run' },
+        },
+      },
     });
     expect(openSpy).toHaveBeenCalledWith(
       '/admin-new/sessions/session-1/preview',
@@ -101,6 +118,9 @@ describe('WorkflowDefinitionDetailRoute', () => {
       const url = String(input);
       if (url.endsWith('/api/v1/workflows/workflow-1')) {
         return jsonResponse(workflowPayload({ latest_version: versionCreated ? 'v2' : 'v1' }), 200);
+      }
+      if (url.endsWith('/api/v1/projects')) {
+        return jsonResponse({ projects: [] }, 200);
       }
       if (url.endsWith('/api/v1/workflows/workflow-1/versions') && init?.method === 'GET') {
         return jsonResponse(
@@ -198,6 +218,11 @@ function jsonResponse(payload: unknown, status: number): Response {
     status,
     headers: { 'content-type': 'application/json' },
   });
+}
+
+function setSelectValue(element: Element, value: string): void {
+  (element as HTMLSelectElement).value = value;
+  element.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
 function workflowPayload(overrides: Partial<{ readonly latest_version: string }> = {}) {

@@ -283,11 +283,16 @@ function toProjectPolicyOption(value: unknown, label: string): ProjectPolicyOpti
   const object = expectRecord(value, label);
   return {
     id: expectString(object.id, `${label} id`),
+    projectId: policyOptionProjectId(object),
     name: expectString(object.name, `${label} name`),
     description: optionalString(object.description, `${label} description`) ?? null,
     state: optionState(object),
     scope: optionScope(object),
   };
+}
+
+function policyOptionProjectId(object: Record<string, unknown>): string | null {
+  return optionalString(object.project_id, 'policy option project_id') ?? null;
 }
 
 function optionState(object: Record<string, unknown>): string | null {
