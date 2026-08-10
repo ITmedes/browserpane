@@ -737,6 +737,32 @@ Common project operations:
 ./scripts/bpane session-template create tenant-debug-session --project-id <project-id> --default-label purpose=debug
 ```
 
+Common file-workspace operations:
+
+```bash
+./scripts/bpane file-workspace create pilot-inputs \
+  --project-id <project-id> \
+  --description "Validated pilot inputs" \
+  --label stage=pilot
+./scripts/bpane file-workspace list
+./scripts/bpane file-workspace get <workspace-id>
+./scripts/bpane file-workspace file list <workspace-id>
+./scripts/bpane file-workspace file upload <workspace-id> \
+  --input ./input.csv \
+  --media-type text/csv \
+  --provenance-json '{"source":"operator"}'
+./scripts/bpane file-workspace file download <workspace-id> <file-id> \
+  --output ./downloaded-input.csv
+./scripts/bpane file-workspace file delete <workspace-id> <file-id>
+```
+
+Uploads default `--file-name` to the input basename and use
+`application/octet-stream` unless `--media-type` is set. Downloads write bytes
+only to the required `--output` path and emit JSON metadata on stdout. Workspace
+metadata currently has no delete operation in the frozen control API; delete
+individual files and archive the owning project when retiring a project-scoped
+workspace.
+
 Common egress-profile operations:
 
 ```bash

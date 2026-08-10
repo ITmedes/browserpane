@@ -27,6 +27,7 @@ const KNOWN_OPTIONS = new Set([
   'api-url',
   'allowed-session-template-id',
   'base-url',
+  'body-file',
   'body-json',
   'browser-context-id',
   'browser-context-mode',
@@ -46,6 +47,7 @@ const KNOWN_OPTIONS = new Set([
   'external-id',
   'extension-id',
   'fail-on-issues',
+  'file-name',
   'geolocation-accuracy-meters',
   'geolocation-latitude',
   'geolocation-longitude',
@@ -66,6 +68,7 @@ const KNOWN_OPTIONS = new Set([
   'mcp-display-name',
   'mcp-endpoint-base-url',
   'mcp-issuer',
+  'media-type',
   'max-profile-storage-bytes',
   'max-active-sessions',
   'max-active-workflow-runs',
@@ -81,6 +84,7 @@ const KNOWN_OPTIONS = new Set([
   'owner-mode',
   'profile',
   'project-id',
+  'provenance-json',
   'probe-public-ip-url',
   'probe-timeout-ms',
   'probe-tls-url',
@@ -180,6 +184,13 @@ function usageText() {
     '  bpane browser-context list [options]',
     '  bpane browser-context get <context-id> [options]',
     '  bpane browser-context delete <context-id> [options]',
+    '  bpane file-workspace create [workspace-name] [options]',
+    '  bpane file-workspace list [options]',
+    '  bpane file-workspace get <workspace-id> [options]',
+    '  bpane file-workspace file list <workspace-id> [options]',
+    '  bpane file-workspace file upload <workspace-id> --input <path> [options]',
+    '  bpane file-workspace file download <workspace-id> <file-id> --output <path> [options]',
+    '  bpane file-workspace file delete <workspace-id> <file-id> [options]',
     '  bpane mcp doctor [session-id] [options]',
     '  bpane mcp preflight [session-id] [options]',
     '  bpane mcp repair <session-id> [options]',
@@ -203,7 +214,8 @@ function usageText() {
     '  --mcp-client-id <id>      MCP delegate client id. Env: BPANE_MCP_CLIENT_ID.',
     '  --mcp-issuer <issuer>     MCP delegate issuer. Env: BPANE_MCP_ISSUER.',
     '  --mcp-display-name <name> MCP delegate display name. Env: BPANE_MCP_DISPLAY_NAME.',
-    '  --body-json <json>        Raw JSON request body for session create.',
+    '  --body-json <json>        Inline JSON request body where supported.',
+    '  --body-file <path>        JSON request body file where supported.',
     '  --label <key=value>       Repeatable session label filter or create label.',
     '  --default-label <key=value> Repeatable template default session label.',
     '  --integration <key=value> Repeatable session integration-context filter.',
@@ -271,6 +283,9 @@ function usageText() {
     '  --max-profile-storage-bytes <bytes> Browser context profile storage limit in bytes.',
     '  --input <path>            File path for binary import/upload commands.',
     '  --output <path>           File path for binary export/download commands.',
+    '  --file-name <name>        Uploaded file name. Defaults to the input basename.',
+    '  --media-type <type>       Uploaded file media type. Default: application/octet-stream.',
+    '  --provenance-json <json>  Optional workspace-file provenance metadata object.',
     '  --cleanup-action <name>   Repeatable cleanup action: revoke-automation-owner, disconnect-all, stop, kill.',
     '  --older-than-sec <sec>    Cleanup age filter based on created_at.',
     '  --limit <count>           Limit filtered session list or cleanup candidates.',
@@ -372,6 +387,29 @@ function parseJsonOption(options, name) {
     throw new CliError(
       'USAGE',
       `Invalid JSON for --${name}: ${error instanceof Error ? error.message : String(error)}`,
+      EXIT_CODES.usage,
+    );
+  }
+}
+
+async function parseJsonBodyOption(options) {
+  const inlineBody = getOption(options, 'body-json');
+  const bodyFile = getOption(options, 'body-file');
+  if (inlineBody !== null && bodyFile !== null) {
+    throw new CliError('USAGE', 'Use only one of --body-json or --body-file.', EXIT_CODES.usage);
+  }
+  if (inlineBody !== null) {
+    return parseJsonOption(options, 'body-json');
+  }
+  if (bodyFile === null) {
+    return null;
+  }
+  try {
+    return JSON.parse(await fs.readFile(expandHome(bodyFile), 'utf8'));
+  } catch (error) {
+    throw new CliError(
+      'USAGE',
+      `Invalid JSON for --body-file ${bodyFile}: ${error instanceof Error ? error.message : String(error)}`,
       EXIT_CODES.usage,
     );
   }
@@ -658,6 +696,35 @@ function requiredNestedEgressProfileId(positionals, commandLabel) {
     throw new CliError('USAGE', `Usage: bpane ${commandLabel} <profile-id>`, EXIT_CODES.usage);
   }
   return profileId;
+}
+
+function requiredFileWorkspaceId(positionals, commandLabel) {
+  const workspaceId = positionals[2];
+  if (!workspaceId || positionals.length > 3) {
+    throw new CliError('USAGE', `Usage: bpane ${commandLabel} <workspace-id>`, EXIT_CODES.usage);
+  }
+  return workspaceId;
+}
+
+function requiredNestedFileWorkspaceId(positionals, commandLabel) {
+  const workspaceId = positionals[3];
+  if (!workspaceId || positionals.length > 4) {
+    throw new CliError('USAGE', `Usage: bpane ${commandLabel} <workspace-id>`, EXIT_CODES.usage);
+  }
+  return workspaceId;
+}
+
+function requiredWorkspaceFileIds(positionals, commandLabel) {
+  const workspaceId = positionals[3];
+  const fileId = positionals[4];
+  if (!workspaceId || !fileId || positionals.length > 5) {
+    throw new CliError(
+      'USAGE',
+      `Usage: bpane ${commandLabel} <workspace-id> <file-id>`,
+      EXIT_CODES.usage,
+    );
+  }
+  return { workspaceId, fileId };
 }
 
 function requireAccessToken(config) {
@@ -1961,6 +2028,82 @@ function buildBrowserContextRequest(options, fallbackName = null, commandLabel =
   return body;
 }
 
+function requireSingleLineHeaderValue(value, optionName) {
+  const normalized = String(value).trim();
+  if (!normalized || /[\r\n]/u.test(normalized)) {
+    throw new CliError(
+      'USAGE',
+      `--${optionName} must be a non-empty single-line value.`,
+      EXIT_CODES.usage,
+    );
+  }
+  return normalized;
+}
+
+async function buildFileWorkspaceRequest(options, fallbackName = null) {
+  const rawBody = await parseJsonBodyOption(options);
+  if (rawBody !== null) {
+    if (!rawBody || typeof rawBody !== 'object' || Array.isArray(rawBody)) {
+      throw new CliError('USAGE', 'File workspace request body must be a JSON object.', EXIT_CODES.usage);
+    }
+    return rawBody;
+  }
+
+  const name = getOption(options, 'name') ?? fallbackName;
+  if (!name) {
+    throw new CliError(
+      'USAGE',
+      'File workspace create requires --name or a positional workspace name.',
+      EXIT_CODES.usage,
+    );
+  }
+  const body = { name };
+  const projectId = getOption(options, 'project-id');
+  if (projectId) {
+    body.project_id = projectId;
+  }
+  const description = getOption(options, 'description');
+  if (description !== null) {
+    body.description = description;
+  }
+  const labels = parseKeyValueOptions(options, 'label');
+  if (Object.keys(labels).length) {
+    body.labels = labels;
+  }
+  return body;
+}
+
+function parseProvenance(options) {
+  const provenance = parseJsonOption(options, 'provenance-json');
+  if (provenance === null) {
+    return null;
+  }
+  if (!provenance || typeof provenance !== 'object' || Array.isArray(provenance)) {
+    throw new CliError('USAGE', '--provenance-json must contain a JSON object.', EXIT_CODES.usage);
+  }
+  return provenance;
+}
+
+async function readBinaryInput(options, commandLabel) {
+  const inputPath = getOption(options, 'input');
+  if (!inputPath) {
+    throw new CliError('USAGE', `${commandLabel} requires --input <path>.`, EXIT_CODES.usage);
+  }
+  const resolvedPath = expandHome(inputPath);
+  try {
+    return {
+      bytes: await fs.readFile(resolvedPath),
+      inputPath: resolvedPath,
+    };
+  } catch (error) {
+    throw new CliError(
+      'USAGE',
+      `Failed to read --input ${inputPath}: ${error instanceof Error ? error.message : String(error)}`,
+      EXIT_CODES.usage,
+    );
+  }
+}
+
 function sessionStateFilters(options, defaultStates = []) {
   const states = getOptions(options, 'state')
     .flatMap((value) => value.split(','))
@@ -2948,6 +3091,108 @@ async function handleBrowserContextCommand(config, positionals, options) {
   );
 }
 
+async function handleFileWorkspaceCommand(config, positionals, options) {
+  const action = positionals[1];
+  if (action === 'create' && positionals.length <= 3) {
+    return await requestGateway(config, '/api/v1/file-workspaces', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(await buildFileWorkspaceRequest(options, positionals[2] ?? null)),
+    });
+  }
+  if (action === 'list' && positionals.length === 2) {
+    return await requestGateway(config, '/api/v1/file-workspaces');
+  }
+  if (action === 'get') {
+    const workspaceId = requiredFileWorkspaceId(positionals, 'file-workspace get');
+    return await requestGateway(config, `/api/v1/file-workspaces/${encodeURIComponent(workspaceId)}`);
+  }
+  if (action === 'file') {
+    const fileAction = positionals[2];
+    if (fileAction === 'list') {
+      const workspaceId = requiredNestedFileWorkspaceId(positionals, 'file-workspace file list');
+      return await requestGateway(
+        config,
+        `/api/v1/file-workspaces/${encodeURIComponent(workspaceId)}/files`,
+      );
+    }
+    if (fileAction === 'upload') {
+      const workspaceId = requiredNestedFileWorkspaceId(positionals, 'file-workspace file upload');
+      const input = await readBinaryInput(options, 'file-workspace file upload');
+      const fileName = requireSingleLineHeaderValue(
+        getOption(options, 'file-name') ?? path.basename(input.inputPath),
+        'file-name',
+      );
+      const mediaType = requireSingleLineHeaderValue(
+        getOption(options, 'media-type') ?? 'application/octet-stream',
+        'media-type',
+      );
+      const headers = {
+        'Content-Type': mediaType,
+        'x-bpane-file-name': fileName,
+      };
+      const provenance = parseProvenance(options);
+      if (provenance !== null) {
+        headers['x-bpane-file-provenance'] = JSON.stringify(provenance);
+      }
+      return await requestGateway(
+        config,
+        `/api/v1/file-workspaces/${encodeURIComponent(workspaceId)}/files`,
+        {
+          method: 'POST',
+          headers,
+          body: input.bytes,
+        },
+      );
+    }
+    if (fileAction === 'download') {
+      const { workspaceId, fileId } = requiredWorkspaceFileIds(
+        positionals,
+        'file-workspace file download',
+      );
+      const outputPath = getOption(options, 'output');
+      if (!outputPath) {
+        throw new CliError(
+          'USAGE',
+          'file-workspace file download requires --output <path>.',
+          EXIT_CODES.usage,
+        );
+      }
+      const resolvedOutputPath = expandHome(outputPath);
+      const { bytes, contentType } = await requestGatewayBinary(
+        config,
+        `/api/v1/file-workspaces/${encodeURIComponent(workspaceId)}/files/${encodeURIComponent(fileId)}/content`,
+        { method: 'GET', headers: { Accept: '*/*' } },
+      );
+      await fs.mkdir(path.dirname(resolvedOutputPath), { recursive: true });
+      await fs.writeFile(resolvedOutputPath, bytes);
+      return {
+        workspace_id: workspaceId,
+        file_id: fileId,
+        output_path: resolvedOutputPath,
+        byte_count: bytes.length,
+        content_type: contentType,
+      };
+    }
+    if (fileAction === 'delete') {
+      const { workspaceId, fileId } = requiredWorkspaceFileIds(
+        positionals,
+        'file-workspace file delete',
+      );
+      return await requestGateway(
+        config,
+        `/api/v1/file-workspaces/${encodeURIComponent(workspaceId)}/files/${encodeURIComponent(fileId)}`,
+        { method: 'DELETE' },
+      );
+    }
+  }
+  throw new CliError(
+    'USAGE',
+    `Unknown file-workspace command: ${positionals.slice(1).join(' ')}`.trim(),
+    EXIT_CODES.usage,
+  );
+}
+
 async function handleMcpCommand(config, positionals, options) {
   const action = positionals[1];
   if ((action === 'doctor' || action === 'preflight') && positionals.length <= 3) {
@@ -3193,6 +3438,9 @@ export async function runBpaneCli(argv, env = process.env, io = process, fetchIm
     } else if (scope === 'browser-context') {
       const config = await buildConfig(options, env, fetchImpl);
       result = await handleBrowserContextCommand(config, positionals, options);
+    } else if (scope === 'file-workspace') {
+      const config = await buildConfig(options, env, fetchImpl);
+      result = await handleFileWorkspaceCommand(config, positionals, options);
     } else if (scope === 'mcp') {
       const config = await buildConfig(options, env, fetchImpl);
       result = await handleMcpCommand(config, positionals, options);
