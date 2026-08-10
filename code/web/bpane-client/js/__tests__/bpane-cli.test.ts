@@ -3010,13 +3010,14 @@ describe('bpane operator CLI', () => {
     });
   });
 
-  it('mints access, automation access, cancels queue, and disconnects all session clients', async () => {
+  it('mints access, manages runtime lifecycle, and disconnects all session clients', async () => {
     const io = createIo();
     const { calls, fetchImpl } = createFetch(
       jsonResponse({ token_type: 'session_connect_ticket' }),
       jsonResponse({ token_type: 'session_automation_access_token' }),
       jsonResponse({ state: 'stopped' }),
       jsonResponse({ state: 'idle' }),
+      jsonResponse({ state: 'idle', runtime_state: 'released' }),
     );
 
     const env = { BPANE_ACCESS_TOKEN: 'token-1' };
@@ -3024,17 +3025,68 @@ describe('bpane operator CLI', () => {
     const automationCode = await runBpaneCli(['session', 'automation-access', 'session-1'], env, io.io, fetchImpl);
     const cancelCode = await runBpaneCli(['session', 'cancel', 'session-1'], env, io.io, fetchImpl);
     const disconnectCode = await runBpaneCli(['session', 'disconnect-all', 'session-1'], env, io.io, fetchImpl);
+    const releaseCode = await runBpaneCli(
+      ['session', 'release', 'session/with space'],
+      env,
+      io.io,
+      fetchImpl,
+    );
 
     expect(accessCode).toBe(EXIT_CODES.ok);
     expect(automationCode).toBe(EXIT_CODES.ok);
     expect(cancelCode).toBe(EXIT_CODES.ok);
     expect(disconnectCode).toBe(EXIT_CODES.ok);
+    expect(releaseCode).toBe(EXIT_CODES.ok);
     expect(calls.map((call) => [call.url, call.init.method])).toEqual([
       ['http://localhost:8080/api/v1/sessions/session-1/access-tokens', 'POST'],
       ['http://localhost:8080/api/v1/sessions/session-1/automation-access', 'POST'],
       ['http://localhost:8080/api/v1/sessions/session-1/cancel', 'POST'],
       ['http://localhost:8080/api/v1/sessions/session-1/connections/disconnect-all', 'POST'],
+      ['http://localhost:8080/api/v1/sessions/session%2Fwith%20space/release', 'POST'],
     ]);
+  });
+
+  it('rejects invalid release requests and preserves release API errors', async () => {
+    const usageFetch = createFetch(jsonResponse({ state: 'idle' }));
+    const usageIo = createIo();
+    expect(await runBpaneCli(
+      ['session', 'release', 'session-1', 'unexpected'],
+      { BPANE_ACCESS_TOKEN: 'token-1' },
+      usageIo.io,
+      usageFetch.fetchImpl,
+    )).toBe(EXIT_CODES.usage);
+    expect(usageFetch.calls).toHaveLength(0);
+
+    const authFetch = createFetch(jsonResponse({ state: 'idle' }));
+    const authIo = createIo();
+    expect(await runBpaneCli(
+      ['session', 'release', 'session-1'],
+      {},
+      authIo.io,
+      authFetch.fetchImpl,
+    )).toBe(EXIT_CODES.auth);
+    expect(authFetch.calls).toHaveLength(0);
+
+    for (const [status, body] of [
+      [404, { error: 'session not found' }],
+      [409, { error: 'session has active blockers' }],
+      [503, { error: 'runtime manager unavailable' }],
+    ] as const) {
+      const { calls, fetchImpl } = createFetch(jsonResponse(body, status));
+      const io = createIo();
+      expect(await runBpaneCli(
+        ['session', 'release', 'session-1'],
+        { BPANE_ACCESS_TOKEN: 'token-1' },
+        io.io,
+        fetchImpl,
+      )).toBe(EXIT_CODES.api);
+      expect(calls).toHaveLength(1);
+      expect(parseStderr(io)).toMatchObject({
+        code: 'HTTP_ERROR',
+        status,
+        body,
+      });
+    }
   });
 
   it('derives MCP health from the configured bridge control URL with path prefixes', async () => {

@@ -1,6 +1,6 @@
 # Consolidated Validation Matrix
 
-Revalidated against current package scripts: 2026-08-07
+Revalidated against current package scripts: 2026-08-10
 
 This matrix defines the available validation surfaces for product slices. Use
 `PRODUCT_PHASES_AND_RELEASE_GATES.md` to decide which evidence is required for
@@ -207,6 +207,12 @@ files, recordings, and network routes, validates active navigation and
 responsive layout, switches each subarea to a second session with distinct
 network evidence, then exercises MCP delegation and the popup browser
 connection lifecycle.
+
+The canonical operator CLI smoke covers profile permissions, identity,
+governed resource lifecycles, exact binary workspace transfer, session
+create/status/access/disconnect/release/stop/kill/cleanup, and MCP
+doctor/preflight/repair. The API-family boundary and local diagnostic sequence
+are maintained in `OPERATOR_CLI_AND_LOCAL_DIAGNOSTICS.md`.
 
 ## Broader Existing Client Smoke Matrix
 
