@@ -18,6 +18,7 @@ async fn scopes_session_resources_to_the_authenticated_owner() {
             vec![6; 32],
             Duration::from_secs(300),
         )),
+        recording_worker_access_token_manager: test_recording_worker_access_token_manager(),
         session_store: SessionStore::in_memory(),
         session_manager: Arc::new(
             SessionManager::new(SessionManagerConfig::StaticSingle {
@@ -98,6 +99,7 @@ async fn rejects_session_scoped_runtime_routes_for_unknown_or_foreign_sessions_b
             vec![6; 32],
             Duration::from_secs(300),
         )),
+        recording_worker_access_token_manager: test_recording_worker_access_token_manager(),
         session_store: SessionStore::in_memory(),
         session_manager: Arc::new(
             SessionManager::new(SessionManagerConfig::StaticSingle {

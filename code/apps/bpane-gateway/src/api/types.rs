@@ -20,7 +20,8 @@ use crate::recording::{
 };
 use crate::recording_lifecycle::RecordingLifecycleManager;
 use crate::session_access::{
-    AdminEventAccessTokenManager, SessionAutomationAccessTokenManager, SessionConnectTicketManager,
+    AdminEventAccessTokenManager, RecordingWorkerAccessTokenManager,
+    SessionAutomationAccessTokenManager, SessionConnectTicketManager,
 };
 use crate::session_control::{
     BrowserContextPersistenceMode, CreateSessionRequest, EgressCustomCaConfig,
@@ -53,6 +54,7 @@ pub(crate) struct ApiServerConfig {
     pub admin_event_access_token_manager: Arc<AdminEventAccessTokenManager>,
     pub connect_ticket_manager: Arc<SessionConnectTicketManager>,
     pub automation_access_token_manager: Arc<SessionAutomationAccessTokenManager>,
+    pub recording_worker_access_token_manager: Arc<RecordingWorkerAccessTokenManager>,
     pub session_store: SessionStore,
     pub session_manager: Arc<SessionManager>,
     pub credential_provider: Option<Arc<CredentialProvider>>,
@@ -80,6 +82,7 @@ pub(super) struct ApiState {
     pub(super) admin_event_access_token_manager: Arc<AdminEventAccessTokenManager>,
     pub(super) connect_ticket_manager: Arc<SessionConnectTicketManager>,
     pub(super) automation_access_token_manager: Arc<SessionAutomationAccessTokenManager>,
+    pub(super) recording_worker_access_token_manager: Arc<RecordingWorkerAccessTokenManager>,
     pub(super) session_store: SessionStore,
     pub(super) session_manager: Arc<SessionManager>,
     pub(super) credential_provider: Option<Arc<CredentialProvider>>,
@@ -108,6 +111,7 @@ pub(crate) struct McpBridgeControlConfig {
 }
 
 pub(super) const AUTOMATION_ACCESS_TOKEN_HEADER: &str = "x-bpane-automation-access-token";
+pub(super) const RECORDING_WORKER_ACCESS_TOKEN_HEADER: &str = "x-bpane-recording-worker-token";
 pub(super) const BROWSER_CONTEXT_DESCRIPTION_HEADER: &str = "x-bpane-browser-context-description";
 pub(super) const BROWSER_CONTEXT_LABELS_HEADER: &str = "x-bpane-browser-context-labels";
 pub(super) const BROWSER_CONTEXT_MAX_PROFILE_STORAGE_BYTES_HEADER: &str =
