@@ -3,13 +3,14 @@
 ## Metadata
 
 - Issue: [#162](https://github.com/ITmedes/browserpane/issues/162)
-- State: In progress; implementation slice 1 complete
+- State: In progress; implementation slice 1 merged through PR `#205`, slice 2
+  in progress
 - Lane: Operator Product
 - Target gate: Admin-New Phase 1 Promotion
 - Depends on: control API conformance through `#179`, admin-new resource
   catalogs through `#159`, and project governance through `#161`
-- Branch: `feature/BPANE-00162`
-- Baseline: `main` at `ac9849df09b2b237afd615a28eab40551da78d0f`,
+- Branch: `feature/BPANE-00162-workflow-cli`
+- Baseline: `main` at `9a759dbf4c37aae57207583d9667f65ddc25e8a1`,
   2026-08-10
 
 ## Business Outcome
@@ -121,7 +122,7 @@ long-lived bearer token or resolved credential value is printed.
    add reusable JSON-file and binary-output helpers, file-workspace
    create/list/get plus file list/upload/download/delete, focused unit tests,
    and representative Compose smoke coverage.
-2. **Workflow CLI convergence**: move workflow definition/run commands onto the
+2. **Workflow CLI convergence** (in progress): move workflow definition/run commands onto the
    canonical profile/auth/error contract, preserve the old workflow entrypoint
    as a thin compatibility wrapper, and cover wait/intervention/artifact paths.
 3. **Governance resource parity**: add approved-extension, credential-binding,
