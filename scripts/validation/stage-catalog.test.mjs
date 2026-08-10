@@ -25,6 +25,10 @@ test('catalog exposes stable, unique fast and compose profiles', () => {
   assert.ok(fast.some((stage) => stage.id === 'openapi-compatibility'));
   assert.ok(compose.some((stage) => stage.id === 'compose-gateway-api'));
   assert.ok(compose.some((stage) => stage.id === 'compose-recording'));
+  assert.ok(compose.some((stage) => stage.id === 'compose-session-files'));
+  assert.ok(compose.some((stage) => stage.id === 'compose-workflow-cli'));
+  assert.ok(compose.some((stage) => stage.id === 'compose-workflow-workspace'));
+  assert.ok(compose.some((stage) => stage.id === 'compose-workflow-events'));
 });
 
 test('catalog selects requested stages in caller order and rejects out-of-profile ids', () => {

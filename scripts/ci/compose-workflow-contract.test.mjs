@@ -41,9 +41,13 @@ test('compose workflow preserves every browser-facing smoke stage', () => {
     'compose-admin-new-api-companion',
     'compose-admin-compat',
     'compose-cli',
+    'compose-session-files',
     'compose-mcp',
     'compose-recording',
-    'compose-workflow'
+    'compose-workflow',
+    'compose-workflow-cli',
+    'compose-workflow-workspace',
+    'compose-workflow-events'
   ];
 
   assert.equal(

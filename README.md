@@ -1306,10 +1306,10 @@ node scripts/validate.mjs --profile full
 clean installs, maintained Node checks/tests/builds, browser-client and
 admin-new coverage ratchets, OpenAPI lint/inventory/example/compatibility
 contracts, Markdown/YAML/workflow policy, and operational script checks.
-`compose` runs the bounded gateway API, admin, CLI, MCP,
-recording, workflow, and admin-new API-companion smoke set; it may build or
-start the local stack and leaves it running for inspection. `full` runs both
-profiles. Use `--list`,
+`compose` runs the bounded gateway API, admin, CLI, MCP, session-evidence,
+recording, workflow admission/CLI/workspace/event, and admin-new API-companion
+smoke set; it may build or start the local stack and leaves it running for
+inspection. `full` runs both profiles. Use `--list`,
 `--dry-run`, or repeatable `--stage <id>` selections for focused work. The
 runner stops at the first failing stage, preserves its exit code, prints the
 exact rerun command, and terminates the active child process on timeout or
@@ -1383,9 +1383,10 @@ changes on pull requests and publishes immutable content tags only from trusted
 
 `Compose / Representative compose smoke` runs after pushes to `main`, on its
 weekday schedule, or by manual dispatch. It is intentionally not a pull-request
-merge check yet. The job runs the nine-stage compose profile with a 60-minute
-job limit, uploads only redacted and bounded control-plane diagnostics after a
-failure, and always removes BrowserPane test containers and compose volumes.
+merge check yet. Split gateway and browser-integration jobs run all 15 canonical
+Compose stages with 40- and 35-minute job limits, upload only redacted and
+bounded control-plane diagnostics after a failure, and always remove
+BrowserPane test containers and compose volumes.
 
 Dependency safety:
 
