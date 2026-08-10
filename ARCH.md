@@ -630,12 +630,13 @@ The supported local operator CLI lives in
 `code/web/bpane-client/scripts/bpane-cli.mjs`, is exposed as the package binary
 `bpane`, and has a repo-level wrapper at `scripts/bpane`.
 
-- Commands cover profile inspection/init, identity me/access-review, service-principal create/list/get/update/disable, identity-mapping create/list/get/update/disable, project create/list/get/usage/update/archive,
-  egress-profile create/list/get, session create/list/get/status with project
-  and network-identity options, access-ticket and automation-access minting,
-  sanitized egress-usage counter reports, connection disconnect, stop, kill,
-  and bounded cleanup. Egress-profile create/update commands can attach a
-  proxy-auth credential binding with `--proxy-credential-binding-id`.
+- Commands cover profile inspection/init, identity me/access-review, service
+  principals, identity mappings, projects, egress profiles, reusable browser
+  contexts, session templates, sessions, and MCP delegation. File-workspace
+  commands cover workspace create/list/get and exact-byte file
+  list/upload/download/delete through the same profile, auth, JSON, and stable
+  error contract. Egress-profile create/update commands can attach a proxy-auth
+  credential binding with `--proxy-credential-binding-id`.
 - `deploy/examples/egress-observer` provides local Squid forward-proxy
   examples for metadata-only access-log observation, session/container IP
   correlation, authenticated proxy validation, and sanitized egress-usage
@@ -653,8 +654,8 @@ The supported local operator CLI lives in
 - All successful responses and structured errors are JSON, with stable exit
   codes for usage, auth, API, and unexpected failures.
 - `code/web/bpane-client/scripts/run-bpane-cli-smoke.mjs` logs in through the
-  admin app and integration-smokes the main session, MCP, cleanup, and profile
-  paths against the local compose stack.
+  admin app and integration-smokes profile, identity, project, file-workspace
+  binary transfer, session, MCP, and cleanup paths against local Compose.
 
 ### Wire Protocol (`bpane-protocol` plus the TypeScript client codec)
 
