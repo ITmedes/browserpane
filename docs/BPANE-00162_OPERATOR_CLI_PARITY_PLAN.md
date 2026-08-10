@@ -4,7 +4,7 @@
 
 - Issue: [#162](https://github.com/ITmedes/browserpane/issues/162)
 - State: In progress; implementation slice 1 merged through PR `#205`, slice 2
-  in progress
+  implemented and validated
 - Lane: Operator Product
 - Target gate: Admin-New Phase 1 Promotion
 - Depends on: control API conformance through `#179`, admin-new resource
@@ -48,9 +48,9 @@ long-lived bearer token or resolved credential value is printed.
   `--save-token`; flags override environment, which overrides profile values.
 - Success and error responses are JSON and usage, authentication, API, and
   unexpected failures have stable exit codes.
-- Workflow definitions and runs use a separate `workflow-cli.mjs` with a
-  different default URL, no shared profile support, process-exit helpers, and a
-  separate error/output contract.
+- Workflow definitions, versions, source inspection, and runs now use the
+  canonical `bpane workflow` profile/auth/error contract. `workflow-cli.mjs`
+  remains a thin compatibility wrapper around that implementation.
 - File workspaces, workspace files, approved extensions, credential bindings,
   workflow event subscriptions, session files/bindings, and recording exports
   have owner APIs and admin-new routes but no canonical `bpane` commands.
@@ -122,9 +122,10 @@ long-lived bearer token or resolved credential value is printed.
    add reusable JSON-file and binary-output helpers, file-workspace
    create/list/get plus file list/upload/download/delete, focused unit tests,
    and representative Compose smoke coverage.
-2. **Workflow CLI convergence** (in progress): move workflow definition/run commands onto the
-   canonical profile/auth/error contract, preserve the old workflow entrypoint
-   as a thin compatibility wrapper, and cover wait/intervention/artifact paths.
+2. **Workflow CLI convergence** (complete): move workflow definition/run
+   commands onto the canonical profile/auth/error contract, preserve the old
+   workflow entrypoint as a thin compatibility wrapper, and cover
+   wait/intervention/artifact paths.
 3. **Governance resource parity**: add approved-extension, credential-binding,
    and workflow event-subscription commands with safe metadata and state
    transitions; reject secret-resolution operations.
@@ -176,6 +177,29 @@ with evidence before PR creation.
   comparison, project allowlist linkage, and all existing session/MCP paths.
 - README and ARCH now document the canonical file-workspace surface and the
   absence of a workspace metadata delete route. No gateway, OpenAPI, database,
+  protocol, support-matrix, or runtime-topology change was required.
+
+## Slice 2 Evidence (2026-08-10)
+
+- Added canonical workflow definition, immutable-version, source validation and
+  inspection, run lifecycle, wait/intervention/cancel, logs/events, and
+  produced-file download commands to `./scripts/bpane workflow`.
+- Replaced the independent workflow CLI with a thin compatibility wrapper so
+  profiles, authentication precedence, error mapping, output, and exit codes
+  cannot diverge.
+- Focused CLI suite passed all `56` tests, including exact produced-file bytes,
+  malformed input, wait timeout/terminal-state handling, API errors, and
+  compatibility-wrapper behavior. The full browser-client suite passed all
+  `667` tests across `86` files.
+- TypeScript check, browser-client build, Node syntax checks, canonical CLI help,
+  and documentation whitespace validation passed.
+- `smoke:workflow-cli` passed against local Compose and terminated cleanly. It
+  covered Git source pinning, project-scoped and idempotent run creation,
+  admission summary, terminal wait, logs, produced-file download, durable
+  submit/resume/reject actions, and a compatibility-entrypoint parity lookup.
+- README, ARCH, AGENTS, and the validation matrix now name
+  `./scripts/bpane workflow` as the preferred command and identify the npm
+  workflow entrypoint as temporary compatibility. No gateway, OpenAPI, database,
   protocol, support-matrix, or runtime-topology change was required.
 
 ## Validation Strategy

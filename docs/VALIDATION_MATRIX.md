@@ -258,7 +258,7 @@ npm run smoke:workflow-restart-safety -- --headless
 npm run smoke:workflow-runtime-hold -- --headless
 npm run smoke:workflow-workspace -- --headless
 npm run smoke:workflows -- --headless
-npm run workflow:cli -- --help
+../../../scripts/bpane workflow --help
 npm run test:coverage
 ```
 

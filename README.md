@@ -1058,7 +1058,8 @@ Current workflow capabilities:
 - file workspaces for reusable inputs and durable outputs
 - Vault-backed credential bindings
 - approved extension references on workflow versions and sessions
-- local workflow CLI for owner-token-driven testing and automation
+- canonical `./scripts/bpane workflow` commands for owner-token-driven testing
+  and automation
 
 Primary workflow routes:
 
@@ -1169,7 +1170,7 @@ Local usage options:
   source/version/run launcher; `/admin-new/workflow-runs` provides the run
   catalog plus route-backed metadata, evidence, intervention controls, and
   produced-file downloads. `/admin-new/runs` remains a compatibility alias.
-- CLI: use `code/web/bpane-client/scripts/workflow-cli.mjs`
+- CLI: use the repository-level `./scripts/bpane workflow` command family
 - raw API: use the OpenAPI contract in `openapi/bpane-control-v1.yaml`
 
 Use the CLI or raw API for automation, bulk operations, and workflow event
@@ -1212,14 +1213,13 @@ Workflow run operations available to external systems:
 - resume or reject paused runs through explicit owner actions
 - distinguish live-runtime resume from profile-backed restart through the `runtime` block on the run resource
 
-Minimal CLI flow with an owner bearer token:
+Minimal CLI flow with an owner bearer token, run from the repository root:
 
 ```bash
-cd code/web/bpane-client
 export BPANE_API_URL=http://localhost:8932
 export BPANE_ACCESS_TOKEN=<owner bearer token>
-npm run workflow:cli -- workflow list
-npm run workflow:cli -- workflow run create \
+./scripts/bpane workflow list
+./scripts/bpane workflow run create \
   --workflow-id <workflow-id> \
   --version v1 \
   --project-id <project-id> \
@@ -1227,16 +1227,18 @@ npm run workflow:cli -- workflow run create \
   --input-json '{"target_url":"http://web:8080/test-embed.html"}' \
   --client-request-id <stable-run-key> \
   --summary
-npm run workflow:cli -- workflow run get <run-id>
-npm run workflow:cli -- workflow run get <run-id> --summary
-npm run workflow:cli -- workflow run cancel <run-id>
-npm run workflow:cli -- workflow run resume <run-id> --body-json '{"comment":"approved"}'
+./scripts/bpane workflow run get <run-id>
+./scripts/bpane workflow run get <run-id> --summary
+./scripts/bpane workflow run cancel <run-id>
+./scripts/bpane workflow run resume <run-id> --body-json '{"comment":"approved"}'
 ```
 
 The CLI is intentionally thin. It wraps the existing owner-scoped v1 workflow
 routes rather than introducing a second control-plane contract. Use
 `--body-json` / `--body-file` for the full API payload, or the ergonomic
 `workflow run create` flags for the common project-scoped local test path.
+The package-level `npm run workflow:cli -- ...` command remains a temporary
+compatibility alias to the same implementation.
 
 ## Build, Unit Tests, And Local Smokes
 
@@ -1405,7 +1407,7 @@ npm run smoke:admin-unified-sessions -- --headless
 npm run smoke:admin-unified-workflows -- --headless
 npm run smoke:admin-unified-workflow-runs -- --headless
 npm run smoke:admin-unified-file-workspaces -- --headless
-npm run workflow:cli -- --help
+../../../scripts/bpane workflow --help
 npm run smoke:automation-tasks -- --headless
 npm run smoke:file-workspaces -- --headless
 npm run smoke:session-files -- --headless
