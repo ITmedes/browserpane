@@ -5,7 +5,7 @@
 - Issue: [#162](https://github.com/ITmedes/browserpane/issues/162)
 - State: In progress; slice 1 merged through PR `#205`, slices 2-3 merged
   through PR `#206`, slice 4 merged through PR `#207`, slice 5 merged through
-  PR `#208`, and slice 6 is in progress
+  PR `#208`, and slice 6 is complete on its feature branch pending review
 - Lane: Operator Product
 - Target gate: Admin-New Phase 1 Promotion
 - Depends on: control API conformance through `#179`, admin-new resource
@@ -137,7 +137,7 @@ long-lived bearer token or resolved credential value is printed.
    support inventory, close the missing session-release command, consolidate
    README/ARCH examples, and add accurate local certificate, MCP, workflow
    source, Docker socket, and camera diagnostic steps.
-6. **Battle test and promotion evidence** (in progress): promote the existing
+6. **Battle test and promotion evidence** (complete on feature branch): promote the existing
    session-file, workflow-CLI, workflow-workspace, and workflow-event smokes into
    the canonical Compose runner and hosted browser-integration lane; then run
    focused and full CLI tests, coverage, typecheck/build, Compose
@@ -443,6 +443,52 @@ which Production controls remain owned by later issues.
   passed for `67` Markdown files, `8` YAML files, and `3` workflows.
 - No gateway, OpenAPI, database, protocol, support-matrix, or runtime-topology
   change was required.
+
+## Slice 6 Evidence (2026-08-10)
+
+- Promoted `smoke:session-files`, `smoke:workflow-cli`,
+  `smoke:workflow-workspace`, and `smoke:workflow-events` into the canonical
+  Compose validation catalog and hosted browser-integration lane. The Compose
+  profile now exposes `15` unique, independently rerunnable stages.
+- Validation-tool and hosted-workflow contracts passed: `81` tests in the
+  canonical fast stage, including assertions that all promoted stage ids remain
+  present in the local catalog and GitHub Actions workflow. Repository document
+  validation passed for `67` Markdown files, `8` YAML files, and `3` workflows.
+- The focused CLI suite passed all `63` tests. Its negative matrix covers
+  missing authentication, invalid profile/command shapes, malformed body and
+  input JSON, missing or unreadable binary paths, absent output paths,
+  unavailable resources, policy conflicts, expired artifacts, secret
+  redaction, MCP mismatch/repair failures, and structured `4xx`/`5xx` errors.
+- The canonical fast profile passed all `40` stages. This included Rust
+  formatting, clippy, workspace tests and the `57.32%` local line-coverage
+  ratchet; `41` admin-auth tests; `200` compatibility-admin tests; `618`
+  admin-new tests with `90.43%` line coverage; `674` browser-client tests with
+  `92.88%` line coverage; `12` MCP bridge tests; worker builds; `27` OpenAPI
+  governance tests; all `131` operation classifications; dependency safety;
+  and egress observer checks.
+- The eight operator promotion stages passed against one prepared local stack:
+  CLI, MCP, session files, recording, workflow admission, workflow CLI,
+  workflow workspace, and workflow events. Evidence included real runtime
+  release/profile restart, two isolated MCP sessions, exact-byte file transfer,
+  two ready WebM recording segments plus playback zip, worker-capacity and
+  project-quota queues, canonical/compatibility workflow CLI parity, project
+  workspace policy enforcement, and ordered signed workflow event delivery.
+- The first promoted workflow-workspace run exposed a repeatability defect: a
+  fixed project name conflicted with retained local metadata. Catalog fixtures
+  now share a UUID-backed run prefix. The complete workspace journey then
+  passed twice consecutively against the same persistent Postgres database.
+- Admin-new project, resource-catalog, session, and API-companion smokes passed.
+  They covered create/update and policy references, write-only secret
+  redaction, route-backed session subareas, live observability, MCP delegation,
+  popup preview/restart, and the `131`-operation API inventory without rendering
+  a bearer token.
+- The published diagnostic path passed: gateway health/readiness, certificate
+  SPKI/hash equality and validity, MCP health without runtime package install,
+  read-only workflow source mount, gateway Docker socket, and the expected
+  disabled camera mapping on the macOS host.
+- No gateway, OpenAPI, database, protocol, support-matrix, or runtime-topology
+  change was required. README and the validation matrix describe the promoted
+  test inventory; ARCH remains accurate without a change.
 
 ## Validation Strategy
 
