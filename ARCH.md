@@ -631,7 +631,9 @@ The workflow layer sits on top of the owner-scoped session APIs.
 
 The supported local operator CLI lives in
 `code/web/bpane-client/scripts/bpane-cli.mjs`, is exposed as the package binary
-`bpane`, and has a repo-level wrapper at `scripts/bpane`.
+`bpane`, and has a repo-level wrapper at `scripts/bpane`. The contract-family
+support boundary and local decision path are maintained in
+`docs/OPERATOR_CLI_AND_LOCAL_DIAGNOSTICS.md`.
 
 - Commands cover profile inspection/init, identity me/access-review, service
   principals, identity mappings, projects, egress profiles, reusable browser

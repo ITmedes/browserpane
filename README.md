@@ -614,6 +614,9 @@ MCP delegation terminology:
 
 Supported local operator CLI:
 
+The complete family support matrix and ordered local troubleshooting path live
+in [Operator CLI And Local Diagnostics](docs/OPERATOR_CLI_AND_LOCAL_DIAGNOSTICS.md).
+
 - Repo-level wrapper: `./scripts/bpane <command>`
 - Package entrypoint: `cd code/web/bpane-client && npm run bpane:cli -- <command>`
 - Installable package binary name: `bpane`
