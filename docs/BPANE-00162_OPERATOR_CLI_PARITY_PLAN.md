@@ -3,13 +3,14 @@
 ## Metadata
 
 - Issue: [#162](https://github.com/ITmedes/browserpane/issues/162)
-- State: In progress; implementation slice 1 complete
+- State: In progress; implementation slice 1 merged through PR `#205`, slice 2
+  implemented and validated, slice 3 implemented and validated
 - Lane: Operator Product
 - Target gate: Admin-New Phase 1 Promotion
 - Depends on: control API conformance through `#179`, admin-new resource
   catalogs through `#159`, and project governance through `#161`
-- Branch: `feature/BPANE-00162`
-- Baseline: `main` at `ac9849df09b2b237afd615a28eab40551da78d0f`,
+- Branch: `feature/BPANE-00162-workflow-cli`
+- Baseline: `main` at `9a759dbf4c37aae57207583d9667f65ddc25e8a1`,
   2026-08-10
 
 ## Business Outcome
@@ -47,9 +48,9 @@ long-lived bearer token or resolved credential value is printed.
   `--save-token`; flags override environment, which overrides profile values.
 - Success and error responses are JSON and usage, authentication, API, and
   unexpected failures have stable exit codes.
-- Workflow definitions and runs use a separate `workflow-cli.mjs` with a
-  different default URL, no shared profile support, process-exit helpers, and a
-  separate error/output contract.
+- Workflow definitions, versions, source inspection, and runs now use the
+  canonical `bpane workflow` profile/auth/error contract. `workflow-cli.mjs`
+  remains a thin compatibility wrapper around that implementation.
 - File workspaces, workspace files, approved extensions, credential bindings,
   workflow event subscriptions, session files/bindings, and recording exports
   have owner APIs and admin-new routes but no canonical `bpane` commands.
@@ -121,12 +122,13 @@ long-lived bearer token or resolved credential value is printed.
    add reusable JSON-file and binary-output helpers, file-workspace
    create/list/get plus file list/upload/download/delete, focused unit tests,
    and representative Compose smoke coverage.
-2. **Workflow CLI convergence**: move workflow definition/run commands onto the
-   canonical profile/auth/error contract, preserve the old workflow entrypoint
-   as a thin compatibility wrapper, and cover wait/intervention/artifact paths.
-3. **Governance resource parity**: add approved-extension, credential-binding,
-   and workflow event-subscription commands with safe metadata and state
-   transitions; reject secret-resolution operations.
+2. **Workflow CLI convergence** (complete): move workflow definition/run
+   commands onto the canonical profile/auth/error contract, preserve the old
+   workflow entrypoint as a thin compatibility wrapper, and cover
+   wait/intervention/artifact paths.
+3. **Governance resource parity** (complete): add approved-extension,
+   credential-binding, and workflow event-subscription commands with safe
+   metadata and state transitions; reject secret-resolution operations.
 4. **Session evidence transfers**: add owner-facing session file/binding and
    recording/playback inspection/download commands without exposing worker-only
    mutation routes.
@@ -158,6 +160,27 @@ with evidence before PR creation.
    archived smoke project because the frozen API has no workspace delete route.
 6. Update plan evidence and commit the slice before workflow convergence starts.
 
+## Slice 3 Detailed Steps
+
+1. Add canonical `extension` commands for definition list/create/get, immutable
+   version publication, and explicit enable/disable transitions. Preserve the
+   API limitation that extension definitions and versions are not deletable.
+2. Add canonical `credential-binding` list/create/get commands. Accept complete
+   API objects through `--body-file` or `--body-json`, emit only the gateway's
+   sanitized metadata resource, and do not expose the worker-only resolved
+   credential endpoint.
+3. Add canonical `workflow-event-subscription` list/create/get/deliveries/delete
+   commands. Signing secrets are write-only inputs and must not appear in
+   successful output or structured errors.
+4. Add focused command, URL-encoding, request-shape, body-file, secret-redaction,
+   missing-id/body, authentication, not-found, conflict, and server-error tests.
+5. Extend the Compose operator CLI smoke with an approved extension lifecycle,
+   an external-reference credential binding, and a workflow subscription whose
+   delivery diagnostics can be inspected before it is deleted.
+6. Align README and ARCH command guidance, record validation evidence, commit,
+   and push the slice without changing gateway, OpenAPI, or persistence
+   contracts.
+
 ## Slice 1 Evidence (2026-08-10)
 
 - Added canonical `file-workspace` create/list/get and nested file
@@ -176,6 +199,56 @@ with evidence before PR creation.
 - README and ARCH now document the canonical file-workspace surface and the
   absence of a workspace metadata delete route. No gateway, OpenAPI, database,
   protocol, support-matrix, or runtime-topology change was required.
+
+## Slice 2 Evidence (2026-08-10)
+
+- Added canonical workflow definition, immutable-version, source validation and
+  inspection, run lifecycle, wait/intervention/cancel, logs/events, and
+  produced-file download commands to `./scripts/bpane workflow`.
+- Replaced the independent workflow CLI with a thin compatibility wrapper so
+  profiles, authentication precedence, error mapping, output, and exit codes
+  cannot diverge.
+- Focused CLI suite passed all `56` tests, including exact produced-file bytes,
+  malformed input, wait timeout/terminal-state handling, API errors, and
+  compatibility-wrapper behavior. The full browser-client suite passed all
+  `667` tests across `86` files.
+- TypeScript check, browser-client build, Node syntax checks, canonical CLI help,
+  and documentation whitespace validation passed.
+- `smoke:workflow-cli` passed against local Compose and terminated cleanly. It
+  covered Git source pinning, project-scoped and idempotent run creation,
+  admission summary, terminal wait, logs, produced-file download, durable
+  submit/resume/reject actions, and a compatibility-entrypoint parity lookup.
+- README, ARCH, AGENTS, and the validation matrix now name
+  `./scripts/bpane workflow` as the preferred command and identify the npm
+  workflow entrypoint as temporary compatibility. No gateway, OpenAPI, database,
+  protocol, support-matrix, or runtime-topology change was required.
+
+## Slice 3 Evidence (2026-08-10)
+
+- Added canonical `extension` definition create/list/get, version publication,
+  and enable/disable commands. Extension metadata remains retained because the
+  owner API intentionally has no delete operation.
+- Added canonical `credential-binding` create/list/get and
+  `workflow-event-subscription` create/list/get/deliveries/delete commands.
+  Resolved credential access remains worker-only and is not dispatchable by the
+  owner CLI.
+- Governance command output and structured HTTP error details recursively strip
+  write-only `secret_payload` and `signing_secret` fields. README guidance uses
+  `--body-file` for secret-bearing requests to avoid shell-history exposure.
+- Focused CLI coverage passed all `60` tests, including exact routes, encoded
+  identifiers, body-file input, secret redaction, invalid command shapes,
+  missing authentication, and `404`/`409`/`500` API errors. The full client
+  suite passed all `671` tests across `86` files.
+- TypeScript check, production build, Node syntax checks, canonical CLI help,
+  and documentation whitespace validation passed.
+- Expanded `smoke:bpane-cli` passed against local Compose and exited cleanly. It
+  covered extension publication and state transitions, a project-bound
+  external-reference Vault KV v2 credential binding, project extension policy,
+  public-HTTPS workflow subscription creation, delivery diagnostics, deletion,
+  and every previously covered canonical CLI family.
+- README and ARCH now document the governance command families and write-only
+  secret behavior. No gateway, OpenAPI, database, protocol, support-matrix, or
+  runtime-topology change was required.
 
 ## Validation Strategy
 

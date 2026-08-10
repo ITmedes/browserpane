@@ -36,8 +36,10 @@ const KNOWN_OPTIONS = new Set([
   'allowed-project-id',
   'cleanup-action',
   'client-id',
+  'client-request-id',
   'config',
   'confirm',
+  'create-session',
   'custom-ca-name',
   'custom-ca-ref',
   'default-label',
@@ -55,6 +57,8 @@ const KNOWN_OPTIONS = new Set([
   'help',
   'idle-timeout-sec',
   'input',
+  'input-file',
+  'input-json',
   'integration-json',
   'integration',
   'issuer',
@@ -102,11 +106,19 @@ const KNOWN_OPTIONS = new Set([
   'set-default',
   'scope',
   'service-principal-id',
+  'session-id',
+  'source-path',
+  'source-reference',
+  'source-system',
+  'summary',
   'runtime-state',
   'state',
   'template-id',
   'token',
   'timezone',
+  'target-state',
+  'timeout-ms',
+  'interval-ms',
   'traffic-observation-mode',
   'tx-bytes-delta',
   'egress-usage-source-kind',
@@ -115,7 +127,9 @@ const KNOWN_OPTIONS = new Set([
   'sensitive-log-sink-name',
   'sensitive-log-sink-ref',
   'user-agent',
+  'version',
   'width',
+  'workflow-id',
 ]);
 
 class CliError extends Error {
@@ -191,6 +205,41 @@ function usageText() {
     '  bpane file-workspace file upload <workspace-id> --input <path> [options]',
     '  bpane file-workspace file download <workspace-id> <file-id> --output <path> [options]',
     '  bpane file-workspace file delete <workspace-id> <file-id> [options]',
+    '  bpane extension create [extension-name] [options]',
+    '  bpane extension list [options]',
+    '  bpane extension get <extension-id> [options]',
+    '  bpane extension version create <extension-id> [options]',
+    '  bpane extension enable <extension-id> [options]',
+    '  bpane extension disable <extension-id> [options]',
+    '  bpane credential-binding create [options]',
+    '  bpane credential-binding list [options]',
+    '  bpane credential-binding get <binding-id> [options]',
+    '  bpane workflow-event-subscription create [options]',
+    '  bpane workflow-event-subscription list [options]',
+    '  bpane workflow-event-subscription get <subscription-id> [options]',
+    '  bpane workflow-event-subscription deliveries <subscription-id> [options]',
+    '  bpane workflow-event-subscription delete <subscription-id> [options]',
+    '  bpane workflow list [options]',
+    '  bpane workflow create [options]',
+    '  bpane workflow get <workflow-id> [options]',
+    '  bpane workflow validate-source <workflow-id> [options]',
+    '  bpane workflow version list <workflow-id> [options]',
+    '  bpane workflow version create <workflow-id> [options]',
+    '  bpane workflow version get <workflow-id> <version> [options]',
+    '  bpane workflow version files <workflow-id> <version> [options]',
+    '  bpane workflow version preview <workflow-id> <version> [options]',
+    '  bpane workflow run list [options]',
+    '  bpane workflow run create [options]',
+    '  bpane workflow run get <run-id> [options]',
+    '  bpane workflow run wait <run-id> [options]',
+    '  bpane workflow run logs <run-id> [options]',
+    '  bpane workflow run events <run-id> [options]',
+    '  bpane workflow run submit-input <run-id> [options]',
+    '  bpane workflow run resume <run-id> [options]',
+    '  bpane workflow run reject <run-id> [options]',
+    '  bpane workflow run cancel <run-id> [options]',
+    '  bpane workflow run produced-files <run-id> [options]',
+    '  bpane workflow run download-produced-file <run-id> <file-id> --output <path> [options]',
     '  bpane mcp doctor [session-id] [options]',
     '  bpane mcp preflight [session-id] [options]',
     '  bpane mcp repair <session-id> [options]',
@@ -286,6 +335,20 @@ function usageText() {
     '  --file-name <name>        Uploaded file name. Defaults to the input basename.',
     '  --media-type <type>       Uploaded file media type. Default: application/octet-stream.',
     '  --provenance-json <json>  Optional workspace-file provenance metadata object.',
+    '  --workflow-id <id>        Workflow definition id for workflow run create.',
+    '  --version <version>       Workflow version for run create. Default: v1.',
+    '  --session-id <id>         Existing session for workflow run create.',
+    '  --create-session          Create a session for workflow run create.',
+    '  --input-json <json>       Inline workflow run input object.',
+    '  --input-file <path>       Workflow run input JSON file.',
+    '  --source-system <value>   External source system for a workflow run.',
+    '  --source-reference <ref>  External source reference for a workflow run.',
+    '  --client-request-id <id>  Stable workflow run idempotency key.',
+    '  --source-path <path>      Source file path for workflow version preview.',
+    '  --summary                 Emit a compact workflow run summary.',
+    '  --timeout-ms <ms>         Workflow run wait timeout. Default: 60000.',
+    '  --interval-ms <ms>        Workflow run wait interval. Default: 1000.',
+    '  --target-state <state>    Required workflow run wait state.',
     '  --cleanup-action <name>   Repeatable cleanup action: revoke-automation-owner, disconnect-all, stop, kill.',
     '  --older-than-sec <sec>    Cleanup age filter based on created_at.',
     '  --limit <count>           Limit filtered session list or cleanup candidates.',
@@ -392,14 +455,14 @@ function parseJsonOption(options, name) {
   }
 }
 
-async function parseJsonBodyOption(options) {
-  const inlineBody = getOption(options, 'body-json');
-  const bodyFile = getOption(options, 'body-file');
+async function parseJsonSourceOption(options, jsonName, fileName) {
+  const inlineBody = getOption(options, jsonName);
+  const bodyFile = getOption(options, fileName);
   if (inlineBody !== null && bodyFile !== null) {
-    throw new CliError('USAGE', 'Use only one of --body-json or --body-file.', EXIT_CODES.usage);
+    throw new CliError('USAGE', `Use only one of --${jsonName} or --${fileName}.`, EXIT_CODES.usage);
   }
   if (inlineBody !== null) {
-    return parseJsonOption(options, 'body-json');
+    return parseJsonOption(options, jsonName);
   }
   if (bodyFile === null) {
     return null;
@@ -409,10 +472,14 @@ async function parseJsonBodyOption(options) {
   } catch (error) {
     throw new CliError(
       'USAGE',
-      `Invalid JSON for --body-file ${bodyFile}: ${error instanceof Error ? error.message : String(error)}`,
+      `Invalid JSON for --${fileName} ${bodyFile}: ${error instanceof Error ? error.message : String(error)}`,
       EXIT_CODES.usage,
     );
   }
+}
+
+async function parseJsonBodyOption(options) {
+  return await parseJsonSourceOption(options, 'body-json', 'body-file');
 }
 
 function parseIntegerOption(options, name) {
@@ -2104,6 +2171,150 @@ async function readBinaryInput(options, commandLabel) {
   }
 }
 
+function requiredWorkflowPositionals(positionals, commandLabel, names, startIndex) {
+  const values = names.map((_, index) => positionals[startIndex + index]);
+  if (values.some((value) => !value) || positionals.length > startIndex + names.length) {
+    throw new CliError(
+      'USAGE',
+      `Usage: bpane ${commandLabel} ${names.map((name) => `<${name}>`).join(' ')}`,
+      EXIT_CODES.usage,
+    );
+  }
+  return values;
+}
+
+function workflowRunSummary(run) {
+  const project = run?.project && typeof run.project.name === 'string' && run.project.name.trim()
+    ? run.project.name
+    : run?.project_id ?? null;
+  return {
+    id: run?.id ?? null,
+    state: run?.state ?? null,
+    workflow_id: run?.workflow_id ?? run?.workflow_definition_id ?? null,
+    workflow_version: run?.workflow_version ?? null,
+    session_id: run?.session_id ?? null,
+    project_id: run?.project_id ?? null,
+    project,
+    project_admission_state: run?.project_admission?.state ?? null,
+    project_admission_reason_code: run?.project_admission?.reason_code ?? null,
+    admission_reason: run?.admission?.reason ?? null,
+    client_request_id: run?.client_request_id ?? null,
+    source_system: run?.source_system ?? null,
+    source_reference: run?.source_reference ?? null,
+  };
+}
+
+function maybeSummarizeWorkflowRun(run, options) {
+  return optionEnabled(options, 'summary') ? workflowRunSummary(run) : run;
+}
+
+async function buildWorkflowRunRequest(options) {
+  const rawBody = await parseJsonBodyOption(options);
+  const body = rawBody === null ? {} : rawBody;
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    throw new CliError('USAGE', 'Workflow run create body must be a JSON object.', EXIT_CODES.usage);
+  }
+
+  const workflowId = getOption(options, 'workflow-id');
+  if (workflowId) {
+    body.workflow_id = workflowId;
+  }
+  if (!body.workflow_id) {
+    throw new CliError(
+      'USAGE',
+      'workflow run create requires --workflow-id or body.workflow_id.',
+      EXIT_CODES.usage,
+    );
+  }
+  const version = getOption(options, 'version');
+  if (version) {
+    body.version = version;
+  } else if (!body.version) {
+    body.version = 'v1';
+  }
+  const projectId = getOption(options, 'project-id');
+  if (projectId) {
+    body.project_id = projectId;
+  }
+  const sourceSystem = getOption(options, 'source-system');
+  if (sourceSystem) {
+    body.source_system = sourceSystem;
+  }
+  const sourceReference = getOption(options, 'source-reference');
+  if (sourceReference) {
+    body.source_reference = sourceReference;
+  }
+  const clientRequestId = getOption(options, 'client-request-id');
+  if (clientRequestId) {
+    body.client_request_id = clientRequestId;
+  }
+  const input = await parseJsonSourceOption(options, 'input-json', 'input-file');
+  if (input !== null) {
+    body.input = input;
+  }
+  const labels = parseKeyValueOptions(options, 'label');
+  if (Object.keys(labels).length) {
+    const existingLabels = body.labels && typeof body.labels === 'object' && !Array.isArray(body.labels)
+      ? body.labels
+      : {};
+    body.labels = { ...existingLabels, ...labels };
+  }
+
+  const sessionId = getOption(options, 'session-id');
+  const createSession = optionEnabled(options, 'create-session');
+  if (sessionId && createSession) {
+    throw new CliError('USAGE', 'Use only one of --session-id or --create-session.', EXIT_CODES.usage);
+  }
+  if (sessionId) {
+    body.session = { existing_session_id: sessionId };
+  } else if (createSession) {
+    const configuredSession = body.session?.create_session;
+    const createSessionBody = configuredSession
+      && typeof configuredSession === 'object'
+      && !Array.isArray(configuredSession)
+      ? configuredSession
+      : {};
+    body.session = { create_session: { ...createSessionBody } };
+    if (projectId && body.session.create_session.project_id === undefined) {
+      body.session.create_session.project_id = projectId;
+    }
+  }
+  return body;
+}
+
+async function waitForWorkflowRun(config, runId, options) {
+  const timeoutMs = parseIntegerOption(options, 'timeout-ms') ?? 60_000;
+  const intervalMs = parseIntegerOption(options, 'interval-ms') ?? 1_000;
+  const targetState = getOption(options, 'target-state');
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() <= deadline) {
+    const run = await requestGateway(config, `/api/v1/workflow-runs/${encodeURIComponent(runId)}`);
+    const state = typeof run?.state === 'string' ? run.state : '';
+    const terminal = ['succeeded', 'failed', 'cancelled', 'timed_out'].includes(state);
+    if (targetState && state === targetState) {
+      return run;
+    }
+    if (targetState && terminal) {
+      throw new CliError(
+        'WORKFLOW_TARGET_NOT_REACHED',
+        `Workflow run ${runId} reached terminal state ${state} before ${targetState}.`,
+        EXIT_CODES.api,
+        { run_id: runId, state, target_state: targetState },
+      );
+    }
+    if (!targetState && terminal) {
+      return run;
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  throw new CliError(
+    'WORKFLOW_WAIT_TIMEOUT',
+    `Timed out waiting for workflow run ${runId}.`,
+    EXIT_CODES.api,
+    { run_id: runId, timeout_ms: timeoutMs, target_state: targetState },
+  );
+}
+
 function sessionStateFilters(options, defaultStates = []) {
   const states = getOptions(options, 'state')
     .flatMap((value) => value.split(','))
@@ -3193,6 +3404,368 @@ async function handleFileWorkspaceCommand(config, positionals, options) {
   );
 }
 
+async function requireJsonObjectBody(options, commandLabel) {
+  const body = await parseJsonBodyOption(options);
+  if (body === null) {
+    throw new CliError(
+      'USAGE',
+      `${commandLabel} requires --body-json or --body-file.`,
+      EXIT_CODES.usage,
+    );
+  }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    throw new CliError('USAGE', `${commandLabel} body must be a JSON object.`, EXIT_CODES.usage);
+  }
+  return body;
+}
+
+function sanitizeGovernanceOutput(value) {
+  if (Array.isArray(value)) {
+    return value.map(sanitizeGovernanceOutput);
+  }
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => key !== 'secret_payload' && key !== 'signing_secret')
+      .map(([key, entry]) => [key, sanitizeGovernanceOutput(entry)]),
+  );
+}
+
+async function requestGovernanceResource(config, resourcePath, init = {}) {
+  try {
+    return sanitizeGovernanceOutput(
+      await requestGateway(config, resourcePath, init),
+    );
+  } catch (error) {
+    if (!(error instanceof CliError)) {
+      throw error;
+    }
+    const detail = sanitizeGovernanceOutput(error.detail);
+    if (typeof detail.body === 'string' && detail.body) {
+      detail.body = '[redacted response body]';
+    }
+    const message = error.code === 'HTTP_ERROR' && detail.status
+      ? `HTTP ${detail.status}`
+      : error.message;
+    throw new CliError(error.code, message, error.exitCode, detail);
+  }
+}
+
+async function buildExtensionDefinitionRequest(options, fallbackName = null) {
+  const body = await parseJsonBodyOption(options);
+  if (body !== null) {
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      throw new CliError('USAGE', 'Extension create body must be a JSON object.', EXIT_CODES.usage);
+    }
+    return body;
+  }
+  const name = getOption(options, 'name') ?? fallbackName;
+  if (!name) {
+    throw new CliError(
+      'USAGE',
+      'Extension create requires --name, a positional name, --body-json, or --body-file.',
+      EXIT_CODES.usage,
+    );
+  }
+  const request = { name };
+  const description = getOption(options, 'description');
+  if (description !== null) {
+    request.description = description;
+  }
+  const labels = parseKeyValueOptions(options, 'label');
+  if (Object.keys(labels).length) {
+    request.labels = labels;
+  }
+  return request;
+}
+
+async function handleExtensionCommand(config, positionals, options) {
+  const action = positionals[1];
+  if (action === 'create' && positionals.length <= 3) {
+    return await requestGateway(config, '/api/v1/extensions', {
+      method: 'POST',
+      body: JSON.stringify(
+        await buildExtensionDefinitionRequest(options, positionals[2] ?? null),
+      ),
+    });
+  }
+  if (action === 'list' && positionals.length === 2) {
+    return await requestGateway(config, '/api/v1/extensions');
+  }
+  if (action === 'get' || action === 'enable' || action === 'disable') {
+    const [extensionId] = requiredWorkflowPositionals(
+      positionals,
+      `extension ${action}`,
+      ['extension-id'],
+      2,
+    );
+    const extensionPath = `/api/v1/extensions/${encodeURIComponent(extensionId)}`;
+    if (action === 'get') {
+      return await requestGateway(config, extensionPath);
+    }
+    return await requestGateway(config, `${extensionPath}/${action}`, { method: 'POST' });
+  }
+  if (action === 'version' && positionals[2] === 'create') {
+    const [extensionId] = requiredWorkflowPositionals(
+      positionals,
+      'extension version create',
+      ['extension-id'],
+      3,
+    );
+    return await requestGateway(
+      config,
+      `/api/v1/extensions/${encodeURIComponent(extensionId)}/versions`,
+      {
+        method: 'POST',
+        body: JSON.stringify(
+          await requireJsonObjectBody(options, 'extension version create'),
+        ),
+      },
+    );
+  }
+  throw new CliError(
+    'USAGE',
+    `Unknown extension command: ${positionals.slice(1).join(' ')}`.trim(),
+    EXIT_CODES.usage,
+  );
+}
+
+async function handleCredentialBindingCommand(config, positionals, options) {
+  const action = positionals[1];
+  if (action === 'create' && positionals.length === 2) {
+    return await requestGovernanceResource(config, '/api/v1/credential-bindings', {
+      method: 'POST',
+      body: JSON.stringify(
+        await requireJsonObjectBody(options, 'credential-binding create'),
+      ),
+    });
+  }
+  if (action === 'list' && positionals.length === 2) {
+    return await requestGovernanceResource(config, '/api/v1/credential-bindings');
+  }
+  if (action === 'get') {
+    const [bindingId] = requiredWorkflowPositionals(
+      positionals,
+      'credential-binding get',
+      ['binding-id'],
+      2,
+    );
+    return await requestGovernanceResource(
+      config,
+      `/api/v1/credential-bindings/${encodeURIComponent(bindingId)}`,
+    );
+  }
+  throw new CliError(
+    'USAGE',
+    `Unknown credential-binding command: ${positionals.slice(1).join(' ')}`.trim(),
+    EXIT_CODES.usage,
+  );
+}
+
+async function handleWorkflowEventSubscriptionCommand(config, positionals, options) {
+  const action = positionals[1];
+  if (action === 'create' && positionals.length === 2) {
+    return await requestGovernanceResource(
+      config,
+      '/api/v1/workflow-event-subscriptions',
+      {
+        method: 'POST',
+        body: JSON.stringify(
+          await requireJsonObjectBody(options, 'workflow-event-subscription create'),
+        ),
+      },
+    );
+  }
+  if (action === 'list' && positionals.length === 2) {
+    return await requestGovernanceResource(
+      config,
+      '/api/v1/workflow-event-subscriptions',
+    );
+  }
+  if (['get', 'deliveries', 'delete'].includes(action)) {
+    const [subscriptionId] = requiredWorkflowPositionals(
+      positionals,
+      `workflow-event-subscription ${action}`,
+      ['subscription-id'],
+      2,
+    );
+    const subscriptionPath =
+      `/api/v1/workflow-event-subscriptions/${encodeURIComponent(subscriptionId)}`;
+    return action === 'deliveries'
+      ? await requestGovernanceResource(config, `${subscriptionPath}/deliveries`)
+      : await requestGovernanceResource(
+          config,
+          subscriptionPath,
+          action === 'delete' ? { method: 'DELETE' } : {},
+        );
+  }
+  throw new CliError(
+    'USAGE',
+    `Unknown workflow-event-subscription command: ${positionals.slice(1).join(' ')}`.trim(),
+    EXIT_CODES.usage,
+  );
+}
+
+async function handleWorkflowCommand(config, positionals, options) {
+  const action = positionals[1];
+  if (action === 'list' && positionals.length === 2) {
+    return await requestGateway(config, '/api/v1/workflows');
+  }
+  if (action === 'create' && positionals.length === 2) {
+    return await requestGateway(config, '/api/v1/workflows', {
+      method: 'POST',
+      body: JSON.stringify(await requireJsonObjectBody(options, 'workflow create')),
+    });
+  }
+  if (action === 'get') {
+    const [workflowId] = requiredWorkflowPositionals(positionals, 'workflow get', ['workflow-id'], 2);
+    return await requestGateway(config, `/api/v1/workflows/${encodeURIComponent(workflowId)}`);
+  }
+  if (action === 'validate-source') {
+    const [workflowId] = requiredWorkflowPositionals(
+      positionals,
+      'workflow validate-source',
+      ['workflow-id'],
+      2,
+    );
+    return await requestGateway(
+      config,
+      `/api/v1/workflows/${encodeURIComponent(workflowId)}/source-validation`,
+      {
+        method: 'POST',
+        body: JSON.stringify(await requireJsonObjectBody(options, 'workflow validate-source')),
+      },
+    );
+  }
+  if (action === 'version') {
+    const versionAction = positionals[2];
+    if (versionAction === 'list') {
+      const [workflowId] = requiredWorkflowPositionals(
+        positionals,
+        'workflow version list',
+        ['workflow-id'],
+        3,
+      );
+      return await requestGateway(
+        config,
+        `/api/v1/workflows/${encodeURIComponent(workflowId)}/versions`,
+      );
+    }
+    if (versionAction === 'create') {
+      const [workflowId] = requiredWorkflowPositionals(
+        positionals,
+        'workflow version create',
+        ['workflow-id'],
+        3,
+      );
+      return await requestGateway(
+        config,
+        `/api/v1/workflows/${encodeURIComponent(workflowId)}/versions`,
+        {
+          method: 'POST',
+          body: JSON.stringify(await requireJsonObjectBody(options, 'workflow version create')),
+        },
+      );
+    }
+    if (['get', 'files', 'preview'].includes(versionAction)) {
+      const [workflowId, version] = requiredWorkflowPositionals(
+        positionals,
+        `workflow version ${versionAction}`,
+        ['workflow-id', 'version'],
+        3,
+      );
+      const basePath = `/api/v1/workflows/${encodeURIComponent(workflowId)}/versions/${encodeURIComponent(version)}`;
+      if (versionAction === 'get') {
+        return await requestGateway(config, basePath);
+      }
+      if (versionAction === 'files') {
+        return await requestGateway(config, `${basePath}/source-files`);
+      }
+      const sourcePath = getOption(options, 'source-path');
+      const query = sourcePath ? `?path=${encodeURIComponent(sourcePath)}` : '';
+      return await requestGateway(config, `${basePath}/source-preview${query}`);
+    }
+  }
+  if (action === 'run') {
+    const runAction = positionals[2];
+    if (runAction === 'list' && positionals.length === 3) {
+      return await requestGateway(config, '/api/v1/workflow-runs');
+    }
+    if (runAction === 'create' && positionals.length === 3) {
+      const run = await requestGateway(config, '/api/v1/workflow-runs', {
+        method: 'POST',
+        body: JSON.stringify(await buildWorkflowRunRequest(options)),
+      });
+      return maybeSummarizeWorkflowRun(run, options);
+    }
+    if (runAction === 'download-produced-file') {
+      const [runId, fileId] = requiredWorkflowPositionals(
+        positionals,
+        'workflow run download-produced-file',
+        ['run-id', 'file-id'],
+        3,
+      );
+      const outputPath = getOption(options, 'output');
+      if (!outputPath) {
+        throw new CliError(
+          'USAGE',
+          'workflow run download-produced-file requires --output <path>.',
+          EXIT_CODES.usage,
+        );
+      }
+      const resolvedOutputPath = expandHome(outputPath);
+      const { bytes, contentType } = await requestGatewayBinary(
+        config,
+        `/api/v1/workflow-runs/${encodeURIComponent(runId)}/produced-files/${encodeURIComponent(fileId)}/content`,
+        { method: 'GET', headers: { Accept: '*/*' } },
+      );
+      await fs.mkdir(path.dirname(resolvedOutputPath), { recursive: true });
+      await fs.writeFile(resolvedOutputPath, bytes);
+      return {
+        run_id: runId,
+        file_id: fileId,
+        output_path: resolvedOutputPath,
+        byte_count: bytes.length,
+        content_type: contentType,
+      };
+    }
+
+    const [runId] = requiredWorkflowPositionals(
+      positionals,
+      `workflow run ${runAction ?? '<action>'}`,
+      ['run-id'],
+      3,
+    );
+    const runPath = `/api/v1/workflow-runs/${encodeURIComponent(runId)}`;
+    if (runAction === 'get') {
+      return maybeSummarizeWorkflowRun(await requestGateway(config, runPath), options);
+    }
+    if (runAction === 'wait') {
+      return maybeSummarizeWorkflowRun(await waitForWorkflowRun(config, runId, options), options);
+    }
+    if (runAction === 'logs' || runAction === 'events' || runAction === 'produced-files') {
+      const suffix = runAction === 'produced-files' ? 'produced-files' : runAction;
+      return await requestGateway(config, `${runPath}/${suffix}`);
+    }
+    if (runAction === 'cancel') {
+      return await requestGateway(config, `${runPath}/cancel`, { method: 'POST' });
+    }
+    if (['submit-input', 'resume', 'reject'].includes(runAction)) {
+      return await requestGateway(config, `${runPath}/${runAction}`, {
+        method: 'POST',
+        body: JSON.stringify(await requireJsonObjectBody(options, `workflow run ${runAction}`)),
+      });
+    }
+  }
+  throw new CliError(
+    'USAGE',
+    `Unknown workflow command: ${positionals.slice(1).join(' ')}`.trim(),
+    EXIT_CODES.usage,
+  );
+}
+
 async function handleMcpCommand(config, positionals, options) {
   const action = positionals[1];
   if ((action === 'doctor' || action === 'preflight') && positionals.length <= 3) {
@@ -3441,6 +4014,18 @@ export async function runBpaneCli(argv, env = process.env, io = process, fetchIm
     } else if (scope === 'file-workspace') {
       const config = await buildConfig(options, env, fetchImpl);
       result = await handleFileWorkspaceCommand(config, positionals, options);
+    } else if (scope === 'extension') {
+      const config = await buildConfig(options, env, fetchImpl);
+      result = await handleExtensionCommand(config, positionals, options);
+    } else if (scope === 'credential-binding') {
+      const config = await buildConfig(options, env, fetchImpl);
+      result = await handleCredentialBindingCommand(config, positionals, options);
+    } else if (scope === 'workflow-event-subscription') {
+      const config = await buildConfig(options, env, fetchImpl);
+      result = await handleWorkflowEventSubscriptionCommand(config, positionals, options);
+    } else if (scope === 'workflow') {
+      const config = await buildConfig(options, env, fetchImpl);
+      result = await handleWorkflowCommand(config, positionals, options);
     } else if (scope === 'mcp') {
       const config = await buildConfig(options, env, fetchImpl);
       result = await handleMcpCommand(config, positionals, options);
