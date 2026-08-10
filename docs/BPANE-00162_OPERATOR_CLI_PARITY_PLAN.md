@@ -4,7 +4,7 @@
 
 - Issue: [#162](https://github.com/ITmedes/browserpane/issues/162)
 - State: In progress; implementation slice 1 merged through PR `#205`, slice 2
-  implemented and validated
+  implemented and validated, slice 3 in progress
 - Lane: Operator Product
 - Target gate: Admin-New Phase 1 Promotion
 - Depends on: control API conformance through `#179`, admin-new resource
@@ -159,6 +159,27 @@ with evidence before PR creation.
    and delete the file. The retained workspace metadata remains attached to the
    archived smoke project because the frozen API has no workspace delete route.
 6. Update plan evidence and commit the slice before workflow convergence starts.
+
+## Slice 3 Detailed Steps
+
+1. Add canonical `extension` commands for definition list/create/get, immutable
+   version publication, and explicit enable/disable transitions. Preserve the
+   API limitation that extension definitions and versions are not deletable.
+2. Add canonical `credential-binding` list/create/get commands. Accept complete
+   API objects through `--body-file` or `--body-json`, emit only the gateway's
+   sanitized metadata resource, and do not expose the worker-only resolved
+   credential endpoint.
+3. Add canonical `workflow-event-subscription` list/create/get/deliveries/delete
+   commands. Signing secrets are write-only inputs and must not appear in
+   successful output or structured errors.
+4. Add focused command, URL-encoding, request-shape, body-file, secret-redaction,
+   missing-id/body, authentication, not-found, conflict, and server-error tests.
+5. Extend the Compose operator CLI smoke with an approved extension lifecycle,
+   an external-reference credential binding, and a workflow subscription whose
+   delivery diagnostics can be inspected before it is deleted.
+6. Align README and ARCH command guidance, record validation evidence, commit,
+   and push the slice without changing gateway, OpenAPI, or persistence
+   contracts.
 
 ## Slice 1 Evidence (2026-08-10)
 
