@@ -90,8 +90,7 @@ not ready to become default because:
 
 1. Session-template and operation-counter catalogs plus command-palette behavior
    are incomplete.
-2. Project-governance parity still requires its focused slice; browser-context
-   lifecycle parity is implemented and validated under #160 but remains subject
-   to the overall #163 promotion gate.
+2. Project-governance parity remains the active focused slice under #161;
+   browser-context lifecycle parity merged through PR #203.
 3. The explicit promotion, regression, and fallback gate in #163 has not run.
 4. Some production security/operability slices remain outside admin parity.
