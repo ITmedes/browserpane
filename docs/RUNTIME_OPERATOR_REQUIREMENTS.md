@@ -202,7 +202,7 @@ Required behavior:
 
 Required command families:
 
-- sessions: list, get, status, create, stop, release where supported, kill,
+- sessions: list, get, status, create, stop, release, kill,
   access-token, automation-access, disconnect-all, cleanup, cancel queued,
 - MCP: health, authorize, revoke, set-default, clear-default, doctor,
   preflight, repair,
@@ -210,6 +210,11 @@ Required command families:
   templates, identity, service principals, and other resource commands where
   API support exists,
 - profiles: list, show, init.
+
+The current API-family classification, explicit CLI deferrals, integration
+exceptions, and ordered troubleshooting commands are defined in
+`OPERATOR_CLI_AND_LOCAL_DIAGNOSTICS.md`. API presence alone does not make a
+worker, event-stream, or UI-specific route an operator CLI command.
 
 MCP doctor/preflight/repair requirements:
 
