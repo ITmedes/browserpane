@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
-import { execFile as execFileCallback } from 'node:child_process';
+import { execFile as execFileCallback, spawnSync } from 'node:child_process';
 import { promisify } from 'node:util';
 import { chromium } from 'playwright-core';
 import { testEmbedPageUrl } from './workflow-smoke-lib.mjs';
@@ -81,6 +81,28 @@ Options:
 
 function log(message) {
   console.log(`[recording-smoke] ${message}`);
+}
+
+function runBpaneCli(args, accessToken, options) {
+  const result = spawnSync(
+    process.execPath,
+    [path.join(process.cwd(), 'scripts', 'bpane-cli.mjs'), ...args],
+    {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        BPANE_ACCESS_TOKEN: accessToken,
+        BPANE_BASE_URL: options.pageUrl,
+      },
+      encoding: 'utf8',
+    },
+  );
+  if (result.status !== 0) {
+    throw new Error(
+      `bpane CLI failed with code ${result.status ?? 'unknown'}: ${result.stderr || result.stdout}`,
+    );
+  }
+  return result.stdout.trim() ? JSON.parse(result.stdout) : null;
 }
 
 function sleep(ms) {
@@ -659,6 +681,90 @@ async function main() {
       throw new Error('Playback export bundle was not generated as a non-empty zip artifact.');
     }
 
+    const cliRecordingList = runBpaneCli(
+      ['session', 'recording', 'list', sessionId],
+      accessToken,
+      options,
+    );
+    if (
+      !Array.isArray(cliRecordingList.recordings)
+      || !recordingSegments.every((segment) => (
+        cliRecordingList.recordings.some((recording) => recording.id === segment.id)
+      ))
+    ) {
+      throw new Error('CLI recording list did not include every completed segment.');
+    }
+    const cliSegment = recordingSegments[0];
+    const cliRecording = runBpaneCli(
+      ['session', 'recording', 'get', sessionId, cliSegment.id],
+      accessToken,
+      options,
+    );
+    if (
+      cliRecording.id !== cliSegment.id
+      || cliRecording.state !== 'ready'
+      || cliRecording.artifact_available !== true
+    ) {
+      throw new Error(`CLI recording get returned unexpected data: ${JSON.stringify(cliRecording)}`);
+    }
+    const cliRecordingPath = path.join(tempDir, 'cli-downloads', 'segment.webm');
+    const cliRecordingDownload = runBpaneCli(
+      [
+        'session',
+        'recording',
+        'download',
+        sessionId,
+        cliSegment.id,
+        '--output',
+        cliRecordingPath,
+      ],
+      accessToken,
+      options,
+    );
+    if (
+      cliRecordingDownload.byte_count !== cliSegment.bytes
+      || (await fs.stat(cliRecordingPath)).size !== cliSegment.bytes
+      || cliRecordingDownload.content_type !== cliSegment.mimeType
+    ) {
+      throw new Error('CLI recording download did not preserve the completed WebM segment.');
+    }
+    const cliPlayback = runBpaneCli(
+      ['session', 'playback', 'get', sessionId],
+      accessToken,
+      options,
+    );
+    const cliPlaybackManifest = runBpaneCli(
+      ['session', 'playback', 'manifest', sessionId],
+      accessToken,
+      options,
+    );
+    if (
+      cliPlayback.state !== 'ready'
+      || cliPlaybackManifest.segments?.length !== recordingSegments.length
+    ) {
+      throw new Error('CLI playback inspection did not expose every completed segment.');
+    }
+    const cliPlaybackPath = path.join(tempDir, 'cli-downloads', 'playback.zip');
+    const cliPlaybackExport = runBpaneCli(
+      [
+        'session',
+        'playback',
+        'export',
+        sessionId,
+        '--output',
+        cliPlaybackPath,
+      ],
+      accessToken,
+      options,
+    );
+    if (
+      cliPlaybackExport.byte_count !== playbackExport.bytes
+      || (await fs.stat(cliPlaybackPath)).size !== playbackExport.bytes
+      || cliPlaybackExport.content_type !== 'application/zip'
+    ) {
+      throw new Error('CLI playback export did not preserve the generated zip bundle.');
+    }
+
     const refreshButton = ownerPage.locator('#btn-recording-library-refresh');
     await refreshButton.waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
     await refreshButton.click();
@@ -730,6 +836,13 @@ async function main() {
       playback,
       playback_manifest: playbackManifest,
       playback_export: playbackExport,
+      cli_recording_evidence: {
+        recording: cliRecording,
+        recording_download: cliRecordingDownload,
+        playback: cliPlayback,
+        playback_manifest: cliPlaybackManifest,
+        playback_export: cliPlaybackExport,
+      },
       ui_recording_library: {
         recordings: recordingCatalog.recordings,
         playback: recordingCatalog.playback,
