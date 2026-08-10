@@ -205,6 +205,20 @@ function usageText() {
     '  bpane file-workspace file upload <workspace-id> --input <path> [options]',
     '  bpane file-workspace file download <workspace-id> <file-id> --output <path> [options]',
     '  bpane file-workspace file delete <workspace-id> <file-id> [options]',
+    '  bpane extension create [extension-name] [options]',
+    '  bpane extension list [options]',
+    '  bpane extension get <extension-id> [options]',
+    '  bpane extension version create <extension-id> [options]',
+    '  bpane extension enable <extension-id> [options]',
+    '  bpane extension disable <extension-id> [options]',
+    '  bpane credential-binding create [options]',
+    '  bpane credential-binding list [options]',
+    '  bpane credential-binding get <binding-id> [options]',
+    '  bpane workflow-event-subscription create [options]',
+    '  bpane workflow-event-subscription list [options]',
+    '  bpane workflow-event-subscription get <subscription-id> [options]',
+    '  bpane workflow-event-subscription deliveries <subscription-id> [options]',
+    '  bpane workflow-event-subscription delete <subscription-id> [options]',
     '  bpane workflow list [options]',
     '  bpane workflow create [options]',
     '  bpane workflow get <workflow-id> [options]',
@@ -3405,6 +3419,195 @@ async function requireJsonObjectBody(options, commandLabel) {
   return body;
 }
 
+function sanitizeGovernanceOutput(value) {
+  if (Array.isArray(value)) {
+    return value.map(sanitizeGovernanceOutput);
+  }
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => key !== 'secret_payload' && key !== 'signing_secret')
+      .map(([key, entry]) => [key, sanitizeGovernanceOutput(entry)]),
+  );
+}
+
+async function requestGovernanceResource(config, resourcePath, init = {}) {
+  try {
+    return sanitizeGovernanceOutput(
+      await requestGateway(config, resourcePath, init),
+    );
+  } catch (error) {
+    if (!(error instanceof CliError)) {
+      throw error;
+    }
+    const detail = sanitizeGovernanceOutput(error.detail);
+    if (typeof detail.body === 'string' && detail.body) {
+      detail.body = '[redacted response body]';
+    }
+    const message = error.code === 'HTTP_ERROR' && detail.status
+      ? `HTTP ${detail.status}`
+      : error.message;
+    throw new CliError(error.code, message, error.exitCode, detail);
+  }
+}
+
+async function buildExtensionDefinitionRequest(options, fallbackName = null) {
+  const body = await parseJsonBodyOption(options);
+  if (body !== null) {
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      throw new CliError('USAGE', 'Extension create body must be a JSON object.', EXIT_CODES.usage);
+    }
+    return body;
+  }
+  const name = getOption(options, 'name') ?? fallbackName;
+  if (!name) {
+    throw new CliError(
+      'USAGE',
+      'Extension create requires --name, a positional name, --body-json, or --body-file.',
+      EXIT_CODES.usage,
+    );
+  }
+  const request = { name };
+  const description = getOption(options, 'description');
+  if (description !== null) {
+    request.description = description;
+  }
+  const labels = parseKeyValueOptions(options, 'label');
+  if (Object.keys(labels).length) {
+    request.labels = labels;
+  }
+  return request;
+}
+
+async function handleExtensionCommand(config, positionals, options) {
+  const action = positionals[1];
+  if (action === 'create' && positionals.length <= 3) {
+    return await requestGateway(config, '/api/v1/extensions', {
+      method: 'POST',
+      body: JSON.stringify(
+        await buildExtensionDefinitionRequest(options, positionals[2] ?? null),
+      ),
+    });
+  }
+  if (action === 'list' && positionals.length === 2) {
+    return await requestGateway(config, '/api/v1/extensions');
+  }
+  if (action === 'get' || action === 'enable' || action === 'disable') {
+    const [extensionId] = requiredWorkflowPositionals(
+      positionals,
+      `extension ${action}`,
+      ['extension-id'],
+      2,
+    );
+    const extensionPath = `/api/v1/extensions/${encodeURIComponent(extensionId)}`;
+    if (action === 'get') {
+      return await requestGateway(config, extensionPath);
+    }
+    return await requestGateway(config, `${extensionPath}/${action}`, { method: 'POST' });
+  }
+  if (action === 'version' && positionals[2] === 'create') {
+    const [extensionId] = requiredWorkflowPositionals(
+      positionals,
+      'extension version create',
+      ['extension-id'],
+      3,
+    );
+    return await requestGateway(
+      config,
+      `/api/v1/extensions/${encodeURIComponent(extensionId)}/versions`,
+      {
+        method: 'POST',
+        body: JSON.stringify(
+          await requireJsonObjectBody(options, 'extension version create'),
+        ),
+      },
+    );
+  }
+  throw new CliError(
+    'USAGE',
+    `Unknown extension command: ${positionals.slice(1).join(' ')}`.trim(),
+    EXIT_CODES.usage,
+  );
+}
+
+async function handleCredentialBindingCommand(config, positionals, options) {
+  const action = positionals[1];
+  if (action === 'create' && positionals.length === 2) {
+    return await requestGovernanceResource(config, '/api/v1/credential-bindings', {
+      method: 'POST',
+      body: JSON.stringify(
+        await requireJsonObjectBody(options, 'credential-binding create'),
+      ),
+    });
+  }
+  if (action === 'list' && positionals.length === 2) {
+    return await requestGovernanceResource(config, '/api/v1/credential-bindings');
+  }
+  if (action === 'get') {
+    const [bindingId] = requiredWorkflowPositionals(
+      positionals,
+      'credential-binding get',
+      ['binding-id'],
+      2,
+    );
+    return await requestGovernanceResource(
+      config,
+      `/api/v1/credential-bindings/${encodeURIComponent(bindingId)}`,
+    );
+  }
+  throw new CliError(
+    'USAGE',
+    `Unknown credential-binding command: ${positionals.slice(1).join(' ')}`.trim(),
+    EXIT_CODES.usage,
+  );
+}
+
+async function handleWorkflowEventSubscriptionCommand(config, positionals, options) {
+  const action = positionals[1];
+  if (action === 'create' && positionals.length === 2) {
+    return await requestGovernanceResource(
+      config,
+      '/api/v1/workflow-event-subscriptions',
+      {
+        method: 'POST',
+        body: JSON.stringify(
+          await requireJsonObjectBody(options, 'workflow-event-subscription create'),
+        ),
+      },
+    );
+  }
+  if (action === 'list' && positionals.length === 2) {
+    return await requestGovernanceResource(
+      config,
+      '/api/v1/workflow-event-subscriptions',
+    );
+  }
+  if (['get', 'deliveries', 'delete'].includes(action)) {
+    const [subscriptionId] = requiredWorkflowPositionals(
+      positionals,
+      `workflow-event-subscription ${action}`,
+      ['subscription-id'],
+      2,
+    );
+    const subscriptionPath =
+      `/api/v1/workflow-event-subscriptions/${encodeURIComponent(subscriptionId)}`;
+    return action === 'deliveries'
+      ? await requestGovernanceResource(config, `${subscriptionPath}/deliveries`)
+      : await requestGovernanceResource(
+          config,
+          subscriptionPath,
+          action === 'delete' ? { method: 'DELETE' } : {},
+        );
+  }
+  throw new CliError(
+    'USAGE',
+    `Unknown workflow-event-subscription command: ${positionals.slice(1).join(' ')}`.trim(),
+    EXIT_CODES.usage,
+  );
+}
+
 async function handleWorkflowCommand(config, positionals, options) {
   const action = positionals[1];
   if (action === 'list' && positionals.length === 2) {
@@ -3811,6 +4014,15 @@ export async function runBpaneCli(argv, env = process.env, io = process, fetchIm
     } else if (scope === 'file-workspace') {
       const config = await buildConfig(options, env, fetchImpl);
       result = await handleFileWorkspaceCommand(config, positionals, options);
+    } else if (scope === 'extension') {
+      const config = await buildConfig(options, env, fetchImpl);
+      result = await handleExtensionCommand(config, positionals, options);
+    } else if (scope === 'credential-binding') {
+      const config = await buildConfig(options, env, fetchImpl);
+      result = await handleCredentialBindingCommand(config, positionals, options);
+    } else if (scope === 'workflow-event-subscription') {
+      const config = await buildConfig(options, env, fetchImpl);
+      result = await handleWorkflowEventSubscriptionCommand(config, positionals, options);
     } else if (scope === 'workflow') {
       const config = await buildConfig(options, env, fetchImpl);
       result = await handleWorkflowCommand(config, positionals, options);

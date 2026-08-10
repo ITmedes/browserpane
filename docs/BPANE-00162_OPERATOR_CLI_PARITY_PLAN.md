@@ -4,7 +4,7 @@
 
 - Issue: [#162](https://github.com/ITmedes/browserpane/issues/162)
 - State: In progress; implementation slice 1 merged through PR `#205`, slice 2
-  implemented and validated, slice 3 in progress
+  implemented and validated, slice 3 implemented and validated
 - Lane: Operator Product
 - Target gate: Admin-New Phase 1 Promotion
 - Depends on: control API conformance through `#179`, admin-new resource
@@ -126,9 +126,9 @@ long-lived bearer token or resolved credential value is printed.
    commands onto the canonical profile/auth/error contract, preserve the old
    workflow entrypoint as a thin compatibility wrapper, and cover
    wait/intervention/artifact paths.
-3. **Governance resource parity**: add approved-extension, credential-binding,
-   and workflow event-subscription commands with safe metadata and state
-   transitions; reject secret-resolution operations.
+3. **Governance resource parity** (complete): add approved-extension,
+   credential-binding, and workflow event-subscription commands with safe
+   metadata and state transitions; reject secret-resolution operations.
 4. **Session evidence transfers**: add owner-facing session file/binding and
    recording/playback inspection/download commands without exposing worker-only
    mutation routes.
@@ -222,6 +222,33 @@ with evidence before PR creation.
   `./scripts/bpane workflow` as the preferred command and identify the npm
   workflow entrypoint as temporary compatibility. No gateway, OpenAPI, database,
   protocol, support-matrix, or runtime-topology change was required.
+
+## Slice 3 Evidence (2026-08-10)
+
+- Added canonical `extension` definition create/list/get, version publication,
+  and enable/disable commands. Extension metadata remains retained because the
+  owner API intentionally has no delete operation.
+- Added canonical `credential-binding` create/list/get and
+  `workflow-event-subscription` create/list/get/deliveries/delete commands.
+  Resolved credential access remains worker-only and is not dispatchable by the
+  owner CLI.
+- Governance command output and structured HTTP error details recursively strip
+  write-only `secret_payload` and `signing_secret` fields. README guidance uses
+  `--body-file` for secret-bearing requests to avoid shell-history exposure.
+- Focused CLI coverage passed all `60` tests, including exact routes, encoded
+  identifiers, body-file input, secret redaction, invalid command shapes,
+  missing authentication, and `404`/`409`/`500` API errors. The full client
+  suite passed all `671` tests across `86` files.
+- TypeScript check, production build, Node syntax checks, canonical CLI help,
+  and documentation whitespace validation passed.
+- Expanded `smoke:bpane-cli` passed against local Compose and exited cleanly. It
+  covered extension publication and state transitions, a project-bound
+  external-reference Vault KV v2 credential binding, project extension policy,
+  public-HTTPS workflow subscription creation, delivery diagnostics, deletion,
+  and every previously covered canonical CLI family.
+- README and ARCH now document the governance command families and write-only
+  secret behavior. No gateway, OpenAPI, database, protocol, support-matrix, or
+  runtime-topology change was required.
 
 ## Validation Strategy
 
