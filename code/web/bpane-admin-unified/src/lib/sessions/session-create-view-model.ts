@@ -1,4 +1,6 @@
 import type { ProjectPolicyOption, ProjectResource } from '$lib/projects/project-types';
+import type { ProjectResourceKind } from '$lib/projects/project-governance-types';
+import { SessionCreateGovernancePresenter } from './session-create-governance';
 import type { CreateSessionRequest, SessionCapabilities, SessionRecordingPolicy } from './session-types';
 
 export type SessionCreateDraft = {
@@ -117,8 +119,8 @@ export function validateSessionCreateDraft(
   };
 
   const projectId = draft.projectId.trim();
+  const project = options.projects.find((candidate) => candidate.id === projectId) ?? null;
   if (projectId) {
-    const project = options.projects.find((candidate) => candidate.id === projectId);
     if (options.projects.length > 0 && !project) {
       addError('projectId', 'Selected project is not available.');
     } else if (project?.state === 'archived') {
@@ -127,8 +129,16 @@ export function validateSessionCreateDraft(
   }
 
   const templateId = draft.templateId.trim();
-  if (templateId && options.sessionTemplates.length > 0 && !options.sessionTemplates.some((template) => template.id === templateId)) {
-    addError('templateId', 'Selected session template is not available.');
+  if (templateId) {
+    validateGovernedOptionSelection(
+      'templateId',
+      templateId,
+      'session_template',
+      project,
+      options.sessionTemplates,
+      'Selected session template is not available.',
+      addError,
+    );
   }
 
   const browserContextId = draft.browserContextId.trim();
@@ -136,12 +146,13 @@ export function validateSessionCreateDraft(
     if (!browserContextId) {
       addError('browserContextId', 'Reusable browser context requires a selected context.');
     } else {
-      validatePolicyOptionSelection(
+      validateGovernedOptionSelection(
         'browserContextId',
         browserContextId,
+        'browser_context',
+        project,
         options.browserContexts,
         'Selected browser context is not available.',
-        'Selected browser context is not ready.',
         addError,
       );
     }
@@ -151,12 +162,13 @@ export function validateSessionCreateDraft(
 
   const egressProfileId = draft.egressProfileId.trim();
   if (egressProfileId) {
-    validatePolicyOptionSelection(
+    validateGovernedOptionSelection(
       'egressProfileId',
       egressProfileId,
+      'egress_profile',
+      project,
       options.egressProfiles,
       'Selected egress profile is not available.',
-      'Selected egress profile is disabled.',
       addError,
     );
   }
@@ -298,19 +310,25 @@ function sessionCapabilitiesEqual(
     && left.resize === right.resize;
 }
 
-function validatePolicyOptionSelection(
+function validateGovernedOptionSelection(
   field: SessionCreateValidationField,
   selectedId: string,
+  kind: ProjectResourceKind,
+  project: ProjectResource | null,
   options: readonly ProjectPolicyOption[],
   missingMessage: string,
-  disabledMessage: string,
   addError: (field: SessionCreateValidationField, message: string) => void,
 ): void {
   const option = options.find((candidate) => candidate.id === selectedId);
   if (options.length > 0 && !option) {
     addError(field, missingMessage);
-  } else if (option?.state === 'disabled' || option?.state === 'archived' || option?.state === 'deleted') {
-    addError(field, disabledMessage);
+    return;
+  }
+  if (option) {
+    const decision = new SessionCreateGovernancePresenter().evaluateResource(project, kind, option);
+    if (!decision.allowed) {
+      addError(field, decision.reason);
+    }
   }
 }
 

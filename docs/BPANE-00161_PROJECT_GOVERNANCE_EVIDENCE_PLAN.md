@@ -3,7 +3,7 @@
 ## Metadata
 
 - Issue: `#161`
-- State: In progress; implementation slices 1-2 complete
+- State: In progress; implementation slices 1-3 complete
 - Lane: Operator Product
 - Target gate: admin-new project governance parity
 - Depends on: admin-new shared patterns and session subareas merged through
@@ -168,7 +168,7 @@ admission reason, count/limit snapshot, queue timestamp, and project link.
    workflow runs; add responsive governance summary, policy impact, related
    work links, partial errors, usage refresh, and sanitized egress evidence.
    Commit boundary: project detail operations view.
-3. **Policy-aware session creation**: add selected-project summary, resource
+3. **Policy-aware session creation** (complete): add selected-project summary, resource
    option availability/reasons, pre-submit allowlist/scope validation, and
    authoritative API-race error handling. Commit boundary: session action UX.
 4. **Workflow governance evidence**: replace free-text project entry with a

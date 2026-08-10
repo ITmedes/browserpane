@@ -81,7 +81,11 @@ async function run() {
     }
     createdProject = await fetchProject(accessToken, options, projectId);
     verifyCreatedProject(createdProject, resources, runLabel);
+    await verifySessionCreateGovernance(page, options, resources, createdProject);
 
+    await page.goto(adminRouteUrl(options, `projects/${encodeURIComponent(projectId)}`), {
+      waitUntil: 'domcontentloaded',
+    });
     await page.getByTestId('project-detail-route').waitFor({
       state: 'visible',
       timeout: options.connectTimeoutMs,
@@ -245,6 +249,16 @@ async function createPolicyResources(accessToken, options, runLabel) {
       },
     }),
   });
+  const blockedTemplate = await fetchJson(`${apiOrigin(options)}/api/v1/session-templates`, {
+    method: 'POST',
+    headers: authJsonHeaders(accessToken),
+    body: JSON.stringify({
+      name: `Unified blocked template ${runLabel}`,
+      description: 'Visible but excluded from the smoke project policy',
+      labels: { suite: 'admin-unified-projects-smoke', run: runLabel, role: 'blocked' },
+      defaults: {},
+    }),
+  });
   const browserContext = await fetchJson(`${apiOrigin(options)}/api/v1/browser-contexts`, {
     method: 'POST',
     headers: authJsonHeaders(accessToken),
@@ -292,7 +306,84 @@ async function createPolicyResources(accessToken, options, runLabel) {
       labels: { suite: 'admin-unified-projects-smoke', run: runLabel },
     }),
   });
-  return { template, browserContext, egressProfile, extension, fileWorkspace };
+  return { template, blockedTemplate, browserContext, egressProfile, extension, fileWorkspace };
+}
+
+async function verifySessionCreateGovernance(page, options, resources, project) {
+  await page.goto(adminRouteUrl(options, 'sessions/new'), { waitUntil: 'domcontentloaded' });
+  await page.getByTestId('session-create-route').waitFor({
+    state: 'visible',
+    timeout: options.connectTimeoutMs,
+  });
+  await page.getByTestId('session-create-project-id').selectOption(project.id);
+  await page.getByTestId('session-create-project-governance').waitFor({
+    state: 'visible',
+    timeout: options.connectTimeoutMs,
+  });
+
+  const templateSelector = page.getByTestId('session-create-template-id');
+  const allowedTemplate = templateSelector.locator(`option[value="${resources.template.id}"]`);
+  const blockedTemplate = templateSelector.locator(`option[value="${resources.blockedTemplate.id}"]`);
+  const allowedDisabled = await allowedTemplate.evaluate((option) => option.disabled);
+  const blockedDisabled = await blockedTemplate.evaluate((option) => option.disabled);
+  if (allowedDisabled || !blockedDisabled) {
+    throw new Error(`Expected project allowlist to enable the approved template and disable the excluded template: ${JSON.stringify({
+      allowedDisabled,
+      allowedLabel: await allowedTemplate.textContent(),
+      blockedDisabled,
+      blockedLabel: await blockedTemplate.textContent(),
+    })}`);
+  }
+  const blockedLabel = await blockedTemplate.textContent();
+  if (!blockedLabel?.includes('unavailable') || !blockedLabel.includes('not included')) {
+    throw new Error(`Expected blocked template policy reason, got ${blockedLabel}`);
+  }
+
+  await page.getByTestId('session-create-project-id').selectOption('');
+  await templateSelector.selectOption(resources.blockedTemplate.id);
+  await page.getByTestId('session-create-project-id').selectOption(project.id);
+  await page.getByTestId('session-create-template-id-error').waitFor({
+    state: 'visible',
+    timeout: options.connectTimeoutMs,
+  });
+  if (!await page.getByTestId('session-create-save').isDisabled()) {
+    throw new Error('Expected project policy conflict to disable session creation.');
+  }
+
+  await templateSelector.selectOption(resources.template.id);
+  const conflictHandler = async (route) => {
+    await route.fulfill({
+      status: 409,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        error: 'Project policy changed before session admission.',
+        code: 'project_policy_conflict',
+        category: 'conflict',
+        recovery_hint: 'Refresh the project policy and retry.',
+      }),
+    });
+  };
+  await page.route('**/api/v1/sessions', conflictHandler);
+  try {
+    await page.getByTestId('session-create-save').click();
+    await page.getByTestId('session-create-error').waitFor({
+      state: 'visible',
+      timeout: options.connectTimeoutMs,
+    });
+    const feedback = await page.getByTestId('session-create-error').textContent();
+    if (!feedback?.includes('Project policy changed') || !feedback.includes('Refresh the project policy')) {
+      throw new Error(`Expected authoritative session policy conflict feedback, got ${feedback}`);
+    }
+    if (await page.getByTestId('session-create-project-id').inputValue() !== project.id) {
+      throw new Error('Session policy conflict did not retain the selected project.');
+    }
+  } finally {
+    await page.unroute('**/api/v1/sessions', conflictHandler);
+  }
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await assertNoHorizontalOverflow(page, 'session-create-route', 'project-aware session create route');
+  await page.setViewportSize({ width: 1440, height: 980 });
 }
 
 async function createUpdateSeedProject(accessToken, options, runLabel) {

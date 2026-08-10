@@ -17,6 +17,23 @@ const RESOURCE_LABELS: Readonly<Record<ProjectResourceKind, string>> = {
 };
 
 export class ProjectPolicyEvaluator {
+  public evaluateOwnerScopeOption(
+    kind: ProjectResourceKind,
+    option: ProjectPolicyOption,
+  ): ProjectResourceDecision {
+    const state = option.state?.toLowerCase() ?? null;
+    if (state && BLOCKED_RESOURCE_STATES.has(state)) {
+      return this.decision(option, kind, false, 'blocked_resource_state',
+        `${option.name} is ${state} and cannot be selected.`, 'warning');
+    }
+    if (option.projectId) {
+      return this.decision(option, kind, false, 'blocked_project_scope',
+        `${option.name} requires project ${option.projectId} to be selected.`, 'danger');
+    }
+    return this.decision(option, kind, true, 'allowed_unrestricted',
+      `${option.name} is available to owner-scoped sessions.`, 'neutral');
+  }
+
   public evaluateOption(
     project: ProjectResource,
     kind: ProjectResourceKind,

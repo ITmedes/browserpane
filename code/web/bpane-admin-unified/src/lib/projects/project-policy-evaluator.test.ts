@@ -14,6 +14,17 @@ describe('ProjectPolicyEvaluator', () => {
     });
   });
 
+  it('allows owner resources and blocks project resources without a selected project', () => {
+    expect(evaluator.evaluateOwnerScopeOption('egress_profile', option())).toMatchObject({
+      allowed: true,
+      code: 'allowed_unrestricted',
+    });
+    expect(evaluator.evaluateOwnerScopeOption(
+      'egress_profile',
+      option({ projectId: 'project-1' }),
+    )).toMatchObject({ allowed: false, code: 'blocked_project_scope' });
+  });
+
   it('distinguishes allowlisted, policy-blocked, and cross-project resources', () => {
     const restricted = project({ allowed_egress_profile_ids: ['egress-1'] });
 
