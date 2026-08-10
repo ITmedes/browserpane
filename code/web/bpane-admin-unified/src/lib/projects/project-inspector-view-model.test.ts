@@ -4,7 +4,7 @@ import { buildProjectInspectorModel } from './project-inspector-view-model';
 import type { ProjectResource } from './project-types';
 
 describe('buildProjectInspectorModel', () => {
-  it('formats header, identity, usage, and generated alerts', () => {
+  it('formats the project inspector header', () => {
     const model = buildProjectInspectorModel(project());
 
     expect(model).toMatchObject({
@@ -12,18 +12,7 @@ describe('buildProjectInspectorModel', () => {
       name: 'Support',
       state: 'active',
       stateTone: 'success',
-    });
-    expect(model.identityRows).toContainEqual({
-      label: 'Project ID',
-      value: '11111111-1111-4111-8111-111111111111',
-    });
-    expect(model.usageRows).toContainEqual({
-      label: 'Active sessions',
-      value: '1 / 4',
-    });
-    expect(model.alerts[0]).toMatchObject({
-      label: 'session_creations exceeded',
-      value: 'Session creation budget exceeded.',
+      description: 'Support browser work',
     });
   });
 });

@@ -335,7 +335,12 @@ async function verifyProjectUpdateFlow(page, accessToken, options, resources, pr
     state: 'visible',
     timeout: options.connectTimeoutMs,
   });
+  await page.getByTestId('project-governance-evidence').waitFor({
+    state: 'visible',
+    timeout: options.connectTimeoutMs,
+  });
   await assertNoHorizontalOverflow(page, 'project-detail-route', 'unified project detail route');
+  await assertNoHorizontalOverflow(page, 'project-governance-evidence', 'project governance evidence');
 
   await configureProjectUpdate(page, resources, runLabel);
   if (!await page.getByTestId('project-edit-save').isEnabled()) {
@@ -350,6 +355,17 @@ async function verifyProjectUpdateFlow(page, accessToken, options, resources, pr
   if (!successText?.includes('Project saved')) {
     throw new Error(`Expected project update success message, got ${successText}`);
   }
+
+  const governanceText = await page.getByTestId('project-governance-evidence').textContent();
+  if (!governanceText?.includes('block_session_creation')
+    || !governanceText.includes(resources.egressProfile.name)
+    || !governanceText.includes('Related work')) {
+    throw new Error(`Expected updated project governance evidence, got ${governanceText}`);
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await assertNoHorizontalOverflow(page, 'project-detail-route', 'mobile project detail route');
+  await assertNoHorizontalOverflow(page, 'project-governance-evidence', 'mobile project governance evidence');
+  await page.setViewportSize({ width: 1440, height: 980 });
 
   const refreshed = await fetchProject(accessToken, options, project.id);
   verifyUpdatedProject(refreshed, resources, runLabel);
