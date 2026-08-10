@@ -3,6 +3,7 @@
   import { onMount } from 'svelte';
   import { adminErrorMessage } from '$lib/application/admin-async-state';
   import type { UnifiedAdminContext } from '$lib/auth/unified-admin-context';
+  import { ProjectCatalogClient } from '$lib/projects/project-client';
   import {
     WorkflowCatalogClient,
     WorkflowCatalogError,
@@ -24,6 +25,7 @@
     WorkflowSourceFileListState,
     WorkflowSourcePreviewState,
   } from '$lib/workflows/workflow-detail-state';
+  import type { WorkflowRunProjectOptionsLoadState } from '$lib/workflows/workflow-run-launcher-view-model';
   import AdminMessage from './AdminMessage.svelte';
   import WorkflowDefinitionInspector from './WorkflowDefinitionInspector.svelte';
 
@@ -36,6 +38,7 @@
   let actionState = $state<WorkflowActionState>({ status: 'idle' });
   let sourceFilesState = $state<WorkflowSourceFileListState>({ status: 'idle' });
   let sourcePreviewState = $state<WorkflowSourcePreviewState>({ status: 'idle' });
+  let projectOptionsState = $state<WorkflowRunProjectOptionsLoadState>({ status: 'idle' });
   let sourceFilesRequestId = 0;
   let sourcePreviewRequestId = 0;
 
@@ -50,6 +53,7 @@
       return;
     }
     void loadWorkflow(workflowId);
+    void loadProjectOptions();
   });
 
   function client(): WorkflowCatalogClient {
@@ -58,6 +62,10 @@
 
   function workflowRunClient(): WorkflowRunCatalogClient {
     return new WorkflowRunCatalogClient(clientOptions());
+  }
+
+  function projectClient(): ProjectCatalogClient {
+    return new ProjectCatalogClient(clientOptions());
   }
 
   function clientOptions() {
@@ -85,6 +93,19 @@
         status: 'error',
         workflowId,
         message: adminErrorMessage(error, 'Unexpected workflow definition detail error.'),
+      };
+    }
+  }
+
+  async function loadProjectOptions(): Promise<void> {
+    projectOptionsState = { status: 'loading' };
+    try {
+      const response = await projectClient().listProjects();
+      projectOptionsState = { status: 'ready', projects: response.projects };
+    } catch (error) {
+      projectOptionsState = {
+        status: 'error',
+        message: adminErrorMessage(error, 'Workflow project catalog failed.'),
       };
     }
   }
@@ -302,6 +323,7 @@
       {actionState}
       {sourceFilesState}
       {sourcePreviewState}
+      {projectOptionsState}
       onRefreshWorkflow={refreshWorkflow}
       onSelectVersion={selectWorkflowVersion}
       onSelectSourceFile={selectSourceFile}
