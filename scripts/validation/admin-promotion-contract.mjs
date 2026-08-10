@@ -1,4 +1,6 @@
 export const UNIFIED_ADMIN_PROMOTION_SMOKES = Object.freeze([
+  smoke('compose-admin-new-promotion', 'Smoke admin-new promotion and fallback routing',
+    'smoke:admin-unified-promotion', ['--connect-timeout-ms', '60000']),
   smoke('compose-admin-new-dashboard', 'Smoke admin-new dashboard',
     'smoke:admin-unified-dashboard'),
   smoke('compose-admin-new-projects', 'Smoke admin-new projects',
