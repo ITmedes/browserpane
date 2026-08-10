@@ -616,7 +616,10 @@ The workflow layer sits on top of the owner-scoped session APIs.
 - the gateway persists run logs, events, outputs, produced files, linked recordings, and retention metadata
 - owner actions now include durable `submit-input`, `resume`, `reject`, and `cancel` transitions on workflow runs
 - workflow lifecycle subscriptions provide signed outbound delivery plus persisted delivery diagnostics for external systems
-- local workflow CLI commands live in `code/web/bpane-client/scripts/workflow-cli.mjs` and exercise the same v1 HTTP routes as the browser UI
+- canonical local workflow CLI commands use `./scripts/bpane workflow` and
+  exercise the same v1 HTTP routes as the browser UI; the package-level
+  `workflow-cli.mjs` entrypoint is a temporary compatibility wrapper around the
+  same implementation
 - workflow source listing and snapshot materialization enforce configurable file
   count and byte limits before workflow workers receive source archives
 - workflow source resolution and materialization errors are structured with a
@@ -634,9 +637,14 @@ The supported local operator CLI lives in
   principals, identity mappings, projects, egress profiles, reusable browser
   contexts, session templates, sessions, and MCP delegation. File-workspace
   commands cover workspace create/list/get and exact-byte file
-  list/upload/download/delete through the same profile, auth, JSON, and stable
-  error contract. Egress-profile create/update commands can attach a proxy-auth
-  credential binding with `--proxy-credential-binding-id`.
+  list/upload/download/delete. Extension commands cover definition creation,
+  version publication, inspection, and enable/disable transitions. Credential
+  bindings expose sanitized create/list/get metadata, while workflow event
+  subscriptions expose create/list/get/delivery diagnostics/delete. These
+  commands share the same profile, auth, JSON, secret-redaction, and stable
+  error contract; resolved credentials stay worker-only. Egress-profile
+  create/update commands can attach a proxy-auth credential binding with
+  `--proxy-credential-binding-id`.
 - `deploy/examples/egress-observer` provides local Squid forward-proxy
   examples for metadata-only access-log observation, session/container IP
   correlation, authenticated proxy validation, and sanitized egress-usage
