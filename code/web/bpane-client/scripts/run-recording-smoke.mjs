@@ -2,12 +2,9 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
-import { execFile as execFileCallback, spawnSync } from 'node:child_process';
-import { promisify } from 'node:util';
+import { spawnSync } from 'node:child_process';
 import { chromium } from 'playwright-core';
 import { testEmbedPageUrl } from './workflow-smoke-lib.mjs';
-
-const execFile = promisify(execFileCallback);
 
 const DEFAULTS = {
   pageUrl: 'http://localhost:8080',
@@ -322,7 +319,7 @@ async function createSessionResource(accessToken, options) {
       owner_mode: 'collaborative',
       idle_timeout_sec: 300,
       recording: {
-        mode: 'manual',
+        mode: 'always',
         format: 'webm',
       },
       integration_context: {
@@ -331,51 +328,6 @@ async function createSessionResource(accessToken, options) {
       },
     }),
   });
-}
-
-async function createSessionRecording(accessToken, options, sessionId) {
-  return await fetchJson(`${options.pageUrl}/api/v1/sessions/${sessionId}/recordings`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-}
-
-async function stopSessionRecording(accessToken, options, sessionId, recordingId) {
-  return await fetchJson(
-    `${options.pageUrl}/api/v1/sessions/${sessionId}/recordings/${recordingId}/stop`,
-    {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${accessToken}` },
-    },
-  );
-}
-
-async function completeSessionRecording(
-  accessToken,
-  options,
-  sessionId,
-  recordingId,
-  sourcePath,
-  mimeType,
-  bytes,
-  durationMs,
-) {
-  return await fetchJson(
-    `${options.pageUrl}/api/v1/sessions/${sessionId}/recordings/${recordingId}/complete`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        source_path: sourcePath,
-        mime_type: mimeType,
-        bytes,
-        duration_ms: durationMs,
-      }),
-    },
-  );
 }
 
 async function fetchSessionPlayback(accessToken, options, sessionId) {
@@ -417,31 +369,20 @@ async function fetchRecordingOperations(accessToken, options) {
   });
 }
 
-function resolveGatewayVisibleFinalizePath(sessionId, recordingId) {
-  const explicitHostRoot = process.env.BPANE_RECORDING_GATEWAY_STAGE_ROOT;
-  const explicitGatewayRoot = process.env.BPANE_RECORDING_GATEWAY_SOURCE_ROOT;
-  const fileName = `browserpane-${sessionId}-${recordingId}-control-plane.webm`;
-  if (explicitHostRoot && explicitGatewayRoot) {
-    return {
-      hostPath: path.join(explicitHostRoot, 'recording-smoke', fileName),
-      gatewayPath: path.posix.join(explicitGatewayRoot, 'recording-smoke', fileName),
-    };
-  }
-  return {
-    gatewayPath: path.posix.join('/run/bpane', 'recording-smoke', fileName),
-  };
+async function fetchSessionRecordings(accessToken, options, sessionId) {
+  return await fetchJson(`${options.pageUrl}/api/v1/sessions/${sessionId}/recordings`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
 }
 
-async function stageFileForGateway(sourcePath, finalizeTarget) {
-  if (finalizeTarget.hostPath) {
-    await fs.mkdir(path.dirname(finalizeTarget.hostPath), { recursive: true });
-    await fs.copyFile(sourcePath, finalizeTarget.hostPath);
-    return;
-  }
-
-  const gatewayDir = path.posix.dirname(finalizeTarget.gatewayPath);
-  await execFile('docker', ['exec', 'deploy-gateway-1', 'mkdir', '-p', gatewayDir]);
-  await execFile('docker', ['cp', sourcePath, `deploy-gateway-1:${finalizeTarget.gatewayPath}`]);
+async function disconnectAllSessionConnections(accessToken, options, sessionId) {
+  return await fetchJson(
+    `${options.pageUrl}/api/v1/sessions/${sessionId}/connections/disconnect-all`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    },
+  );
 }
 
 function resolveSegmentOutputPath(requestedOutputPath, tempDir, sessionId, segmentIndex) {
@@ -467,28 +408,19 @@ async function savePlaywrightDownload(download, targetPath) {
   };
 }
 
-async function captureRecordingSegment({
-  accessToken,
+async function captureLocalRecordingSegment({
   ownerPage,
   recorderPage,
   options,
   sessionId,
-  segmentIndex,
   requestedOutputPath,
   tempDir,
 }) {
-  const recordingResource = await createSessionRecording(accessToken, options, sessionId);
-  const recordingId = recordingResource.id;
-  if (!recordingId) {
-    throw new Error(`Failed to create control-plane recording metadata for segment ${segmentIndex}.`);
-  }
-
   await recorderPage.evaluate(() => {
     window.__bpaneRecording.setAutoDownload(false);
     return window.__bpaneRecording.start();
   });
-  log(`Recording segment ${segmentIndex} started for session ${sessionId}`);
-
+  log(`Browser-local recording started for session ${sessionId}`);
   await nudgeRemotePage(ownerPage);
   await sleep(options.recordDurationMs);
   await nudgeRemotePage(ownerPage);
@@ -498,45 +430,26 @@ async function captureRecordingSegment({
     return { size: blob?.size ?? 0, type: blob?.type ?? '' };
   });
   if (!recordingStop.size) {
-    throw new Error(`Recording segment ${segmentIndex} finalized without any media bytes.`);
+    throw new Error('Browser-local recording finalized without any media bytes.');
   }
-
-  const stoppedRecording = await stopSessionRecording(accessToken, options, sessionId, recordingId);
-  const outputPath = resolveSegmentOutputPath(requestedOutputPath, tempDir, sessionId, segmentIndex);
+  const outputPath = resolveSegmentOutputPath(
+    requestedOutputPath,
+    tempDir,
+    sessionId,
+    1,
+  );
   const [download] = await Promise.all([
     recorderPage.waitForEvent('download'),
     recorderPage.evaluate(() => window.__bpaneRecording.downloadLast()),
   ]);
-  const savedDownload = await savePlaywrightDownload(download, outputPath);
-  if (savedDownload.bytes <= 1024) {
-    throw new Error(
-      `Recording segment ${segmentIndex} artifact is unexpectedly small (${savedDownload.bytes} bytes).`,
-    );
+  const saved = await savePlaywrightDownload(download, outputPath);
+  if (saved.bytes <= 1024) {
+    throw new Error(`Browser-local recording is unexpectedly small (${saved.bytes} bytes).`);
   }
-
-  const finalizeTarget = resolveGatewayVisibleFinalizePath(sessionId, recordingId);
-  await stageFileForGateway(savedDownload.path, finalizeTarget);
-  const completedRecording = await completeSessionRecording(
-    accessToken,
-    options,
-    sessionId,
-    recordingId,
-    finalizeTarget.gatewayPath,
-    recordingStop.type || 'video/webm',
-    savedDownload.bytes,
-    options.recordDurationMs,
-  );
-
   return {
-    index: segmentIndex,
-    id: recordingId,
-    outputPath: savedDownload.path,
-    bytes: savedDownload.bytes,
+    ...saved,
     mimeType: recordingStop.type || 'video/webm',
     durationMs: options.recordDurationMs,
-    suggestedFilename: savedDownload.suggestedFilename,
-    stopResponse: stoppedRecording,
-    controlPlane: completedRecording,
   };
 }
 
@@ -641,23 +554,47 @@ async function main() {
     const statusBefore = await poll(
       `recorder session status for ${sessionId}`,
       () => fetchSessionStatus(accessToken, options, sessionId),
-      (status) => status?.browser_clients >= 2 && status?.recorder_clients === 1,
+      (status) => status?.browser_clients >= 3 && status?.recorder_clients >= 2,
       options.connectTimeoutMs,
     );
-    const recordingSegments = [];
-    for (let segmentIndex = 1; segmentIndex <= 2; segmentIndex++) {
-      recordingSegments.push(
-        await captureRecordingSegment({
-          accessToken,
-          ownerPage,
-          recorderPage,
-          options,
-          sessionId,
-          segmentIndex,
-          requestedOutputPath: options.outputPath,
-          tempDir,
-        }),
-      );
+    const localRecording = await captureLocalRecordingSegment({
+      ownerPage,
+      recorderPage,
+      options,
+      sessionId,
+      requestedOutputPath: options.outputPath,
+      tempDir,
+    });
+    await disconnectAllSessionConnections(accessToken, options, sessionId);
+    const recordingCatalogResponse = await poll(
+      `retained recorder-worker segment for ${sessionId}`,
+      () => fetchSessionRecordings(accessToken, options, sessionId),
+      (catalog) => catalog?.recordings?.some((recording) => (
+        recording.state === 'failed'
+        || (recording.state === 'ready' && recording.artifact_available === true)
+      )),
+      options.connectTimeoutMs * 2,
+    );
+    const failedRecording = recordingCatalogResponse.recordings.find(
+      (recording) => recording.state === 'failed',
+    );
+    if (failedRecording) {
+      throw new Error(`Recorder-worker recording failed: ${failedRecording.error ?? 'unknown error'}`);
+    }
+    const recordingSegments = recordingCatalogResponse.recordings
+      .filter((recording) => recording.state === 'ready' && recording.artifact_available === true)
+      .map((recording, index) => ({
+        index: index + 1,
+        id: recording.id,
+        outputPath: null,
+        bytes: recording.bytes,
+        mimeType: recording.mime_type || 'video/webm',
+        durationMs: recording.duration_ms,
+        suggestedFilename: `${recording.id}.webm`,
+        controlPlane: recording,
+      }));
+    if (!recordingSegments.length || recordingSegments.some((segment) => segment.bytes <= 1024)) {
+      throw new Error('Recorder-worker did not retain a non-empty WebM segment.');
     }
 
     const playback = await fetchSessionPlayback(accessToken, options, sessionId);
@@ -773,8 +710,8 @@ async function main() {
       () => ownerPage.evaluate(() => window.__bpaneRecording.getCatalogState()),
       (state) => (
         state?.loaded === true
-        && state?.recordings?.length >= 2
-        && state?.playback?.included_segment_count >= 2
+        && state?.recordings?.length >= recordingSegments.length
+        && state?.playback?.included_segment_count >= recordingSegments.length
       ),
       options.connectTimeoutMs,
     );
@@ -833,6 +770,7 @@ async function main() {
         suggested_filename: segment.suggestedFilename,
         control_plane: segment.controlPlane,
       })),
+      browser_local_recording: localRecording,
       playback,
       playback_manifest: playbackManifest,
       playback_export: playbackExport,
