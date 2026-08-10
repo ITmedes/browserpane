@@ -31,13 +31,13 @@ describe('SessionTransferFilesPanel', () => {
     const target = renderComponent(SessionTransferFilesPanel, {
       client: client(fetchImpl),
       sessionId: 'session-1',
-      transferBlocked: true,
+      transferPolicyMessage: 'The project blocks browser uploads for its sessions.',
     });
 
     await vi.waitFor(() => {
       expect(byTestId(target, 'session-file-name').textContent).toContain('report.pdf');
     });
-    expect(byTestId(target, 'session-files-policy-blocked').textContent).toContain('disables');
+    expect(byTestId(target, 'session-files-policy-blocked').textContent).toContain('blocks browser uploads');
 
     byTestId(target, 'session-file-download').click();
     await vi.waitFor(() => {
@@ -58,14 +58,14 @@ describe('SessionTransferFilesPanel', () => {
     const empty = renderComponent(SessionTransferFilesPanel, {
       client: client(async () => jsonResponse({ files: [] })),
       sessionId: 'session-empty',
-      transferBlocked: false,
+      transferPolicyMessage: null,
     });
     await vi.waitFor(() => expect(byTestId(empty, 'session-files-empty')).toBeTruthy());
 
     const failed = renderComponent(SessionTransferFilesPanel, {
       client: client(async () => new Response('failed', { status: 503 })),
       sessionId: 'session-failed',
-      transferBlocked: false,
+      transferPolicyMessage: null,
     });
     await vi.waitFor(() => {
       expect(byTestId(failed, 'session-files-error').textContent).toContain('HTTP 503');

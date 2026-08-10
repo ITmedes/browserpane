@@ -2,6 +2,9 @@
   import { ArrowLeft, Download, RefreshCw, Video, VideoOff } from '@lucide/svelte';
   import { adminErrorMessage, type AdminActionState } from '$lib/application/admin-async-state';
   import type { UnifiedAdminContext } from '$lib/auth/unified-admin-context';
+  import { ProjectCatalogClient } from '$lib/projects/project-client';
+  import { ProjectPolicyEvaluator } from '$lib/projects/project-policy-evaluator';
+  import type { ProjectResource } from '$lib/projects/project-types';
   import { projectToneClass } from '$lib/projects/project-ui';
   import { RecordingCatalogClient } from '$lib/recordings/recording-client';
   import {
@@ -29,6 +32,8 @@
     | {
         readonly status: 'ready';
         readonly session: SessionResource;
+        readonly project: ProjectResource | null;
+        readonly projectError: string | null;
         readonly recordings: readonly SessionRecordingResource[];
         readonly recordingsError: string | null;
         readonly playback: SessionRecordingPlaybackResource | null;
@@ -42,8 +47,14 @@
 
   const sessionClient = $derived(new SessionCatalogClient(clientOptions()));
   const recordingClient = $derived(new RecordingCatalogClient(clientOptions()));
+  const projectClient = $derived(new ProjectCatalogClient(clientOptions()));
+  const policyEvaluator = new ProjectPolicyEvaluator();
   const model = $derived<SessionRecordingDetailModel | null>(routeState.status === 'ready'
     ? buildSessionRecordingDetailModel(routeState.session, routeState.recordings, routeState.playback)
+    : null);
+  const manualRecordingPolicy = $derived(routeState.status === 'ready' && routeState.project
+    ? policyEvaluator.operationPolicies(routeState.project)
+      .find((operation) => operation.id === 'manual_recordings') ?? null
     : null);
   const busy = $derived(routeState.status === 'loading' || actionState.status === 'running');
 
@@ -71,9 +82,10 @@
     }
     try {
       const session = await sessionClient.getSession(requestSessionId);
-      const [recordingsResult, playbackResult] = await Promise.allSettled([
+      const [recordingsResult, playbackResult, projectResult] = await Promise.allSettled([
         recordingClient.listSessionRecordings(requestSessionId),
         recordingClient.getSessionRecordingPlayback(requestSessionId),
+        loadProject(session),
       ]);
       if (loadedSessionId !== requestSessionId) {
         return;
@@ -81,6 +93,10 @@
       routeState = {
         status: 'ready',
         session,
+        project: projectResult.status === 'fulfilled' ? projectResult.value : null,
+        projectError: projectResult.status === 'rejected'
+          ? adminErrorMessage(projectResult.reason, 'Project recording policy is unavailable.')
+          : null,
         recordings: recordingsResult.status === 'fulfilled' ? recordingsResult.value.recordings : [],
         recordingsError: recordingsResult.status === 'rejected'
           ? adminErrorMessage(recordingsResult.reason, 'Session recording segments are unavailable.')
@@ -91,7 +107,9 @@
           : null,
       };
       if (showFeedback) {
-        actionState = recordingsResult.status === 'fulfilled' && playbackResult.status === 'fulfilled'
+        actionState = recordingsResult.status === 'fulfilled'
+          && playbackResult.status === 'fulfilled'
+          && projectResult.status === 'fulfilled'
           ? { status: 'success', message: 'Session recordings refreshed.' }
           : { status: 'error', message: 'Session recordings refreshed with partial results.' };
       }
@@ -105,6 +123,10 @@
         actionState = { status: 'error', message };
       }
     }
+  }
+
+  async function loadProject(session: SessionResource): Promise<ProjectResource | null> {
+    return session.project_id ? projectClient.getProject(session.project_id) : null;
   }
 
   async function setRecordingPolicy(enabled: boolean): Promise<void> {
@@ -262,6 +284,32 @@
           {/if}
         </div>
       </div>
+      {#if routeState.session.project_id}
+        <div class="border-t border-admin-border p-4" data-testid="session-recording-project-policy">
+          <div class="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div class="min-w-0">
+              <div class="flex min-w-0 flex-wrap items-center gap-2">
+                <p class="m-0 text-xs font-semibold uppercase text-admin-muted">Manual recording starts</p>
+                {#if manualRecordingPolicy}
+                  <span class={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ${projectToneClass(manualRecordingPolicy.tone)}`} data-testid="session-recording-manual-policy-state">
+                    {manualRecordingPolicy.allowed ? 'Allowed' : 'Blocked'}
+                  </span>
+                {/if}
+              </div>
+              {#if manualRecordingPolicy}
+                <p class="m-0 mt-2 text-sm text-admin-muted" data-testid="session-recording-manual-policy-reason">
+                  {manualRecordingPolicy.reason} This restriction applies to explicit manual starts; the gateway evaluates always-on configuration separately.
+                </p>
+              {:else if routeState.projectError}
+                <AdminMessage tone="warning" density="compact" title="Project recording policy unavailable" message={routeState.projectError} testId="session-recording-project-warning" />
+              {/if}
+            </div>
+            <a class="shrink-0 text-xs font-semibold text-admin-accent hover:underline" href={`/admin-new/projects/${encodeURIComponent(routeState.session.project_id)}`} data-testid="session-recording-project-link">
+              Project details
+            </a>
+          </div>
+        </div>
+      {/if}
     </section>
 
     <section class="min-w-0 rounded-md border border-admin-border bg-admin-panel" data-testid="session-recording-playback">

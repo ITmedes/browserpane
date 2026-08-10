@@ -10,10 +10,10 @@
   type SessionTransferFilesPanelProps = {
     readonly client: SessionFileClient;
     readonly sessionId: string;
-    readonly transferBlocked: boolean;
+    readonly transferPolicyMessage: string | null;
   };
 
-  let { client, sessionId, transferBlocked }: SessionTransferFilesPanelProps = $props();
+  let { client, sessionId, transferPolicyMessage }: SessionTransferFilesPanelProps = $props();
   let loadedSessionId = $state<string | null>(null);
   let files = $state<readonly SessionFileResource[]>([]);
   let loading = $state(true);
@@ -137,12 +137,12 @@
       runningTestId="session-files-action-running"
     />
 
-    {#if transferBlocked}
+    {#if transferPolicyMessage}
       <AdminMessage
         tone="warning"
         density="compact"
         title="Live file transfer blocked"
-        message="The effective project policy disables at least one browser file-transfer direction for this session."
+        message={transferPolicyMessage}
         testId="session-files-policy-blocked"
       />
     {/if}
