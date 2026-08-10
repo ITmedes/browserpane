@@ -22,6 +22,7 @@ async function main(): Promise<void> {
   const controlClient = new RecordingControlClient({
     gatewayApiUrl: process.env.BPANE_GATEWAY_API_URL ?? "http://localhost:8932",
     sessionAutomationAccessToken: process.env.BPANE_SESSION_AUTOMATION_ACCESS_TOKEN ?? "",
+    recordingWorkerAccessToken: requiredEnv("BPANE_RECORDING_WORKER_ACCESS_TOKEN"),
     getHeaders: (extraHeaders) => tokenManager.getAuthHeaders(extraHeaders),
   });
   const gatewayApiUrl = process.env.BPANE_GATEWAY_API_URL ?? "http://localhost:8932";

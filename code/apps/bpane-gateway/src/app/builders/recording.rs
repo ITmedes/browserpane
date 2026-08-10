@@ -8,7 +8,10 @@ use crate::auth::AuthValidator;
 use crate::config::Config;
 use crate::recording::{RecordingArtifactStore, RecordingObservability, RecordingRetentionManager};
 use crate::recording_lifecycle::{RecordingLifecycleManager, RecordingWorkerConfig};
-use crate::session_access::{SessionAutomationAccessTokenManager, SessionConnectTicketManager};
+use crate::session_access::{
+    RecordingWorkerAccessTokenManager, SessionAutomationAccessTokenManager,
+    SessionConnectTicketManager,
+};
 use crate::session_control::SessionStore;
 
 use super::RecordingServices;
@@ -19,6 +22,7 @@ impl RecordingServices {
         auth_validator: Arc<AuthValidator>,
         connect_ticket_manager: Arc<SessionConnectTicketManager>,
         automation_access_token_manager: Arc<SessionAutomationAccessTokenManager>,
+        recording_worker_access_token_manager: Arc<RecordingWorkerAccessTokenManager>,
         session_store: SessionStore,
     ) -> anyhow::Result<Self> {
         let lifecycle = Arc::new(RecordingLifecycleManager::new(
@@ -26,6 +30,7 @@ impl RecordingServices {
             auth_validator,
             connect_ticket_manager,
             automation_access_token_manager,
+            recording_worker_access_token_manager,
             session_store.clone(),
         )?);
         lifecycle.reconcile_persisted_state().await?;

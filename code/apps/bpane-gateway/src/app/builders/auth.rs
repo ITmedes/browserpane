@@ -7,7 +7,8 @@ use tracing::info;
 use crate::auth::{AuthValidator, OidcConfig};
 use crate::config::Config;
 use crate::session_access::{
-    AdminEventAccessTokenManager, SessionAutomationAccessTokenManager, SessionConnectTicketManager,
+    AdminEventAccessTokenManager, RecordingWorkerAccessTokenManager,
+    SessionAutomationAccessTokenManager, SessionConnectTicketManager,
 };
 
 use super::AuthServices;
@@ -26,9 +27,12 @@ impl AuthServices {
                 Duration::from_secs(config.auth.session_ticket_ttl_secs),
             )),
             automation_access_token_manager: Arc::new(SessionAutomationAccessTokenManager::new(
-                shared_secret,
+                shared_secret.clone(),
                 Duration::from_secs(config.auth.session_ticket_ttl_secs),
             )),
+            recording_worker_access_token_manager: Arc::new(
+                RecordingWorkerAccessTokenManager::new(shared_secret),
+            ),
             auth_validator,
         })
     }

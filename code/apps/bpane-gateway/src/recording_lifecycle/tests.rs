@@ -9,7 +9,10 @@ use tokio::time::sleep;
 
 use super::*;
 use crate::auth::{AuthValidator, AuthenticatedPrincipal};
-use crate::session_access::{SessionAutomationAccessTokenManager, SessionConnectTicketManager};
+use crate::session_access::{
+    RecordingWorkerAccessTokenManager, SessionAutomationAccessTokenManager,
+    SessionConnectTicketManager,
+};
 use crate::session_control::{
     CreateSessionRequest, PersistCompletedSessionRecordingRequest, SessionOwnerMode,
     SessionRecordingFormat, SessionRecordingPolicy,
@@ -83,7 +86,8 @@ fn create_capture_script(dir: &tempfile::TempDir) -> PathBuf {
     fs::write(
         &script_path,
         r#"#!/bin/sh
-printf '%s %s %s %s\n' "${BPANE_RECORDING_SESSION_ID}" "${BPANE_RECORDING_ID}" "${BPANE_RECORDING_CONNECT_TICKET}" "${BPANE_SESSION_AUTOMATION_ACCESS_TOKEN}" > "$1"
+printf '%s %s %s %s %s\n' "${BPANE_RECORDING_SESSION_ID}" "${BPANE_RECORDING_ID}" "${BPANE_RECORDING_CONNECT_TICKET}" "${BPANE_SESSION_AUTOMATION_ACCESS_TOKEN}" "${BPANE_RECORDING_WORKER_ACCESS_TOKEN}" > "$1.tmp"
+mv "$1.tmp" "$1"
 "#,
     )
     .unwrap();
@@ -109,6 +113,7 @@ fn test_manager(
             vec![6; 32],
             Duration::from_secs(300),
         )),
+        Arc::new(RecordingWorkerAccessTokenManager::new([7; 32])),
         store,
     )
     .unwrap()
@@ -141,9 +146,10 @@ async fn always_mode_launches_worker_and_marks_unfinished_recording_failed() {
     let capture = fs::read_to_string(&capture_file).unwrap();
     assert!(capture.contains(&session.id.to_string()));
     let captured_env: Vec<&str> = capture.split_whitespace().collect();
-    assert_eq!(captured_env.len(), 4);
+    assert_eq!(captured_env.len(), 5);
     assert!(!captured_env[2].is_empty());
     assert!(!captured_env[3].is_empty());
+    assert!(!captured_env[4].is_empty());
 
     let mut latest = None;
     for _ in 0..50 {

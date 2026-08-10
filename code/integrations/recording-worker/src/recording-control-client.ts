@@ -8,12 +8,14 @@ import type {
 type RecordingControlClientOptions = {
   gatewayApiUrl: string;
   sessionAutomationAccessToken: string;
+  recordingWorkerAccessToken: string;
   getHeaders: (extraHeaders?: Record<string, string>) => Promise<Record<string, string>>;
 };
 
 export class RecordingControlClient {
   private readonly gatewayApiUrl: string;
   private readonly sessionAutomationAccessToken: string;
+  private readonly recordingWorkerAccessToken: string;
   private readonly getHeaders: (
     extraHeaders?: Record<string, string>,
   ) => Promise<Record<string, string>>;
@@ -21,6 +23,7 @@ export class RecordingControlClient {
   constructor(options: RecordingControlClientOptions) {
     this.gatewayApiUrl = options.gatewayApiUrl.replace(/\/$/, "");
     this.sessionAutomationAccessToken = options.sessionAutomationAccessToken.trim();
+    this.recordingWorkerAccessToken = options.recordingWorkerAccessToken.trim();
     this.getHeaders = options.getHeaders;
   }
 
@@ -62,7 +65,10 @@ export class RecordingControlClient {
       `/api/v1/sessions/${encodeURIComponent(sessionId)}/recordings/${encodeURIComponent(recordingId)}/complete`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-bpane-recording-worker-token": this.recordingWorkerAccessToken,
+        },
         body: JSON.stringify({
           source_path: sourcePath,
           mime_type: mimeType,
@@ -89,7 +95,10 @@ export class RecordingControlClient {
       `/api/v1/sessions/${encodeURIComponent(sessionId)}/recordings/${encodeURIComponent(recordingId)}/fail`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-bpane-recording-worker-token": this.recordingWorkerAccessToken,
+        },
         body: JSON.stringify(body),
       },
     );
