@@ -99,18 +99,18 @@ see exactly which new-admin and fallback journeys passed.
 
 ## Implementation Slices
 
-1. **Executable promotion contract:** validate navigation-to-route coverage,
-   define the mandatory unified and compatibility smoke inventory, and protect
-   the inventory with focused tests.
-2. **Canonical browser regression stages:** add the missing unified-admin
-   Compose stages, add the promotion/fallback browser journey, and require all
-   stages in the hosted browser-integration lane.
-3. **Default-route promotion:** redirect root `/` to `/admin-new/`, preserve
+1. **Executable promotion contract (complete through `ac54d8d`):** validate
+   navigation-to-route coverage, define the mandatory unified and compatibility
+   smoke inventory, and protect the inventory with focused tests.
+2. **Canonical browser regression stages (in progress through `3861bd6`):** add
+   the missing unified-admin Compose stages, add the promotion/fallback browser
+   journey, and require all stages in isolated hosted promotion lanes.
+3. **Default-route promotion (pending):** redirect root `/` to `/admin-new/`, preserve
    explicit fixture and legacy routes, and cover Nginx behavior with static and
    live tests.
-4. **Documentation and decision evidence:** align README, ARCH, AGENTS, status,
-   manual checkpoints, validation matrix, delivery roadmap, and issue state;
-   run the full gate and record residual risks and rollback steps.
+4. **Documentation and decision evidence (pending):** align README, ARCH,
+   AGENTS, status, manual checkpoints, validation matrix, delivery roadmap, and
+   issue state; run the full gate and record residual risks and rollback steps.
 
 Each completed slice is committed independently. No slice may remove or alias
 the compatibility application.
@@ -196,6 +196,27 @@ the compatibility application.
 - Selected legacy admin stages and focused package tests/builds
 - Repository document and Markdown link checks
 
+## Implementation Evidence
+
+### 2026-08-10: Promotion Contract And Hosted Lane Foundation
+
+- All 16 visible navigation entries resolve to route-backed SvelteKit pages.
+- The promotion contract includes every current `smoke:admin-unified-*` package
+  script and 11 selected compatibility journeys.
+- The canonical Compose catalog exposes 23 independently rerunnable admin
+  promotion stages.
+- Hosted validation runs unified and compatibility promotion surfaces in two
+  parallel jobs instead of extending the existing browser-integration critical
+  path.
+- Focused admin navigation tests passed: 7 tests.
+- Promotion contract, stage catalog, and Compose workflow tests passed: 15
+  tests.
+- The complete validation-tool stage passed: 89 tests.
+- Repository document validation passed: 68 Markdown files, 8 YAML files, and
+  3 workflows.
+- Root routing and README behavior remain unchanged until the dedicated live
+  promotion/fallback smoke is implemented.
+
 ## Completion Criteria
 
 - Root `/` selects `/admin-new/` and `/admin/` remains directly usable.
@@ -208,4 +229,3 @@ the compatibility application.
   residual risks are recorded in the PR.
 - README, ARCH, AGENTS, status, validation, roadmap, and issue context match the
   promoted behavior.
-
