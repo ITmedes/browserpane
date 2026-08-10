@@ -10,6 +10,7 @@
   } from '$lib/sessions/session-create-view-model';
   import AdminMessage from './AdminMessage.svelte';
   import FieldFeedback from './FieldFeedback.svelte';
+  import SessionCreateScopeFields from './SessionCreateScopeFields.svelte';
 
   type SessionCreateFormProps = {
     readonly disabled?: boolean;
@@ -50,6 +51,10 @@
     void onSave?.(validation.request);
   }
 
+  function updateDraft(nextDraft: SessionCreateDraft): void {
+    draft = nextDraft;
+  }
+
   function updateRecordingEnabled(event: Event): void {
     const enabled = (event.currentTarget as HTMLInputElement).checked;
     draft.recordingEnabled = enabled;
@@ -59,7 +64,7 @@
   }
 </script>
 
-<section class="rounded-md border border-admin-border bg-admin-panel p-4 sm:p-5" data-testid="session-create-form">
+<section class="min-w-0 rounded-md border border-admin-border bg-admin-panel p-4 sm:p-5" data-testid="session-create-form">
   <div class="flex flex-col gap-3 border-b border-admin-border pb-4 lg:flex-row lg:items-start lg:justify-between">
     <div class="min-w-0">
       <h3 class="m-0 text-base font-semibold text-admin-ink">New session settings</h3>
@@ -87,121 +92,14 @@
     </div>
   {/if}
 
-  <div class="mt-5 grid gap-4">
-    <section class="rounded-md border border-admin-border bg-admin-soft/50 p-4" data-testid="session-create-scope-section">
-      <div class="border-b border-admin-border pb-3">
-        <h4 class="m-0 text-sm font-semibold text-admin-ink">Scope and ownership</h4>
-        <p class="m-0 mt-1 text-xs leading-5 text-admin-muted">
-          Leave fields empty when the session should use gateway defaults.
-        </p>
-      </div>
-
-      <div class="mt-4 grid items-start gap-4 lg:grid-cols-3">
-        <label class="grid min-w-0 content-start gap-1.5 text-sm">
-          <span class="font-medium text-admin-ink">Project</span>
-          <select
-            class="h-10 w-full min-w-0 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
-            bind:value={draft.projectId}
-            disabled={disabled}
-            data-testid="session-create-project-id"
-          >
-            <option value="">Owner scoped</option>
-            {#each options.projects as project}
-              <option value={project.id}>{project.name} - {project.state}</option>
-            {/each}
-          </select>
-          <FieldFeedback errors={validation.fieldErrors.projectId} testId="session-create-project-id-error" />
-        </label>
-
-        <label class="grid min-w-0 content-start gap-1.5 text-sm">
-          <span class="font-medium text-admin-ink">Session template</span>
-          <select
-            class="h-10 w-full min-w-0 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
-            bind:value={draft.templateId}
-            disabled={disabled}
-            data-testid="session-create-template-id"
-          >
-            <option value="">No template</option>
-            {#each options.sessionTemplates as template}
-              <option value={template.id}>{template.name}{template.state ? ` - ${template.state}` : ''}</option>
-            {/each}
-          </select>
-          <FieldFeedback errors={validation.fieldErrors.templateId} testId="session-create-template-id-error" />
-        </label>
-
-        <label class="grid min-w-0 content-start gap-1.5 text-sm">
-          <span class="font-medium text-admin-ink">Owner mode</span>
-          <select
-            class="h-10 w-full min-w-0 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
-            bind:value={draft.ownerMode}
-            disabled={disabled}
-            data-testid="session-create-owner-mode"
-          >
-            <option value="">Gateway default</option>
-            <option value="collaborative">collaborative</option>
-            <option value="exclusive_browser_owner">exclusive browser owner</option>
-          </select>
-        </label>
-      </div>
-    </section>
-
-    <section class="rounded-md border border-admin-border bg-admin-soft/50 p-4" data-testid="session-create-runtime-section">
-      <div class="border-b border-admin-border pb-3">
-        <h4 class="m-0 text-sm font-semibold text-admin-ink">Browser runtime references</h4>
-        <p class="m-0 mt-1 text-xs leading-5 text-admin-muted">
-          Select explicit browser context or egress resources only when the session should bind to them.
-        </p>
-      </div>
-
-      <div class="mt-4 grid items-start gap-4 lg:grid-cols-3">
-        <label class="grid min-w-0 content-start gap-1.5 text-sm">
-          <span class="font-medium text-admin-ink">Browser context mode</span>
-          <select
-            class="h-10 w-full min-w-0 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
-            bind:value={draft.browserContextMode}
-            disabled={disabled}
-            data-testid="session-create-browser-context-mode"
-          >
-            <option value="">Gateway default</option>
-            <option value="fresh">fresh profile</option>
-            <option value="ephemeral">ephemeral profile</option>
-            <option value="reusable">reusable context</option>
-          </select>
-        </label>
-
-        <label class="grid min-w-0 content-start gap-1.5 text-sm">
-          <span class="font-medium text-admin-ink">Reusable context</span>
-          <select
-            class="h-10 w-full min-w-0 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
-            bind:value={draft.browserContextId}
-            disabled={disabled || draft.browserContextMode !== 'reusable'}
-            data-testid="session-create-browser-context-id"
-          >
-            <option value="">Select context</option>
-            {#each options.browserContexts as context}
-              <option value={context.id}>{context.name}{context.scope ? ` - ${context.scope}` : ''}</option>
-            {/each}
-          </select>
-          <FieldFeedback errors={validation.fieldErrors.browserContextId} testId="session-create-browser-context-id-error" />
-        </label>
-
-        <label class="grid min-w-0 content-start gap-1.5 text-sm">
-          <span class="font-medium text-admin-ink">Egress profile</span>
-          <select
-            class="h-10 w-full min-w-0 rounded-md border border-admin-border bg-white px-3 text-sm text-admin-ink outline-none transition focus:border-admin-accent focus-visible:ring-2 focus-visible:ring-admin-accent/25 disabled:cursor-not-allowed disabled:bg-admin-soft disabled:text-admin-muted"
-            bind:value={draft.egressProfileId}
-            disabled={disabled}
-            data-testid="session-create-egress-profile-id"
-          >
-            <option value="">No explicit egress profile</option>
-            {#each options.egressProfiles as profile}
-              <option value={profile.id}>{profile.name}{profile.scope ? ` - ${profile.scope}` : ''}</option>
-            {/each}
-          </select>
-          <FieldFeedback errors={validation.fieldErrors.egressProfileId} testId="session-create-egress-profile-id-error" />
-        </label>
-      </div>
-    </section>
+  <div class="mt-5 grid min-w-0 gap-4">
+    <SessionCreateScopeFields
+      {draft}
+      {options}
+      {validation}
+      {disabled}
+      onDraftChange={updateDraft}
+    />
 
     <section class="rounded-md border border-admin-border bg-admin-soft/50 p-4" data-testid="session-create-capabilities-section">
       <div class="border-b border-admin-border pb-3">
@@ -470,11 +368,11 @@
       </div>
     </section>
 
-    <section class="rounded-md border border-admin-border bg-admin-soft/50 p-4" data-testid="session-create-payload-section">
+    <section class="min-w-0 rounded-md border border-admin-border bg-admin-soft/50 p-4" data-testid="session-create-payload-section">
       <div class="border-b border-admin-border pb-3">
         <h4 class="m-0 text-sm font-semibold text-admin-ink">API payload</h4>
       </div>
-      <pre class="mt-4 max-h-80 overflow-auto rounded-md border border-admin-border bg-white p-3 text-xs leading-5 text-admin-ink" data-testid="session-create-payload">{validation.preview}</pre>
+      <pre class="mt-4 max-h-80 w-full min-w-0 max-w-full overflow-auto rounded-md border border-admin-border bg-white p-3 text-xs leading-5 text-admin-ink" data-testid="session-create-payload">{validation.preview}</pre>
     </section>
   </div>
 
