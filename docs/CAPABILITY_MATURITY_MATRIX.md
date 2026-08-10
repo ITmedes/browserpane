@@ -2,7 +2,8 @@
 
 Governance issue: [#173](https://github.com/ITmedes/browserpane/issues/173)
 
-Last verified: 2026-08-07 on `feature/BPANE-00158`
+Last verified: 2026-08-10 on
+`feature/BPANE-00149-recording-artifact-finalization`
 
 ## Maturity Definitions
 
@@ -40,7 +41,7 @@ capability.
 | Stable BPM Workflow Endpoint | Planned | Detailed contract and slices in #172 | #172 |
 | Workflow Teach Mode | Planned | Demonstration-to-candidate specification in #171 | #171 |
 | Workflow Human Handoff | Partial prototype | run input/hold/resume primitives exist | #71, #154 |
-| Recording lifecycle and playback | Prototype | recorder worker, segmented artifacts, playback/export | #149, #21, #165 |
+| Recording lifecycle and playback | Prototype | recorder worker, worker-only exact-path finalization, measured-byte accounting, segmented artifacts, admin/CLI downloads, and playback/export; #149 review-ready | #149 merge, #21, #165 |
 | Generalized artifact/evidence model | Partial prototype | recordings, workspace files, workflow produced files remain separate resources | #21, #70, #28 |
 | Workflow event delivery | Prototype | signed delivery, retry/backoff, diagnostics, DNS/IP/redirect policy, pinned delivery, compose E2E; #147 merged through PR #191 | #28, #165 |
 | OIDC login and current-principal identity | Prototype | Keycloak compose, JWT validation, identity/access-review APIs | #146, #157 |

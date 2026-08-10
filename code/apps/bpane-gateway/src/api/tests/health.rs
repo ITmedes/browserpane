@@ -26,6 +26,7 @@ async fn health_and_readiness_are_public_and_drain_rejects_new_work() {
         None,
         Arc::new(RecordingArtifactStore::local_fs(
             temp_dir.path().join("recordings"),
+            temp_dir.path().join("recording-staging"),
         )),
         Arc::new(WorkspaceFileStore::local_fs(
             temp_dir.path().join("workspaces"),
@@ -98,6 +99,7 @@ async fn readiness_failure_is_sanitized() {
         None,
         Arc::new(RecordingArtifactStore::local_fs(
             temp_dir.path().join("recordings"),
+            temp_dir.path().join("recording-staging"),
         )),
         Arc::new(WorkspaceFileStore::local_fs(
             temp_dir.path().join("workspaces"),

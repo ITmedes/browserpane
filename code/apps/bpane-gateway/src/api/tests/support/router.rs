@@ -69,6 +69,7 @@ fn base_api_state(
             vec![6; 32],
             Duration::from_secs(300),
         )),
+        recording_worker_access_token_manager: test_recording_worker_access_token_manager(),
         session_store: SessionStore::in_memory(),
         session_manager: Arc::new(
             SessionManager::new(SessionManagerConfig::StaticSingle {
@@ -203,12 +204,15 @@ pub(crate) fn test_router_with_recording_lifecycle(
         vec![6; 32],
         Duration::from_secs(300),
     ));
+    let recording_worker_access_token_manager =
+        Arc::new(crate::session_access::RecordingWorkerAccessTokenManager::new([7; 32]));
     let recording_lifecycle = Arc::new(
         RecordingLifecycleManager::new(
             Some(config),
             auth_validator.clone(),
             connect_ticket_manager.clone(),
             automation_access_token_manager.clone(),
+            recording_worker_access_token_manager.clone(),
             session_store.clone(),
         )
         .expect("recording lifecycle test config should be valid"),
@@ -219,6 +223,7 @@ pub(crate) fn test_router_with_recording_lifecycle(
         admin_event_access_token_manager: test_admin_event_access_token_manager(),
         connect_ticket_manager,
         automation_access_token_manager,
+        recording_worker_access_token_manager,
         session_store,
         session_manager: Arc::new(
             SessionManager::new(SessionManagerConfig::StaticSingle {
@@ -297,6 +302,7 @@ pub(crate) fn test_router_with_workflow_lifecycle(
             Duration::from_secs(300),
         )),
         automation_access_token_manager,
+        recording_worker_access_token_manager: test_recording_worker_access_token_manager(),
         session_store,
         session_manager,
         credential_provider: Some(test_credential_provider()),
@@ -345,6 +351,7 @@ pub(crate) async fn test_router_with_live_agent_state(
             vec![6; 32],
             Duration::from_secs(300),
         )),
+        recording_worker_access_token_manager: test_recording_worker_access_token_manager(),
         session_store: SessionStore::in_memory(),
         session_manager: Arc::new(
             SessionManager::new(SessionManagerConfig::StaticSingle {
@@ -424,6 +431,7 @@ pub(crate) async fn test_router_with_docker_pool() -> (Router, String) {
             vec![6; 32],
             Duration::from_secs(300),
         )),
+        recording_worker_access_token_manager: test_recording_worker_access_token_manager(),
         session_store,
         session_manager,
         credential_provider: Some(credential_provider),
@@ -450,7 +458,30 @@ pub(crate) async fn test_router_with_docker_pool() -> (Router, String) {
 
 pub(crate) fn test_artifact_store() -> Arc<RecordingArtifactStore> {
     let root = std::env::temp_dir().join(format!("bpane-artifacts-test-{}", uuid::Uuid::now_v7()));
-    Arc::new(RecordingArtifactStore::local_fs(root))
+    Arc::new(RecordingArtifactStore::local_fs(
+        root,
+        test_artifact_staging_root(),
+    ))
+}
+
+pub(crate) fn stage_recording_artifact(
+    session_id: impl ToString,
+    recording_id: impl ToString,
+    bytes: &[u8],
+) -> std::path::PathBuf {
+    let path = test_artifact_staging_root()
+        .join(session_id.to_string())
+        .join(format!("{}.webm", recording_id.to_string()));
+    std::fs::create_dir_all(path.parent().expect("staged artifact should have a parent")).unwrap();
+    std::fs::write(&path, bytes).unwrap();
+    path
+}
+
+fn test_artifact_staging_root() -> std::path::PathBuf {
+    std::env::temp_dir().join(format!(
+        "bpane-recording-staging-test-{}",
+        std::process::id()
+    ))
 }
 
 pub(crate) fn test_admin_event_access_token_manager() -> Arc<AdminEventAccessTokenManager> {
@@ -458,6 +489,25 @@ pub(crate) fn test_admin_event_access_token_manager() -> Arc<AdminEventAccessTok
         vec![4; 32],
         Duration::from_secs(60),
     ))
+}
+
+pub(crate) fn test_recording_worker_access_token_manager(
+) -> Arc<crate::session_access::RecordingWorkerAccessTokenManager> {
+    Arc::new(crate::session_access::RecordingWorkerAccessTokenManager::new([7; 32]))
+}
+
+pub(crate) fn recording_worker_access_token(
+    session_id: impl ToString,
+    recording_id: impl ToString,
+) -> String {
+    let session_id = Uuid::parse_str(&session_id.to_string())
+        .expect("recording worker session id should be valid");
+    let recording_id = Uuid::parse_str(&recording_id.to_string())
+        .expect("recording worker recording id should be valid");
+    test_recording_worker_access_token_manager()
+        .issue_token(session_id, recording_id)
+        .expect("recording worker access token should be issued")
+        .token
 }
 
 pub(crate) fn test_workspace_file_store() -> Arc<WorkspaceFileStore> {

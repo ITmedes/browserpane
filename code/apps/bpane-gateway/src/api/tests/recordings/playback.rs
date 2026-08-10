@@ -20,6 +20,7 @@ async fn playback_manifest_and_export_bundle_follow_ready_segments() {
             vec![6; 32],
             Duration::from_secs(300),
         )),
+        recording_worker_access_token_manager: test_recording_worker_access_token_manager(),
         session_store: session_store.clone(),
         session_manager: Arc::new(
             SessionManager::new(SessionManagerConfig::StaticSingle {
@@ -105,9 +106,7 @@ async fn playback_manifest_and_export_bundle_follow_ready_segments() {
         .unwrap();
     assert_eq!(stop_first_recording.status(), StatusCode::OK);
 
-    let temp_dir = tempfile::tempdir().unwrap();
-    let artifact_path = temp_dir.path().join("segment-1.webm");
-    std::fs::write(&artifact_path, b"segment-one").unwrap();
+    let artifact_path = stage_recording_artifact(&session_id, &first_recording_id, b"segment-one");
     let complete_first_recording = app
         .clone()
         .oneshot(
@@ -117,6 +116,10 @@ async fn playback_manifest_and_export_bundle_follow_ready_segments() {
                     "/api/v1/sessions/{session_id}/recordings/{first_recording_id}/complete"
                 ))
                 .header("authorization", bearer(&token))
+                .header(
+                    RECORDING_WORKER_ACCESS_TOKEN_HEADER,
+                    recording_worker_access_token(&session_id, &first_recording_id),
+                )
                 .header("content-type", "application/json")
                 .body(Body::from(
                     json!({
@@ -157,6 +160,10 @@ async fn playback_manifest_and_export_bundle_follow_ready_segments() {
                     "/api/v1/sessions/{session_id}/recordings/{second_recording_id}/fail"
                 ))
                 .header("authorization", bearer(&token))
+                .header(
+                    RECORDING_WORKER_ACCESS_TOKEN_HEADER,
+                    recording_worker_access_token(&session_id, &second_recording_id),
+                )
                 .header("content-type", "application/json")
                 .body(Body::from(
                     json!({

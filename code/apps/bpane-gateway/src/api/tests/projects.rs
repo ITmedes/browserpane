@@ -759,40 +759,23 @@ async fn project_usage_counts_recording_bytes_and_rejects_over_quota_completion(
     .await;
     let first_recording_id = first_recording["id"].as_str().unwrap().to_string();
 
-    let missing_bytes_dir = tempfile::tempdir().unwrap();
-    let missing_bytes_path = missing_bytes_dir.path().join("missing-bytes.webm");
-    fs::write(&missing_bytes_path, b"abc").unwrap();
-    let missing_bytes = app
+    let stopped = app
         .clone()
         .oneshot(
             Request::builder()
                 .method("POST")
                 .uri(format!(
-                    "/api/v1/sessions/{session_id}/recordings/{first_recording_id}/complete"
+                    "/api/v1/sessions/{session_id}/recordings/{first_recording_id}/stop"
                 ))
                 .header("authorization", bearer(&token))
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    json!({
-                        "source_path": missing_bytes_path.to_string_lossy(),
-                        "mime_type": "video/webm"
-                    })
-                    .to_string(),
-                ))
+                .body(Body::empty())
                 .unwrap(),
         )
         .await
         .unwrap();
-    assert_eq!(missing_bytes.status(), StatusCode::BAD_REQUEST);
-    let missing_bytes = response_json(missing_bytes).await;
-    assert!(missing_bytes["error"]
-        .as_str()
-        .unwrap()
-        .contains("retained_storage_byte_count_required"));
+    assert_eq!(stopped.status(), StatusCode::OK);
 
-    let first_dir = tempfile::tempdir().unwrap();
-    let first_path = first_dir.path().join("first.webm");
-    fs::write(&first_path, b"12345678").unwrap();
+    let first_path = stage_recording_artifact(&session_id, &first_recording_id, b"12345678");
     let completed = app
         .clone()
         .oneshot(
@@ -802,12 +785,15 @@ async fn project_usage_counts_recording_bytes_and_rejects_over_quota_completion(
                     "/api/v1/sessions/{session_id}/recordings/{first_recording_id}/complete"
                 ))
                 .header("authorization", bearer(&token))
+                .header(
+                    RECORDING_WORKER_ACCESS_TOKEN_HEADER,
+                    recording_worker_access_token(&session_id, &first_recording_id),
+                )
                 .header("content-type", "application/json")
                 .body(Body::from(
                     json!({
                         "source_path": first_path.to_string_lossy(),
                         "mime_type": "video/webm",
-                        "bytes": 8,
                         "duration_ms": 1000
                     })
                     .to_string(),
@@ -849,9 +835,24 @@ async fn project_usage_counts_recording_bytes_and_rejects_over_quota_completion(
     )
     .await;
     let second_recording_id = second_recording["id"].as_str().unwrap().to_string();
-    let second_dir = tempfile::tempdir().unwrap();
-    let second_path = second_dir.path().join("second.webm");
-    fs::write(&second_path, b"123").unwrap();
+
+    let stopped = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!(
+                    "/api/v1/sessions/{session_id}/recordings/{second_recording_id}/stop"
+                ))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(stopped.status(), StatusCode::OK);
+
+    let second_path = stage_recording_artifact(&session_id, &second_recording_id, b"123");
     let rejected = app
         .oneshot(
             Request::builder()
@@ -860,12 +861,15 @@ async fn project_usage_counts_recording_bytes_and_rejects_over_quota_completion(
                     "/api/v1/sessions/{session_id}/recordings/{second_recording_id}/complete"
                 ))
                 .header("authorization", bearer(&token))
+                .header(
+                    RECORDING_WORKER_ACCESS_TOKEN_HEADER,
+                    recording_worker_access_token(&session_id, &second_recording_id),
+                )
                 .header("content-type", "application/json")
                 .body(Body::from(
                     json!({
                         "source_path": second_path.to_string_lossy(),
                         "mime_type": "video/webm",
-                        "bytes": 3,
                         "duration_ms": 250
                     })
                     .to_string(),

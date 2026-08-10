@@ -11,7 +11,8 @@ use crate::credentials::{CredentialProvider, VaultKvV2CredentialProvider};
 use crate::recording::{RecordingArtifactStore, RecordingObservability};
 use crate::recording_lifecycle::RecordingLifecycleManager;
 use crate::session_access::{
-    AdminEventAccessTokenManager, SessionAutomationAccessTokenManager, SessionConnectTicketManager,
+    AdminEventAccessTokenManager, RecordingWorkerAccessTokenManager,
+    SessionAutomationAccessTokenManager, SessionConnectTicketManager,
 };
 use crate::session_control::{SessionOwnerMode, SessionStore};
 use crate::session_manager::SessionManager;
@@ -45,6 +46,7 @@ pub(super) struct AuthServices {
     pub(super) admin_event_access_token_manager: Arc<AdminEventAccessTokenManager>,
     pub(super) connect_ticket_manager: Arc<SessionConnectTicketManager>,
     pub(super) automation_access_token_manager: Arc<SessionAutomationAccessTokenManager>,
+    pub(super) recording_worker_access_token_manager: Arc<RecordingWorkerAccessTokenManager>,
 }
 
 pub(super) struct RuntimeServices {

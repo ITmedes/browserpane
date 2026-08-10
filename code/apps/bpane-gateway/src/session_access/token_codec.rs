@@ -15,6 +15,7 @@ pub(super) enum TokenPurpose {
     SessionConnect,
     SessionAutomation,
     AdminEvents,
+    RecordingWorker,
 }
 
 impl TokenPurpose {
@@ -23,6 +24,7 @@ impl TokenPurpose {
             Self::SessionConnect => "session-connect",
             Self::SessionAutomation => "session-automation",
             Self::AdminEvents => "admin-events",
+            Self::RecordingWorker => "recording-worker",
         }
     }
 }
