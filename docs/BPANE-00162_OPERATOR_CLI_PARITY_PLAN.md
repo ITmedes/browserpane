@@ -4,13 +4,14 @@
 
 - Issue: [#162](https://github.com/ITmedes/browserpane/issues/162)
 - State: In progress; slice 1 merged through PR `#205`, slices 2-3 merged
-  through PR `#206`, slice 4 complete on its feature branch, and slice 5 next
+  through PR `#206`, slice 4 merged through PR `#207`, slice 5 complete on its
+  feature branch, and slice 6 next
 - Lane: Operator Product
 - Target gate: Admin-New Phase 1 Promotion
 - Depends on: control API conformance through `#179`, admin-new resource
   catalogs through `#159`, and project governance through `#161`
-- Branch: `feature/BPANE-00162-session-evidence-cli`
-- Baseline: `main` at `24ccbfe7197755446313587c8fa7569f94645010`,
+- Branch: `feature/BPANE-00162-cli-diagnostics`
+- Baseline: `main` at `7cff03e6fbba99d20620cdedafb301acd9d34b41`,
   2026-08-10
 
 ## Business Outcome
@@ -132,9 +133,10 @@ long-lived bearer token or resolved credential value is printed.
 4. **Session evidence transfers** (complete): add owner-facing session
    file/binding and recording/playback inspection/download commands without
    exposing worker-only mutation routes.
-5. **Diagnostics and documentation**: publish the API-family support inventory,
-   consolidate README/ARCH examples, and add accurate local certificate, MCP,
-   workflow source, Docker socket, and camera diagnostic steps.
+5. **Diagnostics and documentation** (complete): publish the API-family
+   support inventory, close the missing session-release command, consolidate
+   README/ARCH examples, and add accurate local certificate, MCP, workflow
+   source, Docker socket, and camera diagnostic steps.
 6. **Battle test and promotion evidence**: run focused and full CLI tests,
    coverage, typecheck/build, Compose CLI/MCP/workflow/resource smokes, negative
    cases, documentation validation, and compatibility regressions.
@@ -202,6 +204,62 @@ with evidence before PR creation.
    recording evidence where fixtures are available.
 6. Align README/ARCH guidance, record validation evidence, commit, and push the
    slice before the final diagnostics and promotion work begins.
+
+## Slice 5 Detailed Steps
+
+1. Inventory every family in `openapi/bpane-control-v1.yaml` against the
+   canonical CLI and classify it as supported, compatibility-only,
+   admin/API-only, worker-internal, or deferred. Record the reason for every
+   non-supported family instead of implying complete API parity.
+2. Add the missing owner-facing `session release <session-id>` command. Reuse
+   the existing profile/auth/error boundary, encode the session id, reject
+   invalid shapes without a request, and cover success plus authentication,
+   not-found, conflict, and server-error behavior.
+3. Add a concise operator CLI support document with preferred command families,
+   the compatibility boundary, binary/secret safety rules, and links to the
+   frozen OpenAPI contract. Keep README examples task-oriented rather than
+   duplicating the complete matrix.
+4. Add one local troubleshooting decision path for gateway health/readiness,
+   WebTransport certificate rotation/trust, MCP doctor/preflight, workflow
+   source validation and trusted-root failures, Docker socket/runtime access,
+   and optional Linux `v4l2loopback` camera ingress. Every command must exist in
+   the repository or standard local toolchain and must avoid printing tokens or
+   resolved secrets.
+5. Extend the canonical CLI Compose smoke with a disposable release lifecycle:
+   start/connect a session, disconnect it, release its runtime, verify the
+   released/profile-restart state, and clean up without disturbing the MCP
+   session used by the rest of the smoke.
+6. Run focused/full CLI tests, TypeScript check, build, CLI help, documentation
+   link/path checks, and the affected live CLI smoke. Update README, ARCH,
+   runtime requirements, validation matrix, plan evidence, and issue #162 before
+   the final promotion-validation slice begins.
+
+### Slice 5 Example Use Case
+
+An operator receives an `Opening handshake failed` report after a local
+certificate rotation and also sees that a workflow source will not validate.
+They follow one decision path to distinguish gateway readiness from certificate
+trust, verify MCP independently, validate the immutable workflow source through
+the canonical CLI, and confirm that the gateway can reach the Docker socket.
+After testing a disposable browser runtime, they release it through
+`bpane session release` so the persisted session can reconnect from its profile
+without being stopped or killed.
+
+### Slice 5 Smoke Sequence
+
+1. Start local Compose and verify gateway `/healthz` and `/readyz`.
+2. Initialize a temporary CLI profile without persisting the bearer token.
+3. Create and connect a disposable session, disconnect all clients, release the
+   runtime, and verify `runtime_state=released` plus profile-backed reconnect
+   semantics.
+4. Run MCP doctor and strict preflight against the smoke delegation session.
+5. Validate a local git-backed workflow source and exercise one trusted-root or
+   missing-source error with its structured category/code.
+6. Compare served certificate metadata with generated local files, confirm
+   Docker runtime access, and verify that camera diagnostics report the default
+   disabled state or an intentionally provisioned Linux device.
+7. Run focused and full CLI tests, typecheck/build/help, repository document
+   checks, and `smoke:bpane-cli -- --headless`.
 
 ## Slice 1 Evidence (2026-08-10)
 
@@ -295,6 +353,37 @@ with evidence before PR creation.
 - README and ARCH now document the read-only session-evidence surface and its
   internal mutation boundary. No gateway, OpenAPI, database, protocol,
   support-matrix, or runtime-topology change was required.
+
+## Slice 5 Evidence (2026-08-10)
+
+- Added canonical `session release <session-id>` support on the shared
+  profile/auth/error boundary with URL-encoded identifiers.
+- Focused CLI coverage passed all `63` tests, including valid release, malformed
+  positionals, missing authentication, and `404`, `409`, and `503` responses.
+- Published `OPERATOR_CLI_AND_LOCAL_DIAGNOSTICS.md`, classifying all `131`
+  frozen OpenAPI operations across `16` families into supported, partial,
+  compatibility, Admin/API-only, evidence, and worker-internal boundaries.
+- Documented one ordered troubleshooting path for gateway readiness,
+  authentication, certificate trust, MCP, workflow source, Docker runtime
+  access, and optional Linux camera ingress. README, ARCH, runtime requirements,
+  validation matrix, and the docs-to-issue map reference that canonical guide.
+- Expanded `smoke:bpane-cli` with a project-policy-compliant disposable session,
+  a real browser transport connection, disconnect, runtime release, real
+  reconnect, `profile_restart` verification, stop, and cleanup. The smoke
+  passed against local Compose without disturbing the separate MCP delegation
+  session.
+- Verified live `/healthz` and `/readyz`, Docker daemon/socket access, gateway
+  `/workspace` access, served-versus-local certificate metadata, certificate
+  validity, and MCP bridge health using the documented commands.
+- The full browser-client suite passed `674` tests across `86` files. The
+  coverage ratchet passed at `92.88%` lines/statements, `93.19%` functions, and
+  `87.57%` branches. TypeScript check, production build, CLI help, Node syntax,
+  and whitespace checks passed.
+- OpenAPI governance passed `27` tests, inventory/lint/examples/compatibility
+  checks, and all `131` operation classifications. Repository document checks
+  passed for `67` Markdown files, `8` YAML files, and `3` workflows.
+- No gateway, OpenAPI, database, protocol, support-matrix, or runtime-topology
+  change was required.
 
 ## Validation Strategy
 
