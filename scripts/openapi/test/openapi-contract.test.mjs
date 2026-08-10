@@ -51,6 +51,24 @@ paths:
   });
 });
 
+test('classifies recording-worker capabilities separately from owner access', () => {
+  withContract(`
+openapi: 3.0.3
+paths:
+  /api/v1/sessions/{session_id}/recordings/{recording_id}/complete:
+    post:
+      tags: [Session Recordings]
+      operationId: completeSessionRecording
+      security:
+        - recordingWorkerAccessToken: []
+      responses:
+        '200': { description: Finalized }
+`, (filename) => {
+    const [operation] = OpenApiContract.load(filename).operations();
+    assert.equal(operation.auth, 'recording-worker');
+  });
+});
+
 test('rejects duplicate YAML keys before inventory generation', () => {
   withContract(`
 openapi: 3.0.3
