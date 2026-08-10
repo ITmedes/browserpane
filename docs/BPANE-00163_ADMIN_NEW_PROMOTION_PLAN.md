@@ -105,7 +105,8 @@ see exactly which new-admin and fallback journeys passed.
 2. **Canonical browser regression stages (complete through PR `#210`):** add
    the missing unified-admin Compose stages, add the promotion/fallback browser
    journey, and require all stages in isolated hosted promotion lanes.
-3. **Default-route promotion (implemented in `e166325`, live validation pending):** redirect root `/` to `/admin-new/`, preserve
+3. **Default-route promotion (complete through `e166325` and `5d785ec`):**
+   redirect root `/` to `/admin-new/`, preserve
    explicit fixture and legacy routes, and cover Nginx behavior with static and
    live tests.
 4. **Documentation and decision evidence (in progress):** align README, ARCH,
@@ -216,6 +217,27 @@ the compatibility application.
   3 workflows.
 - Root routing and README behavior remain unchanged until the dedicated live
   promotion/fallback smoke is implemented.
+
+### 2026-08-10: Default Route And Live Fallback Evidence
+
+- Exact root `/` returns a non-cacheable `302` to same-origin `/admin-new/` and
+  carries the shared admin response-security policy.
+- `/admin/` remains directly reachable and explicit fixture URLs such as
+  `/index.html` remain served.
+- The live promotion smoke completed Keycloak authentication at the promoted
+  root, loaded and reloaded `/admin-new/sessions`, opened the compatibility
+  console, and returned to the unified dashboard.
+- `compose-admin-new-promotion` passed against a rebuilt local web image in
+  3.1 seconds.
+- Browser-client typecheck and all 674 unit tests passed before live execution;
+  20 focused promotion, workflow, stage-catalog, and Nginx contract tests also
+  passed.
+- README, ARCH, AGENTS, admin status/manual checkpoints, validation matrix,
+  delivery roadmap, and issue context now describe `/admin-new/` as the local
+  default while retaining `/admin/` as fallback.
+- The remaining completion gate is the full 24-stage promotion inventory plus
+  the final manual regression record; default routing does not authorize legacy
+  app removal.
 
 ## Completion Criteria
 
