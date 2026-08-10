@@ -1,5 +1,6 @@
 import path from 'node:path';
 
+import { ADMIN_PROMOTION_SMOKES } from './admin-promotion-contract.mjs';
 import { ValidationStage } from './validation-stage.mjs';
 
 export class ValidationStageCatalog {
@@ -41,6 +42,8 @@ export class ValidationStageCatalog {
         'scripts/dependency-safety/policy.test.mjs',
         'scripts/coverage/coverage-baseline-checker.test.mjs',
         'scripts/coverage/rust-coverage-command.test.mjs',
+        'scripts/validation/admin-promotion-contract.test.mjs',
+        'scripts/validation/admin-promotion-runner.test.mjs',
         'scripts/ci/ci-rust-builder-consumer-contract.test.mjs',
         'scripts/ci/ci-rust-builder-ref.test.mjs',
         'scripts/ci/ci-rust-builder-resolver.test.mjs',
@@ -105,21 +108,9 @@ export class ValidationStageCatalog {
     return [
       this.#stage('compose-gateway-api', 'Run gateway compose API suites', 'bash',
         ['scripts/run-gateway-compose-e2e.sh', '--suite', 'all'], root, 2700),
-      this.#npmSmoke('compose-admin-auth-security', 'Smoke shared admin authentication', client,
-        'smoke:admin-auth-security'),
-      this.#npmSmoke('compose-admin-new-dashboard', 'Smoke admin-new dashboard', client,
-        'smoke:admin-unified-dashboard'),
-      this.#npmSmoke('compose-admin-new-projects', 'Smoke admin-new projects', client,
-        'smoke:admin-unified-projects'),
-      this.#npmSmoke('compose-admin-new-resource-catalogs',
-        'Smoke admin-new extension, credential, and event catalogs', client,
-        'smoke:admin-unified-resource-catalogs', ['--connect-timeout-ms', '60000']),
-      this.#npmSmoke('compose-admin-new-sessions', 'Smoke admin-new sessions', client,
-        'smoke:admin-unified-sessions', ['--connect-timeout-ms', '60000']),
-      this.#npmSmoke('compose-admin-new-api-companion', 'Smoke admin-new API companion', client,
-        'smoke:admin-unified-api-companion', ['--connect-timeout-ms', '60000']),
-      this.#npmSmoke('compose-admin-compat', 'Smoke compatibility admin session', client,
-        'smoke:admin-session'),
+      ...ADMIN_PROMOTION_SMOKES.map(({ id, description, script, extraArgs }) => (
+        this.#npmSmoke(id, description, client, script, extraArgs)
+      )),
       this.#npmSmoke('compose-cli', 'Smoke BrowserPane CLI', client, 'smoke:bpane-cli'),
       this.#npmSmoke('compose-session-files', 'Smoke session file evidence', client,
         'smoke:session-files'),

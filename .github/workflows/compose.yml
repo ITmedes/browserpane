@@ -119,13 +119,6 @@ jobs:
       - name: Run browser-facing compose validation
         run: >-
           node scripts/validate.mjs
-          --stage compose-admin-auth-security
-          --stage compose-admin-new-dashboard
-          --stage compose-admin-new-projects
-          --stage compose-admin-new-resource-catalogs
-          --stage compose-admin-new-sessions
-          --stage compose-admin-new-api-companion
-          --stage compose-admin-compat
           --stage compose-cli
           --stage compose-session-files
           --stage compose-mcp
@@ -142,6 +135,70 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: compose-diagnostics-browser-integrations-${{ github.run_id }}
+          path: test-results/ci-diagnostics/compose.log
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Clean compose resources
+        if: always()
+        run: scripts/ci/cleanup-compose.sh
+      - name: Log out of GitHub Container Registry
+        if: always()
+        run: docker logout ghcr.io
+
+  admin-promotion:
+    name: Admin promotion (${{ matrix.surface }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        surface:
+          - unified
+          - compatibility
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Authenticate to GitHub Container Registry
+        run: >-
+          echo "${{ github.token }}" |
+          docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+      - name: Resolve CI Rust builder
+        run: node scripts/ci/ci-rust-builder-resolver.mjs --github-env "${GITHUB_ENV}"
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: code/web/bpane-client/package-lock.json
+      - name: Verify runtime prerequisites
+        run: |
+          docker compose version
+          if command -v google-chrome >/dev/null; then
+            google-chrome --version
+          else
+            chromium --version
+          fi
+      - name: Install browser-client dependencies
+        run: node scripts/validate.mjs --stage client-install
+      - name: Build workflow worker image
+        run: docker compose -f deploy/compose.yml --profile workflow build workflow-worker
+      - name: Prepare compose runtime
+        run: scripts/run-gateway-compose-e2e.sh --suite stack
+      - name: Run admin promotion validation
+        run: node scripts/run-admin-promotion-validation.mjs "${{ matrix.surface }}"
+      - name: Collect redacted failure diagnostics
+        if: failure()
+        run: node scripts/collect-compose-diagnostics.mjs
+      - name: Publish redacted failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: compose-diagnostics-admin-${{ matrix.surface }}-${{ github.run_id }}
           path: test-results/ci-diagnostics/compose.log
           if-no-files-found: ignore
           retention-days: 7

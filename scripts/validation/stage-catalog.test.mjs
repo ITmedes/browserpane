@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { ADMIN_PROMOTION_SMOKES } from './admin-promotion-contract.mjs';
 import { ValidationStageCatalog } from './stage-catalog.mjs';
 import { ValidationStage } from './validation-stage.mjs';
 
@@ -29,6 +30,19 @@ test('catalog exposes stable, unique fast and compose profiles', () => {
   assert.ok(compose.some((stage) => stage.id === 'compose-workflow-cli'));
   assert.ok(compose.some((stage) => stage.id === 'compose-workflow-workspace'));
   assert.ok(compose.some((stage) => stage.id === 'compose-workflow-events'));
+  for (const smoke of ADMIN_PROMOTION_SMOKES) {
+    assert.ok(compose.some((stage) => stage.id === smoke.id));
+  }
+});
+
+test('promotion surface runner remains part of validation tooling tests', () => {
+  const tooling = new ValidationStageCatalog('/repo')
+    .forProfile('fast')
+    .find((stage) => stage.id === 'validation-tool-tests');
+
+  assert.ok(tooling);
+  assert.ok(tooling.args.includes('scripts/validation/admin-promotion-contract.test.mjs'));
+  assert.ok(tooling.args.includes('scripts/validation/admin-promotion-runner.test.mjs'));
 });
 
 test('catalog selects requested stages in caller order and rejects out-of-profile ids', () => {
