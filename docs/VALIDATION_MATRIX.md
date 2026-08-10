@@ -12,13 +12,13 @@ one important surface, but it is not the only delivery lane.
 The current coverage ratchet records:
 
 - all non-ignored Rust workspace tests passed under `cargo llvm-cov`, with
-  54.88% line coverage on the canonical pinned Ubuntu runner and 56.88% on
+  54.88% line coverage on the canonical pinned Ubuntu runner and 57.32% on
   local macOS; the cross-platform floor is 54.8%,
 - browser-client tests pass on pinned Node 22/Linux with 92.88% lines, 92.88%
   statements, 93.19% functions, and 87.57% branches across all maintained `js`
   sources; the cross-platform function floor is 92.9%,
-- admin-new's 494 tests pass with 89.54% lines, 91.79% statements, 93.59%
-  functions, and 76.47% branches across `src/lib`,
+- admin-new's 618 tests pass with 90.43% lines, 92.28% statements, 93.86%
+  functions, and 76.74% branches across `src/lib`,
 - MCP bridge has focused unit tests,
 - recording-worker and workflow-worker have build checks but no unit-test
   suites,
@@ -57,15 +57,19 @@ local stack and leaves it running for inspection. Smokes that temporarily
 change gateway admission limits restore the normal compose configuration before
 returning.
 
-Verified catalog on 2026-08-07:
+Verified catalog on 2026-08-10:
 
 - the fast profile contains 40 stages, including Rust, browser-client, and
   admin-new coverage ratchets,
-- the compose profile contains 11 bounded stages, including the admin-new API
-  companion smoke,
+- the compose profile contains 15 bounded stages, including the admin-new API
+  companion, session-file evidence, workflow CLI, workflow workspace, and
+  workflow event smokes,
 - the compose gateway stage passes 17 default API and four docker-pool cases,
 - representative admin-new, compatibility-admin, CLI, MCP, recording, and
-  workflow admission journeys pass against the running stack.
+  workflow admission journeys pass against the running stack,
+- issue `#162` promotion evidence additionally passes the named session-file,
+  workflow CLI, workflow workspace, and workflow event stages; the workspace
+  fixture passes repeatedly against retained Postgres metadata.
 
 The fast GitHub workflow exposes stable repository, dependency, Rust, and
 per-package Node checks. It parses all committed YAML, validates local Markdown
@@ -76,10 +80,11 @@ in strict mode and binds them to the GitHub Actions app.
 
 `Compose / Representative compose smoke` runs on pushes to `main`, a weekday
 schedule, and manual dispatch. It is not a pull-request gate until hosted-runner
-reliability is demonstrated. The 60-minute job executes all 11 representative
-compose stages, captures only selected control-plane status/log tails after a
-failure, redacts credential and identity material before upload, and always
-removes BrowserPane containers and compose volumes.
+reliability is demonstrated. The split jobs execute all 15 representative
+compose stages, including the promoted CLI evidence journeys, capture only
+selected control-plane status/log tails after a failure, redact credential and
+identity material before upload, and always remove BrowserPane containers and
+compose volumes.
 
 ## Baseline Checks For Any Unified Admin Slice
 
