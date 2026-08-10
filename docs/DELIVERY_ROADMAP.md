@@ -47,7 +47,7 @@ or capacity decision.
 | --- | --- | --- | --- |
 | Foundation | Trusted build, auth, contracts, storage, and lifecycle baseline. | Complete through #179 | Foundation Gate |
 | Pilot Value | One bounded reference workflow with accepted evidence and runbook. | #174 | Phase 0 Gate |
-| Operator Product | Complete and promote `/admin-new/` as the default operator console. | #160 in review, then #161 | Phase 1 Gate |
+| Operator Product | Complete and promote `/admin-new/` as the default operator console. | #161 | Phase 1 Gate |
 | Production | Harden deployment, security, recovery, supply chain, and telemetry. | #72 / #66 / #178 | Production Baseline |
 | Enterprise | Organization controls, policy, residency, HA, and governed integrations. | #176 / #70 / #79 | Phase N Gate |
 | Innovation | Teach Mode and controlled repair after stable execution contracts. | #171 | Phase N capability gate |
@@ -85,8 +85,8 @@ after all 40 fast and all 10 Compose validation stages passed. #153 has
 merged through PR #195 after all required checks passed. #154 merged through
 PR #196, #155 through PR #197, #156 through PR #198, and #157 through PR #199.
 #158 merged through PR #200, #159 through PR #201, and #148 through PR #202.
-#160 is implemented and validated on `feature/BPANE-00160` under PR #203;
-merge remains before #161 becomes the next Operator Product slice.
+#160 merged through PR #203 after required and manually dispatched Compose
+validation passed. #161 is the active Operator Product slice.
 
 ## Foundation Gate Sequence
 
