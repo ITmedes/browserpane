@@ -61,8 +61,9 @@ Verified catalog on 2026-08-07:
 
 - the fast profile contains 40 stages, including Rust, browser-client, and
   admin-new coverage ratchets,
-- the compose profile contains 11 bounded stages, including the admin-new API
-  companion smoke,
+- the compose profile contains 15 bounded stages, including the admin-new API
+  companion, session-file evidence, workflow CLI, workflow workspace, and
+  workflow event smokes,
 - the compose gateway stage passes 17 default API and four docker-pool cases,
 - representative admin-new, compatibility-admin, CLI, MCP, recording, and
   workflow admission journeys pass against the running stack.
@@ -76,10 +77,11 @@ in strict mode and binds them to the GitHub Actions app.
 
 `Compose / Representative compose smoke` runs on pushes to `main`, a weekday
 schedule, and manual dispatch. It is not a pull-request gate until hosted-runner
-reliability is demonstrated. The 60-minute job executes all 11 representative
-compose stages, captures only selected control-plane status/log tails after a
-failure, redacts credential and identity material before upload, and always
-removes BrowserPane containers and compose volumes.
+reliability is demonstrated. The split jobs execute all 15 representative
+compose stages, including the promoted CLI evidence journeys, capture only
+selected control-plane status/log tails after a failure, redact credential and
+identity material before upload, and always remove BrowserPane containers and
+compose volumes.
 
 ## Baseline Checks For Any Unified Admin Slice
 

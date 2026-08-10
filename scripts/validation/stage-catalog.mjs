@@ -121,11 +121,19 @@ export class ValidationStageCatalog {
       this.#npmSmoke('compose-admin-compat', 'Smoke compatibility admin session', client,
         'smoke:admin-session'),
       this.#npmSmoke('compose-cli', 'Smoke BrowserPane CLI', client, 'smoke:bpane-cli'),
+      this.#npmSmoke('compose-session-files', 'Smoke session file evidence', client,
+        'smoke:session-files'),
       this.#npmSmoke('compose-mcp', 'Smoke session-scoped MCP endpoint', client,
         'smoke:mcp-session-endpoints', ['--connect-timeout-ms', '60000']),
       this.#npmSmoke('compose-recording', 'Smoke recording lifecycle', client, 'smoke:recording'),
       this.#npmSmoke('compose-workflow', 'Smoke workflow admission', client,
-        'smoke:workflow-admission')
+        'smoke:workflow-admission'),
+      this.#npmSmoke('compose-workflow-cli', 'Smoke workflow CLI compatibility', client,
+        'smoke:workflow-cli'),
+      this.#npmSmoke('compose-workflow-workspace', 'Smoke workflow workspace transfer', client,
+        'smoke:workflow-workspace'),
+      this.#npmSmoke('compose-workflow-events', 'Smoke workflow event delivery', client,
+        'smoke:workflow-events')
     ];
   }
 

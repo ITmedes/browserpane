@@ -127,9 +127,13 @@ jobs:
           --stage compose-admin-new-api-companion
           --stage compose-admin-compat
           --stage compose-cli
+          --stage compose-session-files
           --stage compose-mcp
           --stage compose-recording
           --stage compose-workflow
+          --stage compose-workflow-cli
+          --stage compose-workflow-workspace
+          --stage compose-workflow-events
       - name: Collect redacted failure diagnostics
         if: failure()
         run: node scripts/collect-compose-diagnostics.mjs
