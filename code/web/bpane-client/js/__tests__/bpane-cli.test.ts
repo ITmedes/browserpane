@@ -6,6 +6,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { EXIT_CODES, runBpaneCli } from '../../scripts/bpane-cli.mjs';
+import { runWorkflowCli } from '../../scripts/workflow-cli.mjs';
 
 function createIo() {
   let stdout = '';
@@ -1171,6 +1172,361 @@ describe('bpane operator CLI', () => {
       )).toBe(EXIT_CODES.auth);
       expect(parseStderr(authIo).code).toBe('AUTH_REQUIRED');
       expect(calls).toHaveLength(1);
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('manages workflow definitions, versions, and source inspection through the canonical CLI', async () => {
+    const { calls, fetchImpl } = createFetch(
+      jsonResponse({ workflows: [{ id: 'workflow-1' }] }),
+      jsonResponse({ id: 'workflow-1' }, 201),
+      jsonResponse({ id: 'workflow/with space' }),
+      jsonResponse({ valid: true }),
+      jsonResponse({ versions: [{ version: 'v1' }] }),
+      jsonResponse({ workflow_id: 'workflow-1', version: 'v2' }, 201),
+      jsonResponse({ workflow_id: 'workflow-1', version: 'v2' }),
+      jsonResponse({ files: [{ path: 'run.mjs' }] }),
+      jsonResponse({ path: 'src/run file.mjs', content: 'export default {}' }),
+    );
+    const env = { BPANE_ACCESS_TOKEN: 'token-1', BPANE_BASE_URL: 'http://bpane.example/root/' };
+
+    const commands = [
+      ['workflow', 'list'],
+      ['workflow', 'create', '--body-json', '{"name":"pilot"}'],
+      ['workflow', 'get', 'workflow/with space'],
+      ['workflow', 'validate-source', 'workflow/with space', '--body-json', '{"source":{"kind":"git"}}'],
+      ['workflow', 'version', 'list', 'workflow/with space'],
+      ['workflow', 'version', 'create', 'workflow/with space', '--body-json', '{"version":"v2"}'],
+      ['workflow', 'version', 'get', 'workflow/with space', 'v2/candidate'],
+      ['workflow', 'version', 'files', 'workflow/with space', 'v2/candidate'],
+      [
+        'workflow',
+        'version',
+        'preview',
+        'workflow/with space',
+        'v2/candidate',
+        '--source-path',
+        'src/run file.mjs',
+      ],
+    ];
+
+    for (const args of commands) {
+      const io = createIo();
+      expect(await runBpaneCli(args, env, io.io, fetchImpl)).toBe(EXIT_CODES.ok);
+      expect(io.stderr()).toBe('');
+      expect(io.stdout()).not.toBe('');
+    }
+
+    expect(calls.map((call) => [call.url, call.init.method])).toEqual([
+      ['http://bpane.example/api/v1/workflows', undefined],
+      ['http://bpane.example/api/v1/workflows', 'POST'],
+      ['http://bpane.example/api/v1/workflows/workflow%2Fwith%20space', undefined],
+      ['http://bpane.example/api/v1/workflows/workflow%2Fwith%20space/source-validation', 'POST'],
+      ['http://bpane.example/api/v1/workflows/workflow%2Fwith%20space/versions', undefined],
+      ['http://bpane.example/api/v1/workflows/workflow%2Fwith%20space/versions', 'POST'],
+      ['http://bpane.example/api/v1/workflows/workflow%2Fwith%20space/versions/v2%2Fcandidate', undefined],
+      ['http://bpane.example/api/v1/workflows/workflow%2Fwith%20space/versions/v2%2Fcandidate/source-files', undefined],
+      [
+        'http://bpane.example/api/v1/workflows/workflow%2Fwith%20space/versions/v2%2Fcandidate/source-preview?path=src%2Frun%20file.mjs',
+        undefined,
+      ],
+    ]);
+    expect(JSON.parse(calls[1].init.body)).toEqual({ name: 'pilot' });
+    expect(JSON.parse(calls[3].init.body)).toEqual({ source: { kind: 'git' } });
+    expect(JSON.parse(calls[5].init.body)).toEqual({ version: 'v2' });
+  });
+
+  it('manages workflow runs, interventions, waiting, and produced files through the canonical CLI', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'bpane-cli-workflow-run-test-'));
+    const outputPath = path.join(tempDir, 'nested', 'output.txt');
+    const outputBytes = Buffer.from('workflow output\n');
+    const createdRun = {
+      id: 'run-1',
+      state: 'queued',
+      workflow_definition_id: 'workflow-1',
+      workflow_version: 'v2',
+      session_id: 'session-1',
+      project_id: 'project-1',
+      project: { id: 'project-1', name: 'Pilot project' },
+      project_admission: { state: 'allowed', reason_code: 'within_limit' },
+      admission: { reason: 'worker_capacity' },
+      client_request_id: 'request-1',
+      source_system: 'camunda',
+      source_reference: 'process/42',
+    };
+    const { calls, fetchImpl } = createFetch(
+      jsonResponse({ runs: [] }),
+      jsonResponse(createdRun, 201),
+      jsonResponse({ ...createdRun, state: 'running' }),
+      jsonResponse({ ...createdRun, state: 'succeeded' }),
+      jsonResponse({ logs: [{ message: 'done' }] }),
+      jsonResponse({ events: [{ state: 'succeeded' }] }),
+      jsonResponse({ files: [{ file_id: 'file-1' }] }),
+      jsonResponse({ ...createdRun, state: 'cancelled' }),
+      jsonResponse({ ...createdRun, state: 'running', action: 'submit-input' }),
+      jsonResponse({ ...createdRun, state: 'running', action: 'resume' }),
+      jsonResponse({ ...createdRun, state: 'failed', action: 'reject' }),
+      binaryResponse(outputBytes, 'text/plain'),
+    );
+    const env = { BPANE_ACCESS_TOKEN: 'token-1' };
+
+    try {
+      const listIo = createIo();
+      expect(await runBpaneCli(['workflow', 'run', 'list'], env, listIo.io, fetchImpl)).toBe(EXIT_CODES.ok);
+
+      const createRunIo = createIo();
+      expect(await runBpaneCli(
+        [
+          'workflow',
+          'run',
+          'create',
+          '--workflow-id',
+          'workflow-1',
+          '--version',
+          'v2',
+          '--project-id',
+          'project-1',
+          '--create-session',
+          '--source-system',
+          'camunda',
+          '--source-reference',
+          'process/42',
+          '--client-request-id',
+          'request-1',
+          '--input-json',
+          '{"ticket":"INC=42"}',
+          '--label',
+          'suite=cli',
+          '--summary',
+        ],
+        env,
+        createRunIo.io,
+        fetchImpl,
+      )).toBe(EXIT_CODES.ok);
+      expect(parseStdout(createRunIo)).toEqual({
+        id: 'run-1',
+        state: 'queued',
+        workflow_id: 'workflow-1',
+        workflow_version: 'v2',
+        session_id: 'session-1',
+        project_id: 'project-1',
+        project: 'Pilot project',
+        project_admission_state: 'allowed',
+        project_admission_reason_code: 'within_limit',
+        admission_reason: 'worker_capacity',
+        client_request_id: 'request-1',
+        source_system: 'camunda',
+        source_reference: 'process/42',
+      });
+      expect(JSON.parse(calls[1].init.body)).toEqual({
+        workflow_id: 'workflow-1',
+        version: 'v2',
+        project_id: 'project-1',
+        source_system: 'camunda',
+        source_reference: 'process/42',
+        client_request_id: 'request-1',
+        input: { ticket: 'INC=42' },
+        labels: { suite: 'cli' },
+        session: { create_session: { project_id: 'project-1' } },
+      });
+
+      const getIo = createIo();
+      expect(await runBpaneCli(
+        ['workflow', 'run', 'get', 'run/with space', '--summary'],
+        env,
+        getIo.io,
+        fetchImpl,
+      )).toBe(EXIT_CODES.ok);
+      expect(parseStdout(getIo).state).toBe('running');
+
+      const waitIo = createIo();
+      expect(await runBpaneCli(
+        ['workflow', 'run', 'wait', 'run/with space', '--target-state', 'succeeded', '--interval-ms', '1'],
+        env,
+        waitIo.io,
+        fetchImpl,
+      )).toBe(EXIT_CODES.ok);
+      expect(parseStdout(waitIo).state).toBe('succeeded');
+
+      for (const action of ['logs', 'events', 'produced-files', 'cancel']) {
+        const io = createIo();
+        expect(await runBpaneCli(
+          ['workflow', 'run', action, 'run/with space'],
+          env,
+          io.io,
+          fetchImpl,
+        )).toBe(EXIT_CODES.ok);
+      }
+
+      for (const action of ['submit-input', 'resume', 'reject']) {
+        const io = createIo();
+        expect(await runBpaneCli(
+          ['workflow', 'run', action, 'run/with space', '--body-json', `{"action":"${action}"}`],
+          env,
+          io.io,
+          fetchImpl,
+        )).toBe(EXIT_CODES.ok);
+      }
+
+      const downloadIo = createIo();
+      expect(await runBpaneCli(
+        [
+          'workflow',
+          'run',
+          'download-produced-file',
+          'run/with space',
+          'file/with space',
+          '--output',
+          outputPath,
+        ],
+        env,
+        downloadIo.io,
+        fetchImpl,
+      )).toBe(EXIT_CODES.ok);
+      expect(await fs.readFile(outputPath)).toEqual(outputBytes);
+      expect(parseStdout(downloadIo)).toMatchObject({
+        run_id: 'run/with space',
+        file_id: 'file/with space',
+        output_path: outputPath,
+        byte_count: outputBytes.length,
+        content_type: 'text/plain',
+      });
+
+      expect(calls.map((call) => [call.url, call.init.method])).toEqual([
+        ['http://localhost:8080/api/v1/workflow-runs', undefined],
+        ['http://localhost:8080/api/v1/workflow-runs', 'POST'],
+        ['http://localhost:8080/api/v1/workflow-runs/run%2Fwith%20space', undefined],
+        ['http://localhost:8080/api/v1/workflow-runs/run%2Fwith%20space', undefined],
+        ['http://localhost:8080/api/v1/workflow-runs/run%2Fwith%20space/logs', undefined],
+        ['http://localhost:8080/api/v1/workflow-runs/run%2Fwith%20space/events', undefined],
+        ['http://localhost:8080/api/v1/workflow-runs/run%2Fwith%20space/produced-files', undefined],
+        ['http://localhost:8080/api/v1/workflow-runs/run%2Fwith%20space/cancel', 'POST'],
+        ['http://localhost:8080/api/v1/workflow-runs/run%2Fwith%20space/submit-input', 'POST'],
+        ['http://localhost:8080/api/v1/workflow-runs/run%2Fwith%20space/resume', 'POST'],
+        ['http://localhost:8080/api/v1/workflow-runs/run%2Fwith%20space/reject', 'POST'],
+        ['http://localhost:8080/api/v1/workflow-runs/run%2Fwith%20space/produced-files/file%2Fwith%20space/content', 'GET'],
+      ]);
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps the workflow compatibility entrypoint on canonical profiles and structured errors', async () => {
+    await withConfig(
+      {
+        default_profile: 'local',
+        profiles: {
+          local: {
+            base_url: 'http://profile.example',
+            access_token: 'profile-token',
+          },
+        },
+      },
+      async (configPath) => {
+        const successIo = createIo();
+        const { calls, fetchImpl } = createFetch(jsonResponse({ workflows: [] }));
+        expect(await runWorkflowCli(
+          ['workflow', 'list', '--config', configPath],
+          {},
+          successIo.io,
+          fetchImpl,
+        )).toBe(EXIT_CODES.ok);
+        expect(calls[0]).toMatchObject({
+          url: 'http://profile.example/api/v1/workflows',
+        });
+        expect(calls[0].init.headers).toMatchObject({ Authorization: 'Bearer profile-token' });
+
+        const errorIo = createIo();
+        expect(await runWorkflowCli(
+          ['workflow', 'get', '--config', configPath],
+          {},
+          errorIo.io,
+          fetchImpl,
+        )).toBe(EXIT_CODES.usage);
+        expect(parseStderr(errorIo)).toMatchObject({ ok: false, code: 'USAGE' });
+      },
+    );
+  });
+
+  it('rejects invalid workflow command input before unsafe requests', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'bpane-cli-workflow-input-test-'));
+    const invalidInputPath = path.join(tempDir, 'invalid.json');
+    await fs.writeFile(invalidInputPath, '{invalid');
+    const { calls, fetchImpl } = createFetch(
+      jsonResponse({ id: 'run-1', state: 'failed' }),
+    );
+    const env = { BPANE_ACCESS_TOKEN: 'token-1' };
+
+    try {
+      const cases = [
+        {
+          args: ['workflow', 'create'],
+          expected: 'requires --body-json or --body-file',
+        },
+        {
+          args: ['workflow', 'run', 'create'],
+          expected: 'requires --workflow-id',
+        },
+        {
+          args: [
+            'workflow',
+            'run',
+            'create',
+            '--workflow-id',
+            'workflow-1',
+            '--session-id',
+            'session-1',
+            '--create-session',
+          ],
+          expected: 'Use only one of --session-id or --create-session',
+        },
+        {
+          args: [
+            'workflow',
+            'run',
+            'create',
+            '--workflow-id',
+            'workflow-1',
+            '--input-file',
+            invalidInputPath,
+          ],
+          expected: 'Invalid JSON for --input-file',
+        },
+        {
+          args: ['workflow', 'run', 'download-produced-file', 'run-1', 'file-1'],
+          expected: 'requires --output',
+        },
+      ];
+      for (const testCase of cases) {
+        const io = createIo();
+        expect(await runBpaneCli(testCase.args, env, io.io, fetchImpl)).toBe(EXIT_CODES.usage);
+        expect(parseStderr(io).error).toContain(testCase.expected);
+      }
+      expect(calls).toHaveLength(0);
+
+      const targetIo = createIo();
+      expect(await runBpaneCli(
+        [
+          'workflow',
+          'run',
+          'wait',
+          'run-1',
+          '--target-state',
+          'succeeded',
+          '--interval-ms',
+          '1',
+        ],
+        env,
+        targetIo.io,
+        fetchImpl,
+      )).toBe(EXIT_CODES.api);
+      expect(parseStderr(targetIo)).toMatchObject({
+        code: 'WORKFLOW_TARGET_NOT_REACHED',
+        run_id: 'run-1',
+        state: 'failed',
+        target_state: 'succeeded',
+      });
     } finally {
       await fs.rm(tempDir, { recursive: true, force: true });
     }
