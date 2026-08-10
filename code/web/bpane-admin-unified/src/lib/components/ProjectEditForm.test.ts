@@ -253,6 +253,7 @@ function options(): ProjectPolicyOptions {
   return {
     sessionTemplates: [{
       id: 'template-support',
+      projectId: null,
       name: 'Support Browser',
       description: 'Approved template',
       state: 'v1',
@@ -260,6 +261,7 @@ function options(): ProjectPolicyOptions {
     }],
     browserContexts: [{
       id: '22222222-2222-4222-8222-222222222222',
+      projectId: null,
       name: 'Support Context',
       description: null,
       state: 'ready',
@@ -267,6 +269,7 @@ function options(): ProjectPolicyOptions {
     }],
     egressProfiles: [{
       id: '33333333-3333-4333-8333-333333333333',
+      projectId: null,
       name: 'Support Egress',
       description: 'Approved egress profile',
       state: 'active',
@@ -274,6 +277,7 @@ function options(): ProjectPolicyOptions {
     }],
     extensions: [{
       id: '44444444-4444-4444-8444-444444444444',
+      projectId: null,
       name: 'Support Extension',
       description: 'Approved extension',
       state: 'enabled',
@@ -281,6 +285,7 @@ function options(): ProjectPolicyOptions {
     }],
     fileWorkspaces: [{
       id: '55555555-5555-4555-8555-555555555555',
+      projectId: null,
       name: 'Support Workspace',
       description: 'Approved file workspace',
       state: 'active',
