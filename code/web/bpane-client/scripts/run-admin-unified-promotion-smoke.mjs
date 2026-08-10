@@ -80,9 +80,15 @@ async function run() {
 
 async function assertRootRedirect(rootUrl) {
   const response = await fetch(rootUrl, { redirect: 'manual' });
+  const location = response.headers.get('location');
 
   assert.equal(response.status, 302);
-  assert.equal(response.headers.get('location'), '/admin-new/');
+  assert.ok(location, 'root redirect must include a Location header');
+  const redirect = new URL(location, rootUrl);
+  assert.equal(redirect.origin, new URL(rootUrl).origin);
+  assert.equal(redirect.pathname, '/admin-new/');
+  assert.equal(redirect.search, '');
+  assert.equal(redirect.hash, '');
   assert.equal(response.headers.get('cache-control'), 'no-cache, no-store, must-revalidate');
 }
 
