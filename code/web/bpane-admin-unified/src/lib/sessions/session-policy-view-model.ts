@@ -1,5 +1,6 @@
 import type { ProjectPolicy, ProjectResource } from '$lib/projects/project-types';
 import type { ProjectTone } from '$lib/projects/project-formatters';
+import { ProjectPolicyEvaluator } from '$lib/projects/project-policy-evaluator';
 import type { SessionResource, SessionStatus } from './session-types';
 
 export type SessionPolicyFact = {
@@ -20,8 +21,11 @@ export type SessionPolicySection = {
 export type SessionPolicyModel = {
   readonly scopeLabel: string;
   readonly scopeTone: ProjectTone;
+  readonly projectHref: string | null;
   readonly sections: readonly SessionPolicySection[];
 };
+
+const projectPolicyEvaluator = new ProjectPolicyEvaluator();
 
 const CAPABILITY_LABELS: Readonly<Record<keyof SessionResource['capabilities'], string>> = {
   browser_input: 'Browser input',
@@ -39,11 +43,18 @@ export function buildSessionPolicyModel(
   project: ProjectResource | null,
 ): SessionPolicyModel {
   return {
-    scopeLabel: project ? `${project.name} project policy` : 'Owner-scoped defaults',
-    scopeTone: project ? projectStateTone(project.state) : 'neutral',
+    scopeLabel: project
+      ? `${project.name} project policy`
+      : session.project_id
+        ? `${session.project?.name ?? 'Project'} policy unavailable`
+        : 'Owner-scoped defaults',
+    scopeTone: project ? projectStateTone(project.state) : session.project_id ? 'warning' : 'neutral',
+    projectHref: session.project_id
+      ? `/admin-new/projects/${encodeURIComponent(session.project_id)}`
+      : null,
     sections: [
       capabilitySection(session, project),
-      operationSection(project),
+      operationSection(project, Boolean(session.project_id)),
       resourceSection(session, project),
       admissionSection(session, status, project),
       browserPolicySection(session),
@@ -69,20 +80,30 @@ function capabilitySection(session: SessionResource, project: ProjectResource | 
   };
 }
 
-function operationSection(project: ProjectResource | null): SessionPolicySection {
-  const policy = project?.policy ?? null;
+function operationSection(project: ProjectResource | null, projectBound: boolean): SessionPolicySection {
+  const operations = project ? projectPolicyEvaluator.operationPolicies(project) : [];
   return {
     title: 'Project operations',
     description: project
       ? 'Project policy gates applied to browser transfer, session files, and manual recording operations.'
-      : 'This owner-scoped session has no project operation policy attached.',
+      : projectBound
+        ? 'Project operation policy evidence could not be loaded for this project-bound session.'
+        : 'This owner-scoped session has no project operation policy attached.',
     testId: 'session-policy-operations',
-    facts: [
-      operationFact('Browser uploads', policy?.allow_browser_uploads, 'browser-upload'),
-      operationFact('Browser downloads', policy?.allow_browser_downloads, 'browser-download'),
-      operationFact('Session file bindings', policy?.allow_session_file_bindings, 'session-file-bindings'),
-      operationFact('Manual recording starts', policy?.allow_manual_recordings, 'manual-recordings'),
-    ],
+    facts: project
+      ? operations.map((operation) => fact(
+          operation.label,
+          operation.allowed ? 'Allowed' : 'Blocked',
+          operation.reason,
+          operation.tone,
+          `session-policy-${operationTestId(operation.id)}`,
+        ))
+      : [
+          unavailableOperationFact('Browser uploads', 'browser-upload', projectBound),
+          unavailableOperationFact('Browser downloads', 'browser-download', projectBound),
+          unavailableOperationFact('Session file bindings', 'session-file-bindings', projectBound),
+          unavailableOperationFact('Manual recording starts', 'manual-recordings', projectBound),
+        ],
   };
 }
 
@@ -228,25 +249,26 @@ function capabilityDescription(
     : 'Disabled by session configuration even though project transfer operations are allowed.';
 }
 
-function operationFact(label: string, allowed: boolean | undefined, id: string): SessionPolicyFact {
-  if (allowed === undefined) {
-    return fact(
-      label,
-      'Owner scope',
-      'No project restriction applies; the effective session capability remains authoritative.',
-      'neutral',
-      `session-policy-${id}`,
-    );
-  }
+function unavailableOperationFact(label: string, id: string, projectBound: boolean): SessionPolicyFact {
   return fact(
     label,
-    allowed ? 'Allowed' : 'Blocked',
-    allowed
-      ? 'The project policy permits this operation when the session capability also allows it.'
-      : 'The project policy denies this operation for sessions in this project.',
-    allowed ? 'success' : 'warning',
+    projectBound ? 'Unavailable' : 'Owner scope',
+    projectBound
+      ? 'The project restriction could not be confirmed; the gateway remains authoritative.'
+      : 'No project restriction applies; the effective session capability remains authoritative.',
+    projectBound ? 'warning' : 'neutral',
     `session-policy-${id}`,
   );
+}
+
+function operationTestId(id: string): string {
+  switch (id) {
+    case 'browser_uploads': return 'browser-upload';
+    case 'browser_downloads': return 'browser-download';
+    case 'session_file_bindings': return 'session-file-bindings';
+    case 'manual_recordings': return 'manual-recordings';
+    default: return id;
+  }
 }
 
 function selectedResourceFact(
@@ -320,7 +342,7 @@ function admissionTone(state: string | null): ProjectTone {
   if (state === 'allowed') {
     return 'success';
   }
-  if (state === 'denied') {
+  if (state === 'rejected' || state === 'denied') {
     return 'danger';
   }
   return state ? 'warning' : 'neutral';

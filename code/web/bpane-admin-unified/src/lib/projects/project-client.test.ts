@@ -177,8 +177,13 @@ describe('ProjectCatalogClient', () => {
     });
     expect(options.browserContexts[0]).toMatchObject({
       name: 'Support Context',
+      projectId: null,
       state: 'ready',
       scope: 'owner scoped',
+    });
+    expect(options.egressProfiles[0]).toMatchObject({
+      name: 'Proxy',
+      projectId: null,
     });
     expect(options.extensions[0]).toMatchObject({
       name: 'Password Helper',

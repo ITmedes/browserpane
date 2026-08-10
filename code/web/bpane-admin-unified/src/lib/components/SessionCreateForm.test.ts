@@ -141,6 +141,7 @@ function emptyOptions() {
 function option(overrides: Partial<ProjectPolicyOption> = {}): ProjectPolicyOption {
   return {
     id: 'option-1',
+    projectId: null,
     name: 'Option',
     description: null,
     state: 'ready',

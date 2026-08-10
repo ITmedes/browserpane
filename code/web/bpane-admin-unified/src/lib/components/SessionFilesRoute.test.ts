@@ -49,6 +49,9 @@ describe('SessionFilesRoute', () => {
       .toBe('/admin-new/sessions/session-1/live');
     expect(byTestId(target, 'session-files-empty')).toBeTruthy();
     expect(byTestId(target, 'session-file-bindings-empty')).toBeTruthy();
+    expect(byTestId(target, 'session-files-project-name').textContent).toContain('Support');
+    expect(byTestId(target, 'session-files-project-link').getAttribute('href'))
+      .toBe('/admin-new/projects/project-1');
   });
 
   it('shows project policy blocking while preserving read-only evidence', async () => {
@@ -58,7 +61,10 @@ describe('SessionFilesRoute', () => {
         return jsonResponse(sessionPayload({ totalClients: 0 }));
       }
       if (url.endsWith('/api/v1/projects/project-1')) {
-        return jsonResponse(projectPayload({ allow_session_file_bindings: false }));
+        return jsonResponse(projectPayload({
+          allow_browser_uploads: false,
+          allow_session_file_bindings: false,
+        }));
       }
       if (url.endsWith('/files')) {
         return jsonResponse({ files: [] });
@@ -74,9 +80,43 @@ describe('SessionFilesRoute', () => {
     const target = renderComponent(SessionFilesRoute, { authContext: authContext(), sessionId: 'session-1' });
 
     await vi.waitFor(() => {
-      expect(byTestId(target, 'session-file-bindings-policy-blocked').textContent).toContain('Project Support blocks');
+      expect(byTestId(target, 'session-file-bindings-policy-blocked').textContent)
+        .toContain('project blocks session file bindings');
     });
+    expect(byTestId(target, 'session-files-policy-blocked').textContent)
+      .toContain('project blocks browser uploads');
     expect((byTestId(target, 'session-file-binding-create') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('keeps captured-file evidence available when project policy loading fails', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/api/v1/sessions/session-1')) {
+        return jsonResponse(sessionPayload({ totalClients: 0 }));
+      }
+      if (url.endsWith('/api/v1/projects/project-1')) {
+        return new Response('project unavailable', { status: 503 });
+      }
+      if (url.endsWith('/files')) {
+        return jsonResponse({ files: [] });
+      }
+      if (url.endsWith('/file-bindings')) {
+        return jsonResponse({ bindings: [] });
+      }
+      if (url.endsWith('/file-workspaces')) {
+        return jsonResponse({ workspaces: [] });
+      }
+      return new Response('not found', { status: 404 });
+    }));
+    const target = renderComponent(SessionFilesRoute, { authContext: authContext(), sessionId: 'session-1' });
+
+    await vi.waitFor(() => {
+      expect(byTestId(target, 'session-files-project-warning').textContent).toContain('HTTP 503');
+    });
+    expect(byTestId(target, 'session-files-empty')).toBeTruthy();
+    expect((byTestId(target, 'session-file-binding-create') as HTMLButtonElement).disabled).toBe(true);
+    expect(byTestId(target, 'session-files-project-link').getAttribute('href'))
+      .toBe('/admin-new/projects/project-1');
   });
 
   it('delegates session authentication failure to the shell', async () => {

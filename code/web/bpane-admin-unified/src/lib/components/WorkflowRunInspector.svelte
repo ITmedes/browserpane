@@ -17,6 +17,7 @@
     WorkflowRunResource,
   } from '$lib/workflow-runs/workflow-run-types';
   import AdminMessage from './AdminMessage.svelte';
+  import WorkflowRunAdmissionEvidence from './WorkflowRunAdmissionEvidence.svelte';
   import WorkflowRunControls from './WorkflowRunControls.svelte';
   import WorkflowRunEvidence from './WorkflowRunEvidence.svelte';
 
@@ -80,6 +81,15 @@
       >
         <span>Workflow</span>
       </a>
+      {#if model.projectHref}
+        <a
+          class="inline-flex h-10 items-center gap-2 rounded-md border border-admin-border bg-admin-panel px-3 text-sm font-medium text-admin-ink hover:bg-admin-soft"
+          href={model.projectHref}
+          data-testid="workflow-run-detail-project-link"
+        >
+          <span>Project</span>
+        </a>
+      {/if}
       <a
         class="inline-flex h-10 items-center gap-2 rounded-md border border-admin-border bg-admin-panel px-3 text-sm font-medium text-admin-ink hover:bg-admin-soft"
         href={workflowRunSessionHref(run.session_id)}
@@ -118,6 +128,8 @@
       </div>
     {/each}
   </section>
+
+  <WorkflowRunAdmissionEvidence evidence={model.admissionEvidence} />
 
   {#if run.error}
     <AdminMessage

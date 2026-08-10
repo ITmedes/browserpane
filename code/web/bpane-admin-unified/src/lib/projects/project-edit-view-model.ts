@@ -451,6 +451,7 @@ export function mergePolicyOptionsWithSelected(
     .filter((id) => !knownIds.has(id))
     .map((id) => ({
       id,
+      projectId: null,
       name: `Missing resource ${shortId(id)}`,
       description: id,
       state: 'missing',

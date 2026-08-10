@@ -4,6 +4,8 @@
   import type { UnifiedAdminContext } from '$lib/auth/unified-admin-context';
   import { FileWorkspaceCatalogClient } from '$lib/file-workspaces/file-workspace-client';
   import { ProjectCatalogClient } from '$lib/projects/project-client';
+  import { ProjectPolicyEvaluator } from '$lib/projects/project-policy-evaluator';
+  import type { ProjectResource } from '$lib/projects/project-types';
   import { SessionFileClient } from '$lib/session-files/session-file-client';
   import { SessionCatalogClient } from '$lib/sessions/session-client';
   import type { SessionResource } from '$lib/sessions/session-types';
@@ -24,8 +26,11 @@
     | {
         readonly status: 'ready';
         readonly session: SessionResource;
+        readonly project: ProjectResource | null;
+        readonly projectError: string | null;
         readonly bindingMutationAllowed: boolean;
         readonly bindingPolicyMessage: string | null;
+        readonly transferPolicyMessage: string | null;
         readonly allowedWorkspaceIds: readonly string[];
       };
 
@@ -38,6 +43,7 @@
   const sessionFileClient = $derived(new SessionFileClient(clientOptions()));
   const workspaceClient = $derived(new FileWorkspaceCatalogClient(clientOptions()));
   const projectClient = $derived(new ProjectCatalogClient(clientOptions()));
+  const policyEvaluator = new ProjectPolicyEvaluator();
 
   $effect(() => {
     if (sessionId === loadedSessionId) {
@@ -73,12 +79,17 @@
       routeState = {
         status: 'ready',
         session,
-        bindingMutationAllowed: policy.allowed,
-        bindingPolicyMessage: policy.message,
+        project: policy.project,
+        projectError: policy.projectError,
+        bindingMutationAllowed: policy.bindingAllowed,
+        bindingPolicyMessage: policy.bindingMessage,
+        transferPolicyMessage: transferPolicyMessage(session, policy.project),
         allowedWorkspaceIds: policy.allowedWorkspaceIds,
       };
       if (showFeedback) {
-        actionState = { status: 'success', message: 'Session file policy refreshed.' };
+        actionState = policy.projectError
+          ? { status: 'error', message: 'Session file policy refreshed with incomplete project evidence.' }
+          : { status: 'success', message: 'Session file policy refreshed.' };
       }
     } catch (error) {
       if (loadedSessionId !== requestSessionId) {
@@ -93,34 +104,55 @@
   }
 
   async function loadBindingPolicy(session: SessionResource): Promise<{
-    readonly allowed: boolean;
-    readonly message: string | null;
+    readonly project: ProjectResource | null;
+    readonly projectError: string | null;
+    readonly bindingAllowed: boolean;
+    readonly bindingMessage: string | null;
     readonly allowedWorkspaceIds: readonly string[];
   }> {
     if (!session.project_id) {
-      return { allowed: true, message: null, allowedWorkspaceIds: [] };
-    }
-    try {
-      const project = await projectClient.getProject(session.project_id);
-      if (!project.policy.allow_session_file_bindings) {
-        return {
-          allowed: false,
-          message: `Project ${project.name} blocks session file bindings.`,
-          allowedWorkspaceIds: project.policy.allowed_file_workspace_ids,
-        };
-      }
       return {
-        allowed: true,
-        message: null,
-        allowedWorkspaceIds: project.policy.allowed_file_workspace_ids,
-      };
-    } catch (error) {
-      return {
-        allowed: false,
-        message: adminErrorMessage(error, 'Project file-binding policy could not be loaded.'),
+        project: null,
+        projectError: null,
+        bindingAllowed: true,
+        bindingMessage: null,
         allowedWorkspaceIds: [],
       };
     }
+    try {
+      const project = await projectClient.getProject(session.project_id);
+      const bindingPolicy = policyEvaluator.operationPolicies(project)
+        .find((operation) => operation.id === 'session_file_bindings');
+      return {
+        project,
+        projectError: null,
+        bindingAllowed: bindingPolicy?.allowed ?? true,
+        bindingMessage: bindingPolicy?.allowed === false ? bindingPolicy.reason : null,
+        allowedWorkspaceIds: project.policy.allowed_file_workspace_ids,
+      };
+    } catch (error) {
+      const message = adminErrorMessage(error, 'Project file policy could not be loaded.');
+      return {
+        project: null,
+        projectError: message,
+        bindingAllowed: false,
+        bindingMessage: message,
+        allowedWorkspaceIds: [],
+      };
+    }
+  }
+
+  function transferPolicyMessage(session: SessionResource, project: ProjectResource | null): string | null {
+    if (project) {
+      const blockers = policyEvaluator.operationPolicies(project)
+        .filter((operation) => ['browser_uploads', 'browser_downloads'].includes(operation.id) && !operation.allowed);
+      if (blockers.length > 0) {
+        return blockers.map((operation) => operation.reason).join(' ');
+      }
+    }
+    return session.capabilities.file_transfer
+      ? null
+      : 'Live browser file transfer is disabled by the effective session capability.';
   }
 </script>
 
@@ -165,10 +197,26 @@
   {:else if routeState.status === 'error'}
     <AdminMessage tone="error" title="Session files unavailable" message={routeState.message} testId="session-files-route-error" />
   {:else}
+    {#if routeState.session.project_id}
+      <section class="flex min-w-0 flex-col gap-2 border-y border-admin-border py-3 sm:flex-row sm:items-center sm:justify-between" data-testid="session-files-project-policy">
+        <div class="min-w-0">
+          <p class="m-0 text-xs font-semibold uppercase text-admin-muted">Project file policy</p>
+          <p class="m-0 mt-1 truncate text-sm font-medium text-admin-ink" data-testid="session-files-project-name">
+            {routeState.project?.name ?? routeState.session.project?.name ?? routeState.session.project_id}
+          </p>
+        </div>
+        <a class="shrink-0 text-xs font-semibold text-admin-accent hover:underline" href={`/admin-new/projects/${encodeURIComponent(routeState.session.project_id)}`} data-testid="session-files-project-link">
+          Project details
+        </a>
+      </section>
+    {/if}
+    {#if routeState.projectError}
+      <AdminMessage tone="warning" title="Project file policy unavailable" message={routeState.projectError} testId="session-files-project-warning" />
+    {/if}
     <SessionTransferFilesPanel
       client={sessionFileClient}
       sessionId={routeState.session.id}
-      transferBlocked={!routeState.session.capabilities.file_transfer}
+      transferPolicyMessage={routeState.transferPolicyMessage}
     />
     <SessionFileBindingsPanel
       sessionClient={sessionFileClient}
