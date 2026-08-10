@@ -174,13 +174,34 @@ admission reason, count/limit snapshot, queue timestamp, and project link.
 4. **Workflow governance evidence** (complete): replace free-text project entry with a
    catalog selector/summary and expand run detail admission/queue/project
    evidence. Commit boundary: workflow action and inspection UX.
-5. **Cross-route consistency**: align project links/reason wording in the
+5. **Cross-route consistency** (complete): align project links/reason wording in the
    existing session policy route and affected file/recording surfaces without
    adding new mutation flows. Commit boundary: consistent policy projections.
-6. **Battle test and handoff**: focused suites, admin-new coverage, extended
+6. **Battle test and handoff** (complete): focused suites, admin-new coverage, extended
    project and workflow admission smokes, compatibility/CLI regressions,
    responsive checks, README/docs, issue, and PR evidence. Commit boundary:
    promotion evidence.
+
+## Validation Evidence (2026-08-10)
+
+- Admin-new focused policy/files/recordings suite: 5 files, 19 tests passed.
+- Admin-new full suite: 196 files, 618 tests passed; `npm run check` and the
+  production build passed.
+- Admin-new coverage: 92.28% statements, 76.74% branches, 93.86% functions,
+  and 90.43% lines; the committed coverage baseline passed.
+- Gateway project/admission/policy regression: 38 focused Rust tests passed.
+- Live Compose project API regression: `compose_projects_api_surface` passed.
+- Live admin-new smokes passed for projects, sessions and all session
+  subroutes, workflows, workflow-run details, and recording catalog/download.
+- Workflow backpressure/project admission and queued-cancel smokes passed and
+  restored the normal Compose gateway configuration.
+- Operator CLI, legacy admin session lifecycle, and legacy admin workflow
+  compatibility smokes passed.
+- Project and session smokes exercised 390 px layouts without horizontal
+  overflow; the recordings smoke independently confirmed responsive layout.
+- README and `docs/ADMIN_NEW_STATUS.md` now describe project-aware creation,
+  inspection, admission, and related-work evidence. No OpenAPI, protocol,
+  database, runtime topology, support-matrix, or `ARCH.md` change was required.
 
 ## Test Strategy
 
