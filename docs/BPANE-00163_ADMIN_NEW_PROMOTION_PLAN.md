@@ -102,13 +102,13 @@ see exactly which new-admin and fallback journeys passed.
 1. **Executable promotion contract (complete through `ac54d8d`):** validate
    navigation-to-route coverage, define the mandatory unified and compatibility
    smoke inventory, and protect the inventory with focused tests.
-2. **Canonical browser regression stages (in progress through `3861bd6`):** add
+2. **Canonical browser regression stages (complete through PR `#210`):** add
    the missing unified-admin Compose stages, add the promotion/fallback browser
    journey, and require all stages in isolated hosted promotion lanes.
-3. **Default-route promotion (pending):** redirect root `/` to `/admin-new/`, preserve
+3. **Default-route promotion (implemented in `e166325`, live validation pending):** redirect root `/` to `/admin-new/`, preserve
    explicit fixture and legacy routes, and cover Nginx behavior with static and
    live tests.
-4. **Documentation and decision evidence (pending):** align README, ARCH,
+4. **Documentation and decision evidence (in progress):** align README, ARCH,
    AGENTS, status, manual checkpoints, validation matrix, delivery roadmap, and
    issue state; run the full gate and record residual risks and rollback steps.
 

@@ -14,13 +14,13 @@ Project walkthrough: [watch on YouTube](https://www.youtube.com/watch?v=zhj2_B4v
 
 ## Unified Admin Console
 
-BrowserPane is consolidating live session operation, resource configuration,
+BrowserPane consolidates live session operation, resource configuration,
 workflow execution, recordings, and project/egress governance in the
-route-backed `/admin-new/` application. This is the target standard admin
-experience. The legacy `/admin/` console remains available as a compatibility
-fallback until the
+route-backed `/admin-new/` application. Local Compose opens this standard admin
+experience from the web root. The legacy `/admin/` console remains directly
+available as a compatibility fallback while the
 [admin-new promotion gate in issue #163](https://github.com/ITmedes/browserpane/issues/163)
-has verified the remaining route parity and regression coverage.
+completes regression evidence and defines its later removal criteria.
 
 The current prototype includes the dashboard; project, browser-context,
 egress-profile, and file-workspace catalogs; session create/detail and popup
@@ -123,7 +123,8 @@ Current support and scope:
 - Camera: disabled by default in the compose stack and requires browser H.264 encode support plus a mapped `v4l2loopback` device.
 - Control plane: owner-scoped v1 APIs now cover identity/access-review summaries, service principals, identity-to-project mappings, projects, sessions, session templates, egress profiles, automation tasks, session recordings, workflow definitions/runs, file workspaces, credential bindings, and approved extensions.
 - Workflow execution: Git-backed workflow versions run through a gateway-managed `workflow-worker`; the current executor model is Playwright.
-- Admin console: `/admin-new/` is the target standard operator application. Its
+- Admin console: `/admin-new/` is the standard operator application and the
+  local web-root target. Its
   first-pass dashboard, primary resource catalogs, session creation/detail and
   popup preview, recording catalog/download, workflow launcher, workflow-run
   catalog/detail, identity/access review, and session
@@ -131,10 +132,10 @@ Current support and scope:
   implemented. Contract-derived API, coverage, and docs companions are also
   implemented, together with approved-extension, credential-binding, and signed
   workflow-event subscription catalogs. Session-template and operation-counter
-  catalogs remain open; `/admin/` remains
-  the compatibility fallback until
+  catalogs remain open. `/admin/` remains the directly addressable
+  compatibility fallback while
   [issue #163](https://github.com/ITmedes/browserpane/issues/163) completes the
-  promotion and rollback gate.
+  regression and removal-gate evidence.
 - Workflow boundary: BrowserPane currently focuses on executing and supervising browser workflows. Broader scheduling, DAG orchestration, and cross-system coordination are expected to sit above BrowserPane rather than inside it.
 - External BPM integration: the stable project-scoped Workflow Endpoint is
   planned under [issue #172](https://github.com/ITmedes/browserpane/issues/172);
@@ -232,10 +233,9 @@ BPANE_GATEWAY_MAX_ACTIVE_RUNTIMES=2 \
 docker compose -f deploy/compose.yml up --build
 ```
 
-Then open `http://localhost:8080/admin-new/` in Chromium to use the target
-unified admin console. The web root currently continues to redirect to
-`/admin/`, which remains the compatibility fallback until issue #163 completes
-the promotion gate.
+Then open `http://localhost:8080/` in Chromium. The web root redirects to the
+unified console at `/admin-new/`; `/admin/` remains the explicit compatibility
+fallback while issue #163 completes the regression and removal-gate evidence.
 
 The unified session preview popup includes a local `Metrics` drawer that can
 sample browser transition diagnostics from the BrowserPane client runtime
@@ -1425,7 +1425,7 @@ Coverage floors live in `quality/coverage-baselines.json`. Each coverage
 command writes a concise Markdown result below `test-results/coverage/`; CI
 publishes those summaries without sending coverage data to an external service.
 
-Compatibility admin while `/admin/` remains the fallback:
+Compatibility admin at the retained `/admin/` fallback:
 
 ```bash
 cd code/web/bpane-admin
@@ -1447,6 +1447,7 @@ npm run build
 ../../../scripts/bpane --help
 npm run smoke:bpane-cli -- --headless
 npm run smoke:admin-session -- --headless
+npm run smoke:admin-unified-promotion -- --headless
 npm run smoke:admin-unified-browser-contexts -- --headless
 npm run smoke:admin-unified-dashboard -- --headless
 npm run smoke:admin-unified-egress-profiles -- --headless

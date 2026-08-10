@@ -4,8 +4,9 @@ Status: Canonical execution roadmap
 
 Governance issue: [#173](https://github.com/ITmedes/browserpane/issues/173)
 
-Last implementation audit: 2026-08-07 on `feature/BPANE-00158` through the
-locally validated API/coverage/docs companion implementation.
+Last implementation audit: 2026-08-10 on
+`feature/BPANE-00163-admin-new-promotion-routing` through the default-route and
+fallback-smoke checkpoint.
 
 ## How To Use This Document
 
@@ -86,7 +87,9 @@ merged through PR #195 after all required checks passed. #154 merged through
 PR #196, #155 through PR #197, #156 through PR #198, and #157 through PR #199.
 #158 merged through PR #200, #159 through PR #201, and #148 through PR #202.
 #160 merged through PR #203 after required and manually dispatched Compose
-validation passed. #161 is the active Operator Product slice.
+validation passed. #161 merged through PR #204 and #162 through PR #209. #163
+is the active Operator Product promotion and fallback slice; its validation
+contract foundation merged through PR #210.
 
 ## Foundation Gate Sequence
 
