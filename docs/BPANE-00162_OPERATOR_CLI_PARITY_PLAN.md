@@ -4,7 +4,8 @@
 
 - Issue: [#162](https://github.com/ITmedes/browserpane/issues/162)
 - State: In progress; slice 1 merged through PR `#205`, slices 2-3 merged
-  through PR `#206`, slice 4 merged through PR `#207`, and slice 5 in progress
+  through PR `#206`, slice 4 merged through PR `#207`, slice 5 complete on its
+  feature branch, and slice 6 next
 - Lane: Operator Product
 - Target gate: Admin-New Phase 1 Promotion
 - Depends on: control API conformance through `#179`, admin-new resource
@@ -132,7 +133,7 @@ long-lived bearer token or resolved credential value is printed.
 4. **Session evidence transfers** (complete): add owner-facing session
    file/binding and recording/playback inspection/download commands without
    exposing worker-only mutation routes.
-5. **Diagnostics and documentation** (in progress): publish the API-family
+5. **Diagnostics and documentation** (complete): publish the API-family
    support inventory, close the missing session-release command, consolidate
    README/ARCH examples, and add accurate local certificate, MCP, workflow
    source, Docker socket, and camera diagnostic steps.
@@ -352,6 +353,37 @@ without being stopped or killed.
 - README and ARCH now document the read-only session-evidence surface and its
   internal mutation boundary. No gateway, OpenAPI, database, protocol,
   support-matrix, or runtime-topology change was required.
+
+## Slice 5 Evidence (2026-08-10)
+
+- Added canonical `session release <session-id>` support on the shared
+  profile/auth/error boundary with URL-encoded identifiers.
+- Focused CLI coverage passed all `63` tests, including valid release, malformed
+  positionals, missing authentication, and `404`, `409`, and `503` responses.
+- Published `OPERATOR_CLI_AND_LOCAL_DIAGNOSTICS.md`, classifying all `131`
+  frozen OpenAPI operations across `16` families into supported, partial,
+  compatibility, Admin/API-only, evidence, and worker-internal boundaries.
+- Documented one ordered troubleshooting path for gateway readiness,
+  authentication, certificate trust, MCP, workflow source, Docker runtime
+  access, and optional Linux camera ingress. README, ARCH, runtime requirements,
+  validation matrix, and the docs-to-issue map reference that canonical guide.
+- Expanded `smoke:bpane-cli` with a project-policy-compliant disposable session,
+  a real browser transport connection, disconnect, runtime release, real
+  reconnect, `profile_restart` verification, stop, and cleanup. The smoke
+  passed against local Compose without disturbing the separate MCP delegation
+  session.
+- Verified live `/healthz` and `/readyz`, Docker daemon/socket access, gateway
+  `/workspace` access, served-versus-local certificate metadata, certificate
+  validity, and MCP bridge health using the documented commands.
+- The full browser-client suite passed `674` tests across `86` files. The
+  coverage ratchet passed at `92.88%` lines/statements, `93.19%` functions, and
+  `87.57%` branches. TypeScript check, production build, CLI help, Node syntax,
+  and whitespace checks passed.
+- OpenAPI governance passed `27` tests, inventory/lint/examples/compatibility
+  checks, and all `131` operation classifications. Repository document checks
+  passed for `67` Markdown files, `8` YAML files, and `3` workflows.
+- No gateway, OpenAPI, database, protocol, support-matrix, or runtime-topology
+  change was required.
 
 ## Validation Strategy
 
