@@ -155,6 +155,7 @@ pub async fn run_api_server(
         admin_event_access_token_manager: config.admin_event_access_token_manager,
         connect_ticket_manager: config.connect_ticket_manager,
         automation_access_token_manager: config.automation_access_token_manager,
+        recording_worker_access_token_manager: config.recording_worker_access_token_manager,
         session_store: config.session_store,
         session_manager: config.session_manager,
         credential_provider: config.credential_provider,

@@ -17,6 +17,7 @@ async fn recording_operations_snapshot_tracks_finalize_playback_and_failures() {
             vec![6; 32],
             Duration::from_secs(300),
         )),
+        recording_worker_access_token_manager: test_recording_worker_access_token_manager(),
         session_store: SessionStore::in_memory(),
         session_manager: Arc::new(
             SessionManager::new(SessionManagerConfig::StaticSingle {
@@ -115,6 +116,10 @@ async fn recording_operations_snapshot_tracks_finalize_playback_and_failures() {
                     "/api/v1/sessions/{session_id}/recordings/{recording_id}/complete"
                 ))
                 .header("authorization", bearer(&token))
+                .header(
+                    RECORDING_WORKER_ACCESS_TOKEN_HEADER,
+                    recording_worker_access_token(&session_id, &recording_id),
+                )
                 .header("content-type", "application/json")
                 .body(Body::from(
                     json!({
@@ -154,6 +159,10 @@ async fn recording_operations_snapshot_tracks_finalize_playback_and_failures() {
                     "/api/v1/sessions/{session_id}/recordings/{failed_recording_id}/fail"
                 ))
                 .header("authorization", bearer(&token))
+                .header(
+                    RECORDING_WORKER_ACCESS_TOKEN_HEADER,
+                    recording_worker_access_token(&session_id, &failed_recording_id),
+                )
                 .header("content-type", "application/json")
                 .body(Body::from(
                     json!({

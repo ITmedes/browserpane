@@ -67,7 +67,6 @@ impl RecordingWorkerAccessTokenManager {
         })
     }
 
-    #[cfg(test)]
     pub fn validate_token(
         &self,
         token: &str,
