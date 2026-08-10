@@ -4,14 +4,14 @@
 
 - Issue: [#162](https://github.com/ITmedes/browserpane/issues/162)
 - State: In progress; slice 1 merged through PR `#205`, slices 2-3 merged
-  through PR `#206`, slice 4 merged through PR `#207`, slice 5 complete on its
-  feature branch, and slice 6 next
+  through PR `#206`, slice 4 merged through PR `#207`, slice 5 merged through
+  PR `#208`, and slice 6 is in progress
 - Lane: Operator Product
 - Target gate: Admin-New Phase 1 Promotion
 - Depends on: control API conformance through `#179`, admin-new resource
   catalogs through `#159`, and project governance through `#161`
-- Branch: `feature/BPANE-00162-cli-diagnostics`
-- Baseline: `main` at `7cff03e6fbba99d20620cdedafb301acd9d34b41`,
+- Branch: `feature/BPANE-00162-cli-promotion`
+- Baseline: `main` at `374ca2a4b6e62f85f868cc685651daaee3507196`,
   2026-08-10
 
 ## Business Outcome
@@ -137,9 +137,12 @@ long-lived bearer token or resolved credential value is printed.
    support inventory, close the missing session-release command, consolidate
    README/ARCH examples, and add accurate local certificate, MCP, workflow
    source, Docker socket, and camera diagnostic steps.
-6. **Battle test and promotion evidence**: run focused and full CLI tests,
-   coverage, typecheck/build, Compose CLI/MCP/workflow/resource smokes, negative
-   cases, documentation validation, and compatibility regressions.
+6. **Battle test and promotion evidence** (in progress): promote the existing
+   session-file, workflow-CLI, workflow-workspace, and workflow-event smokes into
+   the canonical Compose runner and hosted browser-integration lane; then run
+   focused and full CLI tests, coverage, typecheck/build, Compose
+   CLI/MCP/workflow/resource smokes, negative cases, documentation validation,
+   and compatibility regressions.
 
 Each completed slice is committed independently. The plan and issue are updated
 with evidence before PR creation.
@@ -260,6 +263,62 @@ without being stopped or killed.
    disabled state or an intentionally provisioned Linux device.
 7. Run focused and full CLI tests, typecheck/build/help, repository document
    checks, and `smoke:bpane-cli -- --headless`.
+
+## Slice 6 Detailed Steps
+
+1. Add named canonical Compose stages for the existing `smoke:session-files`,
+   `smoke:workflow-cli`, `smoke:workflow-workspace`, and
+   `smoke:workflow-events` scripts. Keep each stage independently rerunnable,
+   bounded by the established smoke timeout, and owned by the package that
+   already implements the journey.
+2. Add those stages to the hosted browser-integration Compose lane after the
+   shared stack preparation. Extend validation-tool contract tests so removing
+   a promoted stage from either the local profile or hosted workflow fails
+   visibly.
+3. Re-audit the focused CLI suite against the issue's negative-case matrix:
+   missing authentication, invalid profile/command shape, malformed bodies,
+   missing binary input/output, unavailable resources, policy conflicts,
+   unavailable artifacts, and gateway failures. Add tests only where the
+   current suite lacks a real assertion.
+4. Run the canonical fast floor, focused CLI coverage, and the promoted Compose
+   stages against one prepared local stack. Retain exact-byte, secret-redaction,
+   workflow compatibility, MCP preflight, and admin-new regression evidence.
+5. Update the validation matrix and this plan with exact commands, counts,
+   outcomes, and any residual gaps. Do not convert passing prototype evidence
+   into a Production readiness claim.
+6. Publish the evidence on issue `#162`, open a PR that closes the issue on
+   merge, and keep the compatibility workflow entrypoint until its documented
+   removal gate is handled separately.
+
+### Slice 6 Example Use Case
+
+A release reviewer wants to know whether a script-only operator can prepare a
+workflow, transfer its inputs and outputs, inspect session evidence, and recover
+from common configuration failures without depending on an untested command
+path. They run one canonical validation inventory, rerun a failed stage by its
+stable id, and compare machine-readable CLI errors with the same owner API used
+by admin-new. The promotion record states exactly which journeys passed and
+which Production controls remain owned by later issues.
+
+### Slice 6 Smoke Sequence
+
+1. Run validation-tool contract tests and list the Compose profile; confirm the
+   promoted stage ids and their package-owned commands are present exactly once.
+2. Run focused CLI tests, the complete browser-client suite and coverage
+   ratchet, TypeScript check, production build, and canonical/compatibility help
+   checks.
+3. Run OpenAPI inventory, lint, examples, and compatibility checks plus the
+   repository Markdown/YAML/workflow validator.
+4. Prepare local Compose once and run `compose-cli`, `compose-mcp`,
+   `compose-session-files`, `compose-recording`, `compose-workflow`,
+   `compose-workflow-cli`, `compose-workflow-workspace`, and
+   `compose-workflow-events` through `scripts/validate.mjs`.
+5. Run the representative admin-new session, resource-catalog, project, and API
+   companion smokes to ensure CLI promotion did not diverge from the UI-facing
+   owner contract.
+6. Verify the documented readiness, certificate, MCP, workflow-source, Docker,
+   and optional camera diagnostics without printing owner tokens or resolved
+   secrets.
 
 ## Slice 1 Evidence (2026-08-10)
 
