@@ -2,6 +2,10 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import test from 'node:test';
 
+import {
+  COMPATIBILITY_ADMIN_PROMOTION_SMOKES,
+  UNIFIED_ADMIN_PROMOTION_SMOKES,
+} from '../validation/admin-promotion-contract.mjs';
 import { YamlDocumentParser } from '../validation/yaml-document-parser.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
@@ -33,13 +37,6 @@ test('compose workflow preserves every browser-facing smoke stage', () => {
   const job = workflow.jobs['browser-integrations'];
   const command = stepByName(job, 'Run browser-facing compose validation').run;
   const expectedStages = [
-    'compose-admin-auth-security',
-    'compose-admin-new-dashboard',
-    'compose-admin-new-projects',
-    'compose-admin-new-resource-catalogs',
-    'compose-admin-new-sessions',
-    'compose-admin-new-api-companion',
-    'compose-admin-compat',
     'compose-cli',
     'compose-session-files',
     'compose-mcp',
@@ -58,6 +55,20 @@ test('compose workflow preserves every browser-facing smoke stage', () => {
     assert.match(command, new RegExp(`--stage ${stage}(?:\\s|$)`));
   }
   assert.equal((command.match(/--stage /g) ?? []).length, expectedStages.length);
+});
+
+test('compose workflow runs unified and compatibility promotion lanes independently', () => {
+  const job = workflow.jobs['admin-promotion'];
+
+  assert.ok(job);
+  assert.equal(job.strategy['fail-fast'], false);
+  assert.deepEqual(job.strategy.matrix.surface, ['unified', 'compatibility']);
+  assert.equal(
+    stepByName(job, 'Run admin promotion validation').run,
+    'node scripts/run-admin-promotion-validation.mjs "${{ matrix.surface }}"',
+  );
+  assert.ok(UNIFIED_ADMIN_PROMOTION_SMOKES.length > 0);
+  assert.ok(COMPATIBILITY_ADMIN_PROMOTION_SMOKES.length > 0);
 });
 
 test('every compose lane retains failure diagnostics and unconditional cleanup', () => {
