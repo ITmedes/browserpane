@@ -91,7 +91,8 @@ trust exception.
                      v
        ┌──────────────────────────┐
        │  nginx (web, :8080)      │
-       │  / -> /admin/ redirect   │
+       │  / -> /admin-new/        │
+       │  /admin/ compatibility   │
        │  /test-embed.html        │
        │  /dist/ -> bpane-client   │
        │  /auth-config.json       │

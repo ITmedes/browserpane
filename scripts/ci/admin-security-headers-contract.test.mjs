@@ -9,12 +9,20 @@ const COMPAT_CONFIG = new URL('../../code/web/bpane-admin/svelte.config.js', imp
 const NEW_CONFIG = new URL('../../code/web/bpane-admin-unified/svelte.config.js', import.meta.url);
 const INCLUDE = 'include /etc/nginx/snippets/admin-security-headers.conf;';
 
-test('admin routes share the hardened response policy', async () => {
+test('admin routes and the promoted root share the hardened response policy', async () => {
   const nginx = await readFile(NGINX_CONFIG, 'utf8');
 
-  for (const route of ['/admin', '/admin/', '/admin-new', '/admin-new/']) {
+  for (const route of ['/', '/admin', '/admin/', '/admin-new', '/admin-new/']) {
     assert.match(locationBlock(nginx, route), new RegExp(escapeRegExp(INCLUDE)));
   }
+});
+
+test('web root selects admin-new while preserving explicit compatibility and fixture paths', async () => {
+  const nginx = await readFile(NGINX_CONFIG, 'utf8');
+
+  assert.match(locationBlock(nginx, '/'), /return 302 \/admin-new\//);
+  assert.doesNotMatch(locationBlock(nginx, '/admin/'), /return 302 \/admin-new\//);
+  assert.match(nginx, /location \/ \{[\s\S]*?try_files \$uri \$uri\/ =404;/);
 });
 
 test('admin security policy contains the required browser defenses', async () => {
@@ -52,7 +60,7 @@ test('web image packages the shared admin header policy', async () => {
 
 function locationBlock(config, route) {
   const escaped = escapeRegExp(route);
-  const pattern = route.endsWith('/')
+  const pattern = route.endsWith('/') && route !== '/'
     ? new RegExp(`location \\^~ ${escaped} \\{([\\s\\S]*?)\\n    \\}`)
     : new RegExp(`location = ${escaped} \\{([\\s\\S]*?)\\n    \\}`);
   const match = config.match(pattern);

@@ -7,13 +7,14 @@ treated as complete.
 ## Baseline
 
 1. Start the local stack.
-2. Open `http://localhost:8080/admin/`.
+2. Open `http://localhost:8080/` and confirm the web root redirects to
+   `/admin-new/`.
 3. Log in with `demo / demo-demo`.
-4. Confirm the current live workspace loads.
-5. Create or select a session.
-6. Confirm connect, disconnect, reconnect, and route navigation still work.
-7. Open `http://localhost:8080/admin-new/` and confirm the new app is separate
-   from the old app.
+4. Confirm the unified dashboard loads.
+5. Create or select a session and confirm its route-backed detail loads.
+6. Open `http://localhost:8080/admin/` directly.
+7. Confirm compatibility connect, disconnect, reconnect, and route navigation
+   still work independently from the unified app.
 
 ## New App Shell
 
@@ -408,7 +409,7 @@ treated as complete.
 8. Log out and log in again from both apps.
 9. Confirm route state, selected session, and live-attach state do not leak
    between `/admin/` and `/admin-new/`.
-10. Keep `/admin/` as default until parity and security gates are accepted.
+10. Keep `/admin/` directly available until a dated removal gate is accepted.
 
 ## Final Regression Sequence
 

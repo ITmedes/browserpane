@@ -131,14 +131,14 @@ Current product shape:
     code owns runtime config, bounded PKCE transaction state, memory-only token
     lifetime, auth snapshots, redirects, and app recovery.
 - `code/web/bpane-admin`
-  - Stable/default SvelteKit admin console served at `/admin/`.
+  - Compatibility SvelteKit admin console retained at `/admin/`.
   - Owns the current operations overlay, route-backed inspection surfaces, and
     gateway admin-event WebSocket consumer. The consumer mints a short-lived
     event token over authenticated HTTP, opens a query-free socket, and sends
     the scoped token in the first message on every connect/reconnect.
 - `code/web/bpane-admin-unified`
-  - Side-by-side SvelteKit admin console under active development at
-    `/admin-new/`.
+  - Standard SvelteKit admin console served at `/admin-new/`; local Compose
+    redirects the web root to this app while retaining `/admin/` as fallback.
   - Owns the route-backed dashboard, resource catalogs, session flows and
     subareas, preview popup, recordings, workflows/runs, identity review, and
     contract-derived API/coverage/docs companions described in
@@ -266,7 +266,8 @@ Run these where applicable:
 2. Start the local stack:
    `BPANE_GATEWAY_MAX_ACTIVE_RUNTIMES=2 docker compose -f deploy/compose.yml up --build`
 3. Wait for `curl -fsS http://localhost:8932/readyz`; use `/healthz` only for process-liveness checks.
-4. Open `http://localhost:8080/admin/` in Chromium. The web root redirects there for local development.
+4. Open `http://localhost:8080/` in Chromium. The web root redirects to
+   `/admin-new/`; use `/admin/` only for compatibility fallback checks.
 5. Log in through the local Keycloak realm with `demo / demo-demo`.
 6. The admin console will resolve or create an owner-scoped `/api/v1/sessions` resource before transport connect.
 7. The admin console will mint a short-lived session-scoped connect ticket before WebTransport connect.

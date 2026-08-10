@@ -1,6 +1,6 @@
 # Admin-New Implementation Status
 
-Revalidated against current routes and package scripts: 2026-08-07
+Revalidated against current routes and package scripts: 2026-08-10
 
 This file maps the current `code/web/bpane-admin-unified` app to the
 consolidated redesign requirements. It is based on the current routes,
@@ -60,7 +60,7 @@ evidence, but default promotion remains a Phase 1 gate owned by #163. Use
 | Step 15: Dashboard | Read-only resource counts, recent operational activity, and links to active work. | Done for first pass | Dashboard overview exists and has smoke coverage. |
 | Step 16: Command palette | Global navigation/session join/common creation actions without a second hidden state model. | Missing | No implemented command palette route/component. |
 | Step 17: API reference/coverage companion | Copyable API examples, operation classification, OpenAPI link, compatibility separation. | Done for current contract | `/api`, `/coverage`, and `/docs` load strictly validated committed evidence, expose 19 schema-validated examples and 14 separate compatibility surfaces, and are compose-smoke covered. |
-| Step 18: Promotion decision | Compare parity, pass smoke/manual gates, keep `/admin/` side by side until accepted. | Not ready | `/admin/` must remain default until parity/security gates pass. |
+| Step 18: Promotion decision | Compare parity, pass smoke/manual gates, and keep `/admin/` side by side until a separate removal decision. | In progress | Root `/` now selects `/admin-new/`; `/admin/` remains directly available. The executable route/stage contract and live promotion smoke are implemented, while the complete Compose and manual evidence remains pending under #163. |
 
 ## Implemented Admin-New Smoke Coverage
 
@@ -68,6 +68,7 @@ Current `bpane-client` scripts include:
 
 - `smoke:admin-unified-dashboard`
 - `smoke:admin-unified-projects`
+- `smoke:admin-unified-promotion`
 - `smoke:admin-unified-browser-contexts`
 - `smoke:admin-unified-egress-profiles`
 - `smoke:admin-unified-file-workspaces`
@@ -79,19 +80,21 @@ Current `bpane-client` scripts include:
 - `smoke:admin-unified-api-companion`
 - `smoke:admin-unified-resource-catalogs`
 
-These should remain mandatory for PRs that touch the unified admin app. #151
-must make the selected minimal checks enforceable in CI; the existence of local
-scripts alone is not a promotion gate.
+These remain mandatory through the executable #163 promotion contract. The
+hosted Compose workflow runs unified and compatibility promotion surfaces in
+parallel; the existence of scripts alone is not completion of the manual gate.
 
 ## Promotion Assessment
 
-The unified app is useful for manual testing and feature development, but it is
-not ready to become default because:
+The unified app is now the local web-root default, but the #163 promotion gate
+is not complete:
 
-1. Session-template and operation-counter catalogs plus command-palette behavior
-   are incomplete.
-2. Project-governance parity is implemented under #161 and browser-context
-   lifecycle parity merged through PR #203; both remain subject to the promotion
-   regression gate.
-3. The explicit promotion, regression, and fallback gate in #163 has not run.
-4. Some production security/operability slices remain outside admin parity.
+1. The full 24-stage unified/compatibility promotion inventory and final manual
+   regression sequence still need recorded execution evidence.
+2. Session-template catalog management (#124), command-palette behavior, and
+   dedicated operation counters are explicit post-promotion deferrals and are
+   not advertised as implemented routes.
+3. `/admin/` must remain available until a dated observation and removal gate
+   is accepted.
+4. Production security/operability slices remain separate from admin route
+   promotion and must not be implied by the default-route change.
