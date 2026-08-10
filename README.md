@@ -465,7 +465,9 @@ surfaces, not an exhaustive duplicate of the contract.
   quotas.
 - **File workspaces, credential bindings, and approved extensions** provide
   governed inputs without embedding file paths, secrets, or extension payloads
-  in session and workflow definitions.
+  in session and workflow definitions. Operators can manage these catalogs with
+  `./scripts/bpane file-workspace`, `./scripts/bpane credential-binding`, and
+  `./scripts/bpane extension`.
 - **Identity and access-review resources** expose the current principal,
   registered service principals, and explicit identity-to-project mappings
   without returning raw bearer-token payloads. Disabled service principals
@@ -1134,6 +1136,21 @@ Reusable workflow inputs:
 - `POST /api/v1/file-workspaces`
 - `POST /api/v1/credential-bindings`
 - `POST /api/v1/extensions`
+
+The canonical CLI covers these governance catalogs and signed workflow event
+subscriptions:
+
+```bash
+./scripts/bpane extension list
+./scripts/bpane credential-binding list
+./scripts/bpane workflow-event-subscription list
+```
+
+Use `--body-file` for credential or subscription creation when the request
+contains `secret_payload` or `signing_secret`; this avoids putting a write-only
+secret into shell history. CLI results and structured governance errors strip
+those fields. Resolved credential values remain worker-only and have no owner
+CLI command.
 
 Workflow boundary:
 

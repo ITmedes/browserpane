@@ -637,9 +637,14 @@ The supported local operator CLI lives in
   principals, identity mappings, projects, egress profiles, reusable browser
   contexts, session templates, sessions, and MCP delegation. File-workspace
   commands cover workspace create/list/get and exact-byte file
-  list/upload/download/delete through the same profile, auth, JSON, and stable
-  error contract. Egress-profile create/update commands can attach a proxy-auth
-  credential binding with `--proxy-credential-binding-id`.
+  list/upload/download/delete. Extension commands cover definition creation,
+  version publication, inspection, and enable/disable transitions. Credential
+  bindings expose sanitized create/list/get metadata, while workflow event
+  subscriptions expose create/list/get/delivery diagnostics/delete. These
+  commands share the same profile, auth, JSON, secret-redaction, and stable
+  error contract; resolved credentials stay worker-only. Egress-profile
+  create/update commands can attach a proxy-auth credential binding with
+  `--proxy-credential-binding-id`.
 - `deploy/examples/egress-observer` provides local Squid forward-proxy
   examples for metadata-only access-log observation, session/container IP
   correlation, authenticated proxy validation, and sanitized egress-usage

@@ -43,6 +43,8 @@ async function run() {
   let servicePrincipalMappingId = '';
   let workspaceId = '';
   let workspaceFileId = '';
+  let extensionId = '';
+  let workflowEventSubscriptionId = '';
   let configDir = '';
 
   try {
@@ -298,6 +300,161 @@ async function run() {
     }
     workspaceFileId = '';
 
+    const extension = runBpaneCli([
+      'extension',
+      'create',
+      `operator-helper-${runLabel}`,
+      '--description',
+      'Operator CLI smoke approved extension',
+      '--label',
+      'suite=bpane-cli-smoke',
+      '--label',
+      `run_id=${runLabel}`,
+    ], cliEnv);
+    extensionId = extension.id;
+    if (!extensionId || extension.enabled !== true || extension.labels?.run_id !== runLabel) {
+      throw new Error(`CLI extension create returned unexpected data: ${JSON.stringify(extension)}`);
+    }
+
+    const extensionVersion = runBpaneCli([
+      'extension',
+      'version',
+      'create',
+      extensionId,
+      '--body-json',
+      JSON.stringify({
+        version: '1.0.0',
+        install_path: '/home/bpane/bpane-test-extension',
+      }),
+    ], cliEnv);
+    if (
+      extensionVersion.extension_definition_id !== extensionId
+      || extensionVersion.version !== '1.0.0'
+    ) {
+      throw new Error(`CLI extension version create returned unexpected data: ${JSON.stringify(extensionVersion)}`);
+    }
+
+    const listedExtensions = runBpaneCli(['extension', 'list'], cliEnv);
+    if (
+      !Array.isArray(listedExtensions.extensions)
+      || !listedExtensions.extensions.some((item) => item.id === extensionId)
+    ) {
+      throw new Error(`CLI extension list did not include ${extensionId}.`);
+    }
+    const fetchedExtension = runBpaneCli(['extension', 'get', extensionId], cliEnv);
+    if (fetchedExtension.id !== extensionId || fetchedExtension.latest_version !== '1.0.0') {
+      throw new Error(`CLI extension get returned unexpected data: ${JSON.stringify(fetchedExtension)}`);
+    }
+    const disabledExtension = runBpaneCli(['extension', 'disable', extensionId], cliEnv);
+    if (disabledExtension.enabled !== false) {
+      throw new Error(`CLI extension disable returned unexpected data: ${JSON.stringify(disabledExtension)}`);
+    }
+    const enabledExtension = runBpaneCli(['extension', 'enable', extensionId], cliEnv);
+    if (enabledExtension.enabled !== true) {
+      throw new Error(`CLI extension enable returned unexpected data: ${JSON.stringify(enabledExtension)}`);
+    }
+
+    const credentialBinding = runBpaneCli([
+      'credential-binding',
+      'create',
+      '--body-json',
+      JSON.stringify({
+        project_id: projectId,
+        name: `support-login-${runLabel}`,
+        provider: 'vault_kv_v2',
+        external_ref: `secret/data/browserpane/cli-smoke/${runLabel}`,
+        namespace: 'operator-cli-smoke',
+        allowed_origins: ['https://example.com'],
+        injection_mode: 'form_fill',
+        labels: {
+          suite: 'bpane-cli-smoke',
+          run_id: runLabel,
+        },
+      }),
+    ], cliEnv);
+    if (
+      !credentialBinding.id
+      || credentialBinding.project_id !== projectId
+      || credentialBinding.external_ref !== `secret/data/browserpane/cli-smoke/${runLabel}`
+      || Object.hasOwn(credentialBinding, 'secret_payload')
+    ) {
+      throw new Error(`CLI credential-binding create returned unexpected data: ${JSON.stringify(credentialBinding)}`);
+    }
+    const listedCredentialBindings = runBpaneCli(['credential-binding', 'list'], cliEnv);
+    if (
+      !Array.isArray(listedCredentialBindings.credential_bindings)
+      || !listedCredentialBindings.credential_bindings.some(
+        (item) => item.id === credentialBinding.id,
+      )
+    ) {
+      throw new Error(`CLI credential-binding list did not include ${credentialBinding.id}.`);
+    }
+    const fetchedCredentialBinding = runBpaneCli([
+      'credential-binding',
+      'get',
+      credentialBinding.id,
+    ], cliEnv);
+    if (
+      fetchedCredentialBinding.id !== credentialBinding.id
+      || fetchedCredentialBinding.labels?.run_id !== runLabel
+      || Object.hasOwn(fetchedCredentialBinding, 'secret_payload')
+    ) {
+      throw new Error(`CLI credential-binding get returned unexpected data: ${JSON.stringify(fetchedCredentialBinding)}`);
+    }
+
+    const workflowEventSubscriptionBodyPath = path.join(
+      configDir,
+      'workflow-event-subscription.json',
+    );
+    await fs.writeFile(workflowEventSubscriptionBodyPath, JSON.stringify({
+      name: `operator-events-${runLabel}`,
+      target_url: 'https://example.com/browserpane-events',
+      event_types: ['workflow_run.succeeded'],
+      signing_secret: `bpane-cli-smoke-${crypto.randomUUID()}`,
+    }));
+    const workflowEventSubscription = runBpaneCli([
+      'workflow-event-subscription',
+      'create',
+      '--body-file',
+      workflowEventSubscriptionBodyPath,
+    ], cliEnv);
+    workflowEventSubscriptionId = workflowEventSubscription.id;
+    if (
+      !workflowEventSubscriptionId
+      || workflowEventSubscription.has_signing_secret !== true
+      || Object.hasOwn(workflowEventSubscription, 'signing_secret')
+    ) {
+      throw new Error(`CLI workflow event subscription create returned unexpected data: ${JSON.stringify(workflowEventSubscription)}`);
+    }
+    const listedWorkflowEventSubscriptions = runBpaneCli([
+      'workflow-event-subscription',
+      'list',
+    ], cliEnv);
+    if (
+      !Array.isArray(listedWorkflowEventSubscriptions.subscriptions)
+      || !listedWorkflowEventSubscriptions.subscriptions.some(
+        (item) => item.id === workflowEventSubscriptionId,
+      )
+    ) {
+      throw new Error(`CLI workflow event subscription list did not include ${workflowEventSubscriptionId}.`);
+    }
+    const fetchedWorkflowEventSubscription = runBpaneCli([
+      'workflow-event-subscription',
+      'get',
+      workflowEventSubscriptionId,
+    ], cliEnv);
+    if (fetchedWorkflowEventSubscription.id !== workflowEventSubscriptionId) {
+      throw new Error(`CLI workflow event subscription get returned unexpected data: ${JSON.stringify(fetchedWorkflowEventSubscription)}`);
+    }
+    const workflowEventDeliveries = runBpaneCli([
+      'workflow-event-subscription',
+      'deliveries',
+      workflowEventSubscriptionId,
+    ], cliEnv);
+    if (!Array.isArray(workflowEventDeliveries.deliveries)) {
+      throw new Error(`CLI workflow event deliveries returned unexpected data: ${JSON.stringify(workflowEventDeliveries)}`);
+    }
+
     const identityMapping = runBpaneCli([
       'identity-mapping',
       'create',
@@ -540,6 +697,8 @@ async function run() {
       templateId,
       '--allowed-egress-profile-id',
       egressProfileId,
+      '--allowed-extension-id',
+      extensionId,
       '--allowed-file-workspace-id',
       workspaceId,
       '--allow-session-file-bindings',
@@ -552,6 +711,7 @@ async function run() {
     if (
       policyProject.policy?.allowed_session_template_ids?.[0] !== templateId
       || policyProject.policy?.allowed_egress_profile_ids?.[0] !== egressProfileId
+      || policyProject.policy?.allowed_extension_ids?.[0] !== extensionId
       || policyProject.policy?.allowed_file_workspace_ids?.[0] !== workspaceId
       || policyProject.policy?.allow_session_file_bindings !== false
       || policyProject.policy?.allow_manual_recordings !== false
@@ -949,6 +1109,26 @@ async function run() {
     }
     contextId = '';
 
+    const deletedWorkflowEventSubscription = runBpaneCli([
+      'workflow-event-subscription',
+      'delete',
+      workflowEventSubscriptionId,
+    ], cliEnv);
+    if (deletedWorkflowEventSubscription.id !== workflowEventSubscriptionId) {
+      throw new Error(`CLI workflow event subscription delete returned unexpected data: ${JSON.stringify(deletedWorkflowEventSubscription)}`);
+    }
+    workflowEventSubscriptionId = '';
+
+    const retainedDisabledExtension = runBpaneCli([
+      'extension',
+      'disable',
+      extensionId,
+    ], cliEnv);
+    if (retainedDisabledExtension.id !== extensionId || retainedDisabledExtension.enabled !== false) {
+      throw new Error(`CLI extension final disable returned unexpected data: ${JSON.stringify(retainedDisabledExtension)}`);
+    }
+    extensionId = '';
+
     const archivedProject = runBpaneCli(['project', 'archive', projectId], cliEnv);
     if (archivedProject.id !== projectId || archivedProject.state !== 'archived') {
       throw new Error(`CLI project archive did not archive the project: ${JSON.stringify(archivedProject)}`);
@@ -957,6 +1137,21 @@ async function run() {
 
     log('Operator CLI smoke passed.');
   } finally {
+    if (workflowEventSubscriptionId && accessToken) {
+      await fetch(
+        `${apiOrigin(options)}/api/v1/workflow-event-subscriptions/${workflowEventSubscriptionId}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${accessToken}` },
+        },
+      ).catch(() => {});
+    }
+    if (extensionId && accessToken) {
+      await fetch(`${apiOrigin(options)}/api/v1/extensions/${extensionId}/disable`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }).catch(() => {});
+    }
     if (workspaceId && workspaceFileId && accessToken) {
       await fetch(`${apiOrigin(options)}/api/v1/file-workspaces/${workspaceId}/files/${workspaceFileId}`, {
         method: 'DELETE',

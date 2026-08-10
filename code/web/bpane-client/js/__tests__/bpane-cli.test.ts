@@ -1177,6 +1177,232 @@ describe('bpane operator CLI', () => {
     }
   });
 
+  it('manages approved extension definitions and versions through the CLI', async () => {
+    const { calls, fetchImpl } = createFetch(
+      jsonResponse({ id: 'extension-1', name: 'Support helper', enabled: true }, 201),
+      jsonResponse({ extensions: [{ id: 'extension-1' }] }),
+      jsonResponse({ id: 'extension/with space', enabled: true }),
+      jsonResponse({ extension_definition_id: 'extension-1', version: '2.0.0' }, 201),
+      jsonResponse({ id: 'extension-1', enabled: false }),
+      jsonResponse({ id: 'extension-1', enabled: true }),
+    );
+    const env = { BPANE_ACCESS_TOKEN: 'token-1' };
+    const commands = [
+      [
+        'extension',
+        'create',
+        'Support helper',
+        '--description',
+        'Approved support extension',
+        '--label',
+        'team=support',
+      ],
+      ['extension', 'list'],
+      ['extension', 'get', 'extension/with space'],
+      [
+        'extension',
+        'version',
+        'create',
+        'extension/with space',
+        '--body-json',
+        '{"version":"2.0.0","install_path":"/opt/extensions/support"}',
+      ],
+      ['extension', 'disable', 'extension/with space'],
+      ['extension', 'enable', 'extension/with space'],
+    ];
+
+    for (const args of commands) {
+      const io = createIo();
+      expect(await runBpaneCli(args, env, io.io, fetchImpl)).toBe(EXIT_CODES.ok);
+      expect(io.stderr()).toBe('');
+    }
+
+    expect(JSON.parse(calls[0].init.body)).toEqual({
+      name: 'Support helper',
+      description: 'Approved support extension',
+      labels: { team: 'support' },
+    });
+    expect(JSON.parse(calls[3].init.body)).toEqual({
+      version: '2.0.0',
+      install_path: '/opt/extensions/support',
+    });
+    expect(calls.map((call) => [call.url, call.init.method])).toEqual([
+      ['http://localhost:8080/api/v1/extensions', 'POST'],
+      ['http://localhost:8080/api/v1/extensions', undefined],
+      ['http://localhost:8080/api/v1/extensions/extension%2Fwith%20space', undefined],
+      [
+        'http://localhost:8080/api/v1/extensions/extension%2Fwith%20space/versions',
+        'POST',
+      ],
+      [
+        'http://localhost:8080/api/v1/extensions/extension%2Fwith%20space/disable',
+        'POST',
+      ],
+      [
+        'http://localhost:8080/api/v1/extensions/extension%2Fwith%20space/enable',
+        'POST',
+      ],
+    ]);
+  });
+
+  it('manages credential-binding metadata without emitting secret payloads', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'bpane-cli-credential-test-'));
+    const bodyPath = path.join(tempDir, 'credential.json');
+    const secret = 'not-for-cli-output';
+    await fs.writeFile(bodyPath, JSON.stringify({
+      name: 'Support login',
+      provider: 'vault_kv_v2',
+      injection_mode: 'form_fill',
+      secret_payload: { username: 'operator', password: secret },
+    }));
+    const { calls, fetchImpl } = createFetch(
+      jsonResponse({ id: 'binding-1', name: 'Support login', secret_payload: { password: secret } }, 201),
+      jsonResponse({ credential_bindings: [{ id: 'binding-1', secret_payload: secret }] }),
+      jsonResponse({ id: 'binding/with space', secret_payload: secret }),
+    );
+    const env = { BPANE_ACCESS_TOKEN: 'token-1' };
+
+    try {
+      const outputs = [];
+      for (const args of [
+        ['credential-binding', 'create', '--body-file', bodyPath],
+        ['credential-binding', 'list'],
+        ['credential-binding', 'get', 'binding/with space'],
+      ]) {
+        const io = createIo();
+        expect(await runBpaneCli(args, env, io.io, fetchImpl)).toBe(EXIT_CODES.ok);
+        outputs.push(io.stdout());
+      }
+      expect(outputs.join('\n')).not.toContain(secret);
+      expect(JSON.parse(outputs[0])).toEqual({ id: 'binding-1', name: 'Support login' });
+      expect(JSON.parse(calls[0].init.body).secret_payload.password).toBe(secret);
+      expect(calls.map((call) => [call.url, call.init.method])).toEqual([
+        ['http://localhost:8080/api/v1/credential-bindings', 'POST'],
+        ['http://localhost:8080/api/v1/credential-bindings', undefined],
+        [
+          'http://localhost:8080/api/v1/credential-bindings/binding%2Fwith%20space',
+          undefined,
+        ],
+      ]);
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('manages workflow event subscriptions and delivery diagnostics safely', async () => {
+    const signingSecret = 'write-only-signing-secret';
+    const subscription = {
+      id: 'subscription-1',
+      name: 'BPM callback',
+      has_signing_secret: true,
+      signing_secret: signingSecret,
+    };
+    const { calls, fetchImpl } = createFetch(
+      jsonResponse(subscription, 201),
+      jsonResponse({ subscriptions: [subscription] }),
+      jsonResponse({ ...subscription, id: 'subscription/with space' }),
+      jsonResponse({ deliveries: [{ id: 'delivery-1', signing_secret: signingSecret }] }),
+      jsonResponse({ ...subscription, id: 'subscription/with space' }),
+    );
+    const env = { BPANE_ACCESS_TOKEN: 'token-1' };
+    const outputs = [];
+    for (const args of [
+      [
+        'workflow-event-subscription',
+        'create',
+        '--body-json',
+        JSON.stringify({
+          name: 'BPM callback',
+          target_url: 'https://events.example.test/browserpane',
+          event_types: ['workflow_run.succeeded'],
+          signing_secret: signingSecret,
+        }),
+      ],
+      ['workflow-event-subscription', 'list'],
+      ['workflow-event-subscription', 'get', 'subscription/with space'],
+      ['workflow-event-subscription', 'deliveries', 'subscription/with space'],
+      ['workflow-event-subscription', 'delete', 'subscription/with space'],
+    ]) {
+      const io = createIo();
+      expect(await runBpaneCli(args, env, io.io, fetchImpl)).toBe(EXIT_CODES.ok);
+      outputs.push(io.stdout());
+    }
+    expect(outputs.join('\n')).not.toContain(signingSecret);
+    expect(JSON.parse(outputs[0])).toMatchObject({
+      id: 'subscription-1',
+      has_signing_secret: true,
+    });
+    expect(calls.map((call) => [call.url, call.init.method])).toEqual([
+      ['http://localhost:8080/api/v1/workflow-event-subscriptions', 'POST'],
+      ['http://localhost:8080/api/v1/workflow-event-subscriptions', undefined],
+      [
+        'http://localhost:8080/api/v1/workflow-event-subscriptions/subscription%2Fwith%20space',
+        undefined,
+      ],
+      [
+        'http://localhost:8080/api/v1/workflow-event-subscriptions/subscription%2Fwith%20space/deliveries',
+        undefined,
+      ],
+      [
+        'http://localhost:8080/api/v1/workflow-event-subscriptions/subscription%2Fwith%20space',
+        'DELETE',
+      ],
+    ]);
+  });
+
+  it('rejects invalid governance commands and preserves safe API errors', async () => {
+    const env = { BPANE_ACCESS_TOKEN: 'token-1' };
+    const noRequest = createFetch();
+    const invalidCases = [
+      { args: ['extension', 'create'], expected: 'requires --name' },
+      {
+        args: ['extension', 'version', 'create', 'extension-1'],
+        expected: 'requires --body-json or --body-file',
+      },
+      {
+        args: ['credential-binding', 'create'],
+        expected: 'requires --body-json or --body-file',
+      },
+      {
+        args: ['workflow-event-subscription', 'get'],
+        expected: 'Usage: bpane workflow-event-subscription get',
+      },
+    ];
+    for (const testCase of invalidCases) {
+      const io = createIo();
+      expect(await runBpaneCli(testCase.args, env, io.io, noRequest.fetchImpl)).toBe(
+        EXIT_CODES.usage,
+      );
+      expect(parseStderr(io).error).toContain(testCase.expected);
+    }
+    expect(noRequest.calls).toHaveLength(0);
+
+    const authIo = createIo();
+    expect(await runBpaneCli(
+      ['credential-binding', 'list'],
+      {},
+      authIo.io,
+      noRequest.fetchImpl,
+    )).toBe(EXIT_CODES.auth);
+
+    const signingSecret = 'must-not-leak';
+    const errors = createFetch(
+      jsonResponse({ error: 'missing' }, 404),
+      jsonResponse({ error: 'conflict', secret_payload: signingSecret }, 409),
+      jsonResponse({ error: 'unavailable', signing_secret: signingSecret }, 500),
+    );
+    for (const args of [
+      ['extension', 'get', 'missing'],
+      ['credential-binding', 'get', 'conflict'],
+      ['workflow-event-subscription', 'get', 'unavailable'],
+    ]) {
+      const io = createIo();
+      expect(await runBpaneCli(args, env, io.io, errors.fetchImpl)).toBe(EXIT_CODES.api);
+      expect(parseStderr(io).code).toBe('HTTP_ERROR');
+      expect(io.stderr()).not.toContain(signingSecret);
+    }
+  });
+
   it('manages workflow definitions, versions, and source inspection through the canonical CLI', async () => {
     const { calls, fetchImpl } = createFetch(
       jsonResponse({ workflows: [{ id: 'workflow-1' }] }),
