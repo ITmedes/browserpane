@@ -645,6 +645,12 @@ The supported local operator CLI lives in
   error contract; resolved credentials stay worker-only. Egress-profile
   create/update commands can attach a proxy-auth credential binding with
   `--proxy-credential-binding-id`.
+- Session evidence commands expose read-only file and file-binding
+  list/get/download operations plus recording segment inspection/download and
+  session playback metadata, manifest, and zip export. Binary downloads require
+  explicit output paths and preserve exact response bytes. Binding mutations,
+  recording policy changes, recorder lifecycle transitions, and worker
+  completion/failure routes remain outside the owner CLI.
 - `deploy/examples/egress-observer` provides local Squid forward-proxy
   examples for metadata-only access-log observation, session/container IP
   correlation, authenticated proxy validation, and sanitized egress-usage

@@ -3,14 +3,14 @@
 ## Metadata
 
 - Issue: [#162](https://github.com/ITmedes/browserpane/issues/162)
-- State: In progress; implementation slice 1 merged through PR `#205`, slice 2
-  implemented and validated, slice 3 implemented and validated
+- State: In progress; slice 1 merged through PR `#205`, slices 2-3 merged
+  through PR `#206`, slice 4 complete on its feature branch, and slice 5 next
 - Lane: Operator Product
 - Target gate: Admin-New Phase 1 Promotion
 - Depends on: control API conformance through `#179`, admin-new resource
   catalogs through `#159`, and project governance through `#161`
-- Branch: `feature/BPANE-00162-workflow-cli`
-- Baseline: `main` at `9a759dbf4c37aae57207583d9667f65ddc25e8a1`,
+- Branch: `feature/BPANE-00162-session-evidence-cli`
+- Baseline: `main` at `24ccbfe7197755446313587c8fa7569f94645010`,
   2026-08-10
 
 ## Business Outcome
@@ -53,9 +53,9 @@ long-lived bearer token or resolved credential value is printed.
   remains a thin compatibility wrapper around that implementation.
 - File workspaces, workspace files, approved extensions, credential bindings,
   workflow event subscriptions, session files/bindings, and recording exports
-  have owner APIs and admin-new routes but no canonical `bpane` commands.
-- `run-bpane-cli-smoke.mjs` covers the established command families against
-  Compose, but not the newer resource catalogs or workflow commands.
+  now have canonical owner-safe `bpane` commands.
+- Compose smokes cover the canonical resource catalogs, workflow execution,
+  exact-byte session evidence transfers, and retained recording playback.
 - README and ARCH describe both CLIs separately and contain the relevant local
   setup facts, but they do not yet provide one concise diagnostic decision path.
 
@@ -129,9 +129,9 @@ long-lived bearer token or resolved credential value is printed.
 3. **Governance resource parity** (complete): add approved-extension,
    credential-binding, and workflow event-subscription commands with safe
    metadata and state transitions; reject secret-resolution operations.
-4. **Session evidence transfers**: add owner-facing session file/binding and
-   recording/playback inspection/download commands without exposing worker-only
-   mutation routes.
+4. **Session evidence transfers** (complete): add owner-facing session
+   file/binding and recording/playback inspection/download commands without
+   exposing worker-only mutation routes.
 5. **Diagnostics and documentation**: publish the API-family support inventory,
    consolidate README/ARCH examples, and add accurate local certificate, MCP,
    workflow source, Docker socket, and camera diagnostic steps.
@@ -180,6 +180,28 @@ with evidence before PR creation.
 6. Align README and ARCH command guidance, record validation evidence, commit,
    and push the slice without changing gateway, OpenAPI, or persistence
    contracts.
+
+## Slice 4 Detailed Steps
+
+1. Add `session file list/get/download` commands for runtime-produced session
+   files, with encoded identifiers, explicit output paths, exact-byte writes,
+   and content-type/byte-count summaries.
+2. Add `session file-binding list/get/download` commands for owner-visible
+   workspace bindings. Keep binding creation/removal out of this
+   evidence-oriented slice because those operations change session setup.
+3. Add `session recording list/get/download` plus `session playback get`,
+   `manifest`, and `export` commands. A segment download preserves the returned
+   media type; playback export requires an explicit zip output path.
+4. Do not expose recording create/stop, worker completion/failure, recording
+   policy mutation, or gateway operation counters in this slice. Manual
+   lifecycle remains an admin/API operation and worker finalization remains an
+   internal boundary.
+5. Add focused tests for request shape, URL encoding, exact binary output,
+   unavailable/expired artifacts, missing output paths, authentication, and API
+   errors. Extend the Compose smoke with deterministic session-file and retained
+   recording evidence where fixtures are available.
+6. Align README/ARCH guidance, record validation evidence, commit, and push the
+   slice before the final diagnostics and promotion work begins.
 
 ## Slice 1 Evidence (2026-08-10)
 
@@ -249,6 +271,30 @@ with evidence before PR creation.
 - README and ARCH now document the governance command families and write-only
   secret behavior. No gateway, OpenAPI, database, protocol, support-matrix, or
   runtime-topology change was required.
+
+## Slice 4 Evidence (2026-08-10)
+
+- Added canonical session file and file-binding list/get/download commands plus
+  recording list/get/download and playback get/manifest/export commands.
+- All downloads require explicit output paths, write exact response bytes, and
+  return structured path, byte-count, and media-type metadata. Session and
+  resource identifiers are URL encoded.
+- Kept binding mutation, recording policy changes, recorder lifecycle actions,
+  and worker completion/failure outside the owner CLI.
+- Focused CLI coverage passed all `62` tests, including exact bytes, encoded
+  paths, missing output/authentication, API failures, and expired recording
+  artifacts. The full browser-client suite passed all `673` tests across `86`
+  files.
+- TypeScript check, production build, Node syntax checks, canonical CLI help,
+  and documentation whitespace validation passed.
+- `smoke:session-files` passed against local Compose with browser-upload and
+  bound-workspace evidence, including exact-byte CLI downloads and cleanup.
+- `smoke:recording` passed against local Compose with two retained segments,
+  segment metadata/download, playback metadata/manifest, zip export, and the
+  existing admin/test-embed recording-library regression checks.
+- README and ARCH now document the read-only session-evidence surface and its
+  internal mutation boundary. No gateway, OpenAPI, database, protocol,
+  support-matrix, or runtime-topology change was required.
 
 ## Validation Strategy
 

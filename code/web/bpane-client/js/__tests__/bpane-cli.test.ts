@@ -932,6 +932,172 @@ describe('bpane operator CLI', () => {
     expect(calls).toHaveLength(0);
   });
 
+  it('inspects and downloads session files, bindings, recordings, and playback', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'bpane-cli-evidence-test-'));
+    const sessionFileBytes = Buffer.from([0x42, 0x50, 0x00, 0xff]);
+    const bindingBytes = Buffer.from('bound workspace evidence\n');
+    const recordingBytes = Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 0x42, 0x50]);
+    const playbackBytes = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x42, 0x50]);
+    const { calls, fetchImpl } = createFetch(
+      jsonResponse({ files: [{ id: 'file-1' }] }),
+      jsonResponse({ id: 'file/with space', file_name: 'download.bin' }),
+      binaryResponse(sessionFileBytes, 'application/vnd.browserpane.session-file'),
+      jsonResponse({ bindings: [{ id: 'binding-1' }] }),
+      jsonResponse({ id: 'binding/with space', mount_path: 'inputs/evidence.txt' }),
+      binaryResponse(bindingBytes, 'text/plain'),
+      jsonResponse({ recordings: [{ id: 'recording-1' }] }),
+      jsonResponse({ id: 'recording/with space', state: 'completed' }),
+      binaryResponse(recordingBytes, 'video/webm'),
+      jsonResponse({ session_id: 'session/with space', state: 'ready' }),
+      jsonResponse({ session_id: 'session/with space', segments: [] }),
+      binaryResponse(playbackBytes, 'application/zip'),
+    );
+    const env = { BPANE_ACCESS_TOKEN: 'token-1' };
+
+    async function execute(args: string[]) {
+      const io = createIo();
+      expect(await runBpaneCli(args, env, io.io, fetchImpl)).toBe(EXIT_CODES.ok);
+      expect(io.stderr()).toBe('');
+      return parseStdout(io);
+    }
+
+    try {
+      expect((await execute([
+        'session', 'file', 'list', 'session/with space',
+      ])).files).toHaveLength(1);
+      expect((await execute([
+        'session', 'file', 'get', 'session/with space', 'file/with space',
+      ])).file_name).toBe('download.bin');
+      const sessionFileOutput = path.join(tempDir, 'files', 'download.bin');
+      expect(await execute([
+        'session', 'file', 'download', 'session/with space', 'file/with space',
+        '--output', sessionFileOutput,
+      ])).toEqual({
+        session_id: 'session/with space',
+        file_id: 'file/with space',
+        output_path: sessionFileOutput,
+        byte_count: sessionFileBytes.length,
+        content_type: 'application/vnd.browserpane.session-file',
+      });
+      expect(await fs.readFile(sessionFileOutput)).toEqual(sessionFileBytes);
+
+      expect((await execute([
+        'session', 'file-binding', 'list', 'session/with space',
+      ])).bindings).toHaveLength(1);
+      expect((await execute([
+        'session', 'file-binding', 'get', 'session/with space', 'binding/with space',
+      ])).mount_path).toBe('inputs/evidence.txt');
+      const bindingOutput = path.join(tempDir, 'bindings', 'evidence.txt');
+      expect(await execute([
+        'session', 'file-binding', 'download', 'session/with space', 'binding/with space',
+        '--output', bindingOutput,
+      ])).toMatchObject({
+        session_id: 'session/with space',
+        binding_id: 'binding/with space',
+        byte_count: bindingBytes.length,
+        content_type: 'text/plain',
+      });
+      expect(await fs.readFile(bindingOutput)).toEqual(bindingBytes);
+
+      expect((await execute([
+        'session', 'recording', 'list', 'session/with space',
+      ])).recordings).toHaveLength(1);
+      expect((await execute([
+        'session', 'recording', 'get', 'session/with space', 'recording/with space',
+      ])).state).toBe('completed');
+      const recordingOutput = path.join(tempDir, 'recordings', 'recording.webm');
+      expect(await execute([
+        'session', 'recording', 'download', 'session/with space', 'recording/with space',
+        '--output', recordingOutput,
+      ])).toMatchObject({
+        session_id: 'session/with space',
+        recording_id: 'recording/with space',
+        byte_count: recordingBytes.length,
+        content_type: 'video/webm',
+      });
+      expect(await fs.readFile(recordingOutput)).toEqual(recordingBytes);
+
+      expect((await execute([
+        'session', 'playback', 'get', 'session/with space',
+      ])).state).toBe('ready');
+      expect((await execute([
+        'session', 'playback', 'manifest', 'session/with space',
+      ])).segments).toEqual([]);
+      const playbackOutput = path.join(tempDir, 'playback', 'bundle.zip');
+      expect(await execute([
+        'session', 'playback', 'export', 'session/with space',
+        '--output', playbackOutput,
+      ])).toMatchObject({
+        session_id: 'session/with space',
+        byte_count: playbackBytes.length,
+        content_type: 'application/zip',
+      });
+      expect(await fs.readFile(playbackOutput)).toEqual(playbackBytes);
+
+      expect(calls.map((call) => [call.url, call.init.method])).toEqual([
+        ['http://localhost:8080/api/v1/sessions/session%2Fwith%20space/files', undefined],
+        ['http://localhost:8080/api/v1/sessions/session%2Fwith%20space/files/file%2Fwith%20space', undefined],
+        ['http://localhost:8080/api/v1/sessions/session%2Fwith%20space/files/file%2Fwith%20space/content', 'GET'],
+        ['http://localhost:8080/api/v1/sessions/session%2Fwith%20space/file-bindings', undefined],
+        ['http://localhost:8080/api/v1/sessions/session%2Fwith%20space/file-bindings/binding%2Fwith%20space', undefined],
+        ['http://localhost:8080/api/v1/sessions/session%2Fwith%20space/file-bindings/binding%2Fwith%20space/content', 'GET'],
+        ['http://localhost:8080/api/v1/sessions/session%2Fwith%20space/recordings', undefined],
+        ['http://localhost:8080/api/v1/sessions/session%2Fwith%20space/recordings/recording%2Fwith%20space', undefined],
+        ['http://localhost:8080/api/v1/sessions/session%2Fwith%20space/recordings/recording%2Fwith%20space/content', 'GET'],
+        ['http://localhost:8080/api/v1/sessions/session%2Fwith%20space/recording-playback', undefined],
+        ['http://localhost:8080/api/v1/sessions/session%2Fwith%20space/recording-playback/manifest', undefined],
+        ['http://localhost:8080/api/v1/sessions/session%2Fwith%20space/recording-playback/export', 'GET'],
+      ]);
+      expect(calls[11].init.headers.Accept).toBe('application/zip');
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects unsafe session evidence downloads and reports unavailable artifacts', async () => {
+    const env = { BPANE_ACCESS_TOKEN: 'token-1' };
+    const noRequest = createFetch();
+    const invalidCases = [
+      ['session', 'file', 'download', 'session-1', 'file-1'],
+      ['session', 'file-binding', 'download', 'session-1', 'binding-1'],
+      ['session', 'recording', 'download', 'session-1', 'recording-1'],
+      ['session', 'playback', 'export', 'session-1'],
+    ];
+    for (const args of invalidCases) {
+      const io = createIo();
+      expect(await runBpaneCli(args, env, io.io, noRequest.fetchImpl)).toBe(
+        EXIT_CODES.usage,
+      );
+      expect(parseStderr(io).error).toContain('requires --output');
+    }
+    expect(noRequest.calls).toHaveLength(0);
+
+    const authIo = createIo();
+    expect(await runBpaneCli(
+      ['session', 'recording', 'list', 'session-1'],
+      {},
+      authIo.io,
+      noRequest.fetchImpl,
+    )).toBe(EXIT_CODES.auth);
+
+    const expired = createFetch(binaryResponse('artifact expired', 'text/plain', 410));
+    const expiredIo = createIo();
+    expect(await runBpaneCli(
+      [
+        'session', 'file', 'download', 'session-1', 'file-1',
+        '--output', path.join(os.tmpdir(), 'unused-session-file'),
+      ],
+      env,
+      expiredIo.io,
+      expired.fetchImpl,
+    )).toBe(EXIT_CODES.api);
+    expect(parseStderr(expiredIo)).toMatchObject({
+      code: 'HTTP_ERROR',
+      status: 410,
+      body: 'artifact expired',
+    });
+  });
+
   it('manages file workspaces and exact file bytes through the CLI', async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'bpane-cli-workspace-test-'));
     const inputPath = path.join(tempDir, 'input.bin');
