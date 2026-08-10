@@ -3,7 +3,7 @@
 ## Metadata
 
 - Issue: [#162](https://github.com/ITmedes/browserpane/issues/162)
-- State: In progress; implementation slice 1 selected
+- State: In progress; implementation slice 1 complete
 - Lane: Operator Product
 - Target gate: Admin-New Phase 1 Promotion
 - Depends on: control API conformance through `#179`, admin-new resource
@@ -117,7 +117,7 @@ long-lived bearer token or resolved credential value is printed.
 
 ## Implementation Slices
 
-1. **Canonical resource-transfer foundation and file workspaces** (in progress):
+1. **Canonical resource-transfer foundation and file workspaces** (complete):
    add reusable JSON-file and binary-output helpers, file-workspace
    create/list/get plus file list/upload/download/delete, focused unit tests,
    and representative Compose smoke coverage.
@@ -154,8 +154,28 @@ with evidence before PR creation.
    API failures.
 5. Extend the Compose CLI smoke to create a project-scoped workspace, upload a
    deterministic file, verify metadata/hash behavior, download exact bytes,
-   delete the file, and leave deterministic cleanup.
+   and delete the file. The retained workspace metadata remains attached to the
+   archived smoke project because the frozen API has no workspace delete route.
 6. Update plan evidence and commit the slice before workflow convergence starts.
+
+## Slice 1 Evidence (2026-08-10)
+
+- Added canonical `file-workspace` create/list/get and nested file
+  list/upload/download/delete commands to `./scripts/bpane`.
+- Added JSON body-file parsing, exact binary input/output handling, explicit
+  media type and safe file-name headers, and object-only provenance metadata.
+- Focused CLI suite: 52 tests passed, including exact bytes, URL encoding,
+  malformed body files, conflicting body sources, missing files/options,
+  provenance validation, header injection, and missing authentication.
+- TypeScript check and Node syntax checks passed.
+- Live `/healthz` and dependency-aware `/readyz` passed before the Compose
+  smoke.
+- Expanded `smoke:bpane-cli` passed against local Compose, including
+  project-scoped workspace creation, upload/list/download/delete, exact-byte
+  comparison, project allowlist linkage, and all existing session/MCP paths.
+- README and ARCH now document the canonical file-workspace surface and the
+  absence of a workspace metadata delete route. No gateway, OpenAPI, database,
+  protocol, support-matrix, or runtime-topology change was required.
 
 ## Validation Strategy
 

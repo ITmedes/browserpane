@@ -41,6 +41,8 @@ async function run() {
   let servicePrincipalId = '';
   let identityMappingId = '';
   let servicePrincipalMappingId = '';
+  let workspaceId = '';
+  let workspaceFileId = '';
   let configDir = '';
 
   try {
@@ -196,6 +198,105 @@ async function run() {
     ) {
       throw new Error(`CLI project usage returned unexpected data: ${JSON.stringify(projectUsage)}`);
     }
+
+    const workspace = runBpaneCli([
+      'file-workspace',
+      'create',
+      `pilot-inputs-${runLabel}`,
+      '--project-id',
+      projectId,
+      '--description',
+      'Operator CLI smoke file workspace',
+      '--label',
+      'suite=bpane-cli-smoke',
+      '--label',
+      `run_id=${runLabel}`,
+    ], cliEnv);
+    workspaceId = workspace.id;
+    if (!workspaceId || workspace.project_id !== projectId || workspace.labels?.run_id !== runLabel) {
+      throw new Error(`CLI file-workspace create returned unexpected data: ${JSON.stringify(workspace)}`);
+    }
+
+    const listedWorkspaces = runBpaneCli(['file-workspace', 'list'], cliEnv);
+    if (
+      !Array.isArray(listedWorkspaces.workspaces)
+      || !listedWorkspaces.workspaces.some((item) => item.id === workspaceId)
+    ) {
+      throw new Error(`CLI file-workspace list did not include ${workspaceId}.`);
+    }
+    const fetchedWorkspace = runBpaneCli(['file-workspace', 'get', workspaceId], cliEnv);
+    if (fetchedWorkspace.id !== workspaceId || fetchedWorkspace.project?.id !== projectId) {
+      throw new Error(`CLI file-workspace get returned unexpected data: ${JSON.stringify(fetchedWorkspace)}`);
+    }
+
+    const workspaceInputPath = path.join(configDir, 'workspace-input.bin');
+    const workspaceOutputPath = path.join(configDir, 'downloads', 'workspace-output.bin');
+    const workspaceInput = Buffer.from([0x42, 0x50, 0x00, 0xff, 0x0a, 0x3d]);
+    await fs.writeFile(workspaceInputPath, workspaceInput);
+    const uploadedWorkspaceFile = runBpaneCli([
+      'file-workspace',
+      'file',
+      'upload',
+      workspaceId,
+      '--input',
+      workspaceInputPath,
+      '--file-name',
+      'smoke-input.bin',
+      '--media-type',
+      'application/vnd.browserpane.smoke',
+      '--provenance-json',
+      JSON.stringify({ suite: 'bpane-cli-smoke', run_id: runLabel }),
+    ], cliEnv);
+    workspaceFileId = uploadedWorkspaceFile.id;
+    if (
+      !workspaceFileId
+      || uploadedWorkspaceFile.workspace_id !== workspaceId
+      || uploadedWorkspaceFile.byte_count !== workspaceInput.length
+      || uploadedWorkspaceFile.provenance?.run_id !== runLabel
+    ) {
+      throw new Error(`CLI workspace file upload returned unexpected data: ${JSON.stringify(uploadedWorkspaceFile)}`);
+    }
+
+    const listedWorkspaceFiles = runBpaneCli([
+      'file-workspace',
+      'file',
+      'list',
+      workspaceId,
+    ], cliEnv);
+    if (
+      !Array.isArray(listedWorkspaceFiles.files)
+      || !listedWorkspaceFiles.files.some((item) => item.id === workspaceFileId)
+    ) {
+      throw new Error(`CLI workspace file list did not include ${workspaceFileId}.`);
+    }
+
+    const downloadedWorkspaceFile = runBpaneCli([
+      'file-workspace',
+      'file',
+      'download',
+      workspaceId,
+      workspaceFileId,
+      '--output',
+      workspaceOutputPath,
+    ], cliEnv);
+    if (
+      downloadedWorkspaceFile.byte_count !== workspaceInput.length
+      || !Buffer.from(await fs.readFile(workspaceOutputPath)).equals(workspaceInput)
+    ) {
+      throw new Error(`CLI workspace file download did not preserve exact bytes: ${JSON.stringify(downloadedWorkspaceFile)}`);
+    }
+
+    const deletedWorkspaceFile = runBpaneCli([
+      'file-workspace',
+      'file',
+      'delete',
+      workspaceId,
+      workspaceFileId,
+    ], cliEnv);
+    if (deletedWorkspaceFile.id !== workspaceFileId) {
+      throw new Error(`CLI workspace file delete returned unexpected data: ${JSON.stringify(deletedWorkspaceFile)}`);
+    }
+    workspaceFileId = '';
 
     const identityMapping = runBpaneCli([
       'identity-mapping',
@@ -439,6 +540,8 @@ async function run() {
       templateId,
       '--allowed-egress-profile-id',
       egressProfileId,
+      '--allowed-file-workspace-id',
+      workspaceId,
       '--allow-session-file-bindings',
       'false',
       '--allow-manual-recordings',
@@ -449,6 +552,7 @@ async function run() {
     if (
       policyProject.policy?.allowed_session_template_ids?.[0] !== templateId
       || policyProject.policy?.allowed_egress_profile_ids?.[0] !== egressProfileId
+      || policyProject.policy?.allowed_file_workspace_ids?.[0] !== workspaceId
       || policyProject.policy?.allow_session_file_bindings !== false
       || policyProject.policy?.allow_manual_recordings !== false
       || policyProject.policy?.usage_budget_enforcement !== 'block_session_creation'
@@ -853,6 +957,12 @@ async function run() {
 
     log('Operator CLI smoke passed.');
   } finally {
+    if (workspaceId && workspaceFileId && accessToken) {
+      await fetch(`${apiOrigin(options)}/api/v1/file-workspaces/${workspaceId}/files/${workspaceFileId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }).catch(() => {});
+    }
     if (clonedContextId && accessToken) {
       await fetch(`${apiOrigin(options)}/api/v1/browser-contexts/${clonedContextId}`, {
         method: 'DELETE',
