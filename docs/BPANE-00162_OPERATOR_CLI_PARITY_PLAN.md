@@ -3,14 +3,14 @@
 ## Metadata
 
 - Issue: [#162](https://github.com/ITmedes/browserpane/issues/162)
-- State: In progress; implementation slice 1 merged through PR `#205`, slice 2
-  implemented and validated, slice 3 implemented and validated
+- State: In progress; slice 1 merged through PR `#205`, slices 2-3 merged
+  through PR `#206`, slice 4 in progress
 - Lane: Operator Product
 - Target gate: Admin-New Phase 1 Promotion
 - Depends on: control API conformance through `#179`, admin-new resource
   catalogs through `#159`, and project governance through `#161`
-- Branch: `feature/BPANE-00162-workflow-cli`
-- Baseline: `main` at `9a759dbf4c37aae57207583d9667f65ddc25e8a1`,
+- Branch: `feature/BPANE-00162-session-evidence-cli`
+- Baseline: `main` at `24ccbfe7197755446313587c8fa7569f94645010`,
   2026-08-10
 
 ## Business Outcome
@@ -180,6 +180,28 @@ with evidence before PR creation.
 6. Align README and ARCH command guidance, record validation evidence, commit,
    and push the slice without changing gateway, OpenAPI, or persistence
    contracts.
+
+## Slice 4 Detailed Steps
+
+1. Add `session file list/get/download` commands for runtime-produced session
+   files, with encoded identifiers, explicit output paths, exact-byte writes,
+   and content-type/byte-count summaries.
+2. Add `session file-binding list/get/download` commands for owner-visible
+   workspace bindings. Keep binding creation/removal out of this
+   evidence-oriented slice because those operations change session setup.
+3. Add `session recording list/get/download` plus `session playback get`,
+   `manifest`, and `export` commands. A segment download preserves the returned
+   media type; playback export requires an explicit zip output path.
+4. Do not expose recording create/stop, worker completion/failure, recording
+   policy mutation, or gateway operation counters in this slice. Manual
+   lifecycle remains an admin/API operation and worker finalization remains an
+   internal boundary.
+5. Add focused tests for request shape, URL encoding, exact binary output,
+   unavailable/expired artifacts, missing output paths, authentication, and API
+   errors. Extend the Compose smoke with deterministic session-file and retained
+   recording evidence where fixtures are available.
+6. Align README/ARCH guidance, record validation evidence, commit, and push the
+   slice before the final diagnostics and promotion work begins.
 
 ## Slice 1 Evidence (2026-08-10)
 
