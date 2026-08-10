@@ -108,7 +108,7 @@ async fn compose_credentials_and_extensions_api_surface() -> anyhow::Result<()> 
 
 #[tokio::test]
 #[ignore = "requires running local compose stack"]
-async fn compose_recording_artifacts_and_playback_api_surface() -> anyhow::Result<()> {
+async fn compose_recording_worker_boundary_api_surface() -> anyhow::Result<()> {
     let _guard = support::suite_lock().lock().await;
     let harness = support::ComposeHarness::connect().await?;
     harness.cleanup_active_sessions().await?;
