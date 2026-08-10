@@ -31,6 +31,9 @@ subscription catalogs; and refresh-safe session live, files, recordings,
 network, automation, policy, and observability routes. Contract-derived API,
 coverage, and docs companions are implemented. Session-template and operation
 counter catalogs remain open.
+Project governance is carried into session and workflow creation and inspection
+with quota pressure, policy reasons, related-resource links, and authoritative
+admission or queue evidence kept distinct from client-side guidance.
 See the
 [admin-new implementation status](docs/ADMIN_NEW_STATUS.md) for the maintained
 route-level matrix.
