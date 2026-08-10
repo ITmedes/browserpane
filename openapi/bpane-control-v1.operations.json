@@ -145,7 +145,7 @@
       "tags": [
         "Session Recordings"
       ],
-      "auth": "owner-bearer",
+      "auth": "recording-worker",
       "classification": "internal-worker",
       "responses": [
         "200",
@@ -619,7 +619,7 @@
       "tags": [
         "Session Recordings"
       ],
-      "auth": "owner-bearer",
+      "auth": "recording-worker",
       "classification": "internal-worker",
       "responses": [
         "200",
