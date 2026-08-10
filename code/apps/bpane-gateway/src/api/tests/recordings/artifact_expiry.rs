@@ -104,9 +104,7 @@ async fn expired_recording_artifacts_return_gone() {
         .await
         .unwrap();
 
-    let temp_dir = tempfile::tempdir().unwrap();
-    let artifact_path = temp_dir.path().join("expired-segment.webm");
-    std::fs::write(&artifact_path, b"expired-segment").unwrap();
+    let artifact_path = stage_recording_artifact(session_uuid, recording_uuid, b"expired-segment");
     let _ = app
         .clone()
         .oneshot(

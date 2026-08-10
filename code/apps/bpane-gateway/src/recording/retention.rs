@@ -165,21 +165,29 @@ mod tests {
         let store = SessionStore::in_memory();
         let session_id = create_manual_recording_session(&store, Some(60)).await;
         let temp_dir = tempdir().unwrap();
-        let source_path = temp_dir.path().join("recording.webm");
-        std::fs::write(&source_path, b"artifact").unwrap();
         let artifact_root = temp_dir.path().join("artifacts");
-        let artifact_store = Arc::new(RecordingArtifactStore::local_fs(artifact_root.clone()));
+        let staging_root = temp_dir.path().join("staging");
+        let artifact_store = Arc::new(RecordingArtifactStore::local_fs(
+            artifact_root.clone(),
+            staging_root.clone(),
+        ));
 
         let recording = store
             .create_recording_for_session(session_id, SessionRecordingFormat::Webm, None)
             .await
             .unwrap();
+        let source_path = staging_root
+            .join(session_id.to_string())
+            .join(format!("{}.webm", recording.id));
+        std::fs::create_dir_all(source_path.parent().unwrap()).unwrap();
+        std::fs::write(&source_path, b"artifact").unwrap();
         let stored_artifact = artifact_store
             .finalize(FinalizeRecordingArtifactRequest {
                 session_id,
                 recording_id: recording.id,
                 format: SessionRecordingFormat::Webm,
                 source_path: source_path.to_string_lossy().to_string(),
+                expected_bytes: Some(8),
             })
             .await
             .unwrap();
@@ -235,21 +243,29 @@ mod tests {
         let store = SessionStore::in_memory();
         let session_id = create_manual_recording_session(&store, Some(60)).await;
         let temp_dir = tempdir().unwrap();
-        let source_path = temp_dir.path().join("recording.webm");
-        std::fs::write(&source_path, b"artifact").unwrap();
         let artifact_root = temp_dir.path().join("artifacts");
-        let artifact_store = Arc::new(RecordingArtifactStore::local_fs(artifact_root.clone()));
+        let staging_root = temp_dir.path().join("staging");
+        let artifact_store = Arc::new(RecordingArtifactStore::local_fs(
+            artifact_root.clone(),
+            staging_root.clone(),
+        ));
 
         let recording = store
             .create_recording_for_session(session_id, SessionRecordingFormat::Webm, None)
             .await
             .unwrap();
+        let source_path = staging_root
+            .join(session_id.to_string())
+            .join(format!("{}.webm", recording.id));
+        std::fs::create_dir_all(source_path.parent().unwrap()).unwrap();
+        std::fs::write(&source_path, b"artifact").unwrap();
         let stored_artifact = artifact_store
             .finalize(FinalizeRecordingArtifactRequest {
                 session_id,
                 recording_id: recording.id,
                 format: SessionRecordingFormat::Webm,
                 source_path: source_path.to_string_lossy().to_string(),
+                expected_bytes: Some(8),
             })
             .await
             .unwrap();
@@ -305,22 +321,30 @@ mod tests {
         let store = SessionStore::in_memory();
         let session_id = create_manual_recording_session(&store, Some(60)).await;
         let temp_dir = tempdir().unwrap();
-        let source_path = temp_dir.path().join("recording.webm");
-        std::fs::write(&source_path, b"artifact").unwrap();
         let artifact_root = temp_dir.path().join("artifacts");
-        let artifact_store = Arc::new(RecordingArtifactStore::local_fs(artifact_root.clone()));
+        let staging_root = temp_dir.path().join("staging");
+        let artifact_store = Arc::new(RecordingArtifactStore::local_fs(
+            artifact_root.clone(),
+            staging_root.clone(),
+        ));
         let observability = Arc::new(RecordingObservability::default());
 
         let recording = store
             .create_recording_for_session(session_id, SessionRecordingFormat::Webm, None)
             .await
             .unwrap();
+        let source_path = staging_root
+            .join(session_id.to_string())
+            .join(format!("{}.webm", recording.id));
+        std::fs::create_dir_all(source_path.parent().unwrap()).unwrap();
+        std::fs::write(&source_path, b"artifact").unwrap();
         let stored_artifact = artifact_store
             .finalize(FinalizeRecordingArtifactRequest {
                 session_id,
                 recording_id: recording.id,
                 format: SessionRecordingFormat::Webm,
                 source_path: source_path.to_string_lossy().to_string(),
+                expected_bytes: Some(8),
             })
             .await
             .unwrap();

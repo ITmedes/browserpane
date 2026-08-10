@@ -121,6 +121,7 @@ pub(super) async fn complete_session_recording(
             recording_id,
             format: recording.format,
             source_path,
+            expected_bytes: bytes,
         })
         .await
         .map_err(|error| {
@@ -137,7 +138,7 @@ pub(super) async fn complete_session_recording(
             PersistCompletedSessionRecordingRequest {
                 artifact_ref: stored_artifact.artifact_ref.clone(),
                 mime_type,
-                bytes,
+                bytes: Some(stored_artifact.bytes),
                 duration_ms,
             },
         )
