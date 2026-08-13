@@ -97,6 +97,12 @@ RUN groupadd -f input && \
 
 RUN mkdir -p /run/bpane/session \
       /run/bpane/storage-helper/session \
+      /run/bpane/storage-helper/session/chromium \
+      /run/bpane/storage-helper/session/downloads \
+      /run/bpane/storage-helper/session/egress \
+      /run/bpane/storage-helper/session/mounts \
+      /run/bpane/storage-helper/session/uploads \
+      /run/bpane/storage-helper/input \
       /run/bpane/storage-helper/source \
       /run/bpane/storage-helper/target \
       /home/bpane/bpane-downloads /home/bpane/bpane-uploads && \

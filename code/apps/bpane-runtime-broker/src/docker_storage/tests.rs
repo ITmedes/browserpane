@@ -52,6 +52,8 @@ impl StorageDockerApi for MockStorageDockerApi {
         name: String,
         body: ContainerCreateBody,
         input: Option<Vec<u8>>,
+        input_volume: Option<String>,
+        failure_cleanup_volume: Option<String>,
         output_limit: usize,
     ) -> Result<Vec<u8>, StorageDockerError> {
         let action = body
@@ -70,31 +72,49 @@ impl StorageDockerApi for MockStorageDockerApi {
             input,
             output_limit,
         });
+        if let Some(volume) = input_volume.as_ref() {
+            self.volumes.lock().unwrap().insert(volume.clone());
+        }
         if self.fail_launch.load(Ordering::SeqCst) {
-            if let Some(volume) = self
+            if let Some(mounts) = self
                 .launches
                 .lock()
                 .unwrap()
                 .last()
                 .and_then(|launch| launch.body.host_config.as_ref())
                 .and_then(|host| host.mounts.as_ref())
-                .and_then(|mounts| {
-                    mounts.iter().find(|mount| {
-                        mount.target.as_deref() == Some("/run/bpane/storage-helper/target")
-                            && mount.read_only == Some(false)
-                    })
-                })
-                .and_then(|mount| mount.source.clone())
             {
-                self.volumes.lock().unwrap().insert(volume);
+                for volume in mounts.iter().filter_map(|mount| {
+                    matches!(
+                        mount.target.as_deref(),
+                        Some("/run/bpane/storage-helper/target") | Some(STORAGE_INPUT_MOUNT_ROOT)
+                    )
+                    .then(|| mount.source.clone())
+                    .flatten()
+                }) {
+                    self.volumes.lock().unwrap().insert(volume);
+                }
+            }
+            if let Some(volume) = input_volume {
+                self.volumes.lock().unwrap().remove(&volume);
+                self.removed.lock().unwrap().push(volume);
+            }
+            if let Some(volume) = failure_cleanup_volume {
+                self.volumes.lock().unwrap().remove(&volume);
+                self.removed.lock().unwrap().push(volume);
             }
             return Err(StorageDockerError::Failed);
         }
-        Ok(match action.as_str() {
+        let output = match action.as_str() {
             "export_browser_context" => b"context-archive".to_vec(),
             "measure_browser_context" => b"42\n".to_vec(),
             _ => Vec::new(),
-        })
+        };
+        if let Some(volume) = input_volume {
+            self.volumes.lock().unwrap().remove(&volume);
+            self.removed.lock().unwrap().push(volume);
+        }
+        Ok(output)
     }
 }
 
@@ -148,6 +168,13 @@ fn fixed_helper_script_is_valid_posix_shell_syntax() {
         .status()
         .unwrap();
     assert!(status.success());
+}
+
+#[test]
+fn fixed_helper_script_consumes_and_verifies_the_staged_payload() {
+    assert!(STORAGE_HELPER_SCRIPT.contains("/run/bpane/storage-helper/input/payload"));
+    assert!(STORAGE_HELPER_SCRIPT.contains("wc -c"));
+    assert!(!STORAGE_HELPER_SCRIPT.contains("dd bs=1"));
 }
 
 #[tokio::test]
@@ -237,6 +264,18 @@ async fn materializes_only_typed_session_destination() {
     assert!(environment
         .iter()
         .any(|entry| entry == "BPANE_STORAGE_INPUT_BYTES=14"));
+    let mounts = body.host_config.as_ref().unwrap().mounts.as_ref().unwrap();
+    assert!(mounts.iter().any(|mount| {
+        mount.target.as_deref() == Some(STORAGE_INPUT_MOUNT_ROOT) && mount.read_only == Some(false)
+    }));
+    assert!(mounts.iter().any(|mount| {
+        mount
+            .source
+            .as_deref()
+            .is_some_and(|source| source.starts_with("bpane-storage-helper-input-"))
+    }));
+    assert_eq!(body.attach_stdin, Some(false));
+    assert_eq!(body.open_stdin, Some(false));
 }
 
 #[tokio::test]
@@ -344,4 +383,36 @@ async fn failed_clone_removes_partial_target_volume() {
     let target_volume = config().context_volume(target_id);
     assert!(!backend.volumes.lock().unwrap().contains(&target_volume));
     assert_eq!(backend.removed.lock().unwrap().as_slice(), &[target_volume]);
+}
+
+#[tokio::test]
+async fn failed_materialization_removes_only_request_scoped_input() {
+    let backend = Arc::new(MockStorageDockerApi::default());
+    let session_id = Uuid::now_v7();
+    let session_volume = config().session_data_volume(session_id);
+    backend
+        .volumes
+        .lock()
+        .unwrap()
+        .insert(session_volume.clone());
+    backend.fail_launch.store(true, Ordering::SeqCst);
+    let adapter = StorageRuntimeDockerAdapter::with_backend(config(), backend.clone()).unwrap();
+    let bytes = b"workspace data";
+    let mut request = storage(StorageHelperAction::MaterializeSessionFiles);
+    request.session_id = Some(session_id);
+    request.file_target = Some(SessionDataFileTarget::SessionBindingManifest);
+    request.declared_payload_bytes = Some(bytes.len() as u64);
+    let operation = operation(request);
+    let request_id = operation.request_id;
+    let error = adapter
+        .execute_storage(&operation, Some(bytes))
+        .await
+        .unwrap_err();
+    assert_eq!(error.code, ExecutionErrorCode::AdapterFailed);
+    let input_volume = config().input_volume(request_id);
+    let volumes = backend.volumes.lock().unwrap();
+    assert!(volumes.contains(&session_volume));
+    assert!(!volumes.contains(&input_volume));
+    drop(volumes);
+    assert_eq!(backend.removed.lock().unwrap().as_slice(), &[input_volume]);
 }

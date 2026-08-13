@@ -415,7 +415,7 @@ impl StorageHelperRequest {
                     .as_ref()
                     .ok_or(ContractErrorCode::InvalidOperationParameters)?
                     .validate()?;
-                require_payload(self.declared_payload_bytes)
+                require_payload_declaration(self.declared_payload_bytes)
             }
             StorageHelperAction::DeleteSessionData => {
                 require_storage_fields(self, true, false, false)?;
@@ -478,6 +478,13 @@ fn require_storage_fields(
 
 fn require_payload(payload: Option<u64>) -> Result<(), ContractViolation> {
     if payload.is_none_or(|bytes| bytes == 0) {
+        return Err(ContractErrorCode::PayloadDeclarationRequired.into());
+    }
+    Ok(())
+}
+
+fn require_payload_declaration(payload: Option<u64>) -> Result<(), ContractViolation> {
+    if payload.is_none() {
         return Err(ContractErrorCode::PayloadDeclarationRequired.into());
     }
     Ok(())

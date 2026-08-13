@@ -20,6 +20,7 @@ anyhow.workspace = true
 async-trait = "0.1"
 axum = { version = "0.8", features = ["multipart"] }
 bollard.workspace = true
+bytes = "1"
 flate2 = "1"
 futures-util = "0.3"
 clap = { version = "4", features = ["derive", "env"] }

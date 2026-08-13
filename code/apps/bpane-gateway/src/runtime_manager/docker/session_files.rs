@@ -145,10 +145,13 @@ struct SessionFileBindingsManifestEntry {
 }
 
 impl DockerRuntimeManager {
-    pub(super) async fn initialize_session_data_volume(
+    pub(in crate::runtime_manager) async fn initialize_session_data_volume(
         &self,
         lease: &RuntimeLease,
     ) -> Result<(), RuntimeManagerError> {
+        if matches!(self.storage_control, StorageControl::Broker(_)) {
+            return self.broker_initialize_session_data(lease).await;
+        }
         let output = Command::new(&self.config.docker_bin)
             .args(self.docker_initialize_session_data_args(lease))
             .output()
@@ -219,10 +222,13 @@ impl DockerRuntimeManager {
         args
     }
 
-    pub(super) async fn remove_session_data_volume(
+    pub(in crate::runtime_manager) async fn remove_session_data_volume(
         &self,
         session_id: Uuid,
     ) -> Result<(), RuntimeManagerError> {
+        if matches!(self.storage_control, StorageControl::Broker(_)) {
+            return self.broker_delete_session_data(session_id).await;
+        }
         let volume = self.session_data_volume_for_session(session_id);
         self.remove_docker_volume(&volume, "session data").await
     }
@@ -231,6 +237,9 @@ impl DockerRuntimeManager {
         &self,
         context_id: Uuid,
     ) -> Result<(), RuntimeManagerError> {
+        if matches!(self.storage_control, StorageControl::Broker(_)) {
+            return self.broker_delete_browser_context(context_id).await;
+        }
         let volume = self.browser_context_profile_volume_for_context(context_id);
         self.remove_docker_volume(&volume, "browser context profile")
             .await
@@ -241,6 +250,11 @@ impl DockerRuntimeManager {
         source_context_id: Uuid,
         target_context_id: Uuid,
     ) -> Result<(), RuntimeManagerError> {
+        if matches!(self.storage_control, StorageControl::Broker(_)) {
+            return self
+                .broker_clone_browser_context(source_context_id, target_context_id)
+                .await;
+        }
         let source_volume = self.browser_context_profile_volume_for_context(source_context_id);
         let target_volume = self.browser_context_profile_volume_for_context(target_context_id);
         if !self
@@ -287,6 +301,9 @@ impl DockerRuntimeManager {
         &self,
         context_id: Uuid,
     ) -> Result<Option<Vec<u8>>, RuntimeManagerError> {
+        if matches!(self.storage_control, StorageControl::Broker(_)) {
+            return self.broker_export_browser_context(context_id).await;
+        }
         let volume = self.browser_context_profile_volume_for_context(context_id);
         if !self
             .docker_volume_exists(&volume, "browser context profile")
@@ -329,6 +346,11 @@ impl DockerRuntimeManager {
         context_id: Uuid,
         profile_archive: Option<&[u8]>,
     ) -> Result<(), RuntimeManagerError> {
+        if matches!(self.storage_control, StorageControl::Broker(_)) {
+            return self
+                .broker_import_browser_context(context_id, profile_archive)
+                .await;
+        }
         self.remove_browser_context_profile_volume(context_id)
             .await?;
         let Some(profile_archive) = profile_archive else {
@@ -407,6 +429,9 @@ impl DockerRuntimeManager {
     ) -> Result<HashMap<Uuid, u64>, RuntimeManagerError> {
         if context_ids.is_empty() {
             return Ok(HashMap::new());
+        }
+        if matches!(self.storage_control, StorageControl::Broker(_)) {
+            return self.broker_measure_browser_contexts(context_ids).await;
         }
 
         let output = Command::new(&self.config.docker_bin)
@@ -565,7 +590,7 @@ impl DockerRuntimeManager {
         )))
     }
 
-    pub(super) async fn materialize_session_file_bindings(
+    pub(in crate::runtime_manager) async fn materialize_session_file_bindings(
         &self,
         session_id: Uuid,
     ) -> Result<bool, RuntimeManagerError> {
@@ -625,10 +650,15 @@ impl DockerRuntimeManager {
                 }
             };
 
-            let target_path = self.materialized_path_for_binding(&binding);
-            let mode = materialization_file_mode(binding.mode);
             if let Err(error) = self
-                .write_session_data_file(session_id, &target_path, mode, &bytes)
+                .write_session_data_file(
+                    session_id,
+                    SessionDataFileTarget::SessionBinding {
+                        relative_path: binding.mount_path.clone(),
+                        writable: binding.mode != SessionFileBindingMode::ReadOnly,
+                    },
+                    &bytes,
+                )
                 .await
             {
                 let message = error.to_string();
@@ -652,8 +682,7 @@ impl DockerRuntimeManager {
         if let Err(error) = self
             .write_session_data_file(
                 session_id,
-                &self.session_file_manifest_path(),
-                "0444",
+                SessionDataFileTarget::SessionBindingManifest,
                 &manifest,
             )
             .await
@@ -765,12 +794,17 @@ impl DockerRuntimeManager {
     pub(in crate::runtime_manager) async fn write_session_data_file(
         &self,
         session_id: Uuid,
-        target_path: &str,
-        mode: &str,
+        target: SessionDataFileTarget,
         bytes: &[u8],
     ) -> Result<(), RuntimeManagerError> {
+        if matches!(self.storage_control, StorageControl::Broker(_)) {
+            return self
+                .broker_write_session_data(session_id, target, bytes)
+                .await;
+        }
+        let (target_path, mode) = self.direct_materialization_target(&target);
         let mut child = Command::new(&self.config.docker_bin)
-            .args(self.docker_materialize_file_args(session_id, target_path, mode))
+            .args(self.docker_materialize_file_args(session_id, &target_path, mode))
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -807,6 +841,30 @@ impl DockerRuntimeManager {
             "failed to write session data file {target_path}: {}",
             String::from_utf8_lossy(&output.stderr).trim()
         )))
+    }
+
+    fn direct_materialization_target(
+        &self,
+        target: &SessionDataFileTarget,
+    ) -> (String, &'static str) {
+        match target {
+            SessionDataFileTarget::SessionBinding {
+                relative_path,
+                writable,
+            } => (
+                format!("{}/{}", self.session_file_mounts_root(), relative_path),
+                if *writable { "0666" } else { "0444" },
+            ),
+            SessionDataFileTarget::SessionBindingManifest => {
+                (self.session_file_manifest_path(), "0444")
+            }
+            SessionDataFileTarget::EgressProxyAuthentication => {
+                (self.egress_proxy_auth_config_path_for_session(), "0444")
+            }
+            SessionDataFileTarget::EgressTrustedCa => {
+                (self.egress_custom_ca_bundle_path_for_session(), "0444")
+            }
+        }
     }
 
     async fn fail_session_file_binding_materialization(
@@ -859,11 +917,4 @@ pub(in crate::runtime_manager) fn parse_browser_context_profile_usage(
         ));
     }
     Ok(usage)
-}
-
-fn materialization_file_mode(mode: SessionFileBindingMode) -> &'static str {
-    match mode {
-        SessionFileBindingMode::ReadOnly => "0444",
-        SessionFileBindingMode::ReadWrite | SessionFileBindingMode::ScratchOutput => "0666",
-    }
 }

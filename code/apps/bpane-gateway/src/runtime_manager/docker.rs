@@ -24,6 +24,7 @@ use crate::session_control::{
     StoredEgressProfile, StoredSession,
 };
 use crate::workspaces::WorkspaceFileStore;
+use bpane_runtime_contract::SessionDataFileTarget;
 
 pub(super) struct DockerRuntimeManager {
     pub(super) config: DockerRuntimeConfig,
@@ -33,6 +34,22 @@ pub(super) struct DockerRuntimeManager {
     pub(super) credential_provider: Mutex<Option<Arc<CredentialProvider>>>,
     pub(super) workspace_file_store: Mutex<Option<Arc<WorkspaceFileStore>>>,
     pub(super) browser_control: BrowserContainerControl,
+    pub(super) storage_control: StorageControl,
+}
+
+#[derive(Clone)]
+pub(super) enum StorageControl {
+    Direct,
+    Broker(Arc<dyn RuntimeBrokerClient>),
+}
+
+impl std::fmt::Debug for StorageControl {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Direct => formatter.write_str("StorageControl::Direct"),
+            Self::Broker(_) => formatter.write_str("StorageControl::Broker([REDACTED])"),
+        }
+    }
 }
 
 pub(super) enum DockerLeaseState {
@@ -61,6 +78,19 @@ impl DockerRuntimeManager {
         config: DockerRuntimeConfig,
         profile: RuntimeProfile,
         browser_control: BrowserContainerControl,
+    ) -> Result<Self, RuntimeManagerError> {
+        let storage_control = match &browser_control {
+            BrowserContainerControl::Direct => StorageControl::Direct,
+            BrowserContainerControl::Broker(client) => StorageControl::Broker(Arc::clone(client)),
+        };
+        Self::new_with_controls(config, profile, browser_control, storage_control)
+    }
+
+    fn new_with_controls(
+        config: DockerRuntimeConfig,
+        profile: RuntimeProfile,
+        browser_control: BrowserContainerControl,
+        storage_control: StorageControl,
     ) -> Result<Self, RuntimeManagerError> {
         if config.image.trim().is_empty() {
             return Err(RuntimeManagerError::InvalidConfiguration(
@@ -150,6 +180,7 @@ impl DockerRuntimeManager {
             credential_provider: Mutex::new(None),
             workspace_file_store: Mutex::new(None),
             browser_control,
+            storage_control,
         })
     }
 

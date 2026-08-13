@@ -96,12 +96,14 @@ too broad to constitute resource-level production authorization.
 
 An opt-in `deploy/compose.runtime-broker.yml` overlay inserts the authenticated
 runtime broker for browser, workflow-worker, and recording-worker lifecycle
-operations and enables its isolated storage-helper adapter. In that mode the
-broker reaches the same Docker proxy over a broker-only control network and
-derives Docker-sensitive fields from typed BrowserPane intent plus trusted
-startup configuration. The gateway retains proxy access temporarily for its
-context and session-data call sites until they migrate to that adapter; the
-base Compose topology remains on `docker_pool` with a fail-closed broker.
+operations and its isolated storage-helper adapter. In that mode the broker
+reaches the same Docker proxy over a broker-only control network and derives
+Docker-sensitive fields from typed BrowserPane intent plus trusted startup
+configuration. `broker_pool` routes session-data and browser-context storage
+through the same authenticated boundary, while workspace artifact reads and
+binding state remain gateway-owned. The gateway retains proxy access only as a
+transitional topology until the final removal checkpoint; base Compose remains
+on `docker_pool` with a fail-closed broker.
 
 ```
               Browser / E2E Test
@@ -288,15 +290,15 @@ service.
     - `docker_single`: opt-in Docker-backed worker startup/shutdown for the active session, with idle timeout and one active runtime at a time
     - `docker_pool`: Docker-backed worker pool with explicit `max_active_runtimes` and `max_starting_runtimes`; this is the default local compose backend
     - `broker_pool`: opt-in parity backend that reuses Docker pool admission,
-      persistence, context, and storage preparation but sends browser and
-      worker lifecycle operations through `bpane-runtime-client`
+      persistence, and context semantics but sends browser, worker, and typed
+      storage operations through `bpane-runtime-client`
   - session resources, runtime capacity, and compatibility routing now derive from this runtime profile
   - local compose exercises `docker_pool` through an internal Docker API proxy, a shared socket-only runtime volume, per-session browser data volumes, and a shared host-worker env profile; the gateway itself has no Docker socket mount
   - the runtime-broker overlay exercises `broker_pool` with broker-owned
     immutable browser and worker images, extension and environment snapshots,
-    worker policy, container policy, and Docker adapters, including a
-    network-disabled bounded storage helper running as the unprivileged
-    `bpane` user; base Compose remains unchanged
+    worker policy, container policy, and Docker adapters, including
+    request-scoped bounded input staging and network-disabled storage helpers
+    running as the unprivileged `bpane` user; base Compose remains unchanged
   - the proxy blocks unrelated API families and is checked by `scripts/validate-docker-runtime-boundary.mjs`, but a purpose-specific launch broker or orchestrator adapter remains required to validate permitted resource names, images, mounts, networks, privileges, and limits in a production trust boundary
   - Docker runtime assignment metadata is now persisted in Postgres and reconciled on gateway startup, so an existing pool-mode worker can be rebound after a gateway restart without launching a duplicate runtime
   - Docker-backed workers now receive `BPANE_SESSION_ID` plus explicit profile/upload/download paths under a session-specific data root, so reconnecting a stopped session reuses cookies/cache/downloads and Chromium session-restore state without exposing one shared browser data root
@@ -602,8 +604,9 @@ The default dev stack no longer uses a shared token file.
 - `docker_single` keeps the old single-runtime compatibility behavior with start/stop-on-idle worker lifecycle
 - `docker_pool` enables multiple runtime-backed sessions, and legacy global routes like `/api/session/status` are intentionally not available there
 - `broker_pool` has the same session-runtime compatibility contract while
-  isolating browser and worker container operations behind the typed broker; it
-  remains an explicit migration overlay until storage operation families move
+  isolating browser, worker, and storage operations behind the typed broker; it
+  remains an explicit migration overlay until gateway Docker-control access is
+  removed and the broker-only topology is validated
 - `mcp-bridge` has an optional session-control bootstrap (`BPANE_SESSION_ID` /
   `BPANE_SESSION_BOOTSTRAP_MODE`), compatibility delegated-session assignment
   through its bridge-local `/control-session` API, and per-connection session

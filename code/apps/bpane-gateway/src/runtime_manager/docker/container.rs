@@ -529,18 +529,18 @@ impl DockerRuntimeManager {
         let Some(certificate_ref) = launch_options.egress_custom_ca_ref.as_deref() else {
             return Ok(());
         };
-        let Some(target_path) = launch_options.egress_custom_ca_path.as_deref() else {
+        if launch_options.egress_custom_ca_path.is_none() {
             return Err(RuntimeManagerError::StartupFailed(
                 "egress TLS inspection requested a custom CA but no runtime CA target path was configured".to_string(),
             ));
-        };
+        }
         let bytes = read_egress_custom_ca_bundle(certificate_ref).await?;
         if bytes.is_empty() {
             return Err(RuntimeManagerError::StartupFailed(format!(
                 "egress custom CA bundle {certificate_ref} is empty"
             )));
         }
-        self.write_session_data_file(session_id, target_path, "0444", &bytes)
+        self.write_session_data_file(session_id, SessionDataFileTarget::EgressTrustedCa, &bytes)
             .await
     }
 
@@ -552,8 +552,12 @@ impl DockerRuntimeManager {
         let Some(material) = launch_options.egress_proxy_auth.as_ref() else {
             return Ok(());
         };
-        self.write_session_data_file(session_id, &material.target_path, "0444", &material.payload)
-            .await
+        self.write_session_data_file(
+            session_id,
+            SessionDataFileTarget::EgressProxyAuthentication,
+            &material.payload,
+        )
+        .await
     }
 
     async fn session_extension_dirs(

@@ -2,7 +2,7 @@
 
 Issue: [#214 Implement a policy-validating runtime launch broker](https://github.com/ITmedes/browserpane/issues/214)
 
-Status: active; checkpoints 1 through 4 complete; checkpoint 5 slices 1 and 2 complete
+Status: active; checkpoints 1 through 5 complete; checkpoint 6 is next
 
 ## Business Case
 
@@ -39,12 +39,13 @@ operations use separate typed request variants and separate allowlists.
 - Recording worker launch and supervision use the same direct/broker boundary.
   Base compose still supplies direct Docker CLI arguments; the broker path uses
   typed credentials and broker-owned container materialization.
-- Browser-context and session-file helpers use short-lived containers, named
-  volumes, stdin/stdout archive streams, and exact storage measurements.
+- Browser-context and session-file helpers use short-lived broker-owned
+  containers, derived named volumes, bounded archive transfers, and exact
+  storage measurements in `broker_pool`; `docker_pool` retains direct helpers.
 - `SessionManager` is the control-plane boundary for browser session runtimes,
   and the shared worker-control boundary selects direct or broker-backed
-  workflow and recording lifecycle. Storage helper ownership remains to be
-  migrated in checkpoint 5.
+  workflow and recording lifecycle. Storage helper ownership is routed through
+  typed broker operations in `broker_pool`.
 
 ## Architecture Decisions
 
@@ -595,8 +596,9 @@ Execution slices:
 
 Slice 1 acceptance:
 
-- input-bearing actions require an exact non-zero payload declaration and
-  reject absent, short, long, or over-limit request streams before execution;
+- input-bearing actions require an exact payload declaration and reject absent,
+  short, long, or over-limit request streams before execution; context imports
+  must be non-empty while typed session files may be empty;
 - output-bearing actions return only an explicitly declared, bounded binary
   stream and reject invalid content type, missing declarations, excessive
   output, and response/request correlation mismatches;
@@ -730,8 +732,98 @@ Slice 2 evidence:
   dependency safety, Compose/overlay policy checks, a release-image build, and
   the authenticated live storage matrix.
 
+Slice 3 acceptance:
+
+- `DockerRuntimeManager` selects an explicit direct or broker-backed storage
+  control alongside browser control; `docker_pool` retains the existing Docker
+  command path and `broker_pool` sends every session-data and browser-context
+  storage operation through `RuntimeBrokerClient::execute_storage`;
+- gateway callers submit only typed session-data destinations for workspace
+  bindings, the binding manifest, proxy authentication, and the trusted CA;
+  they cannot send a broker path, mode, image, mount, command, or Docker model;
+- session-data initialization preserves optional reusable-context profile
+  mounting, and ephemeral-session cleanup removes session storage through the
+  selected control without changing runtime release semantics;
+- context clone, export, import, measurement, retention deletion, and API
+  deletion retain active-writer exclusion, absent-volume behavior, archive
+  shape, quota reporting, replacement semantics, and sanitized errors;
+- workspace bytes are still read by the gateway artifact-store boundary, and
+  binding state changes to `materialized` only after every typed broker write
+  plus the manifest write succeeds; failures retain actionable sanitized
+  binding state without leaking file, credential, or CA content;
+- broker results are action-checked: unexpected states, missing export bytes,
+  payload/result mismatches, transport failures, and partial operations fail
+  closed while direct-mode compatibility remains covered;
+- base Compose remains on `docker_pool`; the opt-in overlay exercises the
+  gateway-to-broker path and keeps gateway Docker-control removal as the
+  separately validated checkpoint 6 topology switch.
+
+Slice 3 example use case:
+
+An operator starts a broker-backed session that uses a reusable browser
+context, an authenticated TLS-intercept egress profile, and two workspace-file
+bindings. The gateway resolves the approved credential and CA bytes, reads the
+workspace artifacts, and sends typed storage intents plus bounded bytes to the
+broker. The broker derives the only permitted volume and destination for each
+write before launching the browser. A later context export and storage-usage
+read also pass through the broker, while an export attempted during an active
+context writer remains rejected by the gateway before any storage call.
+
+Slice 3 smoke sequence:
+
+1. Unit-test direct and broker storage-control selection, every storage action,
+   exact typed request construction, result/payload validation, unavailable
+   broker mapping, and direct Docker argument parity.
+2. Test workspace binding and manifest materialization through a deterministic
+   broker client, including read-only/read-write targets, binding-state updates,
+   missing artifacts, rejected writes, and content redaction.
+3. Test context API clone/export/import/delete, profile usage/quota paths, and
+   retention against broker control, including active-writer and absent-profile
+   cases.
+4. Run gateway, runtime contract/client/broker, full workspace, strict Clippy,
+   Rustdoc, formatting, dependency, repository-document, Compose, and overlay
+   topology checks.
+5. Start the broker overlay; run the authenticated broker storage smoke, then
+   create/import/clone/export/delete a browser context and start a session with
+   workspace files through gateway APIs. Verify session startup, file content,
+   usage evidence, cleanup, and that no gateway-owned storage-helper container
+   is launched.
+
 Manual checkpoint: clone/export/import a context, bind a workspace file, run a
-session, and verify storage usage and cleanup without gateway Docker access.
+session, and verify storage usage and cleanup through the broker. Removing the
+gateway from the Docker-control network remains checkpoint 6.
+
+Slice 3 evidence:
+
+- `DockerRuntimeManager` derives storage control from browser control, so
+  direct and broker lifecycle/storage modes cannot be mixed accidentally.
+  `broker_pool` routes initialization, four typed file destinations,
+  clone/export/import/measure, retention deletion, and owned-volume cleanup
+  through `RuntimeBrokerClient::execute_storage`.
+- Workspace bytes and binding state remain gateway-owned. Deterministic tests
+  cover read-only/read-write binding writes, manifest ordering, state
+  transitions, rejected manifests, active-context exclusion, malformed broker
+  results, transport failures, empty files, and content redaction.
+- Input-bearing helpers use a broker-derived request-scoped staging volume and
+  Docker's bounded archive upload route rather than attach stdin. The helper
+  verifies the declared byte count before consumption; helper and staging
+  volumes are removed after success, failure, or timeout. This preserves
+  realistic Chromium profile import performance without accepting host paths.
+- The host helper image pre-creates the fixed unprivileged session-data layout,
+  including the first-use reusable-context path, so Docker volume initialization
+  does not introduce root-owned nested directories.
+- Live validation passes for a 94 MB browser-context export/import with restored
+  profile state, clone, reconnect, quota, malformed/archive-link denial, and
+  cleanup. The gateway compose workspace test observes a file binding changing
+  from `pending` to `materialized` during broker-backed runtime startup.
+- Browser/CLI session files, admin-new session navigation/lifecycle/MCP/popup,
+  workflow workspace execution, and recording/playback/export smokes pass on
+  the broker overlay. The dedicated broker storage smoke uses a 4 MB
+  incompressible archive and verifies every storage action plus helper,
+  staging, session, and context volume cleanup.
+- README, ARCH, and AGENTS now describe broker-owned storage call sites. The
+  gateway intentionally retains its Docker-control network only until
+  checkpoint 6 proves and switches the broker-only topology.
 
 ### 6. Production-Like Topology Switch
 
