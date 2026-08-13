@@ -57,7 +57,7 @@ function brokerRequest({ bearer, body, contentType = MEDIA_TYPE }) {
   return { status: Number(result.stdout), body: response.stdout };
 }
 
-const request = JSON.stringify({
+const browserRequest = JSON.stringify({
   api_version: "v1",
   request_id: "019db438-c74a-7ef2-810c-792e298faf00",
   idempotency_key: "browser:launch:foundation-smoke",
@@ -70,20 +70,64 @@ const request = JSON.stringify({
   },
 });
 
+const workerSecret = "foundation-worker-secret";
+const workflowRequest = JSON.stringify({
+  api_version: "v1",
+  request_id: "019db438-c74a-7ef2-810c-792e298faf01",
+  idempotency_key: "workflow:launch:foundation-smoke",
+  operation: {
+    kind: "launch_workflow",
+    parameters: {
+      workflow_run_id: "019db438-c74a-7ef2-810c-792e298faf12",
+      session_id: "019db438-c74a-7ef2-810c-792e298faf13",
+      automation_task_id: "019db438-c74a-7ef2-810c-792e298faf14",
+      credentials: {
+        session_automation_access_token: workerSecret,
+        gateway_bearer_token: null,
+      },
+    },
+  },
+});
+const recordingRequest = JSON.stringify({
+  api_version: "v1",
+  request_id: "019db438-c74a-7ef2-810c-792e298faf02",
+  idempotency_key: "recording:launch:foundation-smoke",
+  operation: {
+    kind: "launch_recording",
+    parameters: {
+      session_id: "019db438-c74a-7ef2-810c-792e298faf15",
+      recording_id: "019db438-c74a-7ef2-810c-792e298faf16",
+      credentials: {
+        connect_ticket: workerSecret,
+        session_automation_access_token: workerSecret,
+        recording_worker_access_token: workerSecret,
+        gateway_bearer_token: null,
+      },
+    },
+  },
+});
+
 const validToken = await token(
   "bpane-runtime-broker-gateway",
   "bpane-runtime-broker-gateway-secret",
 );
-const valid = brokerRequest({ bearer: validToken, body: request });
+const valid = brokerRequest({ bearer: validToken, body: browserRequest });
 assert.equal(valid.status, 503);
 assert.equal(JSON.parse(valid.body).error.code, "adapter_unavailable");
 
-const unauthenticated = brokerRequest({ body: request });
+for (const workerRequest of [workflowRequest, recordingRequest]) {
+  const rejected = brokerRequest({ bearer: validToken, body: workerRequest });
+  assert.equal(rejected.status, 503);
+  assert.equal(JSON.parse(rejected.body).error.code, "adapter_unavailable");
+  assert.ok(!rejected.body.includes(workerSecret));
+}
+
+const unauthenticated = brokerRequest({ body: browserRequest });
 assert.equal(unauthenticated.status, 401);
 assert.equal(JSON.parse(unauthenticated.body).error.code, "authentication_required");
 
 const wrongAudienceToken = await token("bpane-mcp-bridge", "bpane-mcp-bridge-secret");
-const wrongAudience = brokerRequest({ bearer: wrongAudienceToken, body: request });
+const wrongAudience = brokerRequest({ bearer: wrongAudienceToken, body: browserRequest });
 assert.equal(wrongAudience.status, 403);
 assert.equal(
   JSON.parse(wrongAudience.body).error.code,
@@ -92,7 +136,7 @@ assert.equal(
 
 const wrongMedia = brokerRequest({
   bearer: validToken,
-  body: request,
+  body: browserRequest,
   contentType: "application/json",
 });
 assert.equal(wrongMedia.status, 415);
