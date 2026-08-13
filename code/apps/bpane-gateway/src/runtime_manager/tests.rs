@@ -6,10 +6,11 @@ use std::time::Duration;
 
 use bpane_runtime_client::{
     RuntimeBrokerClient, RuntimeBrokerClientError, RuntimeBrokerClientErrorCode,
+    RuntimeStorageOperationResponse,
 };
 use bpane_runtime_contract::{
     BrokerApiVersion, RuntimeOperation, RuntimeOperationRequest, RuntimeOperationResponse,
-    RuntimeOperationResult,
+    RuntimeOperationResult, SessionDataFileTarget, StorageHelperAction,
 };
 use chrono::Utc;
 use serde_json::{json, Value};
@@ -27,13 +28,19 @@ use crate::credentials::{
 use crate::session_control::{
     BrowserContextPersistenceMode, CreateSessionRequest, EgressCustomCaConfig, EgressProfileState,
     EgressProxyConfig, EgressTrafficObservationConfig, EgressTrafficObservationMode,
-    PersistBrowserContextRequest, PersistEgressProfileRequest, SessionBrowserContextMode,
-    SessionBrowserContextRequest, SessionBrowserContextResource, SessionGeolocation,
-    SessionLifecycleState, SessionNetworkIdentity, SessionOwner, SessionOwnerMode,
-    SessionRecordingPolicy, SessionStore, SessionViewport, StoredEgressProfile, StoredSession,
+    PersistBrowserContextRequest, PersistEgressProfileRequest, PersistSessionFileBindingRequest,
+    SessionBrowserContextMode, SessionBrowserContextRequest, SessionBrowserContextResource,
+    SessionGeolocation, SessionLifecycleState, SessionNetworkIdentity, SessionOwner,
+    SessionOwnerMode, SessionRecordingPolicy, SessionStore, SessionViewport, StoredEgressProfile,
+    StoredSession,
 };
 use crate::session_files::{
     SessionFileBindingMode, SessionFileBindingState, StoredSessionFileBinding,
+};
+use crate::session_manager::SessionManagerProfile;
+use crate::workspaces::{
+    PersistFileWorkspaceFileRequest, PersistFileWorkspaceRequest, StoreWorkspaceFileRequest,
+    WorkspaceFileStore,
 };
 
 fn docker_config() -> DockerRuntimeConfig {
@@ -71,6 +78,9 @@ fn docker_profile(max_runtime_sessions: usize) -> RuntimeProfile {
 struct StatefulBrokerClient {
     exists: AtomicBool,
     requests: StdMutex<Vec<RuntimeOperationRequest>>,
+    storage_requests: StdMutex<Vec<(RuntimeOperationRequest, Option<Vec<u8>>)>>,
+    storage_response: StdMutex<Option<RuntimeStorageOperationResponse>>,
+    rejected_storage_target: StdMutex<Option<SessionDataFileTarget>>,
     failure: StdMutex<Option<RuntimeBrokerClientErrorCode>>,
 }
 
@@ -121,6 +131,524 @@ impl RuntimeBrokerClient for StatefulBrokerClient {
             result,
         })
     }
+
+    async fn execute_storage(
+        &self,
+        request: &RuntimeOperationRequest,
+        payload: Option<&[u8]>,
+    ) -> Result<RuntimeStorageOperationResponse, RuntimeBrokerClientError> {
+        if let Some(code) = *self.failure.lock().unwrap() {
+            return Err(code.into());
+        }
+        self.storage_requests
+            .lock()
+            .unwrap()
+            .push((request.clone(), payload.map(ToOwned::to_owned)));
+        if let Some(response) = self.storage_response.lock().unwrap().clone() {
+            return Ok(RuntimeStorageOperationResponse {
+                response: RuntimeOperationResponse {
+                    request_id: request.request_id,
+                    ..response.response
+                },
+                payload: response.payload,
+            });
+        }
+        let RuntimeOperation::RunStorageHelper(storage) = &request.operation else {
+            return Err(RuntimeBrokerClientErrorCode::InvalidRequest.into());
+        };
+        if self
+            .rejected_storage_target
+            .lock()
+            .unwrap()
+            .as_ref()
+            .is_some_and(|target| storage.file_target.as_ref() == Some(target))
+        {
+            return Ok(RuntimeStorageOperationResponse {
+                response: RuntimeOperationResponse {
+                    api_version: BrokerApiVersion::V1,
+                    request_id: request.request_id,
+                    result: RuntimeOperationResult::Accepted,
+                },
+                payload: None,
+            });
+        }
+        let (result, output) = match storage.action {
+            StorageHelperAction::ExportBrowserContext => (
+                RuntimeOperationResult::StoragePayload {
+                    payload_bytes: 15,
+                    sha256_hex: "a".repeat(64),
+                },
+                Some(b"context-archive".to_vec()),
+            ),
+            StorageHelperAction::MeasureBrowserContext => (
+                RuntimeOperationResult::StorageUsage { storage_bytes: 42 },
+                None,
+            ),
+            StorageHelperAction::DeleteSessionData | StorageHelperAction::DeleteBrowserContext => {
+                (RuntimeOperationResult::Absent, None)
+            }
+            _ => (
+                RuntimeOperationResult::Completed {
+                    exit_code: Some(0),
+                    omitted_output_bytes: 0,
+                },
+                None,
+            ),
+        };
+        Ok(RuntimeStorageOperationResponse {
+            response: RuntimeOperationResponse {
+                api_version: BrokerApiVersion::V1,
+                request_id: request.request_id,
+                result,
+            },
+            payload: output,
+        })
+    }
+}
+
+fn broker_storage_manager(client: Arc<StatefulBrokerClient>) -> DockerRuntimeManager {
+    let broker: Arc<dyn RuntimeBrokerClient> = client;
+    DockerRuntimeManager::new_with_browser_control(
+        docker_config(),
+        RuntimeProfile {
+            runtime_binding: "runtime_broker_pool".to_string(),
+            ..docker_profile(2)
+        },
+        BrowserContainerControl::Broker(broker),
+    )
+    .unwrap()
+}
+
+#[tokio::test]
+async fn broker_storage_control_routes_all_typed_storage_actions() {
+    let client = Arc::new(StatefulBrokerClient::default());
+    let manager = broker_storage_manager(Arc::clone(&client));
+    let session_id = Uuid::now_v7();
+    let source_context_id = Uuid::now_v7();
+    let target_context_id = Uuid::now_v7();
+    let lease = RuntimeLease {
+        session_id,
+        agent_socket_path: manager.socket_path_for_session(session_id),
+        container_name: Some(manager.container_name_for_session(session_id)),
+        browser_context_id: Some(source_context_id),
+        discard_session_data_on_release: false,
+        idle_generation: 0,
+    };
+
+    manager
+        .initialize_session_data_volume(&lease)
+        .await
+        .unwrap();
+    manager
+        .write_session_data_file(
+            session_id,
+            SessionDataFileTarget::SessionBinding {
+                relative_path: "inputs/empty.txt".to_string(),
+                writable: false,
+            },
+            b"",
+        )
+        .await
+        .unwrap();
+    manager
+        .clone_browser_context_data(source_context_id, target_context_id)
+        .await
+        .unwrap();
+    assert_eq!(
+        manager
+            .export_browser_context_profile_archive(source_context_id)
+            .await
+            .unwrap()
+            .as_deref(),
+        Some(&b"context-archive"[..])
+    );
+    manager
+        .import_browser_context_profile_archive(target_context_id, Some(b"archive"))
+        .await
+        .unwrap();
+    assert_eq!(
+        manager
+            .browser_context_profile_storage_bytes(&[source_context_id, target_context_id])
+            .await
+            .unwrap(),
+        HashMap::from([(source_context_id, 42), (target_context_id, 42)])
+    );
+    manager
+        .remove_session_data_volume(session_id)
+        .await
+        .unwrap();
+    manager
+        .delete_browser_context_data(target_context_id)
+        .await
+        .unwrap();
+
+    let requests = client.storage_requests.lock().unwrap();
+    let actions = requests
+        .iter()
+        .filter_map(|(request, _)| match &request.operation {
+            RuntimeOperation::RunStorageHelper(storage) => Some(storage.action),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        actions,
+        vec![
+            StorageHelperAction::InitializeSessionData,
+            StorageHelperAction::MaterializeSessionFiles,
+            StorageHelperAction::CloneBrowserContext,
+            StorageHelperAction::ExportBrowserContext,
+            StorageHelperAction::ImportBrowserContext,
+            StorageHelperAction::MeasureBrowserContext,
+            StorageHelperAction::MeasureBrowserContext,
+            StorageHelperAction::DeleteSessionData,
+            StorageHelperAction::DeleteBrowserContext,
+        ]
+    );
+    assert!(requests
+        .iter()
+        .all(|(request, _)| request.idempotency_key.as_str().starts_with("storage:")));
+    let (_, empty_payload) = &requests[1];
+    assert_eq!(empty_payload.as_deref(), Some(&b""[..]));
+    let RuntimeOperation::RunStorageHelper(materialize) = &requests[1].0.operation else {
+        panic!("expected storage request");
+    };
+    assert_eq!(materialize.declared_payload_bytes, Some(0));
+    assert_eq!(
+        materialize.file_target,
+        Some(SessionDataFileTarget::SessionBinding {
+            relative_path: "inputs/empty.txt".to_string(),
+            writable: false,
+        })
+    );
+}
+
+#[tokio::test]
+async fn broker_storage_control_rejects_invalid_results_and_maps_unavailability() {
+    let client = Arc::new(StatefulBrokerClient::default());
+    *client.storage_response.lock().unwrap() = Some(RuntimeStorageOperationResponse {
+        response: RuntimeOperationResponse {
+            api_version: BrokerApiVersion::V1,
+            request_id: Uuid::now_v7(),
+            result: RuntimeOperationResult::Accepted,
+        },
+        payload: None,
+    });
+    let manager = broker_storage_manager(Arc::clone(&client));
+    let error = manager
+        .delete_browser_context_data(Uuid::now_v7())
+        .await
+        .unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "runtime broker returned an invalid delete browser context result"
+    );
+
+    *client.storage_response.lock().unwrap() = None;
+    *client.failure.lock().unwrap() = Some(RuntimeBrokerClientErrorCode::Unreachable);
+    let error = manager
+        .export_browser_context_profile_archive(Uuid::now_v7())
+        .await
+        .unwrap_err();
+    assert!(matches!(error, RuntimeManagerError::Unavailable(_)));
+    assert!(!error.to_string().contains("docker"));
+
+    *client.failure.lock().unwrap() = Some(RuntimeBrokerClientErrorCode::TimedOut);
+    let error = manager
+        .export_browser_context_profile_archive(Uuid::now_v7())
+        .await
+        .unwrap_err();
+    assert!(matches!(error, RuntimeManagerError::Unavailable(_)));
+}
+
+#[tokio::test]
+async fn active_context_rejection_precedes_broker_storage_dispatch() {
+    let client = Arc::new(StatefulBrokerClient::default());
+    let manager = broker_storage_manager(Arc::clone(&client));
+    let session_id = Uuid::now_v7();
+    let context_id = Uuid::now_v7();
+    manager.leases.lock().await.insert(
+        session_id,
+        DockerLeaseState::Ready(RuntimeLease {
+            session_id,
+            agent_socket_path: manager.socket_path_for_session(session_id),
+            container_name: Some(manager.container_name_for_session(session_id)),
+            browser_context_id: Some(context_id),
+            discard_session_data_on_release: false,
+            idle_generation: 0,
+        }),
+    );
+
+    assert!(matches!(
+        manager
+            .export_browser_context_profile_archive(context_id)
+            .await,
+        Err(RuntimeManagerError::BrowserContextInUse { .. })
+    ));
+    assert!(client.storage_requests.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn broker_storage_materializes_workspace_bindings_and_manifest_before_state_transition() {
+    let client = Arc::new(StatefulBrokerClient::default());
+    let manager = broker_storage_manager(Arc::clone(&client));
+    let store = SessionStore::in_memory_with_config(SessionManagerProfile {
+        runtime_binding: "runtime_broker_pool".to_string(),
+        compatibility_mode: "session_runtime_pool".to_string(),
+        max_runtime_sessions: 2,
+        supports_legacy_global_routes: false,
+        supports_session_extensions: true,
+    });
+    let owner = test_principal("workspace-owner");
+    let session = store
+        .create_session(
+            &owner,
+            CreateSessionRequest {
+                project_id: None,
+                template_id: None,
+                browser_context: None,
+                network_identity: None,
+                owner_mode: None,
+                viewport: None,
+                capabilities: Default::default(),
+                idle_timeout_sec: None,
+                labels: HashMap::new(),
+                integration_context: None,
+                extension_ids: Vec::new(),
+                extensions: Vec::new(),
+                recording: SessionRecordingPolicy::default(),
+            },
+            SessionOwnerMode::Collaborative,
+        )
+        .await
+        .unwrap();
+    let workspace = store
+        .create_file_workspace(
+            &owner,
+            PersistFileWorkspaceRequest {
+                project_id: None,
+                name: "broker-inputs".to_string(),
+                description: None,
+                labels: HashMap::new(),
+            },
+        )
+        .await
+        .unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let workspace_store = Arc::new(WorkspaceFileStore::local_fs(temp.path().join("files")));
+
+    for (index, mode) in [
+        SessionFileBindingMode::ReadOnly,
+        SessionFileBindingMode::ReadWrite,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let file_id = Uuid::now_v7();
+        let file_name = format!("input-{index}.txt");
+        let bytes = format!("confidential-workspace-value-{index}").into_bytes();
+        let artifact = workspace_store
+            .write(StoreWorkspaceFileRequest {
+                workspace_id: workspace.id,
+                file_id,
+                file_name: file_name.clone(),
+                bytes: bytes.clone(),
+            })
+            .await
+            .unwrap();
+        store
+            .create_file_workspace_file_for_owner(
+                &owner,
+                PersistFileWorkspaceFileRequest {
+                    id: file_id,
+                    workspace_id: workspace.id,
+                    name: file_name,
+                    media_type: Some("text/plain".to_string()),
+                    byte_count: bytes.len() as u64,
+                    sha256_hex: "a".repeat(64),
+                    provenance: None,
+                    artifact_ref: artifact.artifact_ref,
+                },
+            )
+            .await
+            .unwrap();
+        store
+            .create_session_file_binding_for_owner(
+                &owner,
+                PersistSessionFileBindingRequest {
+                    id: Uuid::now_v7(),
+                    session_id: session.id,
+                    workspace_id: workspace.id,
+                    file_id,
+                    mount_path: format!("inputs/input-{index}.txt"),
+                    mode,
+                    labels: HashMap::new(),
+                },
+            )
+            .await
+            .unwrap();
+    }
+
+    manager.attach_session_store(store.clone()).await;
+    manager
+        .attach_workspace_file_store(workspace_store.clone())
+        .await;
+    assert!(manager
+        .materialize_session_file_bindings(session.id)
+        .await
+        .unwrap());
+
+    let bindings = store
+        .list_session_file_bindings_for_session(session.id)
+        .await
+        .unwrap();
+    assert_eq!(bindings.len(), 2);
+    assert!(bindings
+        .iter()
+        .all(|binding| binding.state == SessionFileBindingState::Materialized));
+
+    let requests = client.storage_requests.lock().unwrap();
+    assert_eq!(requests.len(), 3);
+    let targets = requests
+        .iter()
+        .map(|(request, _)| match &request.operation {
+            RuntimeOperation::RunStorageHelper(storage) => storage.file_target.clone().unwrap(),
+            _ => panic!("expected storage helper request"),
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        targets[..2].contains(&SessionDataFileTarget::SessionBinding {
+            relative_path: "inputs/input-0.txt".to_string(),
+            writable: false,
+        })
+    );
+    assert!(
+        targets[..2].contains(&SessionDataFileTarget::SessionBinding {
+            relative_path: "inputs/input-1.txt".to_string(),
+            writable: true,
+        })
+    );
+    assert_eq!(targets[2], SessionDataFileTarget::SessionBindingManifest);
+    let manifest: Value = serde_json::from_slice(requests[2].1.as_deref().unwrap()).unwrap();
+    assert_eq!(manifest["session_id"], session.id.to_string());
+    assert_eq!(manifest["bindings"].as_array().unwrap().len(), 2);
+    assert_eq!(manifest["bindings"][0]["state"], "materialized");
+}
+
+#[tokio::test]
+async fn broker_storage_manifest_rejection_fails_bindings_without_content_disclosure() {
+    let client = Arc::new(StatefulBrokerClient::default());
+    *client.rejected_storage_target.lock().unwrap() =
+        Some(SessionDataFileTarget::SessionBindingManifest);
+    let manager = broker_storage_manager(Arc::clone(&client));
+    let store = SessionStore::in_memory_with_config(SessionManagerProfile {
+        runtime_binding: "runtime_broker_pool".to_string(),
+        compatibility_mode: "session_runtime_pool".to_string(),
+        max_runtime_sessions: 2,
+        supports_legacy_global_routes: false,
+        supports_session_extensions: true,
+    });
+    let owner = test_principal("workspace-owner");
+    let session = store
+        .create_session(
+            &owner,
+            CreateSessionRequest {
+                project_id: None,
+                template_id: None,
+                browser_context: None,
+                network_identity: None,
+                owner_mode: None,
+                viewport: None,
+                capabilities: Default::default(),
+                idle_timeout_sec: None,
+                labels: HashMap::new(),
+                integration_context: None,
+                extension_ids: Vec::new(),
+                extensions: Vec::new(),
+                recording: SessionRecordingPolicy::default(),
+            },
+            SessionOwnerMode::Collaborative,
+        )
+        .await
+        .unwrap();
+    let workspace = store
+        .create_file_workspace(
+            &owner,
+            PersistFileWorkspaceRequest {
+                project_id: None,
+                name: "broker-inputs".to_string(),
+                description: None,
+                labels: HashMap::new(),
+            },
+        )
+        .await
+        .unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let workspace_store = Arc::new(WorkspaceFileStore::local_fs(temp.path().join("files")));
+    let file_id = Uuid::now_v7();
+    let secret_bytes = b"content-must-not-appear-in-errors".to_vec();
+    let artifact = workspace_store
+        .write(StoreWorkspaceFileRequest {
+            workspace_id: workspace.id,
+            file_id,
+            file_name: "private.txt".to_string(),
+            bytes: secret_bytes.clone(),
+        })
+        .await
+        .unwrap();
+    store
+        .create_file_workspace_file_for_owner(
+            &owner,
+            PersistFileWorkspaceFileRequest {
+                id: file_id,
+                workspace_id: workspace.id,
+                name: "private.txt".to_string(),
+                media_type: Some("text/plain".to_string()),
+                byte_count: secret_bytes.len() as u64,
+                sha256_hex: "b".repeat(64),
+                provenance: None,
+                artifact_ref: artifact.artifact_ref,
+            },
+        )
+        .await
+        .unwrap();
+    let binding = store
+        .create_session_file_binding_for_owner(
+            &owner,
+            PersistSessionFileBindingRequest {
+                id: Uuid::now_v7(),
+                session_id: session.id,
+                workspace_id: workspace.id,
+                file_id,
+                mount_path: "private.txt".to_string(),
+                mode: SessionFileBindingMode::ReadOnly,
+                labels: HashMap::new(),
+            },
+        )
+        .await
+        .unwrap();
+    manager.attach_session_store(store.clone()).await;
+    manager
+        .attach_workspace_file_store(workspace_store.clone())
+        .await;
+
+    let error = manager
+        .materialize_session_file_bindings(session.id)
+        .await
+        .unwrap_err();
+    let message = error.to_string();
+    assert!(message.contains("invalid materialize session data result"));
+    assert!(!message.contains("content-must-not-appear-in-errors"));
+    let failed = store
+        .get_session_file_binding_for_session(session.id, binding.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(failed.state, SessionFileBindingState::Failed);
+    assert!(failed
+        .error
+        .as_deref()
+        .unwrap()
+        .contains("invalid materialize session data result"));
 }
 
 #[tokio::test]

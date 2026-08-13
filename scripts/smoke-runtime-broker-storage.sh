@@ -9,26 +9,34 @@ HOST_IMAGE="${BPANE_RUNTIME_BROKER_STORAGE_HELPER_IMAGE:-$(docker image inspect 
 WORK_DIR="$(mktemp -d)"
 SOURCE_ID="$(uuidgen | tr '[:upper:]' '[:lower:]')"
 CLONE_ID="$(uuidgen | tr '[:upper:]' '[:lower:]')"
+EMPTY_CONTEXT_ID="$(uuidgen | tr '[:upper:]' '[:lower:]')"
 SESSION_ID="$(uuidgen | tr '[:upper:]' '[:lower:]')"
+EMPTY_CONTEXT_SESSION_ID="$(uuidgen | tr '[:upper:]' '[:lower:]')"
 SOURCE_VOLUME="deploy_bpane-session-data-browser-context-${SOURCE_ID//-/}"
 CLONE_VOLUME="deploy_bpane-session-data-browser-context-${CLONE_ID//-/}"
+EMPTY_CONTEXT_VOLUME="deploy_bpane-session-data-browser-context-${EMPTY_CONTEXT_ID//-/}"
 SESSION_VOLUME="deploy_bpane-session-data-${SESSION_ID//-/}"
+EMPTY_CONTEXT_SESSION_VOLUME="deploy_bpane-session-data-${EMPTY_CONTEXT_SESSION_ID//-/}"
 
 cleanup() {
   docker exec "$GATEWAY_CONTAINER" sh -c \
     'rm /tmp/bpane-storage-smoke-input.tgz /tmp/bpane-storage-smoke-export.tgz /tmp/bpane-storage-smoke-headers 2>/dev/null || true' \
     >/dev/null 2>&1 || true
-  for volume in "$SOURCE_VOLUME" "$CLONE_VOLUME" "$SESSION_VOLUME"; do
+  for volume in "$SOURCE_VOLUME" "$CLONE_VOLUME" "$EMPTY_CONTEXT_VOLUME" \
+    "$SESSION_VOLUME" "$EMPTY_CONTEXT_SESSION_VOLUME"; do
     docker volume rm "$volume" >/dev/null 2>&1 || true
   done
   rm "$WORK_DIR/input.tgz" "$WORK_DIR/export.tgz" 2>/dev/null || true
-  rm "$WORK_DIR/profile/Default/Preferences" 2>/dev/null || true
+  rm "$WORK_DIR/profile/Default/Preferences" "$WORK_DIR/profile/Default/StoragePayload" \
+    2>/dev/null || true
   rmdir "$WORK_DIR/profile/Default" "$WORK_DIR/profile" "$WORK_DIR" 2>/dev/null || true
 }
 trap cleanup EXIT
 
 mkdir -p "$WORK_DIR/profile/Default"
 printf 'storage-smoke-profile\n' >"$WORK_DIR/profile/Default/Preferences"
+dd if=/dev/urandom of="$WORK_DIR/profile/Default/StoragePayload" \
+  bs=1048576 count=4 status=none
 tar -czf "$WORK_DIR/input.tgz" -C "$WORK_DIR/profile" .
 ARCHIVE_BYTES="$(wc -c <"$WORK_DIR/input.tgz" | tr -d ' ')"
 docker cp "$WORK_DIR/input.tgz" "$GATEWAY_CONTAINER:/tmp/bpane-storage-smoke-input.tgz"
@@ -106,6 +114,7 @@ run_json_operation() {
 run_json_operation import_browser_context '' '' "$SOURCE_ID" "$ARCHIVE_BYTES" null
 run_json_operation measure_browser_context '' "$SOURCE_ID" '' '' null
 run_json_operation clone_browser_context '' "$SOURCE_ID" "$CLONE_ID" '' null
+run_json_operation initialize_session_data "$EMPTY_CONTEXT_SESSION_ID" '' "$EMPTY_CONTEXT_ID" '' null
 run_json_operation initialize_session_data "$SESSION_ID" '' "$SOURCE_ID" '' null
 run_json_operation materialize_session_files "$SESSION_ID" '' '' 10 \
   '{"purpose":"session_binding_manifest"}'
@@ -135,10 +144,13 @@ tar -xOf "$WORK_DIR/export.tgz" ./Default/Preferences | grep -qx 'storage-smoke-
 printf '%-28s HTTP 200 bytes=%s digest=verified content=verified\n' export_browser_context "$EXPORT_BYTES"
 
 run_json_operation delete_session_data "$SESSION_ID" '' '' '' null
+run_json_operation delete_session_data "$EMPTY_CONTEXT_SESSION_ID" '' '' '' null
 run_json_operation delete_browser_context '' "$SOURCE_ID" '' '' null
 run_json_operation delete_browser_context '' "$CLONE_ID" '' '' null
+run_json_operation delete_browser_context '' "$EMPTY_CONTEXT_ID" '' '' null
 
-for volume in "$SOURCE_VOLUME" "$CLONE_VOLUME" "$SESSION_VOLUME"; do
+for volume in "$SOURCE_VOLUME" "$CLONE_VOLUME" "$EMPTY_CONTEXT_VOLUME" \
+  "$SESSION_VOLUME" "$EMPTY_CONTEXT_SESSION_VOLUME"; do
   if docker volume inspect "$volume" >/dev/null 2>&1; then
     printf 'volume was not removed: %s\n' "$volume" >&2
     exit 1
@@ -146,6 +158,10 @@ for volume in "$SOURCE_VOLUME" "$CLONE_VOLUME" "$SESSION_VOLUME"; do
 done
 if [[ -n "$(docker ps -a --filter name=bpane-storage-helper --format '{{.Names}}')" ]]; then
   printf 'storage helper containers were not removed\n' >&2
+  exit 1
+fi
+if docker volume ls --format '{{.Name}}' | grep -q '^bpane-storage-helper-input-'; then
+  printf 'storage helper input volumes were not removed\n' >&2
   exit 1
 fi
 

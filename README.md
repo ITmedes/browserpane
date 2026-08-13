@@ -268,8 +268,7 @@ The compose stack starts:
 - `host`: Linux host runtime with Xorg dummy, Openbox, Chromium, and `bpane-host`
 - `gateway`: WebTransport relay on `:4433` and HTTP APIs on `:8932`
 - `docker-proxy`: internal-only, allowlisted Docker API proxy used by the
-  gateway for direct and storage operations and by the runtime broker in the
-  opt-in broker overlay
+  gateway in direct mode and by the runtime broker in the opt-in broker overlay
 - `runtime-broker`: internal-only authenticated typed-operation boundary; its
   base configuration remains fail-closed, while the opt-in overlay enables
   policy-owned Docker adapters for browser, workflow, recording, and isolated
@@ -336,8 +335,9 @@ The gateway supports four runtime backends:
 - `docker_single`: one start-on-demand runtime container with idle shutdown
 - `docker_pool`: multiple start-on-demand runtime containers with explicit `max_active_runtimes` and `max_starting_runtimes`
 - `broker_pool`: opt-in parity path that preserves the Docker pool state
-  machine while routing browser, workflow-worker, and recording-worker
-  lifecycle operations through the authenticated runtime broker
+  machine while routing browser, workflow-worker, recording-worker, session
+  data, and browser-context storage operations through the authenticated
+  runtime broker
 
 `deploy/compose.yml` now defaults to `docker_pool`, but you can still switch backends explicitly when you need a compatibility check:
 
@@ -388,9 +388,11 @@ default topology, start the dedicated overlay:
 The wrapper builds the host, workflow-worker, and recording-worker images,
 resolves immutable image IDs, starts the broker with read-only browser and
 worker policy inputs plus the host image as its isolated storage-helper image,
-and selects `broker_pool` in the gateway. The storage adapter is available at
-the broker boundary, but the gateway retains Docker-proxy access in this
-checkpoint until its session-data and browser-context call sites migrate.
+and selects `broker_pool` in the gateway. In this mode the gateway sends typed
+storage intents for session-data initialization, approved file destinations,
+and browser-context lifecycle; it retains workspace artifact reads and binding
+state in the control plane. The transitional overlay still leaves the gateway
+on Docker control until the final topology-removal checkpoint is validated.
 Validate the overlay topology with:
 
 ```bash
@@ -400,13 +402,15 @@ node scripts/validate-runtime-broker-browser-overlay.mjs
 
 The storage smoke requires the running overlay and exercises authenticated
 context import/measure/clone/export/delete plus session-data initialization,
-typed materialization, digest verification, and helper/volume cleanup.
+typed materialization, a realistic multi-megabyte archive transfer, digest
+verification, and helper/staging/owned-volume cleanup.
 
 Broker `/readyz` checks the selected adapter dependency without creating an
 audited runtime operation. Browser and worker lifecycle requests remain typed
 and audited. Do not treat either the foundation or this transitional overlay
-as the final production authorization boundary until storage operations have
-broker parity and gateway Docker-proxy access is removed.
+as the final production authorization boundary until gateway Docker-proxy
+access is removed and the broker-only topology passes the complete parity
+matrix.
 
 Compose also forwards a shared host-worker env profile automatically. If your
 compose project name is not the default `deploy`, override these defaults too:

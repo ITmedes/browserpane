@@ -6,14 +6,16 @@ use bollard::errors::Error as BollardError;
 use bollard::models::ContainerCreateBody;
 use bollard::query_parameters::{
     AttachContainerOptionsBuilder, CreateContainerOptionsBuilder, RemoveContainerOptionsBuilder,
-    RemoveVolumeOptionsBuilder, WaitContainerOptionsBuilder,
+    RemoveVolumeOptionsBuilder, UploadToContainerOptionsBuilder, WaitContainerOptionsBuilder,
 };
 use bollard::{Docker, API_DEFAULT_VERSION};
+use bytes::Bytes;
 use futures_util::StreamExt;
 use reqwest::Url;
-use tokio::io::AsyncWriteExt;
 
 use crate::{ExecutionError, ExecutionErrorCode};
+
+use super::STORAGE_INPUT_MOUNT_ROOT;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub(super) enum StorageDockerError {
@@ -31,6 +33,8 @@ pub(super) trait StorageDockerApi: Send + Sync {
         name: String,
         body: ContainerCreateBody,
         input: Option<Vec<u8>>,
+        input_volume: Option<String>,
+        failure_cleanup_volume: Option<String>,
         output_limit: usize,
     ) -> Result<Vec<u8>, StorageDockerError>;
 }
@@ -97,6 +101,8 @@ impl StorageDockerApi for BollardStorageDockerApi {
         name: String,
         body: ContainerCreateBody,
         input: Option<Vec<u8>>,
+        input_volume: Option<String>,
+        failure_cleanup_volume: Option<String>,
         output_limit: usize,
     ) -> Result<Vec<u8>, StorageDockerError> {
         let docker = self.docker.clone();
@@ -114,16 +120,36 @@ impl StorageDockerApi for BollardStorageDockerApi {
                 .v(false)
                 .build();
             let cleanup = docker.remove_container(&name, Some(remove)).await;
-            match (operation, cleanup) {
+            let input_cleanup = if let Some(volume) = input_volume {
+                let options = RemoveVolumeOptionsBuilder::default().force(true).build();
+                match docker.remove_volume(&volume, Some(options)).await {
+                    Ok(())
+                    | Err(BollardError::DockerResponseServerError {
+                        status_code: 404, ..
+                    }) => Ok(()),
+                    Err(_) => Err(StorageDockerError::Failed),
+                }
+            } else {
+                Ok(())
+            };
+            let result = match (operation, cleanup, input_cleanup) {
                 (
                     Ok(output),
                     Ok(())
                     | Err(BollardError::DockerResponseServerError {
                         status_code: 404, ..
                     }),
+                    Ok(()),
                 ) => Ok(output),
-                (Ok(_), Err(_)) | (Err(_), _) => Err(StorageDockerError::Failed),
+                _ => Err(StorageDockerError::Failed),
+            };
+            if result.is_err() {
+                if let Some(volume) = failure_cleanup_volume {
+                    let options = RemoveVolumeOptionsBuilder::default().force(true).build();
+                    let _ = docker.remove_volume(&volume, Some(options)).await;
+                }
             }
+            result
         });
         task.await.map_err(|_| StorageDockerError::Failed)?
     }
@@ -152,8 +178,11 @@ async fn execute_helper(
         .create_container(Some(create), body)
         .await
         .map_err(map_bollard_error)?;
+    if let Some(bytes) = input {
+        upload_input(docker, name, bytes).await?;
+    }
     let attach = AttachContainerOptionsBuilder::default()
-        .stdin(input.is_some())
+        .stdin(false)
         .stdout(true)
         .stderr(true)
         .stream(true)
@@ -161,7 +190,7 @@ async fn execute_helper(
         .build();
     let bollard::container::AttachContainerResults {
         mut output,
-        input: mut container_input,
+        input: _,
     } = docker
         .attach_container(name, Some(attach))
         .await
@@ -171,18 +200,6 @@ async fn execute_helper(
         .await
         .map_err(map_bollard_error)?;
 
-    let writer = async move {
-        if let Some(bytes) = input {
-            container_input
-                .write_all(&bytes)
-                .await
-                .map_err(|_| StorageDockerError::Failed)?;
-        }
-        container_input
-            .shutdown()
-            .await
-            .map_err(|_| StorageDockerError::Failed)
-    };
     let reader = async move {
         let mut stdout = Vec::new();
         let mut stderr_bytes = 0_usize;
@@ -217,8 +234,46 @@ async fn execute_helper(
         let response = result.map_err(map_bollard_error)?;
         require_successful_exit(response.status_code)
     };
-    let (_, stdout, _) = tokio::try_join!(writer, reader, waiter)?;
+    let (stdout, _) = tokio::try_join!(reader, waiter)?;
     Ok(stdout)
+}
+
+async fn upload_input(
+    docker: &Docker,
+    name: &str,
+    input: Vec<u8>,
+) -> Result<(), StorageDockerError> {
+    let options = UploadToContainerOptionsBuilder::default()
+        .path(STORAGE_INPUT_MOUNT_ROOT)
+        .build();
+    docker
+        .upload_to_container(
+            name,
+            Some(options),
+            bollard::body_stream(futures_util::stream::iter(input_archive_chunks(input)?)),
+        )
+        .await
+        .map_err(map_bollard_error)
+}
+
+fn input_archive_chunks(input: Vec<u8>) -> Result<Vec<Bytes>, StorageDockerError> {
+    let input_len = u64::try_from(input.len()).map_err(|_| StorageDockerError::Failed)?;
+    let mut header = tar::Header::new_gnu();
+    header
+        .set_path("payload")
+        .map_err(|_| StorageDockerError::Failed)?;
+    header.set_entry_type(tar::EntryType::Regular);
+    header.set_mode(0o444);
+    header.set_uid(0);
+    header.set_gid(0);
+    header.set_size(input_len);
+    header.set_cksum();
+    let padding = (512 - input.len() % 512) % 512;
+    Ok(vec![
+        Bytes::copy_from_slice(header.as_bytes()),
+        Bytes::from(input),
+        Bytes::from(vec![0_u8; padding + 1024]),
+    ])
 }
 
 fn require_successful_exit(status_code: i64) -> Result<(), StorageDockerError> {
@@ -245,7 +300,30 @@ fn map_bollard_error(error: BollardError) -> StorageDockerError {
 
 #[cfg(test)]
 mod tests {
+    use std::io::Read;
+
     use super::*;
+
+    #[test]
+    fn input_archive_wraps_the_exact_payload_at_a_fixed_path() {
+        let expected = vec![0_u8, 1, 2, 3, 255];
+        let archive = input_archive_chunks(expected.clone())
+            .unwrap()
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>();
+        let mut archive = tar::Archive::new(archive.as_slice());
+        let mut entries = archive.entries().unwrap();
+        let mut entry = entries.next().unwrap().unwrap();
+        assert_eq!(
+            entry.path().unwrap().as_ref(),
+            std::path::Path::new("payload")
+        );
+        let mut actual = Vec::new();
+        entry.read_to_end(&mut actual).unwrap();
+        assert_eq!(actual, expected);
+        assert!(entries.next().is_none());
+    }
 
     #[test]
     fn accepts_only_successful_helper_exit_status() {

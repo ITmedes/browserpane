@@ -20,7 +20,8 @@ use archive::validate_context_archive;
 use backend::{BollardStorageDockerApi, StorageDockerApi, StorageDockerError};
 use materialize::MaterializedStorageHelper;
 
-const STORAGE_HELPER_SCRIPT: &str = r#"set -eu; clean_dir() { find "$1" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +; }; read_input() { dd bs=1 count="${BPANE_STORAGE_INPUT_BYTES:?}" iflag=fullblock status=none; }; case "${BPANE_STORAGE_ACTION:?}" in initialize_session_data) mkdir -p "$BPANE_SESSION_DATA_DIR" "$BPANE_PROFILE_DIR" "$BPANE_UPLOAD_DIR" "$BPANE_DOWNLOAD_DIR" "$BPANE_SESSION_FILE_MOUNTS_DIR"; chmod 0770 "$BPANE_SESSION_DATA_DIR" "$BPANE_PROFILE_DIR" "$BPANE_UPLOAD_DIR" "$BPANE_DOWNLOAD_DIR" "$BPANE_SESSION_FILE_MOUNTS_DIR" ;; materialize_session_files) parent=$(dirname "$BPANE_MATERIALIZE_TARGET"); mkdir -p "$parent"; temporary="${BPANE_MATERIALIZE_TARGET}.tmp.$$"; trap 'rm -f "$temporary"' EXIT; read_input > "$temporary"; chmod "$BPANE_MATERIALIZE_MODE" "$temporary"; mv -f "$temporary" "$BPANE_MATERIALIZE_TARGET"; trap - EXIT ;; clone_browser_context) clean_dir /run/bpane/storage-helper/target; cp -a /run/bpane/storage-helper/source/. /run/bpane/storage-helper/target/; chmod 0770 /run/bpane/storage-helper/target ;; export_browser_context) cd /run/bpane/storage-helper/source; find . -xdev \( -type f -o -type d \) -print0 | tar --null --no-recursion --hard-dereference --files-from=- -czf - ;; import_browser_context) clean_dir /run/bpane/storage-helper/target; read_input | tar -C /run/bpane/storage-helper/target -xzf - --no-same-owner --no-same-permissions --delay-directory-restore; if find /run/bpane/storage-helper/target -xdev ! -type d ! -type f -print -quit | grep -q .; then exit 65; fi; chmod 0770 /run/bpane/storage-helper/target ;; measure_browser_context) du -sb /run/bpane/storage-helper/source | cut -f1 ;; *) exit 64 ;; esac"#;
+const STORAGE_INPUT_MOUNT_ROOT: &str = "/run/bpane/storage-helper/input";
+const STORAGE_HELPER_SCRIPT: &str = r#"set -eu; clean_dir() { find "$1" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +; }; read_input() { test "$(wc -c < /run/bpane/storage-helper/input/payload)" -eq "${BPANE_STORAGE_INPUT_BYTES:?}"; cat /run/bpane/storage-helper/input/payload; }; case "${BPANE_STORAGE_ACTION:?}" in initialize_session_data) mkdir -p "$BPANE_SESSION_DATA_DIR" "$BPANE_PROFILE_DIR" "$BPANE_UPLOAD_DIR" "$BPANE_DOWNLOAD_DIR" "$BPANE_SESSION_FILE_MOUNTS_DIR"; chmod 0770 "$BPANE_SESSION_DATA_DIR" "$BPANE_PROFILE_DIR" "$BPANE_UPLOAD_DIR" "$BPANE_DOWNLOAD_DIR" "$BPANE_SESSION_FILE_MOUNTS_DIR" ;; materialize_session_files) parent=$(dirname "$BPANE_MATERIALIZE_TARGET"); mkdir -p "$parent"; temporary="${BPANE_MATERIALIZE_TARGET}.tmp.$$"; trap 'rm -f "$temporary"' EXIT; read_input > "$temporary"; chmod "$BPANE_MATERIALIZE_MODE" "$temporary"; mv -f "$temporary" "$BPANE_MATERIALIZE_TARGET"; trap - EXIT ;; clone_browser_context) clean_dir /run/bpane/storage-helper/target; cp -a /run/bpane/storage-helper/source/. /run/bpane/storage-helper/target/; chmod 0770 /run/bpane/storage-helper/target ;; export_browser_context) cd /run/bpane/storage-helper/source; find . -xdev \( -type f -o -type d \) -print0 | tar --null --no-recursion --hard-dereference --files-from=- -czf - ;; import_browser_context) clean_dir /run/bpane/storage-helper/target; read_input | tar -C /run/bpane/storage-helper/target -xzf - --no-same-owner --no-same-permissions --delay-directory-restore; if find /run/bpane/storage-helper/target -xdev ! -type d ! -type f -print -quit | grep -q .; then exit 65; fi; chmod 0770 /run/bpane/storage-helper/target ;; measure_browser_context) du -sb /run/bpane/storage-helper/source | cut -f1 ;; *) exit 64 ;; esac"#;
 
 /// Policy-validating Docker adapter for bounded storage operations.
 pub struct StorageRuntimeDockerAdapter {
@@ -94,27 +95,28 @@ impl StorageRuntimeDockerAdapter {
         let cleanup_target = self.prepare_target(request).await?;
         let helper = MaterializedStorageHelper::new(&self.config, request_id, request)
             .map_err(|_| ExecutionErrorCode::AdapterFailed)?;
+        if let Some(input_volume) = helper.input_volume.as_deref() {
+            self.remove_owned_volume_if_present(input_volume).await?;
+        }
         self.policy
             .authorize_launch(&helper.policy_spec)
             .map_err(|_| ExecutionErrorCode::AdapterFailed)?;
         let action = helper.action;
+        let input_volume = helper.input_volume.clone();
         let output = self
             .backend
             .run_helper(
                 helper.container_name,
                 helper.container,
                 payload.map(ToOwned::to_owned),
+                input_volume,
+                cleanup_target,
                 helper.output_limit,
             )
             .await;
         let output = match output {
             Ok(output) => output,
-            Err(error) => {
-                if let Some(volume) = cleanup_target {
-                    let _ = self.backend.remove_volume(&volume).await;
-                }
-                return Err(map_backend_error(error));
-            }
+            Err(error) => return Err(map_backend_error(error)),
         };
         MaterializedStorageHelper::result(action, output)
             .map_err(|_| ExecutionErrorCode::AdapterFailed.into())
@@ -174,6 +176,13 @@ impl StorageRuntimeDockerAdapter {
             result,
             payload: None,
         })
+    }
+
+    async fn remove_owned_volume_if_present(&self, volume: &str) -> Result<(), ExecutionError> {
+        match self.backend.remove_volume(volume).await {
+            Ok(()) | Err(StorageDockerError::NotFound) => Ok(()),
+            Err(error) => Err(map_backend_error(error)),
+        }
     }
 }
 

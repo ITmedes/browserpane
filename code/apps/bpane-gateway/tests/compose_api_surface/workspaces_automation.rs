@@ -82,6 +82,35 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
         .await?;
     let session_id = json_id(&session, "id")?;
 
+    let bound_file = harness
+        .post_bytes(
+            &format!("/api/v1/file-workspaces/{workspace_id}/files"),
+            b"compose gateway e2e bound workspace bytes".to_vec(),
+            "text/plain; charset=utf-8",
+            &[("x-bpane-file-name", "compose-bound-e2e.txt")],
+        )
+        .await?;
+    let bound_file_id = json_id(&bound_file, "id")?;
+
+    let binding = harness
+        .post_json(
+            &format!("/api/v1/sessions/{session_id}/file-bindings"),
+            json!({
+                "workspace_id": workspace_id,
+                "file_id": bound_file_id,
+                "mount_path": "inputs/compose-bound-e2e.txt",
+                "mode": "read_only",
+                "labels": label_map("workspaces-automation-binding"),
+            }),
+        )
+        .await?;
+    let binding_id = json_id(&binding, "id")?;
+    if binding["state"] != json!("pending") {
+        return Err(anyhow!(
+            "workspace binding was not pending before runtime startup: {binding}"
+        ));
+    }
+
     let task = harness
         .post_json(
             "/api/v1/automation-tasks",
@@ -128,6 +157,20 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
         )
         .await?;
     let automation_token = json_id(&automation_access, "token")?;
+
+    let materialized_binding = harness
+        .get_json(&format!(
+            "/api/v1/sessions/{session_id}/file-bindings/{binding_id}"
+        ))
+        .await?;
+    if materialized_binding["state"] != json!("materialized")
+        || materialized_binding["mount_path"] != json!("inputs/compose-bound-e2e.txt")
+        || materialized_binding["sha256_hex"] != bound_file["sha256_hex"]
+    {
+        return Err(anyhow!(
+            "workspace binding was not materialized during runtime startup: {materialized_binding}"
+        ));
+    }
 
     let automation_headers =
         map_headers(&[("x-bpane-automation-access-token", &automation_token)])?;
@@ -220,6 +263,17 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
     if cancelled["state"] != json!("cancelled") {
         return Err(anyhow!(
             "automation task cancel endpoint did not cancel the task"
+        ));
+    }
+
+    let removed_binding = harness
+        .delete_json(&format!(
+            "/api/v1/sessions/{session_id}/file-bindings/{binding_id}"
+        ))
+        .await?;
+    if removed_binding["state"] != json!("removed") {
+        return Err(anyhow!(
+            "workspace binding cleanup did not mark the binding removed"
         ));
     }
 
