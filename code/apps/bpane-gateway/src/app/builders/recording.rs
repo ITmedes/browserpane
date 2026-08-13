@@ -89,6 +89,10 @@ pub(in crate::app) fn build_recording_worker_config(
         finalize_timeout: Duration::from_secs(
             config.recording.recording_worker_finalize_timeout_secs,
         ),
+        request_timeout: Duration::from_millis(
+            config.recording.recording_worker_request_timeout_ms,
+        ),
+        output_limit_bytes: config.recording.recording_worker_output_limit_bytes,
         bearer_token: config.recording.recording_worker_bearer_token.clone(),
         oidc_token_url: config.recording.recording_worker_oidc_token_url.clone(),
         oidc_client_id: config.recording.recording_worker_oidc_client_id.clone(),

@@ -99,6 +99,7 @@ Current product shape:
   - `recording/observability.rs`: gateway-local counters/timestamps for recording finalization, playback export generation, and retention passes.
   - `recording/retention.rs`: periodic cleanup of completed recording artifacts after the session-scoped retention window expires; it clears artifact refs but preserves recording segment metadata.
   - `workflow_lifecycle.rs`: control-plane launch/supervision for workflow workers. The gateway can auto-start Playwright workflow workers as short-lived Docker jobs, persist run-worker assignments, fail stale active runs after restart instead of leaving them orphaned, and manage awaiting-input runtime hold/release semantics for paused workflow runs.
+  - `worker_process_output.rs`: bounded concurrent stdout/stderr draining shared by workflow and recording worker supervisors.
   - `workflow_event_delivery/`: owner-scoped workflow event subscriptions,
     signed outbound webhook delivery, retry/backoff, and persisted delivery
     diagnostics. Its destination policy uses standard URL/DNS/HTTP facilities,
@@ -148,10 +149,10 @@ Current product shape:
   - Can resolve an explicit control-plane session via `/api/v1/sessions`, accepts delegated-session assignment through its bridge-local `/control-session` compatibility API, supports per-connection session routing through `/sessions/{session_id}/mcp` and `/sessions/{session_id}/sse`, resolves the managed session's runtime CDP endpoint from the session resource, and uses session-scoped `status` / `mcp-owner` APIs when a managed session is configured, including in `docker_pool` mode. In local compose, browser/admin callers mutate the bridge-global control session through the authenticated gateway proxy at `/api/v1/mcp-bridge/control-session`; the direct bridge-local control target is protected by an internal bearer token.
 - `code/integrations/recording-worker`
   - Playwright-driven recorder worker that attaches as a `recorder` browser client through the control plane.
-  - Creates or adopts session recording resources via `/api/v1/sessions/{id}/recordings`, waits for stop/finalize signals, writes the deterministic staged WebM, and uses a gateway-issued session/recording-bound worker capability for completion or failure. Ordinary session automation credentials cannot finalize artifacts.
+  - Creates or adopts session recording resources via `/api/v1/sessions/{id}/recordings`, waits for stop/finalize signals with sequential polling and finite HTTP/OIDC deadlines, writes the deterministic staged WebM, and uses a gateway-issued session/recording-bound worker capability for completion or failure. Ordinary session automation credentials cannot finalize artifacts.
 - `code/integrations/workflow-worker`
   - One-off workflow executor worker for owner-scoped workflow runs with git-backed source snapshots.
-  - Loads the workflow run through the gateway using an owner bearer token, mints session automation access, downloads the run source snapshot and workspace inputs, materializes them locally, uploads produced files back through run-scoped artifact APIs, and executes the pinned Playwright entrypoint against the bound BrowserPane session.
+  - Loads the workflow run through the gateway using an owner bearer token, mints session automation access, downloads the run source snapshot and workspace inputs, materializes them locally, uploads produced files back through run-scoped artifact APIs, and executes the pinned Playwright entrypoint against the bound BrowserPane session with finite HTTP/OIDC deadlines and bounded stdout/stderr capture.
 - `deploy/compose.yml`
   - Source of truth for local dev runtime defaults.
   - Local auth in compose is OIDC via Keycloak on `:8091`.

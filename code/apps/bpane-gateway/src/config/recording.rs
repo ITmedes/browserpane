@@ -57,6 +57,14 @@ pub struct RecordingConfig {
     #[arg(long = "recording-worker-poll-interval-ms", default_value_t = 2000)]
     pub recording_worker_poll_interval_ms: u64,
 
+    /// HTTP request deadline forwarded to recorder workers in milliseconds.
+    #[arg(long = "recording-worker-request-timeout-ms", default_value_t = 30_000)]
+    pub recording_worker_request_timeout_ms: u64,
+
+    /// Maximum stdout or stderr bytes retained by the recorder worker supervisor.
+    #[arg(long = "recording-worker-output-limit-bytes", default_value_t = 256 * 1024)]
+    pub recording_worker_output_limit_bytes: usize,
+
     /// How long the gateway waits for recorder finalization during session teardown.
     #[arg(long = "recording-worker-finalize-timeout-secs", default_value_t = 30)]
     pub recording_worker_finalize_timeout_secs: u64,

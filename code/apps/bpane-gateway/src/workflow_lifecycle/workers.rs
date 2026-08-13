@@ -4,6 +4,7 @@ use tokio::process::Command;
 use tracing::{info, warn};
 
 use super::*;
+use crate::worker_process_output::{wait_with_bounded_output, BoundedProcessOutput};
 
 #[derive(Debug, Clone)]
 pub(super) struct LaunchedWorkflowWorker {
@@ -78,6 +79,16 @@ impl WorkflowLifecycleInner {
         );
         append_container_env(
             &mut command,
+            "BPANE_WORKER_REQUEST_TIMEOUT_MS",
+            self.config.request_timeout.as_millis().to_string(),
+        );
+        append_container_env(
+            &mut command,
+            "BPANE_WORKER_MAX_OUTPUT_BYTES",
+            self.config.output_limit_bytes.to_string(),
+        );
+        append_container_env(
+            &mut command,
             "BPANE_SESSION_AUTOMATION_ACCESS_TOKEN",
             automation_access_token.token,
         );
@@ -143,8 +154,9 @@ impl WorkflowLifecycleInner {
 
         let manager = Arc::clone(self);
         let run_id = run.id;
+        let output_limit_bytes = self.config.output_limit_bytes;
         tokio::spawn(async move {
-            let status = child.wait_with_output().await;
+            let status = wait_with_bounded_output(child, output_limit_bytes).await;
             manager.handle_worker_exit(run_id, status).await;
         });
 
@@ -168,7 +180,7 @@ impl WorkflowLifecycleInner {
     pub(super) async fn handle_worker_exit(
         self: Arc<Self>,
         run_id: Uuid,
-        status: std::io::Result<std::process::Output>,
+        status: std::io::Result<BoundedProcessOutput>,
     ) {
         let container_name = self
             .launched
@@ -194,7 +206,10 @@ impl WorkflowLifecycleInner {
                             output.status.code()
                         )
                     });
-                format!("workflow worker exited before completing workflow run {run_id}: {detail}")
+                let truncation = output_truncation_detail(output.omitted_bytes());
+                format!(
+                    "workflow worker exited before completing workflow run {run_id}: {detail}{truncation}"
+                )
             }
             Err(error) => format!("workflow worker failed while waiting for run {run_id}: {error}"),
         };
@@ -303,6 +318,14 @@ impl WorkflowLifecycleInner {
                 stderr
             }
         )))
+    }
+}
+
+fn output_truncation_detail(omitted_bytes: u64) -> String {
+    if omitted_bytes == 0 {
+        String::new()
+    } else {
+        format!(" (omitted {omitted_bytes} earlier output bytes)")
     }
 }
 

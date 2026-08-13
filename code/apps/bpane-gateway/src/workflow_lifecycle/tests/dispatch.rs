@@ -34,6 +34,8 @@ async fn launches_worker_and_marks_unfinished_run_failed() {
             container_name_prefix: "bpane-workflow".to_string(),
             gateway_api_url: "http://gateway:8932".to_string(),
             work_root: PathBuf::from("/tmp/bpane-workflows"),
+            request_timeout: Duration::from_secs(1),
+            output_limit_bytes: 4096,
             bearer_token: Some("token".to_string()),
             oidc_token_url: None,
             oidc_client_id: None,
@@ -80,6 +82,59 @@ async fn launches_worker_and_marks_unfinished_run_failed() {
 
     let failed = latest.expect("workflow run should exist");
     assert!(matches!(failed.state, WorkflowRunState::Failed));
+}
+
+#[tokio::test]
+async fn bounds_noisy_worker_output_and_preserves_failure_tail() {
+    let temp_dir = tempdir().unwrap();
+    let script = create_noisy_failure_script(&temp_dir);
+    let store = SessionStore::in_memory();
+    let auth = Arc::new(AuthValidator::from_hmac_secret(vec![9; 32]));
+    let automation_access_token_manager = Arc::new(SessionAutomationAccessTokenManager::new(
+        vec![7; 32],
+        Duration::from_secs(300),
+    ));
+    let manager = WorkflowLifecycleManager::new(
+        Some(WorkflowWorkerConfig {
+            output_limit_bytes: 32,
+            ..test_config(script)
+        }),
+        auth,
+        automation_access_token_manager,
+        store.clone(),
+        test_session_manager(),
+        test_registry(),
+    )
+    .unwrap();
+    let run = create_workflow_run(&store).await;
+
+    manager
+        .ensure_run_started("playwright", run.id)
+        .await
+        .unwrap();
+
+    let failed = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let current = store
+                .get_workflow_run_by_id(run.id)
+                .await
+                .unwrap()
+                .expect("workflow run should exist");
+            if current.state.is_terminal() {
+                break current;
+            }
+            sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("noisy workflow worker should terminate");
+
+    let error = failed
+        .error
+        .expect("failed workflow run should expose an error");
+    assert!(error.contains("final worker failure"));
+    assert!(error.contains("omitted"));
+    assert!(error.contains("earlier output bytes"));
 }
 
 #[tokio::test]

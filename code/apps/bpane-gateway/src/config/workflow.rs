@@ -63,6 +63,14 @@ pub struct WorkflowConfig {
     )]
     pub workflow_worker_work_root: PathBuf,
 
+    /// HTTP request deadline forwarded to workflow workers in milliseconds.
+    #[arg(long = "workflow-worker-request-timeout-ms", default_value_t = 30_000)]
+    pub workflow_worker_request_timeout_ms: u64,
+
+    /// Maximum stdout or stderr bytes retained by a workflow worker and its gateway supervisor.
+    #[arg(long = "workflow-worker-output-limit-bytes", default_value_t = 256 * 1024)]
+    pub workflow_worker_output_limit_bytes: usize,
+
     /// Optional static bearer token forwarded to workflow workers for gateway API access.
     #[arg(long = "workflow-worker-bearer-token")]
     pub workflow_worker_bearer_token: Option<String>,

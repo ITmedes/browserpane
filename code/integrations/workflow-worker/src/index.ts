@@ -29,6 +29,7 @@ async function main(): Promise<void> {
   const service = new WorkflowWorkerService({
     runId: requiredEnv("BPANE_WORKFLOW_RUN_ID"),
     workRoot: process.env.BPANE_WORKFLOW_WORK_ROOT ?? "/tmp/bpane-workflows",
+    maxOutputBytes: positiveIntegerEnv("BPANE_WORKER_MAX_OUTPUT_BYTES", 262_144),
     controlClient,
   });
 

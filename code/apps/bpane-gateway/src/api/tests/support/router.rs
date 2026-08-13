@@ -180,6 +180,8 @@ pub(crate) fn recording_lifecycle_test_config() -> RecordingWorkerConfig {
         connect_timeout: Duration::from_millis(100),
         poll_interval: Duration::from_millis(10),
         finalize_timeout: Duration::from_secs(1),
+        request_timeout: Duration::from_secs(1),
+        output_limit_bytes: 4096,
         bearer_token: Some("token".to_string()),
         oidc_token_url: None,
         oidc_client_id: None,
