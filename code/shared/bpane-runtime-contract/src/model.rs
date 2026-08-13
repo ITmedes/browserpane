@@ -313,6 +313,8 @@ pub enum StorageHelperAction {
     InitializeSessionData,
     /// Materialize approved session files.
     MaterializeSessionFiles,
+    /// Delete session-owned data storage after runtime release.
+    DeleteSessionData,
     /// Clone one inactive browser context into another.
     CloneBrowserContext,
     /// Export an inactive browser context.
@@ -414,6 +416,10 @@ impl StorageHelperRequest {
                     .ok_or(ContractErrorCode::InvalidOperationParameters)?
                     .validate()?;
                 require_payload(self.declared_payload_bytes)
+            }
+            StorageHelperAction::DeleteSessionData => {
+                require_storage_fields(self, true, false, false)?;
+                reject_payload(self.declared_payload_bytes)
             }
             StorageHelperAction::CloneBrowserContext => {
                 require_storage_fields(self, false, true, true)?;

@@ -2,7 +2,7 @@
 
 Issue: [#214 Implement a policy-validating runtime launch broker](https://github.com/ITmedes/browserpane/issues/214)
 
-Status: active; checkpoints 1 through 4 complete; checkpoint 5 slice 1 complete
+Status: active; checkpoints 1 through 4 complete; checkpoint 5 slices 1 and 2 complete
 
 ## Business Case
 
@@ -657,6 +657,78 @@ Slice 1 evidence:
   strict changed-crate Clippy/Rustdoc/formatting, repository documents, and
   dependency safety. Base Compose and user-visible behavior are unchanged, so
   README and ARCH do not require updates in this transport-only slice.
+
+Slice 2 acceptance:
+
+- the broker derives helper image, container and volume names, fixed mount
+  targets, file destinations, modes, commands, labels, and limits from trusted
+  configuration and typed BrowserPane identifiers only;
+- helper containers run without a network as the unprivileged `bpane` user,
+  drop all capabilities, use no-new-privileges and a read-only root filesystem,
+  and are force-removed after success, failure, or timeout;
+- reusable context volumes preserve the direct helper layout, archive format,
+  replacement semantics, ownership, permissions, and absent-volume behavior;
+- import validation rejects traversal, non-UTF-8, links, special entries,
+  excessive paths, entries, compressed bytes, and uncompressed bytes before
+  Docker receives the archive;
+- base Compose stays fail closed and the overlay enables the storage adapter
+  with the same immutable host image while gateway storage calls remain direct
+  until slice 3.
+
+Slice 2 example use case:
+
+An operator imports an inactive reusable context. The broker validates the
+bounded gzip/tar archive, derives the target context volume, removes only that
+owned target, and launches a short-lived network-disabled helper with the
+target mounted at the fixed `/run/bpane/storage-helper/target` path. Any
+malformed archive, unapproved path, helper failure, or timeout yields a
+sanitized error and removes partial helper state without exposing archive
+content or Docker diagnostics.
+
+Slice 2 smoke sequence:
+
+1. Unit-test every storage action, typed file destination, absent source,
+   immutable configuration, archive denial, derived volume, and helper security
+   invariant through a fake Docker boundary.
+2. Run broker API storage tests for authentication, exact transfers,
+   idempotency, correlation, malformed bodies, and sanitized adapter failures.
+3. Validate the overlay resolves one immutable host image for browser and
+   storage helpers and leaves base Compose fail closed.
+4. Run contract, client, broker, gateway, full workspace, strict Clippy,
+   Rustdoc, formatting, repository-document, and dependency checks.
+5. Start the opt-in broker overlay and run
+   `./scripts/smoke-runtime-broker-storage.sh`; verify the authenticated live
+   import, measure, clone, initialize, typed file write, digest-checked export,
+   session/context deletion, helper cleanup, and volume cleanup matrix.
+
+Slice 2 evidence:
+
+- `StorageRuntimeDockerAdapter` implements typed initialization,
+  materialization, clone, export, import, measurement, and session/context
+  deletion behind a narrow Bollard boundary; it accepts no Docker models or
+  paths from the HTTP contract.
+- Session writes use `SessionDataFileTarget`, so workspace bindings, manifests,
+  proxy authentication, and trusted CA data resolve only below fixed
+  broker-owned paths with broker-selected modes.
+- The helper policy enforces an immutable image, derived named volumes and
+  labels, fixed mounts and command, no network, dropped capabilities,
+  no-new-privileges, a read-only root, bounded tmpfs/resources/output, and
+  guaranteed container cleanup. Failed clone/import helpers also remove their
+  partial target volume.
+- Browser-context archives are validated with maintained gzip/tar libraries
+  before dispatch and the helper retains extraction-time defense in depth.
+- The opt-in overlay supplies the storage helper with the same immutable host
+  image as the browser adapter. README and ARCH describe that the adapter is
+  installed while gateway call-site migration remains slice 3.
+- The reusable live storage smoke passes all storage actions through the
+  authenticated broker route, verifies exported bytes and SHA-256 metadata,
+  and proves helper-container plus owned-volume cleanup. Input helpers consume
+  the exact broker-validated byte count, avoiding Docker attach EOF ambiguity.
+- Validation passed with 65 broker tests, 32 contract tests, 13 runtime-client
+  tests, 5 exact wire tests, all 447 gateway tests, the full Rust workspace,
+  strict changed-crate Clippy/Rustdoc/formatting, repository documents,
+  dependency safety, Compose/overlay policy checks, a release-image build, and
+  the authenticated live storage matrix.
 
 Manual checkpoint: clone/export/import a context, bind a workspace file, run a
 session, and verify storage usage and cleanup without gateway Docker access.

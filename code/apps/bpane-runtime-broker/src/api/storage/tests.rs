@@ -137,6 +137,14 @@ fn storage_request(action: StorageHelperAction, declared: Option<u64>) -> Runtim
             ),
             declared_payload_bytes: declared,
         },
+        StorageHelperAction::DeleteSessionData => StorageHelperRequest {
+            action,
+            session_id: Some(context_id),
+            source_context_id: None,
+            target_context_id: None,
+            file_target: None,
+            declared_payload_bytes: declared,
+        },
         _ => StorageHelperRequest {
             action,
             session_id: None,

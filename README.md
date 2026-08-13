@@ -272,7 +272,8 @@ The compose stack starts:
   opt-in broker overlay
 - `runtime-broker`: internal-only authenticated typed-operation boundary; its
   base configuration remains fail-closed, while the opt-in overlay enables
-  policy-owned Docker adapters for browser, workflow, and recording runtimes
+  policy-owned Docker adapters for browser, workflow, recording, and isolated
+  storage helpers
 - `postgres`: session-control database on `:5433`
 - `vault`: local HashiCorp Vault dev server on `:8200` for workflow credential bindings
 - `keycloak`: local OIDC provider on `:8091`
@@ -386,14 +387,20 @@ default topology, start the dedicated overlay:
 
 The wrapper builds the host, workflow-worker, and recording-worker images,
 resolves immutable image IDs, starts the broker with read-only browser and
-worker policy inputs, and selects `broker_pool` in the gateway. The gateway
-retains Docker-proxy access in this checkpoint for session-data,
-browser-context, and storage-helper operations that have not migrated yet.
+worker policy inputs plus the host image as its isolated storage-helper image,
+and selects `broker_pool` in the gateway. The storage adapter is available at
+the broker boundary, but the gateway retains Docker-proxy access in this
+checkpoint until its session-data and browser-context call sites migrate.
 Validate the overlay topology with:
 
 ```bash
 node scripts/validate-runtime-broker-browser-overlay.mjs
+./scripts/smoke-runtime-broker-storage.sh
 ```
+
+The storage smoke requires the running overlay and exercises authenticated
+context import/measure/clone/export/delete plus session-data initialization,
+typed materialization, digest verification, and helper/volume cleanup.
 
 Broker `/readyz` checks the selected adapter dependency without creating an
 audited runtime operation. Browser and worker lifecycle requests remain typed

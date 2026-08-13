@@ -76,6 +76,26 @@ pub(crate) struct RoutedRuntimeExecutor {
     workers: Arc<dyn RuntimeOperationExecutor>,
 }
 
+pub(crate) struct StorageRoutedRuntimeExecutor {
+    primary: Arc<dyn RuntimeOperationExecutor>,
+    storage: Arc<dyn RuntimeOperationExecutor>,
+}
+
+impl StorageRoutedRuntimeExecutor {
+    pub(crate) fn new(
+        primary: Arc<dyn RuntimeOperationExecutor>,
+        storage: Arc<dyn RuntimeOperationExecutor>,
+    ) -> Self {
+        Self { primary, storage }
+    }
+}
+
+impl std::fmt::Debug for StorageRoutedRuntimeExecutor {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("StorageRoutedRuntimeExecutor([REDACTED])")
+    }
+}
+
 impl RoutedRuntimeExecutor {
     pub(crate) fn new(
         browser: Arc<dyn RuntimeOperationExecutor>,
@@ -111,6 +131,33 @@ impl RuntimeOperationExecutor for RoutedRuntimeExecutor {
                 Err(ExecutionErrorCode::AdapterUnavailable.into())
             }
         }
+    }
+}
+
+#[async_trait]
+impl RuntimeOperationExecutor for StorageRoutedRuntimeExecutor {
+    async fn check_readiness(&self) -> Result<(), ExecutionError> {
+        self.primary.check_readiness().await?;
+        self.storage.check_readiness().await
+    }
+
+    async fn execute(
+        &self,
+        request: &RuntimeOperationRequest,
+    ) -> Result<RuntimeOperationResult, ExecutionError> {
+        if request.operation.kind() == RuntimeOperationKind::StorageHelper {
+            self.storage.execute(request).await
+        } else {
+            self.primary.execute(request).await
+        }
+    }
+
+    async fn execute_storage(
+        &self,
+        request: &RuntimeOperationRequest,
+        payload: Option<&[u8]>,
+    ) -> Result<StorageExecutionOutput, ExecutionError> {
+        self.storage.execute_storage(request, payload).await
     }
 }
 

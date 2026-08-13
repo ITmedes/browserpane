@@ -246,6 +246,10 @@ fn validates_storage_helper_field_combinations() {
             ..storage_request(StorageHelperAction::MaterializeSessionFiles)
         },
         StorageHelperRequest {
+            session_id: Some(session_id),
+            ..storage_request(StorageHelperAction::DeleteSessionData)
+        },
+        StorageHelperRequest {
             source_context_id: Some(source_id),
             target_context_id: Some(target_id),
             ..storage_request(StorageHelperAction::CloneBrowserContext)

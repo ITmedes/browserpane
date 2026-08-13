@@ -8,7 +8,7 @@ use clap::Parser;
 
 use crate::{
     BrokerApiSettings, BrowserAdapterSettings, LedgerConfig, OidcAuthenticatorConfig,
-    RuntimeExecutorMode, WorkerAdapterSettings,
+    RuntimeExecutorMode, StorageAdapterSettings, WorkerAdapterSettings,
 };
 
 const MAX_REQUEST_LIMIT_BYTES: usize = 1_048_576;
@@ -176,6 +176,37 @@ pub struct BrokerConfig {
     /// Read-only OIDC client secret used by approved worker containers.
     #[arg(long, env = "BPANE_RUNTIME_BROKER_WORKER_OIDC_CLIENT_SECRET_FILE")]
     pub worker_oidc_client_secret_file: Option<PathBuf>,
+    /// Immutable storage-helper image reference used only by broker policy.
+    #[arg(long, env = "BPANE_RUNTIME_BROKER_STORAGE_HELPER_IMAGE")]
+    pub storage_helper_image: Option<String>,
+    /// Prefix for short-lived broker-owned storage-helper containers.
+    #[arg(
+        long,
+        env = "BPANE_RUNTIME_BROKER_STORAGE_HELPER_CONTAINER_PREFIX",
+        default_value = "bpane-storage-helper"
+    )]
+    pub storage_helper_container_prefix: String,
+    /// Maximum entries accepted in one browser-context import archive.
+    #[arg(
+        long,
+        env = "BPANE_RUNTIME_BROKER_STORAGE_MAX_ARCHIVE_ENTRIES",
+        default_value_t = 100_000
+    )]
+    pub storage_max_archive_entries: usize,
+    /// Maximum UTF-8 path bytes accepted for one archive entry.
+    #[arg(
+        long,
+        env = "BPANE_RUNTIME_BROKER_STORAGE_MAX_ARCHIVE_PATH_BYTES",
+        default_value_t = 4_096
+    )]
+    pub storage_max_archive_path_bytes: usize,
+    /// Maximum aggregate uncompressed bytes accepted during context import.
+    #[arg(
+        long,
+        env = "BPANE_RUNTIME_BROKER_STORAGE_MAX_ARCHIVE_UNCOMPRESSED_BYTES",
+        default_value_t = 4_294_967_296_u64
+    )]
+    pub storage_max_archive_uncompressed_bytes: u64,
 }
 
 impl BrokerConfig {
@@ -265,6 +296,19 @@ impl BrokerConfig {
             oidc_client_secret_file: self.worker_oidc_client_secret_file.clone(),
         }
     }
+
+    pub fn storage_adapter_settings(&self) -> StorageAdapterSettings {
+        StorageAdapterSettings {
+            image: self.storage_helper_image.clone(),
+            session_data_volume_prefix: self.session_data_volume_prefix.clone(),
+            browser_context_volume_prefix: self.browser_context_volume_prefix.clone(),
+            container_name_prefix: self.storage_helper_container_prefix.clone(),
+            max_payload_bytes: self.max_storage_payload_bytes,
+            max_archive_entries: self.storage_max_archive_entries,
+            max_archive_path_bytes: self.storage_max_archive_path_bytes,
+            max_archive_uncompressed_bytes: self.storage_max_archive_uncompressed_bytes,
+        }
+    }
 }
 
 fn nonzero_usize(value: usize, name: &str) -> anyhow::Result<NonZeroUsize> {
@@ -312,6 +356,11 @@ mod tests {
             workflow_image: None,
             recording_image: None,
             worker_oidc_client_secret_file: None,
+            storage_helper_image: None,
+            storage_helper_container_prefix: "bpane-storage-helper".to_string(),
+            storage_max_archive_entries: 100_000,
+            storage_max_archive_path_bytes: 4_096,
+            storage_max_archive_uncompressed_bytes: 4_294_967_296,
         }
     }
 

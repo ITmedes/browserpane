@@ -14,6 +14,8 @@ services:
       BPANE_RUNTIME_BROKER_WORKER_CONFIG_FILE: /runtime-config/workers.json
       BPANE_RUNTIME_BROKER_WORKFLOW_IMAGE: ${BPANE_RUNTIME_BROKER_WORKFLOW_IMAGE:?set to an immutable repository digest or Docker image id}
       BPANE_RUNTIME_BROKER_RECORDING_IMAGE: ${BPANE_RUNTIME_BROKER_RECORDING_IMAGE:?set to an immutable repository digest or Docker image id}
+      BPANE_RUNTIME_BROKER_STORAGE_HELPER_IMAGE: ${BPANE_RUNTIME_BROKER_STORAGE_HELPER_IMAGE:?set to an immutable repository digest or Docker image id}
+      BPANE_RUNTIME_BROKER_STORAGE_HELPER_CONTAINER_PREFIX: bpane-storage-helper
       BPANE_RUNTIME_BROKER_WORKER_OIDC_CLIENT_SECRET_FILE: /run/secrets/worker-oidc-client-secret
     volumes:
       - ./runtime-broker/extensions.json:/runtime-config/extensions.json:ro

@@ -20,6 +20,8 @@ anyhow.workspace = true
 async-trait = "0.1"
 axum = { version = "0.8", features = ["multipart"] }
 bollard.workspace = true
+flate2 = "1"
+futures-util = "0.3"
 clap = { version = "4", features = ["derive", "env"] }
 hex = "0.4"
 jsonwebtoken = { version = "9", features = ["use_pem"] }
@@ -29,6 +31,7 @@ serde_json = "1"
 sha2 = "0.10"
 thiserror.workspace = true
 tokio.workspace = true
+tar = "0.4"
 tower = { version = "0.5", features = ["util"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true
