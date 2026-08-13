@@ -24,11 +24,12 @@ privileged-mode fields inside a container-create request.
 An operator runs BrowserPane on a dedicated Docker host for a controlled pilot.
 The gateway can create and stop BrowserPane browser, workflow, and recording
 containers through an internal-only Docker API proxy, but it cannot call unrelated
-daemon APIs such as system administration, builds, swarm, secrets, or host-wide
-container listing. The raw socket is mounted only into the proxy. The deployment
+daemon APIs such as system administration, builds, swarm, secrets, services, or
+plugins. The raw socket is mounted only into the proxy. The deployment
 documentation makes clear that a purpose-specific launch broker or orchestrator
 adapter is still required when the gateway itself is inside the production threat
-boundary.
+boundary. That stronger boundary must also constrain resource visibility and
+validate the content of permitted container and volume requests.
 
 ## Decision
 
@@ -94,6 +95,8 @@ work; it does not replace the immediate compose hardening needed here.
 - Prove required readiness and scoped lifecycle endpoints remain reachable.
 - Prove unrelated build, image mutation, system, swarm, secret, service, node,
   plugin, and broad host administration endpoints are denied.
+- Record that the required container and volume API families remain broad enough
+  to list unrelated resources and accept caller-supplied launch fields.
 - Fail validation if the gateway regains a direct socket mount or the proxy gains a
   published host port.
 
