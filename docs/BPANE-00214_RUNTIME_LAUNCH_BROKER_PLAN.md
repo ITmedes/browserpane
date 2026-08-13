@@ -2,7 +2,7 @@
 
 Issue: [#214 Implement a policy-validating runtime launch broker](https://github.com/ITmedes/browserpane/issues/214)
 
-Status: active; checkpoint 1 in progress
+Status: active; checkpoints 1 and 2 complete; checkpoint 3 next
 
 ## Business Case
 
@@ -148,6 +148,16 @@ The broker policy must validate or derive all of the following:
 Manual checkpoint: run contract tests and inspect representative accepted and
 denied policy decisions. Existing compose behavior must remain unchanged.
 
+Completed evidence:
+
+- `bpane-runtime-contract` provides all four typed operation families, stable
+  versioned wire resources, bounded redacted secrets, and deny-by-default
+  launch/lifecycle policy without Docker request models.
+- 25 contract unit tests and 2 wire/golden tests cover accepted policy plus
+  image, mount, network, environment, label, privilege, resource, lifecycle,
+  malformed identifier, unknown-field, and redaction denials.
+- Commits: `bf0aee0f`, `13957bdd`.
+
 ### 2. Authenticated Broker Foundation
 
 - Add the broker binary with liveness/readiness and bounded JSON request handling.
@@ -159,6 +169,25 @@ denied policy decisions. Existing compose behavior must remain unchanged.
 
 Manual checkpoint: validate health, valid authentication, expired/wrong-audience
 credentials, replay denial, malformed/oversized bodies, overload, and redaction.
+
+Completed evidence:
+
+- `bpane-runtime-broker` exposes bounded health and versioned operation routes,
+  validates asymmetric OIDC/JWKS service credentials, enforces audience/client
+  identity, and provides bounded idempotency, replay, timeout, and concurrency
+  behavior. Its adapter remains intentionally fail-closed.
+- `bpane-runtime-client` uses the maintained `oauth2` client-credentials flow,
+  redirect-disabled HTTP clients, short-lived token caching, typed requests,
+  strict deadlines, response bounds, media-type validation, and sanitized
+  errors. It is not connected to the gateway runtime path until checkpoint 3.
+- Compose places the broker on isolated gateway API and Keycloak auth networks
+  with no host port, Docker network/socket, capabilities, writable root, or
+  additional network peers. The current gateway-to-proxy path remains active.
+- 17 broker tests, 8 client tests, 4 topology-contract tests, full Rust workspace
+  tests, strict changed-crate Clippy/Rustdoc/formatting, Dockerfile checks,
+  repository document validation, and the live Keycloak authentication/denial
+  smoke pass.
+- Commits: `8aaad7c6`, `61ec3dd2`.
 
 ### 3. Browser Runtime Migration
 
