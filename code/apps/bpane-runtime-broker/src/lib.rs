@@ -8,6 +8,7 @@
 
 mod api;
 mod auth;
+mod browser_adapter_config;
 mod config;
 mod docker_browser;
 mod executor;
@@ -18,6 +19,7 @@ pub use auth::{
     AuthenticationError, AuthenticationErrorCode, BrokerAuthenticator, OidcAuthenticatorConfig,
     OidcBrokerAuthenticator, ServicePrincipal,
 };
+pub use browser_adapter_config::{BrowserAdapterSettings, RuntimeExecutorMode};
 pub use config::BrokerConfig;
 pub use docker_browser::{
     BrowserRuntimeDockerAdapter, BrowserRuntimeDockerConfig, BrowserRuntimeExtensionConfig,

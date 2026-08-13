@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use bpane_runtime_broker::{
     build_router, BrokerConfig, BrokerState, OidcBrokerAuthenticator, OperationLedger,
-    RejectingRuntimeExecutor,
 };
 use clap::Parser;
 use tracing_subscriber::EnvFilter;
@@ -18,10 +17,11 @@ async fn main() -> anyhow::Result<()> {
 
     let config = BrokerConfig::parse();
     let (api_settings, ledger_config, oidc_config) = config.validated()?;
+    let executor = config.browser_adapter_settings().build_executor()?;
     let authenticator = Arc::new(OidcBrokerAuthenticator::new(oidc_config).await?);
     let state = BrokerState::new(
         authenticator,
-        Arc::new(RejectingRuntimeExecutor),
+        executor,
         Arc::new(OperationLedger::new(ledger_config)),
         api_settings,
     );
