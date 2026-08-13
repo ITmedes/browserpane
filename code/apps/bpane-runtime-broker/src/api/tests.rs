@@ -5,8 +5,8 @@ use async_trait::async_trait;
 use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use bpane_runtime_contract::{
-    BrokerApiVersion, BrowserRuntimeLaunchRequest, IdempotencyKey, RuntimeOperation,
-    RuntimeOperationRequest, RuntimeOperationResult,
+    BrokerApiVersion, BrowserNetworkIdentity, BrowserRuntimeFeatures, BrowserRuntimeLaunchRequest,
+    IdempotencyKey, RuntimeOperation, RuntimeOperationRequest, RuntimeOperationResult,
 };
 use serde_json::{json, Value};
 use tokio::sync::Notify;
@@ -235,11 +235,36 @@ async fn rejects_malformed_oversized_and_semantically_invalid_requests() {
 
     let mut invalid = operation_request();
     invalid.request_id = Uuid::nil();
-    let response = app.oneshot(post(&invalid, Some("valid"))).await.unwrap();
+    let response = app
+        .clone()
+        .oneshot(post(&invalid, Some("valid")))
+        .await
+        .unwrap();
     assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
     assert_eq!(
         response_json(response).await["error"]["code"],
         "invalid_resource_id"
+    );
+
+    let mut invalid_feature = operation_request();
+    let RuntimeOperation::LaunchBrowser(browser) = &mut invalid_feature.operation else {
+        panic!("test request must launch a browser");
+    };
+    browser.features = BrowserRuntimeFeatures {
+        network_identity: BrowserNetworkIdentity {
+            timezone: Some("../etc/passwd".to_string()),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let response = app
+        .oneshot(post(&invalid_feature, Some("valid")))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        response_json(response).await["error"]["code"],
+        "invalid_operation_parameters"
     );
 }
 

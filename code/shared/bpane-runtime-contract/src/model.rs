@@ -315,15 +315,26 @@ impl BrowserNetworkIdentity {
     }
 
     fn validate(&self) -> Result<(), ContractViolation> {
-        validate_optional_text(&self.locale, 64)?;
-        validate_optional_text(&self.timezone, 128)?;
+        if self
+            .locale
+            .as_deref()
+            .is_some_and(|value| !is_locale(value))
+            || self
+                .timezone
+                .as_deref()
+                .is_some_and(|value| !is_timezone(value))
+        {
+            return Err(ContractErrorCode::InvalidOperationParameters.into());
+        }
         validate_optional_text(&self.user_agent, 1_024)?;
         validate_optional_text(&self.browser_identity, 128)?;
         if self.languages.len() > 16 {
             return Err(ContractErrorCode::InvalidOperationParameters.into());
         }
         for language in &self.languages {
-            validate_text(language, 64)?;
+            if !is_locale(language) {
+                return Err(ContractErrorCode::InvalidOperationParameters.into());
+            }
         }
         if let Some(geolocation) = &self.geolocation {
             geolocation.validate()?;
@@ -350,7 +361,9 @@ impl BrowserGeolocation {
     fn validate(&self) -> Result<(), ContractViolation> {
         if !(-900_000_000..=900_000_000).contains(&self.latitude_e7)
             || !(-1_800_000_000..=1_800_000_000).contains(&self.longitude_e7)
-            || self.accuracy_mm.is_some_and(|value| value > 100_000_000)
+            || self
+                .accuracy_mm
+                .is_some_and(|value| value == 0 || value > 100_000_000)
         {
             return Err(ContractErrorCode::InvalidOperationParameters.into());
         }
@@ -440,7 +453,7 @@ impl BrowserEgressSelection {
             && (self.proxy.is_none()
                 || self.custom_ca.is_none()
                 || !self.sensitive_log_sink_configured))
-            || (!intercepting && (self.custom_ca.is_some() || self.sensitive_log_sink_configured))
+            || (!intercepting && self.custom_ca.is_some())
         {
             return Err(ContractErrorCode::InvalidOperationParameters.into());
         }
@@ -664,7 +677,7 @@ fn validate_proxy_url(value: &str) -> Result<(), ContractViolation> {
     }
     let parsed = Url::parse(value)
         .map_err(|_| ContractViolation::from(ContractErrorCode::InvalidOperationParameters))?;
-    let valid_scheme = matches!(parsed.scheme(), "http" | "https" | "socks4" | "socks5");
+    let valid_scheme = matches!(parsed.scheme(), "http" | "https");
     let valid_path = parsed.path().is_empty() || parsed.path() == "/";
     if !valid_scheme
         || parsed.host_str().is_none()
@@ -681,6 +694,27 @@ fn validate_proxy_url(value: &str) -> Result<(), ContractViolation> {
 
 fn is_false(value: &bool) -> bool {
     !value
+}
+
+fn is_locale(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 64
+        && value
+            .split('-')
+            .all(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_alphanumeric()))
+}
+
+fn is_timezone(value: &str) -> bool {
+    value == "UTC"
+        || (!value.is_empty()
+            && value.len() <= 128
+            && !value.starts_with('/')
+            && !value.ends_with('/')
+            && !value.contains("..")
+            && value.contains('/')
+            && value.bytes().all(|byte| {
+                byte.is_ascii_alphanumeric() || matches!(byte, b'/' | b'_' | b'-' | b'+')
+            }))
 }
 
 /// Owned-container lifecycle actions.

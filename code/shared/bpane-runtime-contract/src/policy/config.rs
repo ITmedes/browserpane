@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use thiserror::Error;
 
@@ -112,7 +112,9 @@ fn validate_launch_policy(policy: &ContainerLaunchPolicy) -> Result<(), PolicyCo
     {
         return Err(PolicyConfigurationErrorCode::InvalidEnvironmentKey.into());
     }
-    if !has_safe_static_labels(&policy.static_labels) {
+    if !has_safe_static_labels(&policy.static_labels)
+        || !has_safe_derived_label_keys(&policy.derived_label_keys, &policy.static_labels)
+    {
         return Err(PolicyConfigurationErrorCode::InvalidLabels.into());
     }
     if !has_safe_entrypoint(&policy.entrypoint) {
@@ -205,6 +207,25 @@ fn has_safe_static_labels(labels: &BTreeMap<String, String>) -> bool {
             && !value
                 .bytes()
                 .any(|byte| byte == 0 || byte.is_ascii_control())
+    })
+}
+
+fn has_safe_derived_label_keys(
+    keys: &BTreeSet<String>,
+    static_labels: &BTreeMap<String, String>,
+) -> bool {
+    const RESERVED: [&str; 2] = [
+        "browserpane.runtime.operation",
+        "browserpane.runtime.resource_id",
+    ];
+    keys.iter().all(|key| {
+        !RESERVED.contains(&key.as_str())
+            && !static_labels.contains_key(key)
+            && !key.is_empty()
+            && key.len() <= 128
+            && key.bytes().all(|byte| {
+                byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-' | b'/')
+            })
     })
 }
 

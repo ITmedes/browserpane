@@ -97,6 +97,25 @@ fn validates_typed_browser_feature_selections() {
     ));
 
     valid.validate().unwrap();
+
+    let metadata_with_sink = request(RuntimeOperation::LaunchBrowser(
+        BrowserRuntimeLaunchRequest {
+            session_id: Uuid::now_v7(),
+            browser_context_id: None,
+            features: BrowserRuntimeFeatures {
+                egress: Some(BrowserEgressSelection {
+                    profile_id: Uuid::now_v7(),
+                    proxy: None,
+                    bypass_rules: Vec::new(),
+                    observation_mode: BrowserEgressObservationMode::MetadataOnly,
+                    custom_ca: None,
+                    sensitive_log_sink_configured: true,
+                }),
+                ..Default::default()
+            },
+        },
+    ));
+    metadata_with_sink.validate().unwrap();
 }
 
 #[test]
@@ -117,6 +136,20 @@ fn rejects_invalid_browser_feature_values_and_combinations() {
         },
         BrowserRuntimeFeatures {
             network_identity: BrowserNetworkIdentity {
+                locale: Some("de_DE".to_string()),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        BrowserRuntimeFeatures {
+            network_identity: BrowserNetworkIdentity {
+                timezone: Some("../etc/passwd".to_string()),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        BrowserRuntimeFeatures {
+            network_identity: BrowserNetworkIdentity {
                 geolocation: Some(BrowserGeolocation {
                     latitude_e7: 900_000_001,
                     longitude_e7: 0,
@@ -124,6 +157,20 @@ fn rejects_invalid_browser_feature_values_and_combinations() {
                 }),
                 ..Default::default()
             },
+            ..Default::default()
+        },
+        BrowserRuntimeFeatures {
+            egress: Some(BrowserEgressSelection {
+                profile_id: Uuid::now_v7(),
+                proxy: Some(BrowserProxySelection {
+                    url: "socks5://proxy.internal:1080".to_string(),
+                    authentication: None,
+                }),
+                bypass_rules: Vec::new(),
+                observation_mode: BrowserEgressObservationMode::MetadataOnly,
+                custom_ca: None,
+                sensitive_log_sink_configured: false,
+            }),
             ..Default::default()
         },
         BrowserRuntimeFeatures {

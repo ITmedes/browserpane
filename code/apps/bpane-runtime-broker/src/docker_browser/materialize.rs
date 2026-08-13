@@ -2,8 +2,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use bollard::models::{ContainerCreateBody, HostConfig, Mount, MountType};
 use bpane_runtime_contract::{
-    BrowserRuntimeLaunchRequest, ContainerLaunchSpec, ContainerMount, ContainerSecurity,
-    MountSource, RuntimeOperationKind,
+    BrowserEgressObservationMode, BrowserRuntimeLaunchRequest, ContainerLaunchSpec, ContainerMount,
+    ContainerSecurity, MountSource, RuntimeOperationKind,
 };
 
 use super::BrowserRuntimeDockerConfig;
@@ -18,7 +18,7 @@ impl MaterializedBrowserLaunch {
     pub(super) fn new(
         config: &BrowserRuntimeDockerConfig,
         request: &BrowserRuntimeLaunchRequest,
-    ) -> Self {
+    ) -> Result<Self, &'static str> {
         let container_name = config.container_name(request.session_id);
         let mut mounts = vec![
             mount(&config.socket_volume, &config.socket_mount_root),
@@ -35,8 +35,8 @@ impl MaterializedBrowserLaunch {
                 &config.profile_dir(),
             ));
         }
-        let environment = environment(config, request.session_id);
-        let labels = BTreeMap::from([
+        let environment = environment(config, request)?;
+        let mut labels = BTreeMap::from([
             (
                 "browserpane.runtime.operation".to_string(),
                 "browser_runtime".to_string(),
@@ -46,6 +46,7 @@ impl MaterializedBrowserLaunch {
                 request.session_id.to_string(),
             ),
         ]);
+        add_egress_labels(&mut labels, request);
         let policy_spec = ContainerLaunchSpec {
             operation_kind: RuntimeOperationKind::BrowserRuntime,
             resource_id: request.session_id,
@@ -101,11 +102,11 @@ impl MaterializedBrowserLaunch {
             host_config: Some(host_config),
             ..Default::default()
         };
-        Self {
+        Ok(Self {
             container_name,
             policy_spec,
             container,
-        }
+        })
     }
 }
 
@@ -119,8 +120,12 @@ fn mount(source: &str, target: &str) -> Mount {
     }
 }
 
-fn environment(config: &BrowserRuntimeDockerConfig, session_id: uuid::Uuid) -> Vec<String> {
-    vec![
+fn environment(
+    config: &BrowserRuntimeDockerConfig,
+    request: &BrowserRuntimeLaunchRequest,
+) -> Result<Vec<String>, &'static str> {
+    let session_id = request.session_id;
+    let mut environment = vec![
         format!("BPANE_SESSION_ID={session_id}"),
         format!("BPANE_SOCKET_PATH={}", config.socket_path(session_id)),
         format!("BPANE_SESSION_DATA_DIR={}", config.session_data_root),
@@ -135,5 +140,153 @@ fn environment(config: &BrowserRuntimeDockerConfig, session_id: uuid::Uuid) -> V
             "BPANE_SESSION_FILE_BINDINGS_MANIFEST={}",
             config.session_file_manifest()
         ),
-    ]
+    ];
+    let identity = &request.features.network_identity;
+    if let Some(locale) = &identity.locale {
+        let posix_locale = posix_locale(locale);
+        push_env(&mut environment, "LANG", &posix_locale);
+        push_env(&mut environment, "LC_ALL", &posix_locale);
+        push_env(&mut environment, "BPANE_CHROMIUM_LANG", locale);
+        if identity.languages.is_empty() {
+            push_env(&mut environment, "BPANE_CHROMIUM_ACCEPT_LANG", locale);
+        }
+    }
+    if !identity.languages.is_empty() {
+        push_env(&mut environment, "LANGUAGE", &identity.languages.join(":"));
+        push_env(
+            &mut environment,
+            "BPANE_CHROMIUM_ACCEPT_LANG",
+            &identity.languages.join(","),
+        );
+    }
+    if let Some(timezone) = &identity.timezone {
+        push_env(&mut environment, "TZ", timezone);
+    }
+    if let Some(geolocation) = &identity.geolocation {
+        let value = serde_json::json!({
+            "latitude": f64::from(geolocation.latitude_e7) / 10_000_000.0,
+            "longitude": f64::from(geolocation.longitude_e7) / 10_000_000.0,
+            "accuracy_meters": geolocation.accuracy_mm.map(|value| f64::from(value) / 1_000.0),
+        });
+        push_env(
+            &mut environment,
+            "BPANE_SESSION_GEOLOCATION",
+            &value.to_string(),
+        );
+    }
+    if let Some(user_agent) = &identity.user_agent {
+        push_env(&mut environment, "BPANE_CHROMIUM_USER_AGENT", user_agent);
+    }
+    if let Some(browser_identity) = &identity.browser_identity {
+        push_env(&mut environment, "BPANE_BROWSER_IDENTITY", browser_identity);
+    }
+    if let Some(egress) = &request.features.egress {
+        push_env(
+            &mut environment,
+            "BPANE_EGRESS_PROFILE_ID",
+            &egress.profile_id.to_string(),
+        );
+        push_env(
+            &mut environment,
+            "BPANE_EGRESS_OBSERVATION_MODE",
+            egress.observation_mode.as_str(),
+        );
+        if let Some(proxy) = &egress.proxy {
+            push_env(&mut environment, "BPANE_CHROMIUM_PROXY_SERVER", &proxy.url);
+            if proxy.authentication.is_some() {
+                push_env(
+                    &mut environment,
+                    "BPANE_CHROMIUM_PROXY_AUTH_FILE",
+                    &config.proxy_auth_path(),
+                );
+                push_env(&mut environment, "BPANE_URL", "about:blank");
+            }
+        }
+        if !egress.bypass_rules.is_empty() {
+            push_env(
+                &mut environment,
+                "BPANE_CHROMIUM_PROXY_BYPASS_LIST",
+                &egress.bypass_rules.join(";"),
+            );
+        }
+        if egress.custom_ca.is_some() {
+            push_env(
+                &mut environment,
+                "BPANE_CHROMIUM_TRUSTED_CA_BUNDLE",
+                &config.trusted_ca_path(),
+            );
+            push_env(
+                &mut environment,
+                "BPANE_CHROMIUM_TRUSTED_CA_NAME",
+                "BrowserPane Egress Interception CA",
+            );
+        }
+    }
+    let extension_dirs = config.extension_dirs(&request.features.extension_version_ids)?;
+    if !extension_dirs.is_empty() {
+        push_env(
+            &mut environment,
+            "BPANE_EXTENSION_DIRS",
+            &extension_dirs.join(","),
+        );
+    }
+    Ok(environment)
+}
+
+fn add_egress_labels(labels: &mut BTreeMap<String, String>, request: &BrowserRuntimeLaunchRequest) {
+    let Some(egress) = &request.features.egress else {
+        return;
+    };
+    let tls_interception = egress.observation_mode == BrowserEgressObservationMode::TlsIntercept;
+    labels.extend([
+        (
+            "browserpane.egress_profile_id".to_string(),
+            egress.profile_id.to_string(),
+        ),
+        (
+            "browserpane.egress_observation_mode".to_string(),
+            egress.observation_mode.as_str().to_string(),
+        ),
+        (
+            "browserpane.egress_proxy_configured".to_string(),
+            egress.proxy.is_some().to_string(),
+        ),
+        (
+            "browserpane.egress_proxy_auth_configured".to_string(),
+            egress
+                .proxy
+                .as_ref()
+                .is_some_and(|proxy| proxy.authentication.is_some())
+                .to_string(),
+        ),
+        (
+            "browserpane.egress_bypass_rule_count".to_string(),
+            egress.bypass_rules.len().to_string(),
+        ),
+        (
+            "browserpane.egress_custom_ca_configured".to_string(),
+            egress.custom_ca.is_some().to_string(),
+        ),
+        (
+            "browserpane.egress_tls_interception_enabled".to_string(),
+            tls_interception.to_string(),
+        ),
+        (
+            "browserpane.egress_sensitive_log_sink_configured".to_string(),
+            egress.sensitive_log_sink_configured.to_string(),
+        ),
+    ]);
+}
+
+fn push_env(environment: &mut Vec<String>, key: &str, value: &str) {
+    environment.push(format!("{key}={value}"));
+}
+
+fn posix_locale(locale: &str) -> String {
+    let normalized = locale.replace('-', "_");
+    if normalized.contains('.') {
+        normalized
+    } else {
+        format!("{normalized}.UTF-8")
+    }
 }

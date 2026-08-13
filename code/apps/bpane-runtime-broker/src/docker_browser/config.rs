@@ -6,6 +6,15 @@ use bpane_runtime_contract::{
     RuntimeBrokerPolicy, RuntimeOperationKind, VolumeLifecycleAction,
 };
 
+/// Trusted extension version registered with the runtime broker.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct BrowserRuntimeExtensionConfig {
+    /// Control-plane extension version identifier accepted on the wire.
+    pub extension_version_id: uuid::Uuid,
+    /// Fixed install directory supplied only by trusted broker configuration.
+    pub install_path: String,
+}
+
 /// Trusted broker configuration for browser runtime containers.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct BrowserRuntimeDockerConfig {
@@ -33,6 +42,8 @@ pub struct BrowserRuntimeDockerConfig {
     pub seccomp_profile: String,
     /// Enforced browser runtime resource bounds.
     pub resources: ResourceLimits,
+    /// Trusted mapping from approved extension versions to install paths.
+    pub extensions: BTreeMap<uuid::Uuid, BrowserRuntimeExtensionConfig>,
 }
 
 impl BrowserRuntimeDockerConfig {
@@ -50,6 +61,12 @@ impl BrowserRuntimeDockerConfig {
             || self.session_data_volume_prefix.ends_with('-')
             || self.browser_context_volume_prefix.ends_with('-')
             || self.session_data_volume_prefix == self.browser_context_volume_prefix
+            || self.extensions.iter().any(|(id, extension)| {
+                id.is_nil()
+                    || extension.extension_version_id != *id
+                    || !is_safe_container_path(&extension.install_path)
+                    || extension.install_path.contains(',')
+            })
         {
             return Err("browser runtime Docker configuration is invalid");
         }
@@ -61,6 +78,7 @@ impl BrowserRuntimeDockerConfig {
         let environment_keys = self
             .base_environment_keys()
             .into_iter()
+            .chain(self.feature_environment_keys())
             .map(str::to_string)
             .collect();
         let launch = ContainerLaunchPolicy {
@@ -76,6 +94,11 @@ impl BrowserRuntimeDockerConfig {
             require_read_only_mounts: false,
             environment_keys,
             static_labels: BTreeMap::new(),
+            derived_label_keys: self
+                .egress_label_keys()
+                .into_iter()
+                .map(str::to_string)
+                .collect(),
             entrypoint: self.command.clone(),
             added_capabilities: BTreeSet::new(),
             seccomp_profiles: BTreeSet::from([self.seccomp_profile.clone()]),
@@ -159,6 +182,68 @@ impl BrowserRuntimeDockerConfig {
             "BPANE_SESSION_FILE_MOUNTS_DIR",
             "BPANE_SESSION_FILE_BINDINGS_MANIFEST",
         ]
+    }
+
+    pub(super) fn feature_environment_keys(&self) -> [&'static str; 19] {
+        [
+            "LANG",
+            "LC_ALL",
+            "LANGUAGE",
+            "TZ",
+            "BPANE_CHROMIUM_LANG",
+            "BPANE_CHROMIUM_ACCEPT_LANG",
+            "BPANE_SESSION_GEOLOCATION",
+            "BPANE_CHROMIUM_USER_AGENT",
+            "BPANE_BROWSER_IDENTITY",
+            "BPANE_EGRESS_PROFILE_ID",
+            "BPANE_EGRESS_OBSERVATION_MODE",
+            "BPANE_CHROMIUM_PROXY_SERVER",
+            "BPANE_CHROMIUM_PROXY_AUTH_FILE",
+            "BPANE_CHROMIUM_PROXY_BYPASS_LIST",
+            "BPANE_CHROMIUM_TRUSTED_CA_BUNDLE",
+            "BPANE_CHROMIUM_TRUSTED_CA_NAME",
+            "BPANE_EXTENSION_DIRS",
+            "BPANE_URL",
+            "BPANE_SESSION_FILE_BINDINGS_READY",
+        ]
+    }
+
+    pub(super) fn egress_label_keys(&self) -> [&'static str; 8] {
+        [
+            "browserpane.egress_profile_id",
+            "browserpane.egress_observation_mode",
+            "browserpane.egress_proxy_configured",
+            "browserpane.egress_proxy_auth_configured",
+            "browserpane.egress_bypass_rule_count",
+            "browserpane.egress_custom_ca_configured",
+            "browserpane.egress_tls_interception_enabled",
+            "browserpane.egress_sensitive_log_sink_configured",
+        ]
+    }
+
+    pub(super) fn extension_dirs(&self, ids: &[uuid::Uuid]) -> Result<Vec<String>, &'static str> {
+        ids.iter()
+            .map(|id| {
+                self.extensions
+                    .get(id)
+                    .map(|extension| extension.install_path.clone())
+                    .ok_or("browser runtime extension is not approved by broker configuration")
+            })
+            .collect()
+    }
+
+    pub(super) fn proxy_auth_path(&self) -> String {
+        format!(
+            "{}/egress/proxy-auth.json",
+            self.session_data_root.trim_end_matches('/')
+        )
+    }
+
+    pub(super) fn trusted_ca_path(&self) -> String {
+        format!(
+            "{}/egress/custom-ca.pem",
+            self.session_data_root.trim_end_matches('/')
+        )
     }
 
     pub(super) fn lifecycle_target(
