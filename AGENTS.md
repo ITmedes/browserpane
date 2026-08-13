@@ -108,7 +108,7 @@ Current product shape:
     repeatable exact-origin deployment configuration.
   - `workflow/observability.rs`: gateway-local counters/timestamps for workflow event delivery, produced-file uploads, and workflow retention passes.
   - `workflow/retention.rs`: periodic cleanup of retained workflow logs and structured outputs after the configured workflow retention windows expire.
-  - `runtime_manager.rs`: current `SessionManager` backend implementation; supports `static_single`, `docker_single`, and `docker_pool`. Local compose defaults to `docker_pool` for browser-session testing. Docker-backed workers carry a session id plus explicit session data paths for Chromium profile, uploads, and downloads. Reusable browser contexts mount a context-scoped Chromium profile volume while keeping upload/download/session-file data session-scoped, and the runtime admits only one active writer per reusable context. Docker-backed browser-context cloning, export, and import package profile volume data through the session manager boundary. Docker runtime assignments are persisted/reconciled through Postgres on gateway restart.
+  - `runtime_manager.rs`: current `SessionManager` backend implementation; supports `static_single`, `docker_single`, `docker_pool`, and opt-in `broker_pool`. Local compose defaults to `docker_pool` for browser-session testing. `broker_pool` preserves the Docker pool state machine but routes browser launch/inspect/stop through the authenticated runtime broker; storage helpers remain gateway-managed during migration. Docker-backed workers carry a session id plus explicit session data paths for Chromium profile, uploads, and downloads. Reusable browser contexts mount a context-scoped Chromium profile volume while keeping upload/download/session-file data session-scoped, and the runtime admits only one active writer per reusable context. Docker-backed browser-context cloning, export, and import package profile volume data through the session manager boundary. Docker runtime assignments are persisted/reconciled through Postgres on gateway restart.
   - `runtime_manager/docker/container.rs`: docker runtime launch argument materialization, including safe egress observer labels, startup audit logs for correlating proxy access logs back to BrowserPane sessions, and TLS-interception CA bundle materialization for docker-backed runtimes.
   - `session_access/`: purpose-separated v2 HMAC credentials for browser
     connect, automation, and admin-event access. Cross-purpose replay is
@@ -125,8 +125,9 @@ Current product shape:
   - `docker_browser/`: broker-owned browser container materialization and
     launch/inspect/stop/remove adapter built on Bollard. It derives names,
     volumes, environment, labels, network, security, and resource bounds from
-    trusted policy plus typed resource ids. The service does not enable this
-    adapter until browser feature parity and gateway opt-in wiring are complete.
+    trusted policy plus typed resource ids. Base Compose keeps this adapter
+    disabled; `deploy/compose.runtime-broker.yml` enables it together with the
+    gateway's opt-in `broker_pool` backend.
 - `code/shared/bpane-runtime-contract`
   - Versioned typed runtime operations, redacted secret values, sanitized audit
     resources, and deny-by-default launch and lifecycle policy.

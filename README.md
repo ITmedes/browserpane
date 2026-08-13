@@ -269,8 +269,8 @@ The compose stack starts:
 - `gateway`: WebTransport relay on `:4433` and HTTP APIs on `:8932`
 - `docker-proxy`: internal-only, allowlisted Docker API proxy used by the gateway
 - `runtime-broker`: internal-only authenticated typed-operation boundary; its
-  adapter is intentionally fail-closed while runtime operation families are
-  migrated, so the gateway continues to use `docker-proxy` in this checkpoint
+  base configuration remains fail-closed, while the opt-in browser overlay
+  enables its policy-owned Docker browser adapter
 - `postgres`: session-control database on `:5433`
 - `vault`: local HashiCorp Vault dev server on `:8200` for workflow credential bindings
 - `keycloak`: local OIDC provider on `:8091`
@@ -323,11 +323,14 @@ The recording worker forces the SDK render backend to Canvas2D for reliable head
 
 The local MCP bridge uses the package-installed `@playwright/mcp` executable from its own dependencies. It should not download `@playwright/mcp@latest` on first connect; run `npm ci` in `code/integrations/mcp-bridge` or rebuild the image if that local executable is missing.
 
-The gateway supports three runtime backends:
+The gateway supports four runtime backends:
 
 - `static_single`: one shared host worker
 - `docker_single`: one start-on-demand runtime container with idle shutdown
 - `docker_pool`: multiple start-on-demand runtime containers with explicit `max_active_runtimes` and `max_starting_runtimes`
+- `broker_pool`: opt-in browser-runtime parity path that preserves the Docker
+  pool state machine while routing browser launch, inspect, and stop through
+  the authenticated runtime broker
 
 `deploy/compose.yml` now defaults to `docker_pool`, but you can still switch backends explicitly when you need a compatibility check:
 
@@ -355,22 +358,42 @@ does not validate image, mount, network, capability, or privileged-mode fields
 inside create requests. Production deployments must put runtime launch behind
 a purpose-specific broker or an orchestrator adapter with typed policy.
 
-The compose stack includes the first fail-closed runtime-broker foundation on
+The compose stack includes the runtime-broker foundation on
 two isolated internal networks: only the gateway can reach its operation API,
 and only the broker can reach Keycloak on its auth network. The broker accepts
-the versioned BrowserPane runtime-operation media type and audience-bound OAuth2
-service credentials, but it has no Docker network or socket access in this
-checkpoint. Validate its static confinement and live authentication denials
-with:
+the versioned BrowserPane runtime-operation media type and audience-bound
+OAuth2 service credentials. Base Compose leaves its executor fail-closed and
+gives it no Docker network or socket access. Validate that foundation and its
+live authentication denials with:
 
 ```bash
 node scripts/validate-runtime-broker-foundation.mjs
 node scripts/smoke-runtime-broker-foundation.mjs
 ```
 
-The existing gateway-to-proxy path remains active until browser, workflow,
-recording, and storage-helper operation families have broker parity. Do not
-treat the foundation service alone as the production authorization boundary.
+To exercise the broker-owned browser adapter without changing the default
+topology, start the dedicated overlay:
+
+```bash
+./scripts/start-runtime-broker-browser-overlay.sh
+```
+
+The wrapper builds the current host image, resolves its immutable image ID,
+starts the broker with the read-only browser-adapter configuration, and selects
+`broker_pool` in the gateway. The gateway retains Docker-proxy access in this
+checkpoint for session-data, browser-context, workflow, recording, and storage
+helper operations that have not migrated yet. Validate the overlay topology
+with:
+
+```bash
+node scripts/validate-runtime-broker-browser-overlay.mjs
+```
+
+Broker `/readyz` checks the selected adapter dependency without creating an
+audited runtime operation. Browser launch/lifecycle requests remain typed and
+audited. Do not treat either the foundation or this transitional browser-only
+overlay as the final production authorization boundary until all operation
+families have broker parity and gateway Docker-proxy access is removed.
 
 Compose also forwards a shared host-worker env profile automatically. If your
 compose project name is not the default `deploy`, override these defaults too:

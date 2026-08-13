@@ -2,7 +2,7 @@
 
 Issue: [#214 Implement a policy-validating runtime launch broker](https://github.com/ITmedes/browserpane/issues/214)
 
-Status: active; checkpoints 1 and 2 complete; checkpoint 3 execution slice 3 active
+Status: active; checkpoints 1 through 3 complete; checkpoint 4 is next
 
 ## Business Case
 
@@ -212,7 +212,7 @@ Execution slices:
    persistence ownership, and run lifecycle/reconnect/MCP parity before the
    compose default or gateway Docker network changes.
 
-Progress: execution slices 1 and 2 are complete; execution slice 3 is active on
+Progress: all three execution slices are complete on
 `feature/BPANE-00214-gateway-runtime-broker`.
 
 Slice 1 evidence:
@@ -364,6 +364,29 @@ Slice 3 smoke sequence:
    removed while reusable context data remains.
 7. Run runtime contract/client/broker/gateway unit tests, full Rust workspace,
    compose API, multi-session, reconnect, MCP, repository, and dependency gates.
+
+Slice 3 evidence:
+
+- The broker loads a bounded immutable extension registry and trusted browser
+  environment snapshot at startup, selects an explicit `docker-browser`
+  executor, and rejects mutable images or invalid adapter configuration.
+- The gateway exposes `broker_pool` with file-backed OAuth client credentials,
+  typed feature mapping, stable sanitized failures, operation-specific
+  idempotency keys, and unchanged Docker pool admission, assignment,
+  reconciliation, reusable-context, and storage-preparation behavior.
+- The dedicated Compose overlay pins the built browser image by immutable image
+  id, isolates gateway-to-broker and broker-to-proxy access, and leaves base
+  Compose on the fail-closed broker plus default `docker_pool` path.
+- Broker readiness probes the selected Docker dependency through `/readyz`
+  without token acquisition, idempotency-ledger writes, or runtime-operation
+  audit noise. Launch, inspect, stop, reconciliation, and idle lifecycle remain
+  explicit typed operations.
+- Focused Rust suites pass with 439 gateway tests, 35 broker tests, and 10
+  runtime-client tests. The live broker overlay passes the gateway Compose API
+  suite, multi-session/MCP delegation smoke, and admin create/connect/release/
+  reconnect/stop smoke.
+- Commits: `075442c1`, `73d93269`, `48959508`, `958c8054`, `a0115b0c`,
+  `476ee727`, `1a441ddd`, `6aa22063`.
 
 Manual checkpoint: opt into broker mode locally and operate two concurrent
 sessions plus reconnect and MCP delegation before changing the default.
