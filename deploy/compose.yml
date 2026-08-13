@@ -97,12 +97,57 @@ services:
       bpane-internal:
         ipv4_address: 172.28.0.10
 
+  docker-proxy:
+    image: ghcr.io/tecnativa/docker-socket-proxy@sha256:1f5038b54f06c3e18422902cf00ba21803d1c97805aae032e5e6673d532d3459
+    environment:
+      ALLOW_RESTARTS: "0"
+      ALLOW_START: "1"
+      ALLOW_STOP: "1"
+      AUTH: "0"
+      BUILD: "0"
+      COMMIT: "0"
+      CONFIGS: "0"
+      CONTAINERS: "1"
+      DISTRIBUTION: "0"
+      EVENTS: "0"
+      EXEC: "0"
+      GRPC: "0"
+      IMAGES: "0"
+      INFO: "1"
+      NETWORKS: "0"
+      NODES: "0"
+      PLUGINS: "0"
+      POST: "1"
+      SECRETS: "0"
+      SERVICES: "0"
+      SESSION: "0"
+      SWARM: "0"
+      SYSTEM: "0"
+      TASKS: "0"
+      VOLUMES: "1"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:2375/_ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 2s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - docker-control
+
   gateway:
     build:
       context: ..
       dockerfile: deploy/Dockerfile.gateway
       args:
         BPANE_RUST_BUILDER_IMAGE: ${BPANE_RUST_BUILDER_IMAGE:-ubuntu:24.04@sha256:561618e2c15bf2397621dd04f96926663a3b5616c189cf7e38db7e82f5c538ea}
+    environment:
+      DOCKER_HOST: tcp://docker-proxy:2375
     command: >
       /usr/local/bin/bpane-gateway
       --agent-socket ${BPANE_GATEWAY_AGENT_SOCKET:-/run/bpane/agent.sock}
@@ -229,7 +274,6 @@ services:
       start_period: 10s
     volumes:
       - agent-socket:/run/bpane
-      - /var/run/docker.sock:/var/run/docker.sock
       - ./host-runtime.env:/runtime/host-runtime.env:ro
       - ../dev/certs:/certs:ro
       - ..:/workspace:ro
@@ -246,8 +290,11 @@ services:
         condition: service_started
       recording-worker-image:
         condition: service_completed_successfully
+      docker-proxy:
+        condition: service_healthy
     networks:
       - bpane-internal
+      - docker-control
 
   web:
     build:
@@ -345,3 +392,6 @@ networks:
     ipam:
       config:
         - subnet: 172.28.0.0/24
+  docker-control:
+    driver: bridge
+    internal: true
