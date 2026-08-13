@@ -17,8 +17,8 @@ export class RuntimeBrokerBrowserOverlayContract {
     );
     this.sameValues(
       this.networkMembers(services, "docker-control"),
-      ["docker-proxy", "gateway", "runtime-broker"],
-      "docker-control must contain only the proxy, gateway, and runtime-broker during storage parity",
+      ["docker-proxy", "runtime-broker"],
+      "docker-control must contain only the proxy and runtime-broker",
     );
     this.expect(
       !(broker.volumes ?? []).some((volume) =>
@@ -84,6 +84,38 @@ export class RuntimeBrokerBrowserOverlayContract {
     this.expect(
       command.includes("--runtime-backend broker_pool"),
       "gateway must select broker_pool in the overlay",
+    );
+    this.sameValues(
+      Object.keys(gateway.networks ?? {}),
+      ["bpane-internal", "runtime-broker-api"],
+      "gateway broker topology networks are invalid",
+    );
+    this.expect(
+      gateway.environment?.DOCKER_HOST == null,
+      "gateway broker topology must not configure DOCKER_HOST",
+    );
+    this.expect(
+      !Object.entries(gateway.environment ?? {}).some(
+        ([key, value]) =>
+          key !== "DOCKER_HOST" &&
+          typeof value === "string" &&
+          /(?:docker-proxy|docker\.sock|tcp:\/\/.*:237[56])/i.test(value),
+      ),
+      "gateway broker topology must not configure another Docker endpoint",
+    );
+    this.expect(
+      !Object.keys(gateway.networks ?? {}).includes("docker-control"),
+      "gateway broker topology must not join docker-control",
+    );
+    this.expect(
+      !gateway.depends_on?.["docker-proxy"],
+      "gateway broker topology must not depend on docker-proxy",
+    );
+    this.expect(
+      !(gateway.volumes ?? []).some((volume) =>
+        String(volume.source ?? "").includes("docker.sock"),
+      ),
+      "gateway broker topology must not mount the Docker socket",
     );
     this.expect(
       gateway.environment?.BPANE_GATEWAY_RUNTIME_BROKER_URL ===
