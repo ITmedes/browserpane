@@ -687,7 +687,7 @@ Validation:
 
 ### 23. Docker Runtime Launch Boundary
 
-Tier: P1 production hardening, active under #167.
+Tier: P1 production hardening, review-ready under #167.
 
 Why here:
 

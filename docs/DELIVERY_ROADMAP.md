@@ -4,9 +4,9 @@ Status: Canonical execution roadmap
 
 Governance issue: [#173](https://github.com/ITmedes/browserpane/issues/173)
 
-Last implementation audit: 2026-08-10 on
-`feature/BPANE-00163-admin-new-promotion-routing` through the default-route and
-fallback-smoke checkpoint.
+Last implementation audit: 2026-08-13 on
+`feature/BPANE-00167-docker-runtime-boundary` through the complete proxy-boundary
+and compose/browser regression checkpoint.
 
 ## How To Use This Document
 
@@ -49,7 +49,7 @@ or capacity decision.
 | Foundation | Trusted build, auth, contracts, storage, and lifecycle baseline. | Complete through #179 | Foundation Gate |
 | Pilot Value | One bounded reference workflow with accepted evidence and runbook. | #174 | Phase 0 Gate |
 | Operator Product | Complete and promote `/admin-new/` as the default operator console. | Default promoted through #163; #124 is the next focused catalog gap | Phase 1 Gate |
-| Production | Harden deployment, security, recovery, supply chain, and telemetry. | #167 active, then #72 / #66 / #178 | Production Baseline |
+| Production | Harden deployment, security, recovery, supply chain, and telemetry. | #167 in review; #214 qualified, then #178 / #72 / #66 | Production Baseline |
 | Enterprise | Organization controls, policy, residency, HA, and governed integrations. | #176 / #70 / #79 | Phase N Gate |
 | Innovation | Teach Mode and controlled repair after stable execution contracts. | #171 | Phase N capability gate |
 
@@ -90,8 +90,9 @@ PR #196, #155 through PR #197, #156 through PR #198, and #157 through PR #199.
 validation passed. #161 merged through PR #204 and #162 through PR #209. #163
 closed after its validation contract merged through PR #210 and the unified
 admin became the default web-root route through PR #211. #149 merged through
-PR #212, and #165 worker-runtime hardening merged through PR #213. #167 is the
-active Docker runtime boundary slice.
+PR #212, and #165 worker-runtime hardening merged through PR #213. #167 is
+review-ready through PR #215; #214 owns the remaining typed production launch
+broker rather than expanding the proxy slice.
 
 ## Foundation Gate Sequence
 
