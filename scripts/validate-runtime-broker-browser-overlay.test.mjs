@@ -26,10 +26,18 @@ function validConfig() {
           BPANE_RUNTIME_BROKER_EXECUTOR: "docker-browser",
           BPANE_RUNTIME_BROKER_DOCKER_API_URL: "http://docker-proxy:2375",
           BPANE_RUNTIME_BROKER_BROWSER_IMAGE: digest,
+          BPANE_RUNTIME_BROKER_WORKFLOW_IMAGE: digest,
+          BPANE_RUNTIME_BROKER_RECORDING_IMAGE: digest,
+          BPANE_RUNTIME_BROKER_WORKER_CONFIG_FILE: "/runtime-config/workers.json",
+          BPANE_RUNTIME_BROKER_WORKER_OIDC_CLIENT_SECRET_FILE:
+            "/run/secrets/worker-oidc-client-secret",
         },
         volumes: [
           { target: "/runtime-config/extensions.json", read_only: true },
           { target: "/runtime-config/host-runtime.env", read_only: true },
+          { target: "/runtime-config/workers.json", read_only: true },
+          { target: "/run/secrets/worker-oidc-client-secret", read_only: true },
+          { target: "/certs", read_only: true },
         ],
         depends_on: { "docker-proxy": { condition: "service_healthy" } },
         networks: {
@@ -51,7 +59,7 @@ function mutationFails(mutate, expected) {
   );
 }
 
-test("accepts the opt-in browser broker topology", () => {
+test("accepts the opt-in browser and worker broker topology", () => {
   new RuntimeBrokerBrowserOverlayContract().validate(validConfig());
 });
 
@@ -72,6 +80,36 @@ test("rejects mutable images, direct sockets, and writable configuration", () =>
       config.services["runtime-broker"].volumes[0].read_only = false;
     },
     "must be mounted read-only",
+  );
+});
+
+test("rejects mutable worker images and unsafe worker inputs", () => {
+  mutationFails(
+    (config) => {
+      config.services["runtime-broker"].environment.BPANE_RUNTIME_BROKER_WORKFLOW_IMAGE =
+        "deploy-workflow-worker:latest";
+    },
+    "workflow image must be immutable",
+  );
+  mutationFails(
+    (config) => {
+      config.services["runtime-broker"].environment.BPANE_RUNTIME_BROKER_RECORDING_IMAGE =
+        "deploy-recording-worker:latest";
+    },
+    "recording image must be immutable",
+  );
+  mutationFails(
+    (config) => {
+      config.services["runtime-broker"].volumes[2].read_only = false;
+    },
+    "workers.json must be mounted read-only",
+  );
+  mutationFails(
+    (config) => {
+      const environment = config.services["runtime-broker"].environment;
+      environment.BPANE_RUNTIME_BROKER_WORKER_OIDC_CLIENT_SECRET_FILE = undefined;
+    },
+    "file-backed worker OIDC secret",
   );
 });
 

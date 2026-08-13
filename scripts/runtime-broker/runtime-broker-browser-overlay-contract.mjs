@@ -39,8 +39,29 @@ export class RuntimeBrokerBrowserOverlayContract {
       this.isImmutableImage(broker.environment?.BPANE_RUNTIME_BROKER_BROWSER_IMAGE),
       "runtime-broker browser image must be immutable",
     );
+    this.expect(
+      this.isImmutableImage(broker.environment?.BPANE_RUNTIME_BROKER_WORKFLOW_IMAGE),
+      "runtime-broker workflow image must be immutable",
+    );
+    this.expect(
+      this.isImmutableImage(broker.environment?.BPANE_RUNTIME_BROKER_RECORDING_IMAGE),
+      "runtime-broker recording image must be immutable",
+    );
+    this.expect(
+      broker.environment?.BPANE_RUNTIME_BROKER_WORKER_CONFIG_FILE ===
+        "/runtime-config/workers.json",
+      "runtime-broker must use the fixed worker policy file",
+    );
+    this.expect(
+      broker.environment?.BPANE_RUNTIME_BROKER_WORKER_OIDC_CLIENT_SECRET_FILE ===
+        "/run/secrets/worker-oidc-client-secret",
+      "runtime-broker must use a file-backed worker OIDC secret",
+    );
     this.readOnlyMount(broker, "/runtime-config/extensions.json");
     this.readOnlyMount(broker, "/runtime-config/host-runtime.env");
+    this.readOnlyMount(broker, "/runtime-config/workers.json");
+    this.readOnlyMount(broker, "/run/secrets/worker-oidc-client-secret");
+    this.readOnlyMount(broker, "/certs");
     this.expect(
       broker.depends_on?.["docker-proxy"]?.condition === "service_healthy",
       "runtime-broker must wait for the Docker proxy",
