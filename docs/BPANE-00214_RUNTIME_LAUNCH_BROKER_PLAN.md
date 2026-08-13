@@ -2,7 +2,7 @@
 
 Issue: [#214 Implement a policy-validating runtime launch broker](https://github.com/ITmedes/browserpane/issues/214)
 
-Status: active; checkpoints 1 through 3 complete; checkpoint 4 is next
+Status: active; checkpoints 1 through 3 complete; checkpoint 4 execution slice 1 active
 
 ## Business Case
 
@@ -399,6 +399,78 @@ sessions plus reconnect and MCP delegation before changing the default.
 - Remove arbitrary recording Docker args from production broker mode.
 - Run worker package, API, cancellation, restart, recording, playback, and
   download tests.
+
+Execution slices:
+
+1. Extend the typed worker lifecycle result so a detached broker-owned worker
+   can report running, exited, and absent state without returning Docker models
+   or raw logs. Add a policy-validating Bollard adapter for workflow and
+   recording launch/inspect/stop/remove. The broker derives immutable images,
+   names, network, recording artifact volume, commands, environment keys,
+   security settings, resource limits, and bounded Docker log retention from
+   trusted startup configuration. Worker credentials remain redacted typed
+   request fields and never enter audit metadata or errors.
+2. Add a gateway worker-control boundary with direct-process and broker-backed
+   implementations. In broker mode the existing lifecycle managers keep
+   admission, persisted assignments, cancellation, terminal resource updates,
+   recording finalization waits, and restart reconciliation, while a bounded
+   poller observes typed broker worker state. Detailed workflow logs and
+   recording artifacts continue to arrive through the existing worker-to-
+   control-plane APIs; raw container logs are not copied into API errors.
+3. Extend the opt-in Compose overlay with immutable workflow/recording image
+   ids and read-only trusted worker configuration. Run workflow success,
+   failure, cancellation, restart safety, runtime hold, produced-file, always-
+   on recording, playback/export/download, disconnect/stop/kill finalization,
+   and cleanup smokes before considering any default switch.
+
+Checkpoint 4 design constraints:
+
+- Base Compose and direct worker behavior remain unchanged.
+- `broker_pool` selects broker worker control only when complete trusted worker
+  adapter configuration is present; partial configuration fails startup.
+- Broker launch is detached and idempotent. Gateway supervision uses typed
+  inspect results and bounded deadlines rather than an unbounded broker HTTP
+  request.
+- Docker worker logs use broker-owned bounded rotation. The worker APIs remain
+  the source of workflow logs, events, outputs, and recording artifacts.
+- OIDC bootstrap values, gateway URLs, image references, mounts, and commands
+  come from broker configuration. Launch requests carry only BrowserPane ids
+  and purpose-scoped short-lived credentials.
+- A broker or Docker outage maps to stable sanitized lifecycle failures and
+  cannot leave a persisted assignment pretending to be healthy.
+
+Checkpoint 4 example use case:
+
+An operator starts a Playwright workflow against a broker-backed session and
+opens the live preview while it runs. The gateway creates the workflow run and
+short-lived automation credential, while the broker alone chooses and launches
+the approved worker image. The worker posts logs and produced files through the
+existing run-scoped APIs. If the operator cancels the run, the gateway sends a
+typed stop/remove request and records the normal cancelled state. The same
+topology starts an always-on recorder, waits for finalization during disconnect
+or stop, and exposes the retained WebM/playback export without giving the
+gateway permission to construct either worker container.
+
+Checkpoint 4 smoke sequence:
+
+1. Prove base Compose still launches workers directly and the base broker
+   rejects worker operations.
+2. Start the broker overlay and verify worker images are immutable, the
+   recording artifact mount is broker-derived, and malformed/partial worker
+   configuration fails closed.
+3. Execute successful and failing workflows; inspect logs, events, structured
+   outputs, produced files, session targeting, and broker audit correlation.
+4. Cancel queued and running workflows, restart the gateway during a run, and
+   exercise awaiting-input runtime hold/release.
+5. Record a session through connect, disconnect, reconnect, explicit stop, and
+   kill; verify contiguous segment state, WebM download, playback/export, and
+   worker/container cleanup.
+6. Deny unknown images, names, mounts, environment keys, lifecycle targets,
+   replay conflicts, unavailable broker, and malformed responses without raw
+   backend or secret leakage.
+7. Run contract/client/broker/gateway unit and integration tests, worker builds,
+   Compose API, workflow/recording browser smokes, full workspace, dependency,
+   documentation, and topology gates.
 
 Manual checkpoint: execute a workflow and an always-on recording through the
 broker, inspect their evidence, and verify cleanup after normal and forced stop.
