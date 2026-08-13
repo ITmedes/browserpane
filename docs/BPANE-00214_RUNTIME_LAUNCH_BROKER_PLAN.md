@@ -2,7 +2,7 @@
 
 Issue: [#214 Implement a policy-validating runtime launch broker](https://github.com/ITmedes/browserpane/issues/214)
 
-Status: active; checkpoints 1 through 3 complete; checkpoint 4 execution slices 1 and 2 complete; execution slice 3 active
+Status: active; checkpoints 1 through 4 complete; checkpoint 5 is next
 
 ## Business Case
 
@@ -42,8 +42,9 @@ operations use separate typed request variants and separate allowlists.
 - Browser-context and session-file helpers use short-lived containers, named
   volumes, stdin/stdout archive streams, and exact storage measurements.
 - `SessionManager` is the control-plane boundary for browser session runtimes,
-  but worker and storage operation ownership is not yet represented by one
-  shared launch contract.
+  and the shared worker-control boundary selects direct or broker-backed
+  workflow and recording lifecycle. Storage helper ownership remains to be
+  migrated in checkpoint 5.
 
 ## Architecture Decisions
 
@@ -425,8 +426,8 @@ Execution slices:
    on recording, playback/export/download, disconnect/stop/kill finalization,
    and cleanup smokes before considering any default switch.
 
-Progress: execution slices 1 and 2 are complete on
-`feature/BPANE-00214-gateway-runtime-broker`; execution slice 3 remains.
+Progress: all three execution slices are complete on
+`feature/BPANE-00214-gateway-runtime-broker`.
 
 Slice 1 evidence:
 
@@ -471,6 +472,41 @@ Slice 2 evidence:
   test ignored, all integration test binaries, the source-size gate, and strict
   Clippy. README does not change yet because the opt-in compose worker topology
   is not available until execution slice 3.
+
+Slice 3 evidence:
+
+- The opt-in overlay loads a bounded read-only worker policy snapshot,
+  file-backed worker OIDC secret, and recording certificate input. Browser,
+  workflow, and recording images are resolved to immutable local image ids
+  before Compose interpolation or service startup.
+- Broker worker policy owns fixed images, networks, commands, resource bounds,
+  environment allowlists, and the single recording artifact-volume mount.
+  Docker local logs are capped to one file with explicit compression disabled;
+  a live start regression caught and fixed Docker's incompatible default of
+  compression with `max-file=1`.
+- The overlay topology contract now rejects mutable worker images, writable
+  worker policy/secret/certificate mounts, missing file-backed OIDC bootstrap,
+  direct socket mounts, and gateway routing that bypasses `broker_pool`.
+- Broker-mode live smokes passed for workflow success, expected failure,
+  cancellation, produced-file and CLI operations, workspace input policy,
+  runtime hold/release, always-on recording, disconnect finalization, retained
+  WebM, playback manifest/export, CLI downloads, UI downloads, and worker
+  cleanup with no container residue.
+- Gateway restart safety passed under broker worker backpressure: the stale
+  in-flight run failed deterministically, its durable queued follower started
+  once and succeeded, and an awaiting-input run survived a second gateway
+  restart and completed after operator resume.
+- Base Compose remained on `docker_pool`; its fail-closed broker rejected
+  browser, workflow, and recording launch requests with sanitized responses.
+  Direct workflow cancellation and direct always-on recording/playback/download
+  smokes also passed.
+- Workflow-worker and recording-worker package tests/builds pass, along with 45
+  broker tests, 445 gateway tests, strict changed-crate Clippy/formatting, and
+  the expanded Compose contract tests. README, ARCH, and AGENTS now describe
+  the transitional browser-and-worker broker topology; storage remains the
+  reason the gateway still joins Docker control.
+- Commits: `f62f144f`, `f4b8ee9c`, `746d38f0`, `bcdd98c7`, `d93df734`,
+  `40fd323e`, `0e993f28`, `ceca89bc`, `3913413d`.
 
 Checkpoint 4 design constraints:
 

@@ -267,16 +267,20 @@ The compose stack starts:
 
 - `host`: Linux host runtime with Xorg dummy, Openbox, Chromium, and `bpane-host`
 - `gateway`: WebTransport relay on `:4433` and HTTP APIs on `:8932`
-- `docker-proxy`: internal-only, allowlisted Docker API proxy used by the gateway
+- `docker-proxy`: internal-only, allowlisted Docker API proxy used by the
+  gateway for direct and storage operations and by the runtime broker in the
+  opt-in broker overlay
 - `runtime-broker`: internal-only authenticated typed-operation boundary; its
-  base configuration remains fail-closed, while the opt-in browser overlay
-  enables its policy-owned Docker browser adapter
+  base configuration remains fail-closed, while the opt-in overlay enables
+  policy-owned Docker adapters for browser, workflow, and recording runtimes
 - `postgres`: session-control database on `:5433`
 - `vault`: local HashiCorp Vault dev server on `:8200` for workflow credential bindings
 - `keycloak`: local OIDC provider on `:8091`
 - `web`: local frontend on `:8080`
 - `mcp-bridge`: MCP bridge on `:8931` (`/sessions/{id}/mcp` for recommended session-scoped Streamable HTTP, `/sessions/{id}/sse` for session-scoped legacy SSE, `/mcp` and `/sse` for compatibility)
-- `recording-worker-image`: one-shot build helper for the on-demand recording worker image used by `recording.mode=always`; the gateway launches short-lived recorder containers when sessions start recording
+- `recording-worker-image`: one-shot build helper for the on-demand recording
+  worker image used by `recording.mode=always`; the selected direct or broker
+  worker-control path launches short-lived recorder containers
 
 The gateway exposes unauthenticated, resource-free operational probes on its
 HTTP port:
@@ -297,10 +301,12 @@ work up to a bounded timeout. The local defaults can be overridden with
 `BPANE_GATEWAY_SHUTDOWN_READINESS_GRACE_SECS`, and
 `BPANE_GATEWAY_SHUTDOWN_DRAIN_TIMEOUT_SECS`.
 
-The gateway launches workflow-worker and recording-worker containers as
-short-lived jobs; do not run them as long-lived services. The default compose
-startup builds the `recording-worker-image` helper. Before local workflow runs
-or workflow smokes, build the profile-gated workflow-worker image once:
+Workflow-worker and recording-worker containers run as short-lived jobs; do
+not run them as long-lived services. In direct mode the gateway launches them;
+in `broker_pool` the gateway sends typed intent and the broker owns container
+materialization. The default compose startup builds the
+`recording-worker-image` helper. Before local workflow runs or workflow smokes,
+build the profile-gated workflow-worker image once:
 
 ```bash
 docker compose -f deploy/compose.yml --profile workflow build workflow-worker
@@ -328,9 +334,9 @@ The gateway supports four runtime backends:
 - `static_single`: one shared host worker
 - `docker_single`: one start-on-demand runtime container with idle shutdown
 - `docker_pool`: multiple start-on-demand runtime containers with explicit `max_active_runtimes` and `max_starting_runtimes`
-- `broker_pool`: opt-in browser-runtime parity path that preserves the Docker
-  pool state machine while routing browser launch, inspect, and stop through
-  the authenticated runtime broker
+- `broker_pool`: opt-in parity path that preserves the Docker pool state
+  machine while routing browser, workflow-worker, and recording-worker
+  lifecycle operations through the authenticated runtime broker
 
 `deploy/compose.yml` now defaults to `docker_pool`, but you can still switch backends explicitly when you need a compatibility check:
 
@@ -371,29 +377,29 @@ node scripts/validate-runtime-broker-foundation.mjs
 node scripts/smoke-runtime-broker-foundation.mjs
 ```
 
-To exercise the broker-owned browser adapter without changing the default
-topology, start the dedicated overlay:
+To exercise the broker-owned browser and worker adapters without changing the
+default topology, start the dedicated overlay:
 
 ```bash
 ./scripts/start-runtime-broker-browser-overlay.sh
 ```
 
-The wrapper builds the current host image, resolves its immutable image ID,
-starts the broker with the read-only browser-adapter configuration, and selects
-`broker_pool` in the gateway. The gateway retains Docker-proxy access in this
-checkpoint for session-data, browser-context, workflow, recording, and storage
-helper operations that have not migrated yet. Validate the overlay topology
-with:
+The wrapper builds the host, workflow-worker, and recording-worker images,
+resolves immutable image IDs, starts the broker with read-only browser and
+worker policy inputs, and selects `broker_pool` in the gateway. The gateway
+retains Docker-proxy access in this checkpoint for session-data,
+browser-context, and storage-helper operations that have not migrated yet.
+Validate the overlay topology with:
 
 ```bash
 node scripts/validate-runtime-broker-browser-overlay.mjs
 ```
 
 Broker `/readyz` checks the selected adapter dependency without creating an
-audited runtime operation. Browser launch/lifecycle requests remain typed and
-audited. Do not treat either the foundation or this transitional browser-only
-overlay as the final production authorization boundary until all operation
-families have broker parity and gateway Docker-proxy access is removed.
+audited runtime operation. Browser and worker lifecycle requests remain typed
+and audited. Do not treat either the foundation or this transitional overlay
+as the final production authorization boundary until storage operations have
+broker parity and gateway Docker-proxy access is removed.
 
 Compose also forwards a shared host-worker env profile automatically. If your
 compose project name is not the default `deploy`, override these defaults too:

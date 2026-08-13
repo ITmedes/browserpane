@@ -98,7 +98,8 @@ Current product shape:
   - `recording/playback/`: derives session-level playback/export resources from retained recording segments. Artifact reads remain asynchronous; CPU-bound ZIP assembly for the manifest, player, and included media files runs on Tokio's blocking pool.
   - `recording/observability.rs`: gateway-local counters/timestamps for recording finalization, playback export generation, and retention passes.
   - `recording/retention.rs`: periodic cleanup of completed recording artifacts after the session-scoped retention window expires; it clears artifact refs but preserves recording segment metadata.
-  - `workflow_lifecycle.rs`: control-plane launch/supervision for workflow workers. The gateway can auto-start Playwright workflow workers as short-lived Docker jobs, persist run-worker assignments, fail stale active runs after restart instead of leaving them orphaned, and manage awaiting-input runtime hold/release semantics for paused workflow runs.
+  - `workflow_lifecycle.rs`: control-plane launch/supervision for workflow workers. The gateway can auto-start Playwright workflow workers through direct Docker control or the typed runtime broker, persist run-worker assignments, fail stale active runs after restart instead of leaving them orphaned, and manage awaiting-input runtime hold/release semantics for paused workflow runs.
+  - `worker_runtime_control.rs`: shared direct/broker worker lifecycle boundary for workflow and recording launch, inspect, remove, bounded supervision, and sanitized failures.
   - `worker_process_output.rs`: bounded concurrent stdout/stderr draining shared by workflow and recording worker supervisors.
   - `workflow_event_delivery/`: owner-scoped workflow event subscriptions,
     signed outbound webhook delivery, retry/backoff, and persisted delivery
@@ -108,7 +109,7 @@ Current product shape:
     repeatable exact-origin deployment configuration.
   - `workflow/observability.rs`: gateway-local counters/timestamps for workflow event delivery, produced-file uploads, and workflow retention passes.
   - `workflow/retention.rs`: periodic cleanup of retained workflow logs and structured outputs after the configured workflow retention windows expire.
-  - `runtime_manager.rs`: current `SessionManager` backend implementation; supports `static_single`, `docker_single`, `docker_pool`, and opt-in `broker_pool`. Local compose defaults to `docker_pool` for browser-session testing. `broker_pool` preserves the Docker pool state machine but routes browser launch/inspect/stop through the authenticated runtime broker; storage helpers remain gateway-managed during migration. Docker-backed workers carry a session id plus explicit session data paths for Chromium profile, uploads, and downloads. Reusable browser contexts mount a context-scoped Chromium profile volume while keeping upload/download/session-file data session-scoped, and the runtime admits only one active writer per reusable context. Docker-backed browser-context cloning, export, and import package profile volume data through the session manager boundary. Docker runtime assignments are persisted/reconciled through Postgres on gateway restart.
+  - `runtime_manager.rs`: current `SessionManager` backend implementation; supports `static_single`, `docker_single`, `docker_pool`, and opt-in `broker_pool`. Local compose defaults to `docker_pool` for browser-session testing. `broker_pool` preserves the Docker pool state machine but routes browser and worker lifecycle operations through the authenticated runtime broker; storage helpers remain gateway-managed during migration. Docker-backed workers carry a session id plus explicit session data paths for Chromium profile, uploads, and downloads. Reusable browser contexts mount a context-scoped Chromium profile volume while keeping upload/download/session-file data session-scoped, and the runtime admits only one active writer per reusable context. Docker-backed browser-context cloning, export, and import package profile volume data through the session manager boundary. Docker runtime assignments are persisted/reconciled through Postgres on gateway restart.
   - `runtime_manager/docker/container.rs`: docker runtime launch argument materialization, including safe egress observer labels, startup audit logs for correlating proxy access logs back to BrowserPane sessions, and TLS-interception CA bundle materialization for docker-backed runtimes.
   - `session_access/`: purpose-separated v2 HMAC credentials for browser
     connect, automation, and admin-event access. Cross-purpose replay is
@@ -128,6 +129,11 @@ Current product shape:
     trusted policy plus typed resource ids. Base Compose keeps this adapter
     disabled; `deploy/compose.runtime-broker.yml` enables it together with the
     gateway's opt-in `broker_pool` backend.
+  - `docker_workers/`: broker-owned workflow and recording worker
+    materialization plus launch/inspect/stop/remove. Immutable images, fixed
+    networks and commands, approved environment keys, recording artifact
+    mounts, resource bounds, and bounded Docker logs come only from trusted
+    startup configuration.
 - `code/shared/bpane-runtime-contract`
   - Versioned typed runtime operations, redacted secret values, sanitized audit
     resources, and deny-by-default launch and lifecycle policy.
@@ -188,6 +194,10 @@ Current product shape:
     orchestrator adapter.
   - Local compose uses a one-shot helper to build the `deploy-recording-worker` image and configures the gateway to launch short-lived recorder containers for `recording.mode=always`; artifact handoff uses the trusted `bpane-recordings` staging volume and finalized artifacts use the separate `bpane-recording-artifacts` gateway store.
   - The gateway is configured to auto-launch workflow workers against the `deploy-workflow-worker` image on the compose network. Build that image before workflow-run smoke tests or local workflow execution.
+  - `deploy/compose.runtime-broker.yml` is an opt-in migration overlay. It pins
+    browser and worker images by immutable image id and moves their container
+    lifecycle through the broker; the gateway retains Docker-proxy access for
+    storage helpers until checkpoint 5 of issue #214.
   - The gateway mounts the repo at `/workspace:ro` so local git-backed workflow sources can be resolved and materialized during development smokes.
 - `deploy/examples/egress-observer`
   - Local egress observation fixtures. `compose.yml` runs a metadata-only Squid forward proxy at `bpane-egress-observer:3128` and an auth-enforcing Squid proxy at `bpane-egress-auth-observer:3130` for proxy-auth validation. `compose.tls.yml` runs a mitmproxy TLS-intercept proxy at `bpane-egress-tls-observer:3129` using local CA material prepared by `prepare-mitmproxy-ca.sh`. `egress-usage-reporter.mjs` is the local sanitized usage-ingestion example: it joins Squid logs with docker runtime labels and calls `/api/v1/sessions/{id}/egress-usage` with byte counters and safe observer metadata only.

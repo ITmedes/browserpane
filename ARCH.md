@@ -68,18 +68,18 @@ The system has seven primary runtime roles plus persistent control-plane stores:
 | MCP bridge | Node.js + @playwright/mcp | Streamable HTTP + SSE bridge for browser automation with live supervision |
 | Session store | PostgreSQL 16 | Durable owner-scoped `/api/v1/sessions`, workflows, recordings, and reusable runtime inputs |
 | Secret store | HashiCorp Vault KV v2 | Externalized workflow credential payloads |
-| Deployment | Docker Compose, 8 long-lived services + on-demand workers | Application bridge plus private Docker-control network |
+| Deployment | Docker Compose, 9 long-lived services + on-demand workers | Application bridge plus private Docker-control network |
 
 ---
 
 ## Deployment Topology
 
-Eight long-lived services across the application bridge network
+Nine long-lived services across the application bridge network
 (`172.28.0.0/24`) and a private Docker-control network, plus an
-on-demand `workflow-worker` image profile launched by the gateway. Recording
-workers are launched separately by the gateway and are not modeled as a
-long-lived compose service. Local compose defaults to the `docker_pool`
-session runtime backend. The gateway image trusts the mounted local checkout at
+on-demand `workflow-worker` image profile. Workflow and recording workers are
+short-lived jobs launched through the selected direct or broker control path;
+they are not long-lived compose services. Local compose defaults to the
+`docker_pool` session runtime backend. The gateway image trusts the mounted local checkout at
 `/workspace` through the workflow source trusted-local-root policy. The source
 resolver rejects paths outside that explicit development mount, then supplies
 short-lived `safe.directory` entries for only the validated repository while
@@ -95,12 +95,13 @@ Compose defense-in-depth boundary: container-create and volume access remain
 too broad to constitute resource-level production authorization.
 
 An opt-in `deploy/compose.runtime-broker.yml` overlay inserts the authenticated
-runtime broker for browser container launch, inspect, and stop operations. In
-that mode the broker reaches the same Docker proxy over a broker-only control
-network and derives Docker-sensitive fields from typed BrowserPane intent plus
-trusted startup configuration. The gateway retains proxy access temporarily
-for context, session-data, workflow, recording, and storage helper operations;
-the base Compose topology remains on `docker_pool` with a fail-closed broker.
+runtime broker for browser, workflow-worker, and recording-worker lifecycle
+operations. In that mode the broker reaches the same Docker proxy over a
+broker-only control network and derives Docker-sensitive fields from typed
+BrowserPane intent plus trusted startup configuration. The gateway retains
+proxy access temporarily for context, session-data, and storage helper
+operations; the base Compose topology remains on `docker_pool` with a
+fail-closed broker.
 
 ```
               Browser / E2E Test
@@ -287,13 +288,14 @@ service.
     - `docker_single`: opt-in Docker-backed worker startup/shutdown for the active session, with idle timeout and one active runtime at a time
     - `docker_pool`: Docker-backed worker pool with explicit `max_active_runtimes` and `max_starting_runtimes`; this is the default local compose backend
     - `broker_pool`: opt-in parity backend that reuses Docker pool admission,
-      persistence, context, and storage preparation but sends browser
-      launch/inspect/stop operations through `bpane-runtime-client`
+      persistence, context, and storage preparation but sends browser and
+      worker lifecycle operations through `bpane-runtime-client`
   - session resources, runtime capacity, and compatibility routing now derive from this runtime profile
   - local compose exercises `docker_pool` through an internal Docker API proxy, a shared socket-only runtime volume, per-session browser data volumes, and a shared host-worker env profile; the gateway itself has no Docker socket mount
-  - the runtime-broker overlay exercises `broker_pool` with a broker-owned
-    immutable browser image, extension registry, environment snapshot,
-    container policy, and Docker adapter; base Compose remains unchanged
+  - the runtime-broker overlay exercises `broker_pool` with broker-owned
+    immutable browser and worker images, extension and environment snapshots,
+    worker policy, container policy, and Docker adapters; base Compose remains
+    unchanged
   - the proxy blocks unrelated API families and is checked by `scripts/validate-docker-runtime-boundary.mjs`, but a purpose-specific launch broker or orchestrator adapter remains required to validate permitted resource names, images, mounts, networks, privileges, and limits in a production trust boundary
   - Docker runtime assignment metadata is now persisted in Postgres and reconciled on gateway startup, so an existing pool-mode worker can be rebound after a gateway restart without launching a duplicate runtime
   - Docker-backed workers now receive `BPANE_SESSION_ID` plus explicit profile/upload/download paths under a session-specific data root, so reconnecting a stopped session reuses cookies/cache/downloads and Chromium session-restore state without exposing one shared browser data root
@@ -373,6 +375,8 @@ service.
   buffer, zero-copy frame slicing with `Bytes`
 - **Recording lifecycle** (`recording_lifecycle.rs`, `recording/retention.rs`, `recording/artifact_store.rs`):
   - starts/stops passive recorder workers for `recording.mode=always`
+  - preserves the direct Docker path while `broker_pool` delegates typed
+    launch/inspect/remove operations to the runtime broker
   - launches recorder workers with session-scoped connect tickets, ordinary
     read/connect automation access, and a separate completion/failure
     capability bound to one session and recording
@@ -391,7 +395,8 @@ service.
   - removes docker-backed context profile volumes through the runtime manager and skips active writers for a later pass
 - **Workflow lifecycle** (`workflow_lifecycle.rs`, `workflow/observability.rs`, `workflow/retention.rs`):
   - resolves git-backed workflow versions to immutable snapshots
-  - launches gateway-managed workflow workers with run-scoped automation access
+  - launches workflow workers with run-scoped automation access through the
+    selected direct or broker worker-control path
   - exposes queued/admission state when worker capacity or project workflow-run quotas are exhausted
   - persists run logs, events, outputs, produced files, linked recordings, and correlation metadata
   - reconciles runtime hold/release semantics for paused runs
@@ -596,8 +601,8 @@ The default dev stack no longer uses a shared token file.
 - `docker_single` keeps the old single-runtime compatibility behavior with start/stop-on-idle worker lifecycle
 - `docker_pool` enables multiple runtime-backed sessions, and legacy global routes like `/api/session/status` are intentionally not available there
 - `broker_pool` has the same session-runtime compatibility contract while
-  isolating browser container operations behind the typed broker; it remains an
-  explicit migration overlay until worker and storage operation families move
+  isolating browser and worker container operations behind the typed broker; it
+  remains an explicit migration overlay until storage operation families move
 - `mcp-bridge` has an optional session-control bootstrap (`BPANE_SESSION_ID` /
   `BPANE_SESSION_BOOTSTRAP_MODE`), compatibility delegated-session assignment
   through its bridge-local `/control-session` API, and per-connection session
