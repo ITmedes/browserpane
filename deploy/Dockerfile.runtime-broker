@@ -25,10 +25,13 @@ COPY code/apps/bpane-runtime-broker code/apps/bpane-runtime-broker
 
 # Stub unrelated workspace members required by Cargo metadata discovery.
 COPY code/shared/bpane-protocol/Cargo.toml code/shared/bpane-protocol/Cargo.toml
+COPY code/shared/bpane-runtime-client/Cargo.toml code/shared/bpane-runtime-client/Cargo.toml
 COPY code/apps/bpane-host/Cargo.toml code/apps/bpane-host/Cargo.toml
 COPY code/apps/bpane-gateway/Cargo.toml code/apps/bpane-gateway/Cargo.toml
-RUN mkdir -p code/shared/bpane-protocol/src code/apps/bpane-host/src code/apps/bpane-gateway/src \
+RUN mkdir -p code/shared/bpane-protocol/src code/shared/bpane-runtime-client/src \
+      code/apps/bpane-host/src code/apps/bpane-gateway/src \
     && printf '%s\n' 'pub fn dependency_seed() {}' > code/shared/bpane-protocol/src/lib.rs \
+    && printf '%s\n' 'pub fn dependency_seed() {}' > code/shared/bpane-runtime-client/src/lib.rs \
     && printf '%s\n' 'fn main() {}' > code/apps/bpane-host/src/main.rs \
     && printf '%s\n' 'fn main() {}' > code/apps/bpane-gateway/src/main.rs
 

@@ -127,6 +127,10 @@ Current product shape:
     resources, and deny-by-default launch and lifecycle policy.
   - The wire contract intentionally contains no raw Docker arguments, host
     paths, environment maps, privilege switches, or Docker response models.
+- `code/shared/bpane-runtime-client`
+  - OAuth2 client-credentials token acquisition and bounded typed HTTP transport
+    from the gateway to the runtime broker. Redirects, response sizes, request
+    deadlines, token lifetimes, and error exposure are constrained centrally.
 - `code/shared/bpane-protocol`
   - Shared wire protocol, frame envelope, channel IDs, and message types.
 - `code/web/bpane-client/js`

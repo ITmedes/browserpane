@@ -118,7 +118,10 @@ fn post(request: &RuntimeOperationRequest, token: Option<&str>) -> Request<Body>
     let mut builder = Request::builder()
         .method("POST")
         .uri("/v1/operations")
-        .header("content-type", "application/json");
+        .header(
+            "content-type",
+            bpane_runtime_contract::RUNTIME_BROKER_V1_MEDIA_TYPE,
+        );
     if let Some(token) = token {
         builder = builder.header("authorization", format!("Bearer {token}"));
     }
@@ -203,6 +206,10 @@ async fn rejects_malformed_oversized_and_semantically_invalid_requests() {
         .method("POST")
         .uri("/v1/operations")
         .header("authorization", "Bearer valid")
+        .header(
+            "content-type",
+            bpane_runtime_contract::RUNTIME_BROKER_V1_MEDIA_TYPE,
+        )
         .body(Body::from("not-json"))
         .unwrap();
     let response = app.clone().oneshot(malformed).await.unwrap();
@@ -216,6 +223,10 @@ async fn rejects_malformed_oversized_and_semantically_invalid_requests() {
         .method("POST")
         .uri("/v1/operations")
         .header("authorization", "Bearer valid")
+        .header(
+            "content-type",
+            bpane_runtime_contract::RUNTIME_BROKER_V1_MEDIA_TYPE,
+        )
         .body(Body::from(vec![b'x'; 1_025]))
         .unwrap();
     let response = app.clone().oneshot(oversized).await.unwrap();
@@ -228,6 +239,28 @@ async fn rejects_malformed_oversized_and_semantically_invalid_requests() {
     assert_eq!(
         response_json(response).await["error"]["code"],
         "invalid_resource_id"
+    );
+}
+
+#[tokio::test]
+async fn rejects_unversioned_media_type() {
+    let app = app_with_executor(
+        Arc::new(AcceptingExecutor::default()),
+        settings(1, Duration::from_secs(1)),
+    );
+    let request = operation_request();
+    let raw = Request::builder()
+        .method("POST")
+        .uri("/v1/operations")
+        .header("authorization", "Bearer valid")
+        .header("content-type", "application/json")
+        .body(Body::from(serde_json::to_vec(&request).unwrap()))
+        .unwrap();
+    let response = app.oneshot(raw).await.unwrap();
+    assert_eq!(response.status(), StatusCode::UNSUPPORTED_MEDIA_TYPE);
+    assert_eq!(
+        response_json(response).await["error"]["code"],
+        "unsupported_media_type"
     );
 }
 

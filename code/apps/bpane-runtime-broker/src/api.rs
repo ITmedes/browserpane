@@ -6,7 +6,7 @@ use axum::body::Bytes;
 use axum::extract::rejection::BytesRejection;
 use axum::extract::{Extension, Request, State};
 use axum::http::header::AUTHORIZATION;
-use axum::http::{HeaderMap, HeaderValue, StatusCode};
+use axum::http::{HeaderMap, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
@@ -24,6 +24,10 @@ use crate::auth::{AuthenticationError, AuthenticationErrorCode};
 use crate::executor::{ExecutionError, ExecutionErrorCode};
 use crate::ledger::LedgerDecision;
 use crate::{BrokerAuthenticator, OperationLedger, RuntimeOperationExecutor, ServicePrincipal};
+
+use self::media::{operation_response, require_contract_media_type};
+
+mod media;
 
 /// Bounded HTTP operation settings.
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -49,6 +53,7 @@ pub enum BrokerApiErrorCode {
     AuthenticationKeysUnavailable,
     RequestMalformed,
     RequestTooLarge,
+    UnsupportedMediaType,
     InvalidResourceId,
     InvalidOperationParameters,
     PayloadDeclarationRequired,
@@ -201,8 +206,10 @@ fn malformed_authentication() -> ApiError {
 async fn run_operation(
     State(state): State<BrokerState>,
     Extension(principal): Extension<ServicePrincipal>,
+    headers: HeaderMap,
     body: Result<Bytes, BytesRejection>,
 ) -> Result<Response, ApiError> {
+    require_contract_media_type(&headers)?;
     let body = body.map_err(map_body_rejection)?;
     let request: RuntimeOperationRequest = serde_json::from_slice(&body).map_err(|_| {
         ApiError::new(
@@ -291,17 +298,6 @@ async fn run_operation(
         .await;
     audit_accepted(&request);
     Ok(operation_response(response, false))
-}
-
-fn operation_response(response: RuntimeOperationResponse, replayed: bool) -> Response {
-    let mut response = (StatusCode::ACCEPTED, Json(response)).into_response();
-    if replayed {
-        response.headers_mut().insert(
-            "x-bpane-idempotent-replay",
-            HeaderValue::from_static("true"),
-        );
-    }
-    response
 }
 
 fn request_fingerprint(request: &RuntimeOperationRequest) -> Result<[u8; 32], ApiError> {
