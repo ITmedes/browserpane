@@ -2,7 +2,7 @@
 
 Issue: [#167 Define Docker runtime launch boundary for production hardening](https://github.com/ITmedes/browserpane/issues/167)
 
-Status: active
+Status: implemented and validated; awaiting merge
 
 ## Business Case
 
@@ -150,6 +150,33 @@ work; it does not replace the immediate compose hardening needed here.
 8. Run the targeted gateway unit/integration tests and impacted browser smokes.
 9. Review `README.md`, `ARCH.md`, runtime requirements, and security roadmap claims
    against the final manifest.
+
+## Validation Evidence
+
+- `node scripts/validate-docker-runtime-boundary.mjs`: static compose contract and
+  live required/denied Docker API checks passed.
+- `node --test scripts/validate-docker-runtime-boundary.test.mjs`: 9/9 negative
+  boundary contract tests passed.
+- `cargo test -p bpane-gateway`: 435 passed, 1 environment-gated test ignored;
+  all integration-test binaries passed their active tests.
+- `cargo llvm-cov -p bpane-gateway --summary-only`: 56.13% line, 57.91%
+  function, and 60.69% region coverage across the gateway target.
+- `cargo fmt --all -- --check` and strict gateway clippy passed.
+- `scripts/run-gateway-compose-e2e.sh --suite all`: Postgres store contract,
+  17/17 default compose API surfaces, and 4/4 docker-pool lifecycle surfaces
+  passed through the proxy boundary.
+- Browser smokes passed for multi-session connect/join/MCP routing, unified-admin
+  browser-context CRUD/clone/import/binding, recording finalization/playback/
+  download, workflow execution, workspace-input policy, and the operator CLI.
+- Browser client unit coverage passed with 674 tests and 92.88% line, 93.19%
+  function, and 87.57% branch coverage; the production client build passed.
+- `node scripts/check-repository-documents.mjs`: 71 Markdown, 8 YAML, and 3
+  workflow files passed repository documentation validation.
+
+The multi-session smoke exposed and now covers a pre-existing fixture regression:
+the authenticated MCP bridge proxy was called without the owner bearer and its
+health URL discarded the `/api/v1/mcp-bridge` prefix. Both calls now retain the
+proxy path and owner authentication.
 
 ## Out Of Scope
 
