@@ -94,26 +94,43 @@ pub struct RuntimeConfig {
     pub docker_seccomp_unconfined: bool,
 
     /// Internal runtime broker base URL required by broker_pool.
-    #[arg(long = "runtime-broker-url")]
+    #[arg(long = "runtime-broker-url", env = "BPANE_GATEWAY_RUNTIME_BROKER_URL")]
     pub runtime_broker_url: Option<String>,
 
     /// OAuth2 token endpoint used by the gateway runtime-broker service identity.
-    #[arg(long = "runtime-broker-token-url")]
+    #[arg(
+        long = "runtime-broker-token-url",
+        env = "BPANE_GATEWAY_RUNTIME_BROKER_TOKEN_URL"
+    )]
     pub runtime_broker_token_url: Option<String>,
 
     /// OAuth2 client id used by the gateway runtime-broker service identity.
-    #[arg(long = "runtime-broker-client-id")]
+    #[arg(
+        long = "runtime-broker-client-id",
+        env = "BPANE_GATEWAY_RUNTIME_BROKER_CLIENT_ID"
+    )]
     pub runtime_broker_client_id: Option<String>,
 
     /// File containing the OAuth2 client secret used by broker_pool.
-    #[arg(long = "runtime-broker-client-secret-file")]
+    #[arg(
+        long = "runtime-broker-client-secret-file",
+        env = "BPANE_GATEWAY_RUNTIME_BROKER_CLIENT_SECRET_FILE"
+    )]
     pub runtime_broker_client_secret_file: Option<PathBuf>,
 
     /// End-to-end timeout for one gateway-to-broker operation.
-    #[arg(long = "runtime-broker-request-timeout-secs", default_value_t = 30)]
+    #[arg(
+        long = "runtime-broker-request-timeout-secs",
+        env = "BPANE_GATEWAY_RUNTIME_BROKER_REQUEST_TIMEOUT_SECS",
+        default_value_t = 30
+    )]
     pub runtime_broker_request_timeout_secs: u64,
 
     /// Maximum accepted runtime broker response body size.
-    #[arg(long = "runtime-broker-max-response-bytes", default_value_t = 65_536)]
+    #[arg(
+        long = "runtime-broker-max-response-bytes",
+        env = "BPANE_GATEWAY_RUNTIME_BROKER_MAX_RESPONSE_BYTES",
+        default_value_t = 65_536
+    )]
     pub runtime_broker_max_response_bytes: usize,
 }
