@@ -419,6 +419,8 @@ dependencies = [
  "bb8",
  "bb8-postgres",
  "bpane-protocol",
+ "bpane-runtime-client",
+ "bpane-runtime-contract",
  "bytes",
  "chrono",
  "clap",

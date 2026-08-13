@@ -1,6 +1,6 @@
 use crate::credentials::CredentialProvider;
 use crate::runtime_manager::{
-    DockerRuntimeConfig, PersistedRuntimeAssignment, ResolvedSessionRuntime,
+    BrokerRuntimeConfig, DockerRuntimeConfig, PersistedRuntimeAssignment, ResolvedSessionRuntime,
     RuntimeAssignmentStatus, RuntimeManagerConfig, RuntimeManagerError, RuntimeProfile,
     RuntimeSessionAccessInfo, SessionRuntimeManager,
 };
@@ -12,6 +12,7 @@ use uuid::Uuid;
 
 pub type SessionManagerConfig = RuntimeManagerConfig;
 pub type SessionManagerDockerConfig = DockerRuntimeConfig;
+pub type SessionManagerBrokerConfig = BrokerRuntimeConfig;
 pub type SessionManagerError = RuntimeManagerError;
 pub type SessionManagerProfile = RuntimeProfile;
 pub type SessionRuntime = ResolvedSessionRuntime;

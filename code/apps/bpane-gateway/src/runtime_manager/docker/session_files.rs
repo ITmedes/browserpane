@@ -568,16 +568,16 @@ impl DockerRuntimeManager {
     pub(super) async fn materialize_session_file_bindings(
         &self,
         session_id: Uuid,
-    ) -> Result<(), RuntimeManagerError> {
+    ) -> Result<bool, RuntimeManagerError> {
         let Some(store) = self.session_store().await else {
-            return Ok(());
+            return Ok(false);
         };
         let bindings = store
             .list_session_file_bindings_for_session(session_id)
             .await
             .map_err(|error| RuntimeManagerError::PersistenceFailed(error.to_string()))?;
         if bindings.is_empty() {
-            return Ok(());
+            return Ok(false);
         }
 
         let session = store
@@ -678,7 +678,7 @@ impl DockerRuntimeManager {
                 .map_err(|error| RuntimeManagerError::PersistenceFailed(error.to_string()))?;
         }
 
-        Ok(())
+        Ok(true)
     }
 
     pub(in crate::runtime_manager) fn materialized_path_for_binding(

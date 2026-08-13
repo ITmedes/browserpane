@@ -32,6 +32,7 @@ pub(super) struct DockerRuntimeManager {
     pub(super) session_store: Mutex<Option<SessionStore>>,
     pub(super) credential_provider: Mutex<Option<Arc<CredentialProvider>>>,
     pub(super) workspace_file_store: Mutex<Option<Arc<WorkspaceFileStore>>>,
+    pub(super) browser_control: BrowserContainerControl,
 }
 
 pub(super) enum DockerLeaseState {
@@ -52,6 +53,14 @@ impl DockerRuntimeManager {
     pub(super) fn new(
         config: DockerRuntimeConfig,
         profile: RuntimeProfile,
+    ) -> Result<Self, RuntimeManagerError> {
+        Self::new_with_browser_control(config, profile, BrowserContainerControl::Direct)
+    }
+
+    pub(super) fn new_with_browser_control(
+        config: DockerRuntimeConfig,
+        profile: RuntimeProfile,
+        browser_control: BrowserContainerControl,
     ) -> Result<Self, RuntimeManagerError> {
         if config.image.trim().is_empty() {
             return Err(RuntimeManagerError::InvalidConfiguration(
@@ -140,10 +149,14 @@ impl DockerRuntimeManager {
             session_store: Mutex::new(None),
             credential_provider: Mutex::new(None),
             workspace_file_store: Mutex::new(None),
+            browser_control,
         })
     }
 
     pub(super) async fn check_readiness(&self) -> Result<(), RuntimeManagerError> {
+        if matches!(self.browser_control, BrowserContainerControl::Broker(_)) {
+            return self.check_browser_control_readiness().await;
+        }
         let output = Command::new(&self.config.docker_bin)
             .args(["info", "--format", "{{.ServerVersion}}"])
             .kill_on_drop(true)
@@ -164,7 +177,7 @@ impl DockerRuntimeManager {
         *self.session_store.lock().await = Some(store);
     }
 
-    async fn session_store(&self) -> Option<SessionStore> {
+    pub(in crate::runtime_manager) async fn session_store(&self) -> Option<SessionStore> {
         self.session_store.lock().await.clone()
     }
 

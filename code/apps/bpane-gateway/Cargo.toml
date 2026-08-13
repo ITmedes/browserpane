@@ -10,6 +10,8 @@ path = "src/main.rs"
 
 [dependencies]
 bpane-protocol.workspace = true
+bpane-runtime-client.workspace = true
+bpane-runtime-contract.workspace = true
 bytes = "1"
 futures-util = "0.3"
 tokio.workspace = true

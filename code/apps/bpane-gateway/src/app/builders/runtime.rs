@@ -8,7 +8,9 @@ use wtransport::Identity;
 
 use crate::config::Config;
 use crate::session_control::SessionStore;
-use crate::session_manager::{SessionManager, SessionManagerConfig, SessionManagerDockerConfig};
+use crate::session_manager::{
+    SessionManager, SessionManagerBrokerConfig, SessionManagerConfig, SessionManagerDockerConfig,
+};
 use crate::session_registry::SessionRegistry;
 
 use super::{required_string, RuntimeServices};
@@ -83,8 +85,50 @@ pub(in crate::app) fn build_session_manager_config(
                 config.runtime.max_starting_runtimes,
             )?,
         )),
+        "broker_pool" => Ok(SessionManagerConfig::BrokerPool(
+            build_broker_runtime_config(config)?,
+        )),
         other => bail!("unknown --runtime-backend value: {other}"),
     }
+}
+
+fn build_broker_runtime_config(config: &Config) -> anyhow::Result<SessionManagerBrokerConfig> {
+    let secret_path = config
+        .runtime
+        .runtime_broker_client_secret_file
+        .as_ref()
+        .ok_or_else(|| {
+            anyhow!("--runtime-broker-client-secret-file is required for broker_pool")
+        })?;
+    let secret = std::fs::read_to_string(secret_path)
+        .map_err(|_| anyhow!("failed to read --runtime-broker-client-secret-file"))?;
+    let secret = bpane_runtime_contract::SecretValue::new(secret.trim().to_string())
+        .map_err(|_| anyhow!("--runtime-broker-client-secret-file is invalid"))?;
+    Ok(SessionManagerBrokerConfig {
+        docker: build_docker_runtime_config(
+            config,
+            config.runtime.max_active_runtimes,
+            config.runtime.max_starting_runtimes,
+        )?,
+        base_url: required_string(
+            &config.runtime.runtime_broker_url,
+            "--runtime-broker-url",
+            &config.runtime.backend,
+        )?,
+        token_url: required_string(
+            &config.runtime.runtime_broker_token_url,
+            "--runtime-broker-token-url",
+            &config.runtime.backend,
+        )?,
+        client_id: required_string(
+            &config.runtime.runtime_broker_client_id,
+            "--runtime-broker-client-id",
+            &config.runtime.backend,
+        )?,
+        client_secret: secret,
+        request_timeout: Duration::from_secs(config.runtime.runtime_broker_request_timeout_secs),
+        max_response_bytes: config.runtime.runtime_broker_max_response_bytes,
+    })
 }
 
 fn build_docker_runtime_config(

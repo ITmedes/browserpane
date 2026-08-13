@@ -8,7 +8,7 @@ pub struct RuntimeConfig {
     #[arg(long, default_value = "/tmp/bpane.sock")]
     pub agent_socket: PathBuf,
 
-    /// Runtime backend: "static_single", "docker_single", or "docker_pool".
+    /// Runtime backend: "static_single", "docker_single", "docker_pool", or "broker_pool".
     #[arg(long = "runtime-backend", default_value = "static_single")]
     pub backend: String,
 
@@ -92,4 +92,28 @@ pub struct RuntimeConfig {
     /// Apply --security-opt seccomp=unconfined when launching docker runtime workers.
     #[arg(long = "docker-runtime-seccomp-unconfined", default_value_t = false)]
     pub docker_seccomp_unconfined: bool,
+
+    /// Internal runtime broker base URL required by broker_pool.
+    #[arg(long = "runtime-broker-url")]
+    pub runtime_broker_url: Option<String>,
+
+    /// OAuth2 token endpoint used by the gateway runtime-broker service identity.
+    #[arg(long = "runtime-broker-token-url")]
+    pub runtime_broker_token_url: Option<String>,
+
+    /// OAuth2 client id used by the gateway runtime-broker service identity.
+    #[arg(long = "runtime-broker-client-id")]
+    pub runtime_broker_client_id: Option<String>,
+
+    /// File containing the OAuth2 client secret used by broker_pool.
+    #[arg(long = "runtime-broker-client-secret-file")]
+    pub runtime_broker_client_secret_file: Option<PathBuf>,
+
+    /// End-to-end timeout for one gateway-to-broker operation.
+    #[arg(long = "runtime-broker-request-timeout-secs", default_value_t = 30)]
+    pub runtime_broker_request_timeout_secs: u64,
+
+    /// Maximum accepted runtime broker response body size.
+    #[arg(long = "runtime-broker-max-response-bytes", default_value_t = 65_536)]
+    pub runtime_broker_max_response_bytes: usize,
 }

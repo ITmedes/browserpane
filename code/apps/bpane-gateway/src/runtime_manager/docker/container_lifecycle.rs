@@ -73,7 +73,7 @@ impl DockerRuntimeManager {
         }
     }
 
-    pub(super) async fn container_exists(
+    pub(in crate::runtime_manager) async fn container_exists(
         &self,
         container_name: &str,
     ) -> Result<bool, RuntimeManagerError> {
