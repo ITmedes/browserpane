@@ -311,6 +311,7 @@ async fn workflow_launch_materializes_only_fixed_policy_fields() {
         &std::collections::HashMap::from([
             ("max-size".to_string(), "262144b".to_string()),
             ("max-file".to_string(), "1".to_string()),
+            ("compress".to_string(), "false".to_string()),
         ])
     );
     let env = environment(body);

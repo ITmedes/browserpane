@@ -146,6 +146,7 @@ fn host_config(
                     format!("{}b", resources.output_limit_bytes),
                 ),
                 ("max-file".to_string(), "1".to_string()),
+                ("compress".to_string(), "false".to_string()),
             ])),
         }),
         ..Default::default()
