@@ -7,9 +7,12 @@ import type {
   GatewayWorkflowRunResource,
   WorkflowProducedFileUploadRequest,
 } from "./types.js";
+import { HttpRequestDeadline } from "./http-request-deadline.js";
 
 type WorkflowControlClientOptions = {
   gatewayApiUrl: string;
+  requestTimeoutMs: number;
+  fetchImpl?: typeof fetch;
   getHeaders: (extraHeaders?: Record<string, string>) => Promise<Record<string, string>>;
 };
 
@@ -24,12 +27,16 @@ type WorkflowRunStateUpdate = {
 
 export class WorkflowControlClient {
   private readonly gatewayApiUrl: string;
+  private readonly deadline: HttpRequestDeadline;
+  private readonly fetchImpl: typeof fetch;
   private readonly getHeaders: (
     extraHeaders?: Record<string, string>,
   ) => Promise<Record<string, string>>;
 
   constructor(options: WorkflowControlClientOptions) {
     this.gatewayApiUrl = options.gatewayApiUrl.replace(/\/$/, "");
+    this.deadline = new HttpRequestDeadline(options.requestTimeoutMs);
+    this.fetchImpl = options.fetchImpl ?? fetch;
     this.getHeaders = options.getHeaders;
   }
 
@@ -112,11 +119,10 @@ export class WorkflowControlClient {
   }
 
   async downloadSourceSnapshot(runId: string, automationToken: string): Promise<Uint8Array> {
-    const response = await this.fetchResponseWithAutomationAccess(
+    return this.fetchBytesWithAutomationAccess(
       `/api/v1/workflow-runs/${encodeURIComponent(runId)}/source-snapshot/content`,
       automationToken,
     );
-    return new Uint8Array(await response.arrayBuffer());
   }
 
   async resolveCredentialBinding(
@@ -135,11 +141,10 @@ export class WorkflowControlClient {
     inputId: string,
     automationToken: string,
   ): Promise<Uint8Array> {
-    const response = await this.fetchResponseWithAutomationAccess(
+    return this.fetchBytesWithAutomationAccess(
       `/api/v1/workflow-runs/${encodeURIComponent(runId)}/workspace-inputs/${encodeURIComponent(inputId)}/content`,
       automationToken,
     );
-    return new Uint8Array(await response.arrayBuffer());
   }
 
   async uploadWorkflowRunProducedFile(
@@ -168,8 +173,7 @@ export class WorkflowControlClient {
   }
 
   private async fetchJson<T>(path: string, init: RequestInit = {}): Promise<T> {
-    const response = await this.fetchResponse(path, init);
-    return (await response.json()) as T;
+    return this.fetchDecoded(path, init, async (response) => (await response.json()) as T);
   }
 
   private async fetchJsonWithAutomationAccess<T>(
@@ -177,46 +181,75 @@ export class WorkflowControlClient {
     automationToken: string,
     init: RequestInit = {},
   ): Promise<T> {
-    const response = await this.fetchResponseWithAutomationAccess(path, automationToken, init);
-    return (await response.json()) as T;
+    return this.fetchDecodedWithAutomationAccess(
+      path,
+      automationToken,
+      init,
+      async (response) => (await response.json()) as T,
+    );
   }
 
-  private async fetchResponseWithAutomationAccess(
+  private async fetchBytesWithAutomationAccess(
     path: string,
     automationToken: string,
-    init: RequestInit = {},
-  ): Promise<Response> {
-    return this.fetchResponse(path, {
+  ): Promise<Uint8Array> {
+    return this.fetchDecodedWithAutomationAccess(
+      path,
+      automationToken,
+      {},
+      async (response) => new Uint8Array(await response.arrayBuffer()),
+    );
+  }
+
+  private async fetchDecodedWithAutomationAccess<T>(
+    path: string,
+    automationToken: string,
+    init: RequestInit,
+    decode: (response: Response) => Promise<T>,
+  ): Promise<T> {
+    return this.fetchDecoded(path, {
       ...init,
       headers: {
         ...(init.headers as Record<string, string> | undefined),
         "x-bpane-automation-access-token": automationToken,
       },
-    });
+    }, decode);
   }
 
-  private async fetchResponse(path: string, init: RequestInit = {}): Promise<Response> {
-    const headers = await this.getHeaders({
-      Accept: "application/json",
-      ...(init.headers as Record<string, string> | undefined),
-    });
-    const response = await fetch(`${this.gatewayApiUrl}${path}`, {
-      ...init,
-      headers,
-    });
-    if (!response.ok) {
-      let message = `${response.status} ${response.statusText}`.trim();
-      try {
-        const payload = (await response.json()) as { error?: string };
-        if (payload?.error) {
-          message = payload.error;
+  private async fetchDecoded<T>(
+    path: string,
+    init: RequestInit,
+    decode: (response: Response) => Promise<T>,
+  ): Promise<T> {
+    const method = init.method?.toUpperCase() ?? "GET";
+    return this.deadline.run(
+      `${method} ${path}`,
+      async (signal) => {
+        const headers = await this.getHeaders({
+          Accept: "application/json",
+          ...(init.headers as Record<string, string> | undefined),
+        });
+        const response = await this.fetchImpl(`${this.gatewayApiUrl}${path}`, {
+          ...init,
+          headers,
+          signal,
+        });
+        if (!response.ok) {
+          let message = `${response.status} ${response.statusText}`.trim();
+          try {
+            const payload = (await response.json()) as { error?: string };
+            if (payload?.error) {
+              message = payload.error;
+            }
+          } catch {
+            // Ignore malformed error bodies.
+          }
+          throw new WorkflowControlClientError(message, response.status);
         }
-      } catch {
-        // Ignore malformed error bodies.
-      }
-      throw new WorkflowControlClientError(message, response.status);
-    }
-    return response;
+        return decode(response);
+      },
+      init.signal,
+    );
   }
 }
 
