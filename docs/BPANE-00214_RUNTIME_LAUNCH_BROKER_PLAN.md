@@ -730,6 +730,63 @@ Slice 2 evidence:
   dependency safety, Compose/overlay policy checks, a release-image build, and
   the authenticated live storage matrix.
 
+Slice 3 acceptance:
+
+- `DockerRuntimeManager` selects an explicit direct or broker-backed storage
+  control alongside browser control; `docker_pool` retains the existing Docker
+  command path and `broker_pool` sends every session-data and browser-context
+  storage operation through `RuntimeBrokerClient::execute_storage`;
+- gateway callers submit only typed session-data destinations for workspace
+  bindings, the binding manifest, proxy authentication, and the trusted CA;
+  they cannot send a broker path, mode, image, mount, command, or Docker model;
+- session-data initialization preserves optional reusable-context profile
+  mounting, and ephemeral-session cleanup removes session storage through the
+  selected control without changing runtime release semantics;
+- context clone, export, import, measurement, retention deletion, and API
+  deletion retain active-writer exclusion, absent-volume behavior, archive
+  shape, quota reporting, replacement semantics, and sanitized errors;
+- workspace bytes are still read by the gateway artifact-store boundary, and
+  binding state changes to `materialized` only after every typed broker write
+  plus the manifest write succeeds; failures retain actionable sanitized
+  binding state without leaking file, credential, or CA content;
+- broker results are action-checked: unexpected states, missing export bytes,
+  payload/result mismatches, transport failures, and partial operations fail
+  closed while direct-mode compatibility remains covered;
+- base Compose remains on `docker_pool`; the opt-in overlay exercises the
+  gateway-to-broker path and keeps gateway Docker-control removal as the
+  separately validated checkpoint 6 topology switch.
+
+Slice 3 example use case:
+
+An operator starts a broker-backed session that uses a reusable browser
+context, an authenticated TLS-intercept egress profile, and two workspace-file
+bindings. The gateway resolves the approved credential and CA bytes, reads the
+workspace artifacts, and sends typed storage intents plus bounded bytes to the
+broker. The broker derives the only permitted volume and destination for each
+write before launching the browser. A later context export and storage-usage
+read also pass through the broker, while an export attempted during an active
+context writer remains rejected by the gateway before any storage call.
+
+Slice 3 smoke sequence:
+
+1. Unit-test direct and broker storage-control selection, every storage action,
+   exact typed request construction, result/payload validation, unavailable
+   broker mapping, and direct Docker argument parity.
+2. Test workspace binding and manifest materialization through a deterministic
+   broker client, including read-only/read-write targets, binding-state updates,
+   missing artifacts, rejected writes, and content redaction.
+3. Test context API clone/export/import/delete, profile usage/quota paths, and
+   retention against broker control, including active-writer and absent-profile
+   cases.
+4. Run gateway, runtime contract/client/broker, full workspace, strict Clippy,
+   Rustdoc, formatting, dependency, repository-document, Compose, and overlay
+   topology checks.
+5. Start the broker overlay; run the authenticated broker storage smoke, then
+   create/import/clone/export/delete a browser context and start a session with
+   workspace files through gateway APIs. Verify session startup, file content,
+   usage evidence, cleanup, and that no gateway-owned storage-helper container
+   is launched.
+
 Manual checkpoint: clone/export/import a context, bind a workspace file, run a
 session, and verify storage usage and cleanup without gateway Docker access.
 
