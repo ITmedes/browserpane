@@ -13,6 +13,8 @@ async fn workflow_run_owner_can_cancel_queued_run_before_dispatch() {
         container_name_prefix: "bpane-workflow".to_string(),
         gateway_api_url: "http://gateway:8932".to_string(),
         work_root: std::path::PathBuf::from("/tmp/bpane-workflows"),
+        request_timeout: Duration::from_secs(1),
+        output_limit_bytes: 4096,
         bearer_token: Some("token".to_string()),
         oidc_token_url: None,
         oidc_client_id: None,

@@ -4,6 +4,7 @@ use tokio::process::Command;
 use tracing::{info, warn};
 
 use super::*;
+use crate::worker_process_output::{wait_with_bounded_output, BoundedProcessOutput};
 
 #[derive(Debug, Clone, Copy)]
 pub(super) struct LaunchedRecordingWorker {
@@ -81,6 +82,10 @@ impl RecordingLifecycleInner {
             self.config.poll_interval.as_millis().to_string(),
         );
         command.env(
+            "BPANE_WORKER_REQUEST_TIMEOUT_MS",
+            self.config.request_timeout.as_millis().to_string(),
+        );
+        command.env(
             "BPANE_RECORDING_HEADLESS",
             if self.config.headless {
                 "true"
@@ -135,8 +140,9 @@ impl RecordingLifecycleInner {
             .insert(session_id, LaunchedRecordingWorker { recording_id });
 
         let manager = Arc::clone(self);
+        let output_limit_bytes = self.config.output_limit_bytes;
         tokio::spawn(async move {
-            let status = child.wait_with_output().await;
+            let status = wait_with_bounded_output(child, output_limit_bytes).await;
             manager
                 .handle_worker_exit(session_id, recording_id, status)
                 .await;
@@ -161,7 +167,7 @@ impl RecordingLifecycleInner {
         self: Arc<Self>,
         session_id: Uuid,
         recording_id: Uuid,
-        status: std::io::Result<std::process::Output>,
+        status: std::io::Result<BoundedProcessOutput>,
     ) {
         self.launched.lock().await.remove(&session_id);
 
@@ -178,8 +184,9 @@ impl RecordingLifecycleInner {
                             output.status.code()
                         )
                     });
+                let truncation = output_truncation_detail(output.omitted_bytes());
                 format!(
-                    "recording worker exited before finalizing recording {recording_id}: {detail}"
+                    "recording worker exited before finalizing recording {recording_id}: {detail}{truncation}"
                 )
             }
             Err(error) => {
@@ -226,6 +233,14 @@ impl RecordingLifecycleInner {
             .session_store
             .clear_recording_worker_assignment(session_id)
             .await;
+    }
+}
+
+fn output_truncation_detail(omitted_bytes: u64) -> String {
+    if omitted_bytes == 0 {
+        String::new()
+    } else {
+        format!(" (omitted {omitted_bytes} earlier output bytes)")
     }
 }
 

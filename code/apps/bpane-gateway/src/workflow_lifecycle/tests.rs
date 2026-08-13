@@ -40,12 +40,34 @@ fn test_config(script: PathBuf) -> WorkflowWorkerConfig {
         container_name_prefix: "bpane-workflow".to_string(),
         gateway_api_url: "http://gateway:8932".to_string(),
         work_root: PathBuf::from("/tmp/bpane-workflows"),
+        request_timeout: Duration::from_secs(1),
+        output_limit_bytes: 4096,
         bearer_token: Some("token".to_string()),
         oidc_token_url: None,
         oidc_client_id: None,
         oidc_client_secret: None,
         oidc_scopes: None,
     }
+}
+
+#[test]
+fn worker_config_rejects_unbounded_runtime_settings() {
+    let auth = AuthValidator::from_hmac_secret(vec![9; 32]);
+    let mut config = test_config(PathBuf::from("/bin/sh"));
+    config.output_limit_bytes = 0;
+    assert!(matches!(
+        validate_config(&config, &auth),
+        Err(WorkflowLifecycleError::InvalidConfiguration(message))
+            if message.contains("output limit")
+    ));
+
+    config.output_limit_bytes = 4096;
+    config.request_timeout = Duration::ZERO;
+    assert!(matches!(
+        validate_config(&config, &auth),
+        Err(WorkflowLifecycleError::InvalidConfiguration(message))
+            if message.contains("request timeout")
+    ));
 }
 
 fn test_session_manager() -> Arc<SessionManager> {
@@ -199,6 +221,27 @@ sleep {}
             capture_file.display(),
             sleep_seconds,
         ),
+    )
+    .unwrap();
+    let mut permissions = fs::metadata(&script_path).unwrap().permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&script_path, permissions).unwrap();
+    script_path
+}
+
+fn create_noisy_failure_script(dir: &tempfile::TempDir) -> PathBuf {
+    let script_path = dir.path().join("noisy-failure-docker.sh");
+    fs::write(
+        &script_path,
+        r#"#!/bin/sh
+i=0
+while [ "$i" -lt 256 ]; do
+  printf 'x' >&2
+  i=$((i + 1))
+done
+printf '\nfinal worker failure\n' >&2
+exit 7
+"#,
     )
     .unwrap();
     let mut permissions = fs::metadata(&script_path).unwrap().permissions();

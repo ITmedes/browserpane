@@ -19,9 +19,23 @@ type RecordingWorkerServiceOptions = {
   pollIntervalMs: number;
   minCaptureMs?: number;
   connect: RecorderConnectOptions | null;
-  controlClient: RecordingControlClient;
-  pageRuntime: RecorderPageRuntime;
+  controlClient: RecordingControlPort;
+  pageRuntime: RecorderPagePort;
 };
+
+type RecordingControlPort = Pick<
+  RecordingControlClient,
+  | "getRecording"
+  | "createRecording"
+  | "issueSessionAccessToken"
+  | "completeRecording"
+  | "failRecording"
+>;
+
+type RecorderPagePort = Pick<
+  RecorderPageRuntime,
+  "start" | "waitForMinimumCapture" | "stopAndDownload" | "close"
+>;
 
 export class RecordingWorkerService {
   private readonly sessionId: string;
@@ -30,8 +44,8 @@ export class RecordingWorkerService {
   private readonly pollIntervalMs: number;
   private readonly minCaptureMs: number;
   private readonly connect: RecorderConnectOptions | null;
-  private readonly controlClient: RecordingControlClient;
-  private readonly pageRuntime: RecorderPageRuntime;
+  private readonly controlClient: RecordingControlPort;
+  private readonly pageRuntime: RecorderPagePort;
 
   constructor(options: RecordingWorkerServiceOptions) {
     this.sessionId = options.sessionId;

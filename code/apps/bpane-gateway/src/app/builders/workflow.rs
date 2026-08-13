@@ -127,6 +127,10 @@ fn build_workflow_worker_config(config: &Config) -> Option<WorkflowWorkerConfig>
                 .clone(),
             gateway_api_url: config.workflow.workflow_worker_api_url.clone(),
             work_root: config.workflow.workflow_worker_work_root.clone(),
+            request_timeout: Duration::from_millis(
+                config.workflow.workflow_worker_request_timeout_ms,
+            ),
+            output_limit_bytes: config.workflow.workflow_worker_output_limit_bytes,
             bearer_token: config.workflow.workflow_worker_bearer_token.clone(),
             oidc_token_url: config.workflow.workflow_worker_oidc_token_url.clone(),
             oidc_client_id: config.workflow.workflow_worker_oidc_client_id.clone(),

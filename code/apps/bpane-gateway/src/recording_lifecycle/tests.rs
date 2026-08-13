@@ -41,12 +41,37 @@ fn test_config(script: PathBuf, capture_file: PathBuf) -> RecordingWorkerConfig 
         connect_timeout: Duration::from_secs(1),
         poll_interval: Duration::from_millis(10),
         finalize_timeout: Duration::from_millis(100),
+        request_timeout: Duration::from_secs(1),
+        output_limit_bytes: 4096,
         bearer_token: Some("token".to_string()),
         oidc_token_url: None,
         oidc_client_id: None,
         oidc_client_secret: None,
         oidc_scopes: None,
     }
+}
+
+#[test]
+fn worker_config_rejects_unbounded_runtime_settings() {
+    let auth = AuthValidator::from_hmac_secret(vec![9; 32]);
+    let mut config = test_config(
+        PathBuf::from("/bin/sh"),
+        PathBuf::from("/tmp/recording-capture"),
+    );
+    config.output_limit_bytes = 0;
+    assert!(matches!(
+        validate_config(&config, &auth),
+        Err(RecordingLifecycleError::InvalidConfiguration(message))
+            if message.contains("output limit")
+    ));
+
+    config.output_limit_bytes = 4096;
+    config.request_timeout = Duration::ZERO;
+    assert!(matches!(
+        validate_config(&config, &auth),
+        Err(RecordingLifecycleError::InvalidConfiguration(message))
+            if message.contains("request timeout")
+    ));
 }
 
 async fn create_session_with_mode(
@@ -88,6 +113,27 @@ fn create_capture_script(dir: &tempfile::TempDir) -> PathBuf {
         r#"#!/bin/sh
 printf '%s %s %s %s %s\n' "${BPANE_RECORDING_SESSION_ID}" "${BPANE_RECORDING_ID}" "${BPANE_RECORDING_CONNECT_TICKET}" "${BPANE_SESSION_AUTOMATION_ACCESS_TOKEN}" "${BPANE_RECORDING_WORKER_ACCESS_TOKEN}" > "$1.tmp"
 mv "$1.tmp" "$1"
+"#,
+    )
+    .unwrap();
+    let mut permissions = fs::metadata(&script_path).unwrap().permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&script_path, permissions).unwrap();
+    script_path
+}
+
+fn create_noisy_failure_script(dir: &tempfile::TempDir) -> PathBuf {
+    let script_path = dir.path().join("noisy-recorder.sh");
+    fs::write(
+        &script_path,
+        r#"#!/bin/sh
+i=0
+while [ "$i" -lt 256 ]; do
+  printf 'x' >&2
+  i=$((i + 1))
+done
+printf '\nfinal recorder failure\n' >&2
+exit 7
 "#,
     )
     .unwrap();
@@ -174,6 +220,48 @@ async fn always_mode_launches_worker_and_marks_unfinished_recording_failed() {
 }
 
 #[tokio::test]
+async fn bounds_noisy_recorder_output_and_preserves_failure_tail() {
+    let temp_dir = tempdir().unwrap();
+    let script = create_noisy_failure_script(&temp_dir);
+    let store = SessionStore::in_memory();
+    let auth = Arc::new(AuthValidator::from_hmac_secret(vec![9; 32]));
+    let manager = test_manager(
+        RecordingWorkerConfig {
+            output_limit_bytes: 32,
+            ..test_config(script, temp_dir.path().join("unused"))
+        },
+        auth,
+        store.clone(),
+    );
+    let session = create_session_with_mode(&store, SessionRecordingMode::Always).await;
+
+    manager.ensure_auto_recording(&session).await.unwrap();
+
+    let recording = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let current = store
+                .get_latest_recording_for_session(session.id)
+                .await
+                .unwrap()
+                .expect("recording should exist");
+            if current.state.is_terminal() {
+                break current;
+            }
+            sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("noisy recorder worker should terminate");
+
+    let error = recording
+        .error
+        .expect("failed recording should expose an error");
+    assert!(error.contains("final recorder failure"));
+    assert!(error.contains("omitted"));
+    assert!(error.contains("earlier output bytes"));
+}
+
+#[tokio::test]
 async fn request_stop_and_wait_observes_recording_completion() {
     let store = SessionStore::in_memory();
     let auth = Arc::new(AuthValidator::from_hmac_secret(vec![9; 32]));
@@ -190,6 +278,8 @@ async fn request_stop_and_wait_observes_recording_completion() {
             connect_timeout: Duration::from_secs(1),
             poll_interval: Duration::from_millis(10),
             finalize_timeout: Duration::from_secs(1),
+            request_timeout: Duration::from_secs(1),
+            output_limit_bytes: 4096,
             bearer_token: Some("token".to_string()),
             oidc_token_url: None,
             oidc_client_id: None,

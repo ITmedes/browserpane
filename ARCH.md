@@ -502,6 +502,8 @@ On-demand executor launched and supervised by the gateway for workflow runs.
   - `credentials.generateTotp(...)`
 - Runs the pinned Playwright entrypoint from the materialized source tree
 - Streams task/run logs, state transitions, outputs, and produced files back to the gateway
+- Applies finite control-plane/OIDC request deadlines and retains a configurable
+  tail of entrypoint stdout/stderr instead of buffering unbounded output
 
 ### recording-worker
 
@@ -516,6 +518,9 @@ Gateway-supervised passive session recorder.
 - Sends the dedicated recording-worker capability only on internal
   completion/failure requests; ordinary owner or session-automation access
   cannot finalize artifacts
+- Polls recording state sequentially with a finite control-plane/OIDC request
+  deadline; the gateway supervisor drains recorder stdout/stderr into bounded
+  per-stream buffers
 
 ---
 
