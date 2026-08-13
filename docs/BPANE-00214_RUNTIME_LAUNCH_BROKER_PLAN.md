@@ -2,7 +2,7 @@
 
 Issue: [#214 Implement a policy-validating runtime launch broker](https://github.com/ITmedes/browserpane/issues/214)
 
-Status: active; checkpoints 1 and 2 complete; checkpoint 3 execution slice 3 next
+Status: active; checkpoints 1 through 4 complete; checkpoint 5 is next
 
 ## Business Case
 
@@ -32,16 +32,19 @@ operations use separate typed request variants and separate allowlists.
 
 - Browser runtime launch, readiness, stop, inspect, and context/session-file
   helper operations are implemented in `runtime_manager/docker/`.
-- Workflow worker launch, wait, bounded output, and removal are implemented in
-  `workflow_lifecycle/workers.rs` and currently invoke the Docker CLI directly.
-- Recording worker launch and bounded process supervision are implemented in
-  `recording_lifecycle/workers.rs`; compose currently supplies raw Docker CLI
-  arguments through gateway flags.
+- Workflow worker launch, supervision, cancellation, and removal use a shared
+  gateway worker-control boundary. `docker_pool` retains the direct Docker CLI
+  path; `broker_pool` sends typed operations through the existing authenticated
+  broker client.
+- Recording worker launch and supervision use the same direct/broker boundary.
+  Base compose still supplies direct Docker CLI arguments; the broker path uses
+  typed credentials and broker-owned container materialization.
 - Browser-context and session-file helpers use short-lived containers, named
   volumes, stdin/stdout archive streams, and exact storage measurements.
 - `SessionManager` is the control-plane boundary for browser session runtimes,
-  but worker and storage operation ownership is not yet represented by one
-  shared launch contract.
+  and the shared worker-control boundary selects direct or broker-backed
+  workflow and recording lifecycle. Storage helper ownership remains to be
+  migrated in checkpoint 5.
 
 ## Architecture Decisions
 
@@ -212,7 +215,8 @@ Execution slices:
    persistence ownership, and run lifecycle/reconnect/MCP parity before the
    compose default or gateway Docker network changes.
 
-Progress: execution slices 1 and 2 are complete; execution slice 3 is next.
+Progress: all three execution slices are complete on
+`feature/BPANE-00214-gateway-runtime-broker`.
 
 Slice 1 evidence:
 
@@ -299,16 +303,93 @@ Slice 2 evidence:
   so `README.md` does not require an update in this slice.
 - Commits: `afd31dbf`, `99c86285`, `74b0fdbf`.
 
-Execution slice 3 prerequisite:
+Execution slice 3 scope:
 
-- Define the broker-side extension registry/configuration source and refresh
-  semantics before enabling extension-bearing sessions. The gateway must send
-  extension-version ids only; it must not become able to populate arbitrary
-  broker install paths through each launch request.
+- Load the broker-side extension registry from a bounded, read-only JSON file at
+  startup. Treat it as an immutable process snapshot: changes require a broker
+  restart and invalid, duplicate, nil-id, or unsafe-path entries fail startup.
+  The gateway sends extension-version ids only and cannot populate broker
+  install paths through launch requests.
+- Add an explicit `broker_pool` gateway runtime backend. Reuse the current
+  Docker pool's capacity, reusable-context writer exclusion, assignment
+  persistence, startup readiness, idle cleanup, egress/session-file
+  preparation, and reconciliation state machine, but route browser container
+  launch/inspect/stop/remove through `bpane-runtime-client`.
+- Keep `docker_pool` as the compose and CLI default. Enable the broker Docker
+  adapter and gateway broker backend only through a dedicated local compose
+  overlay until parity and manual checkpoints pass.
+- Preserve stable gateway runtime errors. OAuth, HTTP, broker, and Docker
+  response details must remain sanitized and broker request retries must use
+  operation-specific idempotency keys.
 - Keep existing gateway storage preparation for proxy-auth, custom CA, and
   session files during browser launch parity. Those Docker helper operations
   move behind typed broker storage operations in checkpoint 5 before the
   gateway loses Docker-control access.
+
+Slice 3 example use case:
+
+An operator starts two project-scoped sessions with different reusable browser
+contexts and egress profiles through the opt-in broker topology. The gateway
+still enforces capacity and single-writer context admission and persists each
+assignment, while the broker alone chooses the browser image, container name,
+network, mounts, labels, extension install paths, and security settings. A
+reconnect returns to the existing runtime and MCP resolves the same session CDP
+endpoint; stopping a session removes only its broker-owned browser container.
+
+Slice 3 acceptance:
+
+- broker startup rejects missing or malformed adapter configuration and unsafe
+  extension registry entries before opening the operation service;
+- default compose remains fail-closed and `docker_pool` behavior is unchanged;
+- `broker_pool` maps stored session intent to typed launch/lifecycle requests
+  without install paths, secrets, arbitrary environment maps, or Docker models;
+- launch, readiness wait, reconnect, persisted-assignment recovery, idle stop,
+  explicit stop, capacity, context exclusion, egress, extensions, and prepared
+  session-file behavior have direct-vs-broker parity coverage;
+- OAuth/token, unreachable broker, denial, timeout, malformed response, and
+  conflicting idempotency cases map to stable sanitized gateway failures;
+- the opt-in compose overlay completes two-session, reconnect, stop, and MCP
+  delegation smoke checks before any default topology change.
+
+Slice 3 smoke sequence:
+
+1. Validate base compose and prove the broker still has no Docker-control
+   network and rejects browser operations.
+2. Start the broker overlay and verify malformed registry/configuration startup
+   fails closed, then start it with the approved immutable registry.
+3. Create and connect two sessions through `broker_pool`; verify distinct
+   persisted assignments, sockets, CDP endpoints, and broker-owned containers.
+4. Reconnect one session and delegate it to MCP; verify both use the same live
+   runtime and no replacement container is launched.
+5. Exercise reusable-context exclusion, egress metadata, approved and unknown
+   extension ids, and prepared session-file bindings.
+6. Stop both sessions and verify browser containers and ephemeral data are
+   removed while reusable context data remains.
+7. Run runtime contract/client/broker/gateway unit tests, full Rust workspace,
+   compose API, multi-session, reconnect, MCP, repository, and dependency gates.
+
+Slice 3 evidence:
+
+- The broker loads a bounded immutable extension registry and trusted browser
+  environment snapshot at startup, selects an explicit `docker-browser`
+  executor, and rejects mutable images or invalid adapter configuration.
+- The gateway exposes `broker_pool` with file-backed OAuth client credentials,
+  typed feature mapping, stable sanitized failures, operation-specific
+  idempotency keys, and unchanged Docker pool admission, assignment,
+  reconciliation, reusable-context, and storage-preparation behavior.
+- The dedicated Compose overlay pins the built browser image by immutable image
+  id, isolates gateway-to-broker and broker-to-proxy access, and leaves base
+  Compose on the fail-closed broker plus default `docker_pool` path.
+- Broker readiness probes the selected Docker dependency through `/readyz`
+  without token acquisition, idempotency-ledger writes, or runtime-operation
+  audit noise. Launch, inspect, stop, reconciliation, and idle lifecycle remain
+  explicit typed operations.
+- Focused Rust suites pass with 439 gateway tests, 35 broker tests, and 10
+  runtime-client tests. The live broker overlay passes the gateway Compose API
+  suite, multi-session/MCP delegation smoke, and admin create/connect/release/
+  reconnect/stop smoke.
+- Commits: `075442c1`, `73d93269`, `48959508`, `958c8054`, `a0115b0c`,
+  `476ee727`, `1a441ddd`, `6aa22063`.
 
 Manual checkpoint: opt into broker mode locally and operate two concurrent
 sessions plus reconnect and MCP delegation before changing the default.
@@ -321,6 +402,160 @@ sessions plus reconnect and MCP delegation before changing the default.
 - Remove arbitrary recording Docker args from production broker mode.
 - Run worker package, API, cancellation, restart, recording, playback, and
   download tests.
+
+Execution slices:
+
+1. Extend the typed worker lifecycle result so a detached broker-owned worker
+   can report running, exited, and absent state without returning Docker models
+   or raw logs. Add a policy-validating Bollard adapter for workflow and
+   recording launch/inspect/stop/remove. The broker derives immutable images,
+   names, network, recording artifact volume, commands, environment keys,
+   security settings, resource limits, and bounded Docker log retention from
+   trusted startup configuration. Worker credentials remain redacted typed
+   request fields and never enter audit metadata or errors.
+2. Add a gateway worker-control boundary with direct-process and broker-backed
+   implementations. In broker mode the existing lifecycle managers keep
+   admission, persisted assignments, cancellation, terminal resource updates,
+   recording finalization waits, and restart reconciliation, while a bounded
+   poller observes typed broker worker state. Detailed workflow logs and
+   recording artifacts continue to arrive through the existing worker-to-
+   control-plane APIs; raw container logs are not copied into API errors.
+3. Extend the opt-in Compose overlay with immutable workflow/recording image
+   ids and read-only trusted worker configuration. Run workflow success,
+   failure, cancellation, restart safety, runtime hold, produced-file, always-
+   on recording, playback/export/download, disconnect/stop/kill finalization,
+   and cleanup smokes before considering any default switch.
+
+Progress: all three execution slices are complete on
+`feature/BPANE-00214-gateway-runtime-broker`.
+
+Slice 1 evidence:
+
+- The v1 contract reports detached workers as typed `running`, `exited`, or
+  `absent` state with an optional exit code. Recording launch credentials now
+  preserve the direct path's optional static gateway bearer without exposing
+  it through debug output or audit resources.
+- The broker derives immutable images, owned names, fixed networks, exact
+  commands, worker-specific environment allowlists, no-new-privileges,
+  CPU/memory/PID/shared-memory bounds, and bounded local Docker logs.
+- Workflow workers receive no mounts. Recording workers receive only the fixed
+  configured artifact volume at the fixed output root. Host binds, devices,
+  capabilities, privileged mode, host namespaces, mutable images, unknown
+  operation families, and unowned lifecycle targets remain denied.
+- Docker inspect responses are normalized behind the adapter and retain a
+  detached worker's exit code without returning Docker models or raw logs.
+- Validation passed with 29 contract tests, 4 exact wire tests, 42 broker tests,
+  strict changed-crate Clippy/Rustdoc/formatting, and a real HTTP-shaped Bollard
+  inspect regression test.
+- Commits: `f62f144f`, `f4b8ee9c`.
+
+Slice 2 evidence:
+
+- `broker_pool` reuses the browser runtime's existing cached OAuth broker
+  client for workflow and recording workers. It does not create a second token
+  implementation or expose the client outside the gateway runtime boundary.
+- The lifecycle managers retain admission, persisted assignments, project
+  quotas, direct-process supervision, workflow terminal-state reconciliation,
+  recording finalization waits, and direct Docker behavior. Broker mode adds
+  typed launch/inspect/remove plus bounded detached-worker polling.
+- Worker exit, cancellation, and gateway-restart reconciliation remove only
+  the broker-owned resource derived from its workflow-run or recording id.
+  Three consecutive broker inspection failures become a stable sanitized
+  lifecycle failure rather than leaving an assignment indefinitely healthy.
+- Workflow logs/events/outputs and recording artifacts still flow through the
+  existing worker APIs. Broker-side raw container logs are not copied into
+  gateway errors.
+- Direct workflow and recording lifecycle regression tests pass alongside
+  broker launch/monitor/remove integration tests, credential-redaction tests,
+  broker unavailable/invalid-result tests, and bounded monitor retry tests.
+- The full gateway run passed 445 tests with one external Postgres contract
+  test ignored, all integration test binaries, the source-size gate, and strict
+  Clippy. README does not change yet because the opt-in compose worker topology
+  is not available until execution slice 3.
+
+Slice 3 evidence:
+
+- The opt-in overlay loads a bounded read-only worker policy snapshot,
+  file-backed worker OIDC secret, and recording certificate input. Browser,
+  workflow, and recording images are resolved to immutable local image ids
+  before Compose interpolation or service startup.
+- Broker worker policy owns fixed images, networks, commands, resource bounds,
+  environment allowlists, and the single recording artifact-volume mount.
+  Docker local logs are capped to one file with explicit compression disabled;
+  a live start regression caught and fixed Docker's incompatible default of
+  compression with `max-file=1`.
+- The overlay topology contract now rejects mutable worker images, writable
+  worker policy/secret/certificate mounts, missing file-backed OIDC bootstrap,
+  direct socket mounts, and gateway routing that bypasses `broker_pool`.
+- Broker-mode live smokes passed for workflow success, expected failure,
+  cancellation, produced-file and CLI operations, workspace input policy,
+  runtime hold/release, always-on recording, disconnect finalization, retained
+  WebM, playback manifest/export, CLI downloads, UI downloads, and worker
+  cleanup with no container residue.
+- Gateway restart safety passed under broker worker backpressure: the stale
+  in-flight run failed deterministically, its durable queued follower started
+  once and succeeded, and an awaiting-input run survived a second gateway
+  restart and completed after operator resume.
+- Base Compose remained on `docker_pool`; its fail-closed broker rejected
+  browser, workflow, and recording launch requests with sanitized responses.
+  Direct workflow cancellation and direct always-on recording/playback/download
+  smokes also passed.
+- Workflow-worker and recording-worker package tests/builds pass, along with 45
+  broker tests, 447 gateway tests, strict changed-crate Clippy/formatting, and
+  the expanded Compose contract tests. README, ARCH, and AGENTS now describe
+  the transitional browser-and-worker broker topology; storage remains the
+  reason the gateway still joins Docker control.
+- Commits: `f62f144f`, `f4b8ee9c`, `746d38f0`, `bcdd98c7`, `d93df734`,
+  `40fd323e`, `0e993f28`, `ceca89bc`, `3913413d`.
+
+Checkpoint 4 design constraints:
+
+- Base Compose and direct worker behavior remain unchanged.
+- `broker_pool` selects broker worker control only when complete trusted worker
+  adapter configuration is present; partial configuration fails startup.
+- Broker launch is detached and idempotent. Gateway supervision uses typed
+  inspect results and bounded deadlines rather than an unbounded broker HTTP
+  request.
+- Docker worker logs use broker-owned bounded rotation. The worker APIs remain
+  the source of workflow logs, events, outputs, and recording artifacts.
+- OIDC bootstrap values, gateway URLs, image references, mounts, and commands
+  come from broker configuration. Launch requests carry only BrowserPane ids
+  and purpose-scoped short-lived credentials.
+- A broker or Docker outage maps to stable sanitized lifecycle failures and
+  cannot leave a persisted assignment pretending to be healthy.
+
+Checkpoint 4 example use case:
+
+An operator starts a Playwright workflow against a broker-backed session and
+opens the live preview while it runs. The gateway creates the workflow run and
+short-lived automation credential, while the broker alone chooses and launches
+the approved worker image. The worker posts logs and produced files through the
+existing run-scoped APIs. If the operator cancels the run, the gateway sends a
+typed stop/remove request and records the normal cancelled state. The same
+topology starts an always-on recorder, waits for finalization during disconnect
+or stop, and exposes the retained WebM/playback export without giving the
+gateway permission to construct either worker container.
+
+Checkpoint 4 smoke sequence:
+
+1. Prove base Compose still launches workers directly and the base broker
+   rejects worker operations.
+2. Start the broker overlay and verify worker images are immutable, the
+   recording artifact mount is broker-derived, and malformed/partial worker
+   configuration fails closed.
+3. Execute successful and failing workflows; inspect logs, events, structured
+   outputs, produced files, session targeting, and broker audit correlation.
+4. Cancel queued and running workflows, restart the gateway during a run, and
+   exercise awaiting-input runtime hold/release.
+5. Record a session through connect, disconnect, reconnect, explicit stop, and
+   kill; verify contiguous segment state, WebM download, playback/export, and
+   worker/container cleanup.
+6. Deny unknown images, names, mounts, environment keys, lifecycle targets,
+   replay conflicts, unavailable broker, and malformed responses without raw
+   backend or secret leakage.
+7. Run contract/client/broker/gateway unit and integration tests, worker builds,
+   Compose API, workflow/recording browser smokes, full workspace, dependency,
+   documentation, and topology gates.
 
 Manual checkpoint: execute a workflow and an always-on recording through the
 broker, inspect their evidence, and verify cleanup after normal and forced stop.

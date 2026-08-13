@@ -2,6 +2,7 @@ use bpane_runtime_contract::{
     BrokerApiVersion, BrowserEgressObservationMode, BrowserEgressSelection, BrowserNetworkIdentity,
     BrowserProxySelection, BrowserRuntimeFeatures, BrowserRuntimeLaunchRequest,
     BrowserSessionDataSource, IdempotencyKey, RuntimeOperation, RuntimeOperationRequest,
+    RuntimeOperationResult, WorkerExecutionState,
 };
 use uuid::Uuid;
 
@@ -39,6 +40,24 @@ fn browser_launch_request_has_stable_v1_json_shape() {
     assert!(!json.contains("mount"));
     assert!(!json.contains("privileged"));
     assert!(!json.contains("environment"));
+}
+
+#[test]
+fn worker_state_response_has_stable_sanitized_shape() {
+    let result = RuntimeOperationResult::WorkerState {
+        execution_state: WorkerExecutionState::Exited,
+        exit_code: Some(17),
+    };
+
+    let json = serde_json::to_string(&result).unwrap();
+
+    assert_eq!(
+        json,
+        r#"{"state":"worker_state","execution_state":"exited","exit_code":17}"#
+    );
+    for forbidden in ["docker", "container", "stdout", "stderr", "secret"] {
+        assert!(!json.contains(forbidden));
+    }
 }
 
 #[test]

@@ -17,6 +17,7 @@ use crate::session_control::{
 };
 use crate::session_manager::SessionManager;
 use crate::session_registry::SessionRegistry;
+use crate::worker_runtime_control::WorkerRuntimeControl;
 use crate::workflow::{
     parse_workflow_run_runtime_hold_request, WorkflowRunRuntimeHoldRequest, WorkflowRunState,
     WorkflowRunTransitionRequest,
@@ -84,6 +85,7 @@ struct WorkflowLifecycleInner {
     session_store: SessionStore,
     session_manager: Arc<SessionManager>,
     registry: Arc<SessionRegistry>,
+    worker_control: WorkerRuntimeControl,
     launched: StdMutex<HashMap<Uuid, LaunchedWorkflowWorker>>,
     dispatch_lock: AsyncMutex<()>,
     runtime_hold_tasks: AsyncMutex<HashMap<Uuid, JoinHandle<()>>>,
@@ -94,6 +96,7 @@ impl WorkflowLifecycleManager {
         Self { inner: None }
     }
 
+    #[cfg(test)]
     pub fn new(
         config: Option<WorkflowWorkerConfig>,
         auth_validator: Arc<AuthValidator>,
@@ -101,6 +104,26 @@ impl WorkflowLifecycleManager {
         session_store: SessionStore,
         session_manager: Arc<SessionManager>,
         registry: Arc<SessionRegistry>,
+    ) -> Result<Self, WorkflowLifecycleError> {
+        Self::new_with_worker_control(
+            config,
+            auth_validator,
+            automation_access_token_manager,
+            session_store,
+            session_manager,
+            registry,
+            WorkerRuntimeControl::direct(),
+        )
+    }
+
+    pub(crate) fn new_with_worker_control(
+        config: Option<WorkflowWorkerConfig>,
+        auth_validator: Arc<AuthValidator>,
+        automation_access_token_manager: Arc<SessionAutomationAccessTokenManager>,
+        session_store: SessionStore,
+        session_manager: Arc<SessionManager>,
+        registry: Arc<SessionRegistry>,
+        worker_control: WorkerRuntimeControl,
     ) -> Result<Self, WorkflowLifecycleError> {
         let Some(config) = config else {
             return Ok(Self::disabled());
@@ -114,6 +137,7 @@ impl WorkflowLifecycleManager {
                 session_store,
                 session_manager,
                 registry,
+                worker_control,
                 launched: StdMutex::new(HashMap::new()),
                 dispatch_lock: AsyncMutex::new(()),
                 runtime_hold_tasks: AsyncMutex::new(HashMap::new()),

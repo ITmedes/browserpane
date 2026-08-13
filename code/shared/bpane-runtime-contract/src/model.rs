@@ -286,6 +286,8 @@ pub struct RecordingWorkerCredentials {
     pub session_automation_access_token: SecretValue,
     /// Recording completion credential.
     pub recording_worker_access_token: SecretValue,
+    /// Optional gateway service credential.
+    pub gateway_bearer_token: Option<SecretValue>,
 }
 
 impl std::fmt::Debug for RecordingWorkerCredentials {
@@ -295,6 +297,10 @@ impl std::fmt::Debug for RecordingWorkerCredentials {
             .field("connect_ticket", &"[REDACTED]")
             .field("session_automation_access_token", &"[REDACTED]")
             .field("recording_worker_access_token", &"[REDACTED]")
+            .field(
+                "gateway_bearer_token",
+                &self.gateway_bearer_token.as_ref().map(|_| "[REDACTED]"),
+            )
             .finish()
     }
 }
@@ -473,6 +479,16 @@ pub struct RuntimeOperationResponse {
     pub result: RuntimeOperationResult,
 }
 
+/// Sanitized execution state for a detached broker-owned worker.
+#[derive(Debug, Clone, Copy, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkerExecutionState {
+    /// The worker container is created, starting, running, or stopping.
+    Running,
+    /// The worker container reached a terminal process state.
+    Exited,
+}
+
 /// Sanitized operation results. Docker response models are never exposed.
 #[derive(Debug, Clone, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "state", rename_all = "snake_case")]
@@ -483,6 +499,13 @@ pub enum RuntimeOperationResult {
     Exists,
     /// An owned resource does not exist.
     Absent,
+    /// A detached workflow or recording worker was inspected.
+    WorkerState {
+        /// Stable worker lifecycle state.
+        execution_state: WorkerExecutionState,
+        /// Process exit code for an exited worker when the backend provides it.
+        exit_code: Option<i32>,
+    },
     /// An owned resource reached its terminal state.
     Completed {
         /// Process exit code when available.

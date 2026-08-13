@@ -25,6 +25,9 @@ pub struct RuntimeBrokerClientConfig {
 /// Typed runtime operation client boundary used by the gateway.
 #[async_trait]
 pub trait RuntimeBrokerClient: Send + Sync {
+    /// Checks the broker and selected adapter readiness endpoint.
+    async fn check_readiness(&self) -> Result<(), RuntimeBrokerClientError>;
+
     /// Submits one typed runtime operation.
     async fn execute(
         &self,
@@ -35,6 +38,7 @@ pub trait RuntimeBrokerClient: Send + Sync {
 /// OAuth-authenticated HTTP implementation of the runtime broker client.
 pub struct HttpRuntimeBrokerClient {
     operation_url: Url,
+    readiness_url: Url,
     request_timeout: Duration,
     max_response_bytes: usize,
     token_provider: Arc<dyn AccessTokenProvider>,
@@ -66,6 +70,8 @@ impl HttpRuntimeBrokerClient {
         {
             return Err(RuntimeBrokerClientErrorCode::InvalidConfiguration.into());
         }
+        let mut readiness_url = base_url.clone();
+        readiness_url.set_path("/readyz");
         base_url.set_path("/v1/operations");
         let client = Client::builder()
             .redirect(reqwest::redirect::Policy::none())
@@ -74,6 +80,7 @@ impl HttpRuntimeBrokerClient {
             .map_err(|_| RuntimeBrokerClientErrorCode::InvalidConfiguration)?;
         Ok(Self {
             operation_url: base_url,
+            readiness_url,
             request_timeout: config.request_timeout,
             max_response_bytes: config.max_response_bytes,
             token_provider,
@@ -108,6 +115,27 @@ impl HttpRuntimeBrokerClient {
 
 #[async_trait]
 impl RuntimeBrokerClient for HttpRuntimeBrokerClient {
+    async fn check_readiness(&self) -> Result<(), RuntimeBrokerClientError> {
+        let response = self
+            .client
+            .get(self.readiness_url.clone())
+            .timeout(self.request_timeout)
+            .send()
+            .await
+            .map_err(|error| {
+                if error.is_timeout() {
+                    RuntimeBrokerClientError::from(RuntimeBrokerClientErrorCode::TimedOut)
+                } else {
+                    RuntimeBrokerClientError::from(RuntimeBrokerClientErrorCode::Unreachable)
+                }
+            })?;
+        if response.status().is_success() {
+            Ok(())
+        } else {
+            Err(map_status(response.status()).into())
+        }
+    }
+
     async fn execute(
         &self,
         request: &RuntimeOperationRequest,

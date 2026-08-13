@@ -160,8 +160,16 @@ async fn livez() -> StatusCode {
     StatusCode::OK
 }
 
-async fn readyz() -> StatusCode {
-    StatusCode::OK
+async fn readyz(State(state): State<BrokerState>) -> StatusCode {
+    match timeout(
+        state.settings.operation_timeout,
+        state.executor.check_readiness(),
+    )
+    .await
+    {
+        Ok(Ok(())) => StatusCode::OK,
+        Ok(Err(_)) | Err(_) => StatusCode::SERVICE_UNAVAILABLE,
+    }
 }
 
 async fn authenticate_request(

@@ -2,8 +2,15 @@ use std::collections::HashMap;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::time::Duration;
 
+use async_trait::async_trait;
+use bpane_runtime_client::{RuntimeBrokerClient, RuntimeBrokerClientError};
+use bpane_runtime_contract::{
+    BrokerApiVersion, RuntimeOperation, RuntimeOperationRequest, RuntimeOperationResponse,
+    RuntimeOperationResult, WorkerExecutionState,
+};
 use tempfile::tempdir;
 use tokio::time::sleep;
 
@@ -17,6 +24,120 @@ use crate::session_control::{
     CreateSessionRequest, PersistCompletedSessionRecordingRequest, SessionOwnerMode,
     SessionRecordingFormat, SessionRecordingPolicy,
 };
+use crate::worker_runtime_control::WorkerRuntimeControl;
+
+#[derive(Default)]
+struct RecordingBrokerClient {
+    requests: Mutex<Vec<RuntimeOperationRequest>>,
+}
+
+#[async_trait]
+impl RuntimeBrokerClient for RecordingBrokerClient {
+    async fn check_readiness(&self) -> Result<(), RuntimeBrokerClientError> {
+        Ok(())
+    }
+
+    async fn execute(
+        &self,
+        request: &RuntimeOperationRequest,
+    ) -> Result<RuntimeOperationResponse, RuntimeBrokerClientError> {
+        self.requests.lock().unwrap().push(request.clone());
+        let result = match &request.operation {
+            RuntimeOperation::LaunchRecording(_) => RuntimeOperationResult::Accepted,
+            RuntimeOperation::ContainerLifecycle(request)
+                if request.action == bpane_runtime_contract::ContainerLifecycleAction::Inspect =>
+            {
+                RuntimeOperationResult::WorkerState {
+                    execution_state: WorkerExecutionState::Exited,
+                    exit_code: Some(8),
+                }
+            }
+            RuntimeOperation::ContainerLifecycle(_) => RuntimeOperationResult::Completed {
+                exit_code: None,
+                omitted_output_bytes: 0,
+            },
+            _ => RuntimeOperationResult::Absent,
+        };
+        Ok(RuntimeOperationResponse {
+            api_version: BrokerApiVersion::V1,
+            request_id: request.request_id,
+            result,
+        })
+    }
+}
+
+#[tokio::test]
+async fn broker_mode_launches_monitors_and_removes_recording_worker() {
+    let store = SessionStore::in_memory();
+    let auth = Arc::new(AuthValidator::from_hmac_secret(vec![9; 32]));
+    let client = Arc::new(RecordingBrokerClient::default());
+    let broker: Arc<dyn RuntimeBrokerClient> = client.clone();
+    let mut config = test_config(
+        PathBuf::from("/worker-must-not-run"),
+        PathBuf::from("/capture-must-not-exist"),
+    );
+    config.bearer_token = Some("recording-lifecycle-secret".to_string());
+    let manager = RecordingLifecycleManager::new_with_worker_control(
+        Some(config),
+        auth,
+        Arc::new(SessionConnectTicketManager::new(
+            vec![5; 32],
+            Duration::from_secs(300),
+        )),
+        Arc::new(SessionAutomationAccessTokenManager::new(
+            vec![6; 32],
+            Duration::from_secs(300),
+        )),
+        Arc::new(RecordingWorkerAccessTokenManager::new([7; 32])),
+        store.clone(),
+        WorkerRuntimeControl::from_broker(Some(broker)),
+    )
+    .unwrap();
+    let session = create_session_with_mode(&store, SessionRecordingMode::Always).await;
+
+    manager.ensure_auto_recording(&session).await.unwrap();
+
+    let recording = tokio::time::timeout(Duration::from_secs(3), async {
+        loop {
+            let current = store
+                .get_latest_recording_for_session(session.id)
+                .await
+                .unwrap()
+                .unwrap();
+            if current.state.is_terminal() {
+                break current;
+            }
+            sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("broker recorder should reach its terminal state");
+
+    assert!(matches!(
+        recording.state,
+        crate::session_control::SessionRecordingState::Failed
+    ));
+    assert!(recording.error.unwrap().contains("status Some(8)"));
+    assert!(store
+        .get_recording_worker_assignment(session.id)
+        .await
+        .unwrap()
+        .is_none());
+    let requests = client.requests.lock().unwrap();
+    assert!(matches!(
+        &requests[0].operation,
+        RuntimeOperation::LaunchRecording(_)
+    ));
+    assert!(matches!(
+        &requests[1].operation,
+        RuntimeOperation::ContainerLifecycle(_)
+    ));
+    assert!(matches!(
+        &requests[2].operation,
+        RuntimeOperation::ContainerLifecycle(_)
+    ));
+    assert!(!format!("{requests:?}").contains("recording-lifecycle-secret"));
+}
 
 fn test_principal() -> AuthenticatedPrincipal {
     AuthenticatedPrincipal {

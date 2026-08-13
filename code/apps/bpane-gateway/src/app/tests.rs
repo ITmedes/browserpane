@@ -60,6 +60,53 @@ fn docker_pool_runtime_uses_configured_capacities() {
 }
 
 #[test]
+fn broker_pool_requires_file_backed_service_credentials() {
+    let mut config = test_config();
+    config.runtime.backend = "broker_pool".to_string();
+    config.runtime.docker_image = Some("helper-image".to_string());
+    config.runtime.docker_network = Some("network".to_string());
+    config.runtime.docker_socket_volume = Some("volume".to_string());
+    config.runtime.runtime_broker_url = Some("http://runtime-broker:8940".to_string());
+    config.runtime.runtime_broker_token_url = Some("http://keycloak/token".to_string());
+    config.runtime.runtime_broker_client_id = Some("gateway".to_string());
+
+    let error = build_session_manager_config(&config).unwrap_err();
+
+    assert!(error
+        .to_string()
+        .contains("--runtime-broker-client-secret-file is required"));
+}
+
+#[test]
+fn broker_pool_builds_redacted_typed_configuration() {
+    let directory = tempfile::tempdir().unwrap();
+    let secret_path = directory.path().join("broker-client-secret");
+    std::fs::write(&secret_path, "service-secret\n").unwrap();
+    let mut config = test_config();
+    config.runtime.backend = "broker_pool".to_string();
+    config.runtime.docker_image = Some("helper-image".to_string());
+    config.runtime.docker_network = Some("network".to_string());
+    config.runtime.docker_socket_volume = Some("volume".to_string());
+    config.runtime.runtime_broker_url = Some("http://runtime-broker:8940".to_string());
+    config.runtime.runtime_broker_token_url = Some("http://keycloak/token".to_string());
+    config.runtime.runtime_broker_client_id = Some("gateway".to_string());
+    config.runtime.runtime_broker_client_secret_file = Some(secret_path);
+    config.runtime.max_active_runtimes = 3;
+
+    let manager_config = build_session_manager_config(&config).unwrap();
+    let debug = format!("{manager_config:?}");
+    let SessionManagerConfig::BrokerPool(broker) = manager_config else {
+        panic!("expected broker_pool session manager config");
+    };
+
+    assert_eq!(broker.docker.max_active_runtimes, 3);
+    assert_eq!(broker.base_url, "http://runtime-broker:8940");
+    assert_eq!(broker.client_id, "gateway");
+    assert!(!debug.contains("service-secret"));
+    assert!(debug.contains("[REDACTED]"));
+}
+
+#[test]
 fn recording_worker_requires_chrome_when_enabled() {
     let mut config = test_config();
     config.recording.recording_worker_bin = Some("recording-worker".into());

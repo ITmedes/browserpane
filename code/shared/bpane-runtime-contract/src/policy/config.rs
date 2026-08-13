@@ -154,13 +154,20 @@ fn validate_lifecycle_policy(policy: &LifecyclePolicy) -> Result<(), PolicyConfi
 }
 
 fn is_immutable_image(value: &str) -> bool {
-    let Some((repository, digest)) = value.rsplit_once("@sha256:") else {
-        return false;
-    };
-    !repository.is_empty()
-        && !repository.bytes().any(|byte| byte.is_ascii_whitespace())
-        && digest.len() == 64
-        && digest.bytes().all(|byte| byte.is_ascii_hexdigit())
+    if let Some(digest) = value.strip_prefix("sha256:") {
+        return is_sha256_digest(digest);
+    }
+    value
+        .rsplit_once("@sha256:")
+        .is_some_and(|(repository, digest)| {
+            !repository.is_empty()
+                && !repository.bytes().any(|byte| byte.is_ascii_whitespace())
+                && is_sha256_digest(digest)
+        })
+}
+
+fn is_sha256_digest(value: &str) -> bool {
+    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
 fn is_safe_name(value: &str) -> bool {

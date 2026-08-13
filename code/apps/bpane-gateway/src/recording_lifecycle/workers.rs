@@ -1,14 +1,23 @@
 use std::process::Stdio;
 
+use bpane_runtime_contract::{
+    RecordingWorkerCredentials, RecordingWorkerLaunchRequest, RuntimeOperationKind, SecretValue,
+};
 use tokio::process::Command;
 use tracing::{info, warn};
 
 use super::*;
 use crate::worker_process_output::{wait_with_bounded_output, BoundedProcessOutput};
+use crate::worker_runtime_control::{BrokerWorkerState, WorkerRuntimeControlError};
 
 #[derive(Debug, Clone, Copy)]
 pub(super) struct LaunchedRecordingWorker {
     pub(super) recording_id: Uuid,
+}
+
+enum RecordingWorkerExit {
+    Direct(std::io::Result<BoundedProcessOutput>),
+    Broker(Result<BrokerWorkerState, WorkerRuntimeControlError>),
 }
 
 impl RecordingLifecycleInner {
@@ -51,6 +60,19 @@ impl RecordingLifecycleInner {
                     "failed to issue recorder worker token for recording {recording_id}: {error}"
                 ))
             })?;
+
+        if self.worker_control.is_broker() {
+            return self
+                .spawn_broker_worker(
+                    session_id,
+                    recording_id,
+                    connect_ticket.token,
+                    automation_access_token.token,
+                    recording_worker_access_token.token,
+                    self.resolve_bearer_token(),
+                )
+                .await;
+        }
 
         let mut command = Command::new(&self.config.bin);
         command.args(&self.config.args);
@@ -144,13 +166,104 @@ impl RecordingLifecycleInner {
         tokio::spawn(async move {
             let status = wait_with_bounded_output(child, output_limit_bytes).await;
             manager
-                .handle_worker_exit(session_id, recording_id, status)
+                .handle_worker_exit(
+                    session_id,
+                    recording_id,
+                    RecordingWorkerExit::Direct(status),
+                )
                 .await;
         });
 
         info!(
             session_id = %session_id,
             recording_id = %recording_id,
+            "launched recorder worker for always-on session"
+        );
+        Ok(())
+    }
+
+    async fn spawn_broker_worker(
+        self: &Arc<Self>,
+        session_id: Uuid,
+        recording_id: Uuid,
+        connect_ticket: String,
+        automation_access_token: String,
+        recording_worker_access_token: String,
+        bearer_token: Option<String>,
+    ) -> Result<(), RecordingLifecycleError> {
+        let request = RecordingWorkerLaunchRequest {
+            session_id,
+            recording_id,
+            credentials: RecordingWorkerCredentials {
+                connect_ticket: recording_secret(connect_ticket, recording_id)?,
+                session_automation_access_token: recording_secret(
+                    automation_access_token,
+                    recording_id,
+                )?,
+                recording_worker_access_token: recording_secret(
+                    recording_worker_access_token,
+                    recording_id,
+                )?,
+                gateway_bearer_token: bearer_token
+                    .map(|value| recording_secret(value, recording_id))
+                    .transpose()?,
+            },
+        };
+        self.worker_control
+            .launch_recording(request)
+            .await
+            .map_err(|error| {
+                RecordingLifecycleError::LaunchFailed(format!(
+                    "runtime broker failed to launch recording worker {recording_id}: {error}"
+                ))
+            })?;
+
+        if let Err(error) = self
+            .session_store
+            .upsert_recording_worker_assignment(PersistedSessionRecordingWorkerAssignment {
+                session_id,
+                recording_id,
+                status: SessionRecordingWorkerAssignmentStatus::Running,
+                process_id: None,
+            })
+            .await
+        {
+            let _ = self
+                .worker_control
+                .remove(RuntimeOperationKind::RecordingWorker, recording_id)
+                .await;
+            return Err(error.into());
+        }
+
+        self.launched
+            .lock()
+            .await
+            .insert(session_id, LaunchedRecordingWorker { recording_id });
+
+        let manager = Arc::clone(self);
+        let poll_interval = self.config.poll_interval;
+        tokio::spawn(async move {
+            let status = manager
+                .worker_control
+                .wait_for_exit(
+                    RuntimeOperationKind::RecordingWorker,
+                    recording_id,
+                    poll_interval,
+                )
+                .await;
+            manager
+                .handle_worker_exit(
+                    session_id,
+                    recording_id,
+                    RecordingWorkerExit::Broker(status),
+                )
+                .await;
+        });
+
+        info!(
+            session_id = %session_id,
+            recording_id = %recording_id,
+            launch_mode = "broker",
             "launched recorder worker for always-on session"
         );
         Ok(())
@@ -167,15 +280,22 @@ impl RecordingLifecycleInner {
         self: Arc<Self>,
         session_id: Uuid,
         recording_id: Uuid,
-        status: std::io::Result<BoundedProcessOutput>,
+        status: RecordingWorkerExit,
     ) {
         self.launched.lock().await.remove(&session_id);
 
+        if self.worker_control.is_broker() {
+            let _ = self
+                .worker_control
+                .remove(RuntimeOperationKind::RecordingWorker, recording_id)
+                .await;
+        }
+
         let exit_message = match status {
-            Ok(output) if output.status.success() => {
+            RecordingWorkerExit::Direct(Ok(output)) if output.status.success() => {
                 format!("recording worker exited before finalizing recording {recording_id}")
             }
-            Ok(output) => {
+            RecordingWorkerExit::Direct(Ok(output)) => {
                 let detail = last_non_empty_line(&output.stderr)
                     .or_else(|| last_non_empty_line(&output.stdout))
                     .unwrap_or_else(|| {
@@ -189,9 +309,21 @@ impl RecordingLifecycleInner {
                     "recording worker exited before finalizing recording {recording_id}: {detail}{truncation}"
                 )
             }
-            Err(error) => {
+            RecordingWorkerExit::Direct(Err(error)) => {
                 format!("recording worker failed while waiting for session {session_id}: {error}")
             }
+            RecordingWorkerExit::Broker(Ok(BrokerWorkerState::Exited { exit_code })) => format!(
+                "recording worker exited before finalizing recording {recording_id} with status {exit_code:?}"
+            ),
+            RecordingWorkerExit::Broker(Ok(BrokerWorkerState::Absent)) => format!(
+                "recording worker disappeared before finalizing recording {recording_id}"
+            ),
+            RecordingWorkerExit::Broker(Ok(BrokerWorkerState::Running)) => format!(
+                "recording worker monitor ended unexpectedly for recording {recording_id}"
+            ),
+            RecordingWorkerExit::Broker(Err(error)) => format!(
+                "recording worker monitoring failed for recording {recording_id}: {error}"
+            ),
         };
 
         let Ok(Some(recording)) = self
@@ -234,6 +366,17 @@ impl RecordingLifecycleInner {
             .clear_recording_worker_assignment(session_id)
             .await;
     }
+}
+
+fn recording_secret(
+    value: String,
+    recording_id: Uuid,
+) -> Result<SecretValue, RecordingLifecycleError> {
+    SecretValue::new(value).map_err(|_| {
+        RecordingLifecycleError::LaunchFailed(format!(
+            "recording worker credential for recording {recording_id} is invalid"
+        ))
+    })
 }
 
 fn output_truncation_detail(omitted_bytes: u64) -> String {

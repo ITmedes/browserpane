@@ -19,6 +19,7 @@ use crate::session_control::{
     SessionStoreError, StoredSession,
 };
 use crate::session_registry::SessionRegistry;
+use crate::worker_runtime_control::WorkerRuntimeControl;
 
 mod control;
 mod workers;
@@ -86,6 +87,7 @@ struct RecordingLifecycleInner {
     automation_access_token_manager: Arc<SessionAutomationAccessTokenManager>,
     recording_worker_access_token_manager: Arc<RecordingWorkerAccessTokenManager>,
     session_store: SessionStore,
+    worker_control: WorkerRuntimeControl,
     launched: Mutex<HashMap<Uuid, LaunchedRecordingWorker>>,
 }
 
@@ -94,6 +96,7 @@ impl RecordingLifecycleManager {
         Self { inner: None }
     }
 
+    #[cfg(test)]
     pub fn new(
         config: Option<RecordingWorkerConfig>,
         auth_validator: Arc<AuthValidator>,
@@ -101,6 +104,26 @@ impl RecordingLifecycleManager {
         automation_access_token_manager: Arc<SessionAutomationAccessTokenManager>,
         recording_worker_access_token_manager: Arc<RecordingWorkerAccessTokenManager>,
         session_store: SessionStore,
+    ) -> Result<Self, RecordingLifecycleError> {
+        Self::new_with_worker_control(
+            config,
+            auth_validator,
+            connect_ticket_manager,
+            automation_access_token_manager,
+            recording_worker_access_token_manager,
+            session_store,
+            WorkerRuntimeControl::direct(),
+        )
+    }
+
+    pub(crate) fn new_with_worker_control(
+        config: Option<RecordingWorkerConfig>,
+        auth_validator: Arc<AuthValidator>,
+        connect_ticket_manager: Arc<SessionConnectTicketManager>,
+        automation_access_token_manager: Arc<SessionAutomationAccessTokenManager>,
+        recording_worker_access_token_manager: Arc<RecordingWorkerAccessTokenManager>,
+        session_store: SessionStore,
+        worker_control: WorkerRuntimeControl,
     ) -> Result<Self, RecordingLifecycleError> {
         let Some(config) = config else {
             return Ok(Self::disabled());
@@ -114,6 +137,7 @@ impl RecordingLifecycleManager {
                 automation_access_token_manager,
                 recording_worker_access_token_manager,
                 session_store,
+                worker_control,
                 launched: Mutex::new(HashMap::new()),
             })),
         })

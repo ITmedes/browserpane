@@ -10,6 +10,7 @@ use crate::session_access::SessionAutomationAccessTokenManager;
 use crate::session_control::SessionStore;
 use crate::session_manager::SessionManager;
 use crate::session_registry::SessionRegistry;
+use crate::worker_runtime_control::WorkerRuntimeControl;
 use crate::workflow::{
     WorkflowObservability, WorkflowRetentionManager, WorkflowSourcePolicy, WorkflowSourceResolver,
 };
@@ -28,6 +29,7 @@ impl WorkflowServices {
         session_store: SessionStore,
         session_manager: Arc<SessionManager>,
         registry: Arc<SessionRegistry>,
+        worker_control: WorkerRuntimeControl,
     ) -> anyhow::Result<Self> {
         let source_resolver = Arc::new(WorkflowSourceResolver::with_policy(
             config.workflow.workflow_git_bin.clone(),
@@ -41,13 +43,14 @@ impl WorkflowServices {
                     config.workflow.workflow_source_max_total_bytes,
                 ),
         ));
-        let lifecycle = Arc::new(WorkflowLifecycleManager::new(
+        let lifecycle = Arc::new(WorkflowLifecycleManager::new_with_worker_control(
             build_workflow_worker_config(config),
             auth_validator,
             automation_access_token_manager,
             session_store.clone(),
             session_manager,
             registry,
+            worker_control,
         )?);
         lifecycle.reconcile_persisted_state().await?;
 

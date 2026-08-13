@@ -7,7 +7,7 @@ use tracing::warn;
 pub struct Session {
     pub id: u64,
     /// Milliseconds since `session_start` at which the last heartbeat was received.
-    /// Using AtomicU64 instead of Mutex<Instant> avoids async lock overhead on the hot path.
+    /// Using `AtomicU64` instead of `Mutex<Instant>` avoids async lock overhead on the hot path.
     last_heartbeat_ms: Arc<AtomicU64>,
     session_start: Instant,
     active: Arc<AtomicBool>,

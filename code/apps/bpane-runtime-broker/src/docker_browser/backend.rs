@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use bollard::errors::Error as BollardError;
-use bollard::models::ContainerCreateBody;
+use bollard::models::{ContainerCreateBody, ContainerStateStatusEnum};
 use bollard::query_parameters::{
     CreateContainerOptionsBuilder, RemoveContainerOptionsBuilder, StopContainerOptionsBuilder,
 };
@@ -12,27 +12,34 @@ use reqwest::Url;
 use crate::{ExecutionError, ExecutionErrorCode};
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub(super) enum DockerBackendError {
+pub(crate) enum DockerBackendError {
     NotFound,
     Failed,
 }
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub(crate) enum DockerContainerState {
+    Running,
+    Exited { exit_code: Option<i32> },
+}
+
 #[async_trait]
-pub(super) trait DockerContainerApi: Send + Sync {
+pub(crate) trait DockerContainerApi: Send + Sync {
+    async fn ping(&self) -> Result<(), DockerBackendError>;
     async fn create(&self, name: &str, body: ContainerCreateBody)
         -> Result<(), DockerBackendError>;
     async fn start(&self, name: &str) -> Result<(), DockerBackendError>;
-    async fn inspect(&self, name: &str) -> Result<(), DockerBackendError>;
+    async fn inspect(&self, name: &str) -> Result<DockerContainerState, DockerBackendError>;
     async fn stop(&self, name: &str) -> Result<(), DockerBackendError>;
     async fn remove(&self, name: &str) -> Result<(), DockerBackendError>;
 }
 
-pub(super) struct BollardDockerContainerApi {
+pub(crate) struct BollardDockerContainerApi {
     docker: Docker,
 }
 
 impl BollardDockerContainerApi {
-    pub(super) fn connect(docker_api_url: &str, timeout: Duration) -> Result<Self, ExecutionError> {
+    pub(crate) fn connect(docker_api_url: &str, timeout: Duration) -> Result<Self, ExecutionError> {
         let url = Url::parse(docker_api_url).map_err(|_| ExecutionErrorCode::AdapterFailed)?;
         if url.scheme() != "http"
             || !url.username().is_empty()
@@ -54,6 +61,14 @@ impl BollardDockerContainerApi {
 
 #[async_trait]
 impl DockerContainerApi for BollardDockerContainerApi {
+    async fn ping(&self) -> Result<(), DockerBackendError> {
+        self.docker
+            .ping()
+            .await
+            .map(|_| ())
+            .map_err(map_bollard_error)
+    }
+
     async fn create(
         &self,
         name: &str,
@@ -74,12 +89,29 @@ impl DockerContainerApi for BollardDockerContainerApi {
             .map_err(map_bollard_error)
     }
 
-    async fn inspect(&self, name: &str) -> Result<(), DockerBackendError> {
-        self.docker
+    async fn inspect(&self, name: &str) -> Result<DockerContainerState, DockerBackendError> {
+        let response = self
+            .docker
             .inspect_container(name, None)
             .await
-            .map(|_| ())
-            .map_err(map_bollard_error)
+            .map_err(map_bollard_error)?;
+        let state = response.state.ok_or(DockerBackendError::Failed)?;
+        match state.status {
+            Some(ContainerStateStatusEnum::EXITED | ContainerStateStatusEnum::DEAD) => {
+                Ok(DockerContainerState::Exited {
+                    exit_code: state.exit_code.and_then(|value| i32::try_from(value).ok()),
+                })
+            }
+            Some(
+                ContainerStateStatusEnum::CREATED
+                | ContainerStateStatusEnum::RUNNING
+                | ContainerStateStatusEnum::PAUSED
+                | ContainerStateStatusEnum::RESTARTING
+                | ContainerStateStatusEnum::REMOVING
+                | ContainerStateStatusEnum::STOPPING,
+            ) => Ok(DockerContainerState::Running),
+            Some(ContainerStateStatusEnum::EMPTY) | None => Err(DockerBackendError::Failed),
+        }
     }
 
     async fn stop(&self, name: &str) -> Result<(), DockerBackendError> {
