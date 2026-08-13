@@ -36,8 +36,8 @@ const DEFAULT_PACKAGES = [
   ['code/web/bpane-admin-unified', ['check', 'test', 'test:coverage', 'build']],
   ['code/web/bpane-client', ['check', 'test', 'test:coverage', 'build']],
   ['code/integrations/mcp-bridge', ['test', 'build']],
-  ['code/integrations/recording-worker', ['build']],
-  ['code/integrations/workflow-worker', ['build']],
+  ['code/integrations/recording-worker', ['test', 'build']],
+  ['code/integrations/workflow-worker', ['test', 'build']],
   ['scripts/openapi', ['test', 'check', 'compatibility']]
 ];
 

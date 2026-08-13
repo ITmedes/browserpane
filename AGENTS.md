@@ -250,9 +250,9 @@ Run these in `code/web/bpane-client`:
 Run these where applicable:
 - `cd code/web/bpane-admin-auth && npm run test:coverage`
 - `cd code/web/bpane-admin-unified && npm run test:coverage`
-- `cd code/integrations/mcp-bridge && npm run build`
-- `cd code/integrations/recording-worker && npm run build`
-- `cd code/integrations/workflow-worker && npm run build`
+- `cd code/integrations/mcp-bridge && npm test && npm run build`
+- `cd code/integrations/recording-worker && npm test && npm run build`
+- `cd code/integrations/workflow-worker && npm test && npm run build`
 - `node --test deploy/examples/egress-observer/egress-usage-reporter.test.mjs`
 - `node --check deploy/examples/egress-observer/egress-usage-reporter.mjs`
 - `npm ci --ignore-scripts --prefix scripts/openapi`

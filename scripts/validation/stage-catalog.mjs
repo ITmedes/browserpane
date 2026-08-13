@@ -91,9 +91,9 @@ export class ValidationStageCatalog {
     stages.push(...this.#npmPackage(root, 'mcp-bridge', 'code/integrations/mcp-bridge',
       ['test', 'build']));
     stages.push(...this.#npmPackage(root, 'recording-worker',
-      'code/integrations/recording-worker', ['build']));
+      'code/integrations/recording-worker', ['test', 'build']));
     stages.push(...this.#npmPackage(root, 'workflow-worker',
-      'code/integrations/workflow-worker', ['build']));
+      'code/integrations/workflow-worker', ['test', 'build']));
     stages.push(...this.#npmPackage(root, 'openapi', 'scripts/openapi',
       ['test', 'check', 'compatibility']));
     stages.push(this.#node('egress-observer-check', 'Parse egress observer example', root,
