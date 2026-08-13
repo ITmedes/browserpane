@@ -109,7 +109,7 @@ Current product shape:
     repeatable exact-origin deployment configuration.
   - `workflow/observability.rs`: gateway-local counters/timestamps for workflow event delivery, produced-file uploads, and workflow retention passes.
   - `workflow/retention.rs`: periodic cleanup of retained workflow logs and structured outputs after the configured workflow retention windows expire.
-  - `runtime_manager.rs`: current `SessionManager` backend implementation; supports `static_single`, `docker_single`, `docker_pool`, and opt-in `broker_pool`. Local compose defaults to `docker_pool` for browser-session testing. `broker_pool` preserves the Docker pool state machine but routes browser and worker lifecycle operations through the authenticated runtime broker; storage helpers remain gateway-managed during migration. Docker-backed workers carry a session id plus explicit session data paths for Chromium profile, uploads, and downloads. Reusable browser contexts mount a context-scoped Chromium profile volume while keeping upload/download/session-file data session-scoped, and the runtime admits only one active writer per reusable context. Docker-backed browser-context cloning, export, and import package profile volume data through the session manager boundary. Docker runtime assignments are persisted/reconciled through Postgres on gateway restart.
+  - `runtime_manager.rs`: current `SessionManager` backend implementation; supports `static_single`, `docker_single`, `docker_pool`, and opt-in `broker_pool`. Local compose defaults to `docker_pool` for browser-session testing. `broker_pool` preserves the Docker pool state machine but routes browser, worker, and storage-helper operations through the authenticated runtime broker. Docker-backed workers carry a session id plus explicit session data paths for Chromium profile, uploads, and downloads. Reusable browser contexts mount a context-scoped Chromium profile volume while keeping upload/download/session-file data session-scoped, and the runtime admits only one active writer per reusable context. Docker-backed browser-context cloning, export, and import package profile volume data through the session manager boundary. Docker runtime assignments are persisted/reconciled through Postgres on gateway restart.
   - `runtime_manager/docker/container.rs`: docker runtime launch argument materialization, including safe egress observer labels, startup audit logs for correlating proxy access logs back to BrowserPane sessions, and TLS-interception CA bundle materialization for docker-backed runtimes.
   - `session_access/`: purpose-separated v2 HMAC credentials for browser
     connect, automation, and admin-event access. Cross-purpose replay is
@@ -134,6 +134,11 @@ Current product shape:
     networks and commands, approved environment keys, recording artifact
     mounts, resource bounds, and bounded Docker logs come only from trusted
     startup configuration.
+  - `docker_storage/`: broker-owned session-data and browser-context storage
+    helpers. It derives named volumes and typed destinations, validates bounded
+    context archives, stages validated input in request-scoped volumes, and
+    launches network-disabled unprivileged helpers with fixed mounts and
+    guaranteed helper/staging cleanup.
 - `code/shared/bpane-runtime-contract`
   - Versioned typed runtime operations, redacted secret values, sanitized audit
     resources, and deny-by-default launch and lifecycle policy.
@@ -196,8 +201,9 @@ Current product shape:
   - The gateway is configured to auto-launch workflow workers against the `deploy-workflow-worker` image on the compose network. Build that image before workflow-run smoke tests or local workflow execution.
   - `deploy/compose.runtime-broker.yml` is an opt-in migration overlay. It pins
     browser and worker images by immutable image id and moves their container
-    lifecycle through the broker; the gateway retains Docker-proxy access for
-    storage helpers until checkpoint 5 of issue #214.
+    lifecycle plus typed storage operations through the broker; the gateway
+    retains Docker-proxy network access only until checkpoint 6 of issue #214
+    validates and switches the broker-only topology.
   - The gateway mounts the repo at `/workspace:ro` so local git-backed workflow sources can be resolved and materialized during development smokes.
 - `deploy/examples/egress-observer`
   - Local egress observation fixtures. `compose.yml` runs a metadata-only Squid forward proxy at `bpane-egress-observer:3128` and an auth-enforcing Squid proxy at `bpane-egress-auth-observer:3130` for proxy-auth validation. `compose.tls.yml` runs a mitmproxy TLS-intercept proxy at `bpane-egress-tls-observer:3129` using local CA material prepared by `prepare-mitmproxy-ca.sh`. `egress-usage-reporter.mjs` is the local sanitized usage-ingestion example: it joins Squid logs with docker runtime labels and calls `/api/v1/sessions/{id}/egress-usage` with byte counters and safe observer metadata only.

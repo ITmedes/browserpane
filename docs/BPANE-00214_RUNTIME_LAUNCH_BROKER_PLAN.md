@@ -2,7 +2,7 @@
 
 Issue: [#214 Implement a policy-validating runtime launch broker](https://github.com/ITmedes/browserpane/issues/214)
 
-Status: active; checkpoints 1 through 4 complete; checkpoint 5 slices 1 and 2 complete
+Status: active; checkpoints 1 through 5 complete; checkpoint 6 is next
 
 ## Business Case
 
@@ -39,12 +39,13 @@ operations use separate typed request variants and separate allowlists.
 - Recording worker launch and supervision use the same direct/broker boundary.
   Base compose still supplies direct Docker CLI arguments; the broker path uses
   typed credentials and broker-owned container materialization.
-- Browser-context and session-file helpers use short-lived containers, named
-  volumes, stdin/stdout archive streams, and exact storage measurements.
+- Browser-context and session-file helpers use short-lived broker-owned
+  containers, derived named volumes, bounded archive transfers, and exact
+  storage measurements in `broker_pool`; `docker_pool` retains direct helpers.
 - `SessionManager` is the control-plane boundary for browser session runtimes,
   and the shared worker-control boundary selects direct or broker-backed
-  workflow and recording lifecycle. Storage helper ownership remains to be
-  migrated in checkpoint 5.
+  workflow and recording lifecycle. Storage helper ownership is routed through
+  typed broker operations in `broker_pool`.
 
 ## Architecture Decisions
 
@@ -789,7 +790,40 @@ Slice 3 smoke sequence:
    is launched.
 
 Manual checkpoint: clone/export/import a context, bind a workspace file, run a
-session, and verify storage usage and cleanup without gateway Docker access.
+session, and verify storage usage and cleanup through the broker. Removing the
+gateway from the Docker-control network remains checkpoint 6.
+
+Slice 3 evidence:
+
+- `DockerRuntimeManager` derives storage control from browser control, so
+  direct and broker lifecycle/storage modes cannot be mixed accidentally.
+  `broker_pool` routes initialization, four typed file destinations,
+  clone/export/import/measure, retention deletion, and owned-volume cleanup
+  through `RuntimeBrokerClient::execute_storage`.
+- Workspace bytes and binding state remain gateway-owned. Deterministic tests
+  cover read-only/read-write binding writes, manifest ordering, state
+  transitions, rejected manifests, active-context exclusion, malformed broker
+  results, transport failures, empty files, and content redaction.
+- Input-bearing helpers use a broker-derived request-scoped staging volume and
+  Docker's bounded archive upload route rather than attach stdin. The helper
+  verifies the declared byte count before consumption; helper and staging
+  volumes are removed after success, failure, or timeout. This preserves
+  realistic Chromium profile import performance without accepting host paths.
+- The host helper image pre-creates the fixed unprivileged session-data layout,
+  including the first-use reusable-context path, so Docker volume initialization
+  does not introduce root-owned nested directories.
+- Live validation passes for a 94 MB browser-context export/import with restored
+  profile state, clone, reconnect, quota, malformed/archive-link denial, and
+  cleanup. The gateway compose workspace test observes a file binding changing
+  from `pending` to `materialized` during broker-backed runtime startup.
+- Browser/CLI session files, admin-new session navigation/lifecycle/MCP/popup,
+  workflow workspace execution, and recording/playback/export smokes pass on
+  the broker overlay. The dedicated broker storage smoke uses a 4 MB
+  incompressible archive and verifies every storage action plus helper,
+  staging, session, and context volume cleanup.
+- README, ARCH, and AGENTS now describe broker-owned storage call sites. The
+  gateway intentionally retains its Docker-control network only until
+  checkpoint 6 proves and switches the broker-only topology.
 
 ### 6. Production-Like Topology Switch
 
