@@ -47,6 +47,24 @@ pub trait RuntimeOperationExecutor: Send + Sync {
         &self,
         request: &RuntimeOperationRequest,
     ) -> Result<RuntimeOperationResult, ExecutionError>;
+
+    /// Executes a storage operation with a separately bounded binary payload.
+    async fn execute_storage(
+        &self,
+        _request: &RuntimeOperationRequest,
+        _payload: Option<&[u8]>,
+    ) -> Result<StorageExecutionOutput, ExecutionError> {
+        Err(ExecutionErrorCode::AdapterUnavailable.into())
+    }
+}
+
+/// Storage executor result with optional binary response bytes.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct StorageExecutionOutput {
+    /// Sanitized operation result persisted in the idempotency ledger.
+    pub result: RuntimeOperationResult,
+    /// Optional separately transferred response payload.
+    pub payload: Option<Vec<u8>>,
 }
 
 /// Safe foundation executor used until operation adapters are enabled.
@@ -56,6 +74,26 @@ pub struct RejectingRuntimeExecutor;
 pub(crate) struct RoutedRuntimeExecutor {
     browser: Arc<dyn RuntimeOperationExecutor>,
     workers: Arc<dyn RuntimeOperationExecutor>,
+}
+
+pub(crate) struct StorageRoutedRuntimeExecutor {
+    primary: Arc<dyn RuntimeOperationExecutor>,
+    storage: Arc<dyn RuntimeOperationExecutor>,
+}
+
+impl StorageRoutedRuntimeExecutor {
+    pub(crate) fn new(
+        primary: Arc<dyn RuntimeOperationExecutor>,
+        storage: Arc<dyn RuntimeOperationExecutor>,
+    ) -> Self {
+        Self { primary, storage }
+    }
+}
+
+impl std::fmt::Debug for StorageRoutedRuntimeExecutor {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("StorageRoutedRuntimeExecutor([REDACTED])")
+    }
 }
 
 impl RoutedRuntimeExecutor {
@@ -93,6 +131,33 @@ impl RuntimeOperationExecutor for RoutedRuntimeExecutor {
                 Err(ExecutionErrorCode::AdapterUnavailable.into())
             }
         }
+    }
+}
+
+#[async_trait]
+impl RuntimeOperationExecutor for StorageRoutedRuntimeExecutor {
+    async fn check_readiness(&self) -> Result<(), ExecutionError> {
+        self.primary.check_readiness().await?;
+        self.storage.check_readiness().await
+    }
+
+    async fn execute(
+        &self,
+        request: &RuntimeOperationRequest,
+    ) -> Result<RuntimeOperationResult, ExecutionError> {
+        if request.operation.kind() == RuntimeOperationKind::StorageHelper {
+            self.storage.execute(request).await
+        } else {
+            self.primary.execute(request).await
+        }
+    }
+
+    async fn execute_storage(
+        &self,
+        request: &RuntimeOperationRequest,
+        payload: Option<&[u8]>,
+    ) -> Result<StorageExecutionOutput, ExecutionError> {
+        self.storage.execute_storage(request, payload).await
     }
 }
 

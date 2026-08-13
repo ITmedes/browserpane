@@ -48,6 +48,17 @@ export class RuntimeBrokerBrowserOverlayContract {
       "runtime-broker recording image must be immutable",
     );
     this.expect(
+      this.isImmutableImage(
+        broker.environment?.BPANE_RUNTIME_BROKER_STORAGE_HELPER_IMAGE,
+      ),
+      "runtime-broker storage helper image must be immutable",
+    );
+    this.expect(
+      broker.environment?.BPANE_RUNTIME_BROKER_STORAGE_HELPER_IMAGE ===
+        broker.environment?.BPANE_RUNTIME_BROKER_BROWSER_IMAGE,
+      "runtime-broker storage helper must use the pinned host image",
+    );
+    this.expect(
       broker.environment?.BPANE_RUNTIME_BROKER_WORKER_CONFIG_FILE ===
         "/runtime-config/workers.json",
       "runtime-broker must use the fixed worker policy file",

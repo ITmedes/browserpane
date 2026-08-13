@@ -28,12 +28,17 @@ use crate::{BrokerAuthenticator, OperationLedger, RuntimeOperationExecutor, Serv
 use self::media::{operation_response, require_contract_media_type};
 
 mod media;
+mod storage;
+
+use self::storage::run_storage_transfer;
 
 /// Bounded HTTP operation settings.
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub struct BrokerApiSettings {
     /// Maximum JSON body bytes.
     pub max_request_bytes: NonZeroUsize,
+    /// Maximum binary storage-helper payload bytes in either direction.
+    pub max_storage_payload_bytes: NonZeroUsize,
     /// Maximum in-flight executor calls.
     pub max_concurrent: NonZeroUsize,
     /// Hard operation deadline.
@@ -58,6 +63,10 @@ pub enum BrokerApiErrorCode {
     InvalidOperationParameters,
     PayloadDeclarationRequired,
     PayloadDeclarationNotAllowed,
+    PayloadMissing,
+    PayloadUnexpected,
+    PayloadLengthMismatch,
+    PayloadTooLarge,
     IdempotencyConflict,
     ReplayConflict,
     CapacityExceeded,
@@ -144,7 +153,18 @@ pub fn build_router(state: BrokerState) -> Router {
         .route("/v1/operations", post(run_operation))
         .route_layer(axum::extract::DefaultBodyLimit::max(
             state.settings.max_request_bytes.get(),
-        ))
+        ));
+    let storage_body_limit = state
+        .settings
+        .max_storage_payload_bytes
+        .get()
+        .saturating_add(state.settings.max_request_bytes.get())
+        .saturating_add(65_536);
+    let storage = Router::new()
+        .route("/v1/storage-transfers", post(run_storage_transfer))
+        .route_layer(axum::extract::DefaultBodyLimit::max(storage_body_limit));
+    let authenticated = operation
+        .merge(storage)
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             authenticate_request,
@@ -152,7 +172,7 @@ pub fn build_router(state: BrokerState) -> Router {
     Router::new()
         .route("/livez", get(livez))
         .route("/readyz", get(readyz))
-        .merge(operation)
+        .merge(authenticated)
         .with_state(state)
 }
 
@@ -230,6 +250,7 @@ async fn run_operation(
         let (code, message) = map_contract_error(error.code);
         ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, code, message)
     })?;
+    reject_streaming_storage_on_json_route(&request)?;
     let fingerprint = request_fingerprint(&request)?;
     let idempotency_key = request.idempotency_key.as_str();
 
@@ -306,6 +327,23 @@ async fn run_operation(
         .await;
     audit_accepted(&request);
     Ok(operation_response(response, false))
+}
+
+fn reject_streaming_storage_on_json_route(
+    request: &RuntimeOperationRequest,
+) -> Result<(), ApiError> {
+    let bpane_runtime_contract::RuntimeOperation::RunStorageHelper(storage) = &request.operation
+    else {
+        return Ok(());
+    };
+    if storage.action.accepts_input_payload() || storage.action.produces_output_payload() {
+        return Err(ApiError::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            BrokerApiErrorCode::InvalidOperationParameters,
+            "the storage operation requires the bounded transfer route",
+        ));
+    }
+    Ok(())
 }
 
 fn request_fingerprint(request: &RuntimeOperationRequest) -> Result<[u8; 32], ApiError> {

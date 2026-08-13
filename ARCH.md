@@ -96,12 +96,12 @@ too broad to constitute resource-level production authorization.
 
 An opt-in `deploy/compose.runtime-broker.yml` overlay inserts the authenticated
 runtime broker for browser, workflow-worker, and recording-worker lifecycle
-operations. In that mode the broker reaches the same Docker proxy over a
-broker-only control network and derives Docker-sensitive fields from typed
-BrowserPane intent plus trusted startup configuration. The gateway retains
-proxy access temporarily for context, session-data, and storage helper
-operations; the base Compose topology remains on `docker_pool` with a
-fail-closed broker.
+operations and enables its isolated storage-helper adapter. In that mode the
+broker reaches the same Docker proxy over a broker-only control network and
+derives Docker-sensitive fields from typed BrowserPane intent plus trusted
+startup configuration. The gateway retains proxy access temporarily for its
+context and session-data call sites until they migrate to that adapter; the
+base Compose topology remains on `docker_pool` with a fail-closed broker.
 
 ```
               Browser / E2E Test
@@ -294,8 +294,9 @@ service.
   - local compose exercises `docker_pool` through an internal Docker API proxy, a shared socket-only runtime volume, per-session browser data volumes, and a shared host-worker env profile; the gateway itself has no Docker socket mount
   - the runtime-broker overlay exercises `broker_pool` with broker-owned
     immutable browser and worker images, extension and environment snapshots,
-    worker policy, container policy, and Docker adapters; base Compose remains
-    unchanged
+    worker policy, container policy, and Docker adapters, including a
+    network-disabled bounded storage helper running as the unprivileged
+    `bpane` user; base Compose remains unchanged
   - the proxy blocks unrelated API families and is checked by `scripts/validate-docker-runtime-boundary.mjs`, but a purpose-specific launch broker or orchestrator adapter remains required to validate permitted resource names, images, mounts, networks, privileges, and limits in a production trust boundary
   - Docker runtime assignment metadata is now persisted in Postgres and reconciled on gateway startup, so an existing pool-mode worker can be rebound after a gateway restart without launching a duplicate runtime
   - Docker-backed workers now receive `BPANE_SESSION_ID` plus explicit profile/upload/download paths under a session-specific data root, so reconnecting a stopped session reuses cookies/cache/downloads and Chromium session-restore state without exposing one shared browser data root

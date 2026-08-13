@@ -7,6 +7,7 @@ use axum::http::{Request, StatusCode};
 use bpane_runtime_contract::{
     BrokerApiVersion, BrowserNetworkIdentity, BrowserRuntimeFeatures, BrowserRuntimeLaunchRequest,
     IdempotencyKey, RuntimeOperation, RuntimeOperationRequest, RuntimeOperationResult,
+    StorageHelperAction, StorageHelperRequest,
 };
 use serde_json::{json, Value};
 use tokio::sync::Notify;
@@ -112,6 +113,7 @@ fn operation_request() -> RuntimeOperationRequest {
 fn settings(max_concurrent: usize, timeout_duration: Duration) -> BrokerApiSettings {
     BrokerApiSettings {
         max_request_bytes: NonZeroUsize::new(1_024).unwrap(),
+        max_storage_payload_bytes: NonZeroUsize::new(1024 * 1024).unwrap(),
         max_concurrent: NonZeroUsize::new(max_concurrent).unwrap(),
         operation_timeout: timeout_duration,
     }
@@ -336,6 +338,55 @@ async fn rejects_unversioned_media_type() {
         response_json(response).await["error"]["code"],
         "unsupported_media_type"
     );
+}
+
+#[tokio::test]
+async fn json_route_rejects_streaming_storage_actions() {
+    let app = app_with_executor(
+        Arc::new(AcceptingExecutor::default()),
+        settings(1, Duration::from_secs(1)),
+    );
+    let request = RuntimeOperationRequest {
+        api_version: BrokerApiVersion::V1,
+        request_id: Uuid::now_v7(),
+        idempotency_key: IdempotencyKey::new("storage:import:json-route").unwrap(),
+        operation: RuntimeOperation::RunStorageHelper(StorageHelperRequest {
+            action: StorageHelperAction::ImportBrowserContext,
+            session_id: None,
+            source_context_id: None,
+            target_context_id: Some(Uuid::now_v7()),
+            file_target: None,
+            declared_payload_bytes: Some(4),
+        }),
+    };
+
+    let response = app
+        .clone()
+        .oneshot(post(&request, Some("valid")))
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        response_json(response).await["error"]["code"],
+        "invalid_operation_parameters"
+    );
+
+    let measure = RuntimeOperationRequest {
+        api_version: BrokerApiVersion::V1,
+        request_id: Uuid::now_v7(),
+        idempotency_key: IdempotencyKey::new("storage:measure:json-route").unwrap(),
+        operation: RuntimeOperation::RunStorageHelper(StorageHelperRequest {
+            action: StorageHelperAction::MeasureBrowserContext,
+            session_id: None,
+            source_context_id: Some(Uuid::now_v7()),
+            target_context_id: None,
+            file_target: None,
+            declared_payload_bytes: None,
+        }),
+    };
+    let response = app.oneshot(post(&measure, Some("valid"))).await.unwrap();
+    assert_eq!(response.status(), StatusCode::ACCEPTED);
 }
 
 #[tokio::test]

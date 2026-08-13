@@ -10,7 +10,10 @@ mod client;
 mod error;
 mod token;
 
-pub use client::{HttpRuntimeBrokerClient, RuntimeBrokerClient, RuntimeBrokerClientConfig};
+pub use client::{
+    HttpRuntimeBrokerClient, RuntimeBrokerClient, RuntimeBrokerClientConfig,
+    RuntimeStorageOperationResponse,
+};
 pub use error::{RuntimeBrokerClientError, RuntimeBrokerClientErrorCode};
 pub use token::{
     AccessTokenProvider, Oauth2ClientCredentialsConfig, Oauth2ClientCredentialsProvider,

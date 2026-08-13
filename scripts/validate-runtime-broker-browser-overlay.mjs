@@ -26,6 +26,7 @@ const result = spawnSync(
       ...process.env,
       BPANE_GATEWAY_RUNTIME_BACKEND: "broker_pool",
       BPANE_RUNTIME_BROKER_BROWSER_IMAGE: `sha256:${"a".repeat(64)}`,
+      BPANE_RUNTIME_BROKER_STORAGE_HELPER_IMAGE: `sha256:${"a".repeat(64)}`,
       BPANE_RUNTIME_BROKER_WORKFLOW_IMAGE: `sha256:${"b".repeat(64)}`,
       BPANE_RUNTIME_BROKER_RECORDING_IMAGE: `sha256:${"c".repeat(64)}`,
     },
