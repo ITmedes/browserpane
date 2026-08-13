@@ -9,6 +9,7 @@
 mod api;
 mod auth;
 mod config;
+mod docker_browser;
 mod executor;
 mod ledger;
 
@@ -18,6 +19,7 @@ pub use auth::{
     OidcBrokerAuthenticator, ServicePrincipal,
 };
 pub use config::BrokerConfig;
+pub use docker_browser::{BrowserRuntimeDockerAdapter, BrowserRuntimeDockerConfig};
 pub use executor::{
     ExecutionError, ExecutionErrorCode, RejectingRuntimeExecutor, RuntimeOperationExecutor,
 };

@@ -19,6 +19,7 @@ bpane-runtime-contract.workspace = true
 anyhow.workspace = true
 async-trait = "0.1"
 axum = "0.8"
+bollard.workspace = true
 clap = { version = "4", features = ["derive", "env"] }
 hex = "0.4"
 jsonwebtoken = { version = "9", features = ["use_pem"] }

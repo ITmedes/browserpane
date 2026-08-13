@@ -122,6 +122,11 @@ Current product shape:
     backend-specific launch construction behind a fail-closed executor boundary.
   - The broker foundation is present but is not yet the default runtime path;
     operation adapters are being migrated incrementally under issue #214.
+  - `docker_browser/`: broker-owned browser container materialization and
+    launch/inspect/stop/remove adapter built on Bollard. It derives names,
+    volumes, environment, labels, network, security, and resource bounds from
+    trusted policy plus typed resource ids. The service does not enable this
+    adapter until browser feature parity and gateway opt-in wiring are complete.
 - `code/shared/bpane-runtime-contract`
   - Versioned typed runtime operations, redacted secret values, sanitized audit
     resources, and deny-by-default launch and lifecycle policy.
