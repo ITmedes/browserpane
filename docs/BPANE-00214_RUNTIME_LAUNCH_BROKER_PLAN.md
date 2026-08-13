@@ -198,6 +198,20 @@ Completed evidence:
   context writer exclusion, egress, extensions, and session-file behavior.
 - Run browser session unit, compose API, multi-session, reconnect, and MCP smokes.
 
+Execution slices:
+
+1. Add a broker-owned browser container adapter using a maintained Docker API
+   client. Derive names, base environment, labels, volumes, network, security,
+   and resource bounds from trusted broker configuration and typed resource ids;
+   cover launch/inspect/stop/remove plus backend denial and sanitization tests.
+2. Extend the typed browser intent and broker materializer for the currently
+   supported reusable context, egress, proxy-auth/CA, extension, and
+   session-data selections. Keep arbitrary maps, host paths, raw Docker models,
+   and caller-selected privilege fields out of the wire contract.
+3. Add the opt-in gateway client/backend, preserve existing admission and
+   persistence ownership, and run lifecycle/reconnect/MCP parity before the
+   compose default or gateway Docker network changes.
+
 Manual checkpoint: opt into broker mode locally and operate two concurrent
 sessions plus reconnect and MCP delegation before changing the default.
 
