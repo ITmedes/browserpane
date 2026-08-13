@@ -34,7 +34,8 @@ the browser, Keycloak, web UI, and gateway all run on the same machine.
 `deploy/compose.yml` defaults to `docker_pool` for browser-session testing.
 That mode assumes:
 
-- the gateway can access the Docker socket;
+- the internal `docker-proxy` can access the host Docker socket and the gateway
+  can reach only that proxy through `DOCKER_HOST`;
 - the runtime image is available as `deploy-host` unless overridden;
 - the Docker network, socket volume, and session-data volume prefix match the
   compose project name;
@@ -60,6 +61,12 @@ sudo env \
 Adjust the `deploy_...` names if your compose project is not named `deploy`.
 Without those overrides, the gateway can start with runtime settings that point
 at non-existing images, networks, or volumes.
+
+The checked-in proxy publishes no host port, is digest-pinned, and denies
+unneeded Docker API families. Run
+`node scripts/validate-docker-runtime-boundary.mjs` after the stack is healthy
+to verify the manifest and live allow/deny behavior. Do not attach the gateway
+directly to `/var/run/docker.sock` in a remote deployment.
 
 ## Do Not Expose Dev Services Publicly
 
@@ -90,3 +97,12 @@ outside this repo's compose defaults, including:
 - gateway/API ingress policy;
 - Docker runtime scheduling and capacity limits;
 - logging, metrics, backup, and incident-response policy.
+
+The generic Docker API proxy is not a complete production trust boundary.
+BrowserPane currently needs broad container and volume families, and endpoint
+filtering cannot validate the request body of an allowed container create. A
+production Docker-host design therefore needs a purpose-specific launch broker
+that validates owned images, names, networks, mounts, privileges, resources,
+and lifecycle operations. Kubernetes or cloud execution should use a dedicated
+runtime-manager adapter and orchestrator policy instead of exposing a Docker
+daemon to the gateway.

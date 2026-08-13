@@ -160,14 +160,18 @@ work around a rejected path.
 ```bash
 docker info >/dev/null
 docker compose -f deploy/compose.yml exec -T gateway \
-  sh -lc 'test -S /var/run/docker.sock'
-docker compose -f deploy/compose.yml logs --tail=200 gateway \
+  docker info --format '{{.ServerVersion}}'
+node scripts/validate-docker-runtime-boundary.mjs
+docker compose -f deploy/compose.yml logs --tail=200 gateway docker-proxy \
   | rg 'docker|runtime|permission denied|unavailable'
 ```
 
-The local gateway needs the mounted Docker socket for `docker_pool`, workflow
-workers, and recording workers. A missing socket, inactive host daemon, or
-permission failure can leave the HTTP layer alive while runtime admission fails.
+The local gateway uses `DOCKER_HOST` to reach the internal `docker-proxy` for
+`docker_pool`, workflow workers, recording workers, and volume helpers. Only
+the proxy mounts the host socket. An inactive host daemon, unhealthy proxy,
+denied required API, or permission failure can leave process liveness available
+while readiness and runtime admission fail. The validator checks the structured
+Compose contract and live allowed/denied API behavior.
 
 ### 7. Optional Camera Ingress
 

@@ -44,6 +44,8 @@ validate the content of permitted container and volume requests.
 4. Stage a purpose-specific runtime launch broker or non-Docker orchestrator
    adapter as the production target. That boundary must validate BrowserPane-owned
    images, names, networks, mounts, resource limits, and lifecycle operations.
+   Follow-up implementation is owned by
+   [#214](https://github.com/ITmedes/browserpane/issues/214).
 
 ## Considered Alternatives
 
