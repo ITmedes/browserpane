@@ -109,20 +109,11 @@ impl StorageRuntimeDockerAdapter {
                 helper.container_name,
                 helper.container,
                 payload.map(ToOwned::to_owned),
+                input_volume,
+                cleanup_target,
                 helper.output_limit,
             )
             .await;
-        let input_cleanup = if let Some(volume) = input_volume.as_deref() {
-            self.remove_owned_volume_if_present(volume).await
-        } else {
-            Ok(())
-        };
-        if output.is_err() || input_cleanup.is_err() {
-            if let Some(volume) = cleanup_target {
-                let _ = self.backend.remove_volume(&volume).await;
-            }
-            return Err(ExecutionErrorCode::AdapterFailed.into());
-        }
         let output = match output {
             Ok(output) => output,
             Err(error) => return Err(map_backend_error(error)),

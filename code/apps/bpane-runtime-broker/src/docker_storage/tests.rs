@@ -52,6 +52,8 @@ impl StorageDockerApi for MockStorageDockerApi {
         name: String,
         body: ContainerCreateBody,
         input: Option<Vec<u8>>,
+        input_volume: Option<String>,
+        failure_cleanup_volume: Option<String>,
         output_limit: usize,
     ) -> Result<Vec<u8>, StorageDockerError> {
         let action = body
@@ -70,6 +72,9 @@ impl StorageDockerApi for MockStorageDockerApi {
             input,
             output_limit,
         });
+        if let Some(volume) = input_volume.as_ref() {
+            self.volumes.lock().unwrap().insert(volume.clone());
+        }
         if self.fail_launch.load(Ordering::SeqCst) {
             if let Some(mounts) = self
                 .launches
@@ -90,13 +95,26 @@ impl StorageDockerApi for MockStorageDockerApi {
                     self.volumes.lock().unwrap().insert(volume);
                 }
             }
+            if let Some(volume) = input_volume {
+                self.volumes.lock().unwrap().remove(&volume);
+                self.removed.lock().unwrap().push(volume);
+            }
+            if let Some(volume) = failure_cleanup_volume {
+                self.volumes.lock().unwrap().remove(&volume);
+                self.removed.lock().unwrap().push(volume);
+            }
             return Err(StorageDockerError::Failed);
         }
-        Ok(match action.as_str() {
+        let output = match action.as_str() {
             "export_browser_context" => b"context-archive".to_vec(),
             "measure_browser_context" => b"42\n".to_vec(),
             _ => Vec::new(),
-        })
+        };
+        if let Some(volume) = input_volume {
+            self.volumes.lock().unwrap().remove(&volume);
+            self.removed.lock().unwrap().push(volume);
+        }
+        Ok(output)
     }
 }
 

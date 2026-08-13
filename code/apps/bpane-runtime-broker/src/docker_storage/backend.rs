@@ -33,6 +33,8 @@ pub(super) trait StorageDockerApi: Send + Sync {
         name: String,
         body: ContainerCreateBody,
         input: Option<Vec<u8>>,
+        input_volume: Option<String>,
+        failure_cleanup_volume: Option<String>,
         output_limit: usize,
     ) -> Result<Vec<u8>, StorageDockerError>;
 }
@@ -99,6 +101,8 @@ impl StorageDockerApi for BollardStorageDockerApi {
         name: String,
         body: ContainerCreateBody,
         input: Option<Vec<u8>>,
+        input_volume: Option<String>,
+        failure_cleanup_volume: Option<String>,
         output_limit: usize,
     ) -> Result<Vec<u8>, StorageDockerError> {
         let docker = self.docker.clone();
@@ -116,16 +120,36 @@ impl StorageDockerApi for BollardStorageDockerApi {
                 .v(false)
                 .build();
             let cleanup = docker.remove_container(&name, Some(remove)).await;
-            match (operation, cleanup) {
+            let input_cleanup = if let Some(volume) = input_volume {
+                let options = RemoveVolumeOptionsBuilder::default().force(true).build();
+                match docker.remove_volume(&volume, Some(options)).await {
+                    Ok(())
+                    | Err(BollardError::DockerResponseServerError {
+                        status_code: 404, ..
+                    }) => Ok(()),
+                    Err(_) => Err(StorageDockerError::Failed),
+                }
+            } else {
+                Ok(())
+            };
+            let result = match (operation, cleanup, input_cleanup) {
                 (
                     Ok(output),
                     Ok(())
                     | Err(BollardError::DockerResponseServerError {
                         status_code: 404, ..
                     }),
+                    Ok(()),
                 ) => Ok(output),
-                (Ok(_), Err(_)) | (Err(_), _) => Err(StorageDockerError::Failed),
+                _ => Err(StorageDockerError::Failed),
+            };
+            if result.is_err() {
+                if let Some(volume) = failure_cleanup_volume {
+                    let options = RemoveVolumeOptionsBuilder::default().force(true).build();
+                    let _ = docker.remove_volume(&volume, Some(options)).await;
+                }
             }
+            result
         });
         task.await.map_err(|_| StorageDockerError::Failed)?
     }
