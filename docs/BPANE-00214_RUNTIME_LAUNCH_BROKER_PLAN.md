@@ -821,9 +821,9 @@ Slice 3 evidence:
   the broker overlay. The dedicated broker storage smoke uses a 4 MB
   incompressible archive and verifies every storage action plus helper,
   staging, session, and context volume cleanup.
-- README, ARCH, and AGENTS now describe broker-owned storage call sites. The
-  gateway intentionally retains its Docker-control network only until
-  checkpoint 6 proves and switches the broker-only topology.
+- README, ARCH, and AGENTS described broker-owned storage call sites. At the
+  checkpoint 5 boundary, the gateway intentionally retained Docker control
+  until checkpoint 6 could prove and switch the broker-only topology.
 
 ### 6. Production-Like Topology Switch
 
@@ -878,6 +878,30 @@ Checkpoint 6 focused smoke sequence:
    recording, admin-new, CLI, and complete compose API regressions.
 5. Restart gateway and broker independently and verify persisted assignment,
    queued workflow, recording, and runtime reconciliation behavior.
+
+Checkpoint 6 implementation evidence:
+
+- `deploy/compose.runtime-broker.yml` removes gateway `DOCKER_HOST`, Docker
+  proxy dependency, socket access, and `docker-control` membership while
+  preserving the private broker API network.
+- The static topology validator asserts that `docker-control` contains exactly
+  `docker-proxy` and `runtime-broker` and that no alternate gateway Docker
+  endpoint is configured.
+- `scripts/smoke-runtime-broker-isolation.sh` proves the effective running
+  gateway cannot resolve or connect to the proxy and can still reach broker
+  readiness.
+- `smoke:runtime-broker-restart` preserves the same live browser container
+  across a broker restart, creates no duplicate, retains lifecycle and
+  automation access, and cleans the container after stop.
+- The isolated topology passed all 17 Compose API cases, session files,
+  admin-new sessions, workflow workspace/runtime-hold/restart safety,
+  recording, multi-session/MCP, and 4 MB broker-storage journeys. The direct
+  compatibility topology separately passed all four docker-pool cases.
+- Gateway restart reconciliation passed with one-worker workflow backpressure:
+  the active stale run failed, the queued follower completed, and the
+  awaiting-input run survived and resumed.
+- `npm run check` passed for the browser-client package; final repository,
+  package, Rust, documentation, and hosted checks remain the PR gate.
 
 ## Validation Strategy
 
