@@ -6,13 +6,18 @@ use std::time::Duration;
 
 use uuid::Uuid;
 
+use bpane_runtime_client::RuntimeBrokerClient;
+
 use crate::credentials::CredentialProvider;
 use crate::session_control::SessionStore;
 use crate::workspaces::WorkspaceFileStore;
 
+mod broker_browser;
 mod docker;
 mod static_single;
 
+pub use broker_browser::BrokerRuntimeConfig;
+use broker_browser::{build_broker_pool, BrowserContainerControl};
 use docker::DockerRuntimeManager;
 use static_single::StaticSingleRuntimeManager;
 
@@ -150,6 +155,7 @@ pub enum RuntimeManagerConfig {
     },
     DockerSingle(DockerRuntimeConfig),
     DockerPool(DockerRuntimeConfig),
+    BrokerPool(BrokerRuntimeConfig),
 }
 
 #[derive(Debug, Clone)]
@@ -246,11 +252,33 @@ impl SessionRuntimeManager {
                     profile,
                 })
             }
+            RuntimeManagerConfig::BrokerPool(config) => {
+                let max_runtime_sessions = config.docker.max_active_runtimes;
+                let profile = RuntimeProfile {
+                    runtime_binding: "runtime_broker_pool".to_string(),
+                    compatibility_mode: "session_runtime_pool".to_string(),
+                    max_runtime_sessions,
+                    supports_legacy_global_routes: false,
+                    supports_session_extensions: true,
+                };
+                let manager = build_broker_pool(config, profile.clone())?;
+                Ok(Self {
+                    backend: RuntimeBackend::Docker(Arc::new(manager)),
+                    profile,
+                })
+            }
         }
     }
 
     pub fn profile(&self) -> &RuntimeProfile {
         &self.profile
+    }
+
+    pub(crate) fn runtime_broker_client(&self) -> Option<Arc<dyn RuntimeBrokerClient>> {
+        match &self.backend {
+            RuntimeBackend::StaticSingle(_) => None,
+            RuntimeBackend::Docker(manager) => manager.runtime_broker_client(),
+        }
     }
 
     pub async fn attach_session_store(&self, store: SessionStore) {

@@ -67,6 +67,23 @@ struct BlockingExecutor {
     release: Notify,
 }
 
+#[derive(Default)]
+struct UnreadyExecutor;
+
+#[async_trait]
+impl RuntimeOperationExecutor for UnreadyExecutor {
+    async fn check_readiness(&self) -> Result<(), ExecutionError> {
+        Err(ExecutionErrorCode::AdapterFailed.into())
+    }
+
+    async fn execute(
+        &self,
+        _request: &RuntimeOperationRequest,
+    ) -> Result<RuntimeOperationResult, ExecutionError> {
+        Ok(RuntimeOperationResult::Accepted)
+    }
+}
+
 #[async_trait]
 impl RuntimeOperationExecutor for BlockingExecutor {
     async fn execute(
@@ -156,6 +173,37 @@ async fn health_routes_are_public_but_operations_require_authentication() {
         response_json(response).await["error"]["code"],
         "authentication_required"
     );
+}
+
+#[tokio::test]
+async fn readiness_reflects_the_selected_adapter_without_requiring_authentication() {
+    let app = app_with_executor(
+        Arc::new(UnreadyExecutor),
+        settings(1, Duration::from_secs(1)),
+    );
+
+    let liveness = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/livez")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let readiness = app
+        .oneshot(
+            Request::builder()
+                .uri("/readyz")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(liveness.status(), StatusCode::OK);
+    assert_eq!(readiness.status(), StatusCode::SERVICE_UNAVAILABLE);
 }
 
 #[tokio::test]

@@ -15,7 +15,7 @@ impl WorkflowLifecycleInner {
         );
 
         if let Some(container_name) = assignment.container_name.as_deref() {
-            if let Err(error) = self.remove_container(container_name).await {
+            if let Err(error) = self.remove_worker(assignment.run_id, container_name).await {
                 warn!(
                     run_id = %assignment.run_id,
                     container_name,
@@ -100,7 +100,7 @@ impl WorkflowLifecycleInner {
             .upsert_workflow_run_worker_assignment(assignment.clone())
             .await?;
         if let Some(container_name) = assignment.container_name.as_deref() {
-            self.remove_container(container_name).await?;
+            self.remove_worker(run_id, container_name).await?;
         }
         Ok(())
     }

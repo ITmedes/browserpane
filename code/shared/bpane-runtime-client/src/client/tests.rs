@@ -1,7 +1,7 @@
 use axum::body::Body;
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
-use axum::routing::post;
+use axum::routing::{get, post};
 use axum::{Json, Router};
 use bpane_runtime_contract::{
     BrokerApiVersion, BrowserRuntimeLaunchRequest, IdempotencyKey, RuntimeOperation,
@@ -92,6 +92,46 @@ async fn sends_typed_authenticated_request_and_correlates_response() {
 
     assert_eq!(response.request_id, request.request_id);
     assert_eq!(response.result, RuntimeOperationResult::Accepted);
+}
+
+#[tokio::test]
+async fn checks_public_readiness_without_fetching_a_service_token() {
+    let base_url =
+        spawn(Router::new().route("/readyz", get(|| async { StatusCode::NO_CONTENT }))).await;
+
+    client(base_url, Duration::from_secs(1))
+        .check_readiness()
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn maps_readiness_failure_and_timeout_without_exposing_response_body() {
+    let unavailable = spawn(Router::new().route(
+        "/readyz",
+        get(|| async { (StatusCode::SERVICE_UNAVAILABLE, "adapter-secret") }),
+    ))
+    .await;
+    let error = client(unavailable, Duration::from_secs(1))
+        .check_readiness()
+        .await
+        .unwrap_err();
+    assert_eq!(error.code, RuntimeBrokerClientErrorCode::Unavailable);
+    assert!(!error.to_string().contains("adapter-secret"));
+
+    let delayed = spawn(Router::new().route(
+        "/readyz",
+        get(|| async {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            StatusCode::OK
+        }),
+    ))
+    .await;
+    let error = client(delayed, Duration::from_millis(5))
+        .check_readiness()
+        .await
+        .unwrap_err();
+    assert_eq!(error.code, RuntimeBrokerClientErrorCode::TimedOut);
 }
 
 #[tokio::test]

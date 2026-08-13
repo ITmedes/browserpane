@@ -74,7 +74,9 @@ impl DockerRuntimeManager {
                 continue;
             };
 
-            let container_exists = self.container_exists(container_name).await?;
+            let container_exists = self
+                .browser_container_exists(assignment.session_id, container_name)
+                .await?;
             if !container_exists {
                 drop(leases);
                 self.cleanup_stale_assignment(&store, &assignment, recoverable)
@@ -153,7 +155,9 @@ impl DockerRuntimeManager {
         restore_session_ready: bool,
     ) -> Result<(), RuntimeManagerError> {
         if let Some(container_name) = assignment.container_name.as_deref() {
-            let _ = self.stop_container(container_name).await;
+            let _ = self
+                .stop_browser_container(assignment.session_id, container_name)
+                .await;
         }
         let _ = remove_socket_path(&assignment.agent_socket_path).await;
         store

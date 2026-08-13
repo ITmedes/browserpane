@@ -8,21 +8,30 @@
 
 mod api;
 mod auth;
+mod browser_adapter_config;
 mod config;
 mod docker_browser;
+mod docker_workers;
 mod executor;
 mod ledger;
+mod worker_adapter_config;
 
 pub use api::{build_router, BrokerApiErrorCode, BrokerApiSettings, BrokerState};
 pub use auth::{
     AuthenticationError, AuthenticationErrorCode, BrokerAuthenticator, OidcAuthenticatorConfig,
     OidcBrokerAuthenticator, ServicePrincipal,
 };
+pub use browser_adapter_config::{BrowserAdapterSettings, RuntimeExecutorMode};
 pub use config::BrokerConfig;
 pub use docker_browser::{
     BrowserRuntimeDockerAdapter, BrowserRuntimeDockerConfig, BrowserRuntimeExtensionConfig,
+};
+pub use docker_workers::{
+    RecordingWorkerDockerConfig, WorkerOidcConfig, WorkerRuntimeDockerAdapter,
+    WorkerRuntimeDockerConfig, WorkflowWorkerDockerConfig,
 };
 pub use executor::{
     ExecutionError, ExecutionErrorCode, RejectingRuntimeExecutor, RuntimeOperationExecutor,
 };
 pub use ledger::{LedgerConfig, OperationLedger};
+pub use worker_adapter_config::WorkerAdapterSettings;

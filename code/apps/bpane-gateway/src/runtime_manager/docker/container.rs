@@ -472,9 +472,10 @@ impl DockerRuntimeManager {
             )
         })?;
 
-        let _ = self.stop_container(container_name).await;
+        let _ = self
+            .stop_browser_container(lease.session_id, container_name)
+            .await;
         let _ = remove_socket_path(&lease.agent_socket_path).await;
-        let extension_dirs = self.session_extension_dirs(lease.session_id).await?;
         let launch_options = self
             .session_network_identity_launch_options(lease.session_id)
             .await?;
@@ -484,27 +485,39 @@ impl DockerRuntimeManager {
             .await?;
         self.materialize_egress_proxy_auth_config(lease.session_id, &launch_options)
             .await?;
-        self.materialize_session_file_bindings(lease.session_id)
+        let session_file_bindings = self
+            .materialize_session_file_bindings(lease.session_id)
             .await?;
 
-        let mut command = Command::new(&self.config.docker_bin);
-        command.args(self.docker_run_args_with_launch_options(
-            lease,
-            &extension_dirs,
-            &launch_options,
-        )?);
+        match &self.browser_control {
+            BrowserContainerControl::Direct => {
+                let extension_dirs = self.session_extension_dirs(lease.session_id).await?;
+                let mut command = Command::new(&self.config.docker_bin);
+                command.args(self.docker_run_args_with_launch_options(
+                    lease,
+                    &extension_dirs,
+                    &launch_options,
+                )?);
 
-        let output = command.output().await.map_err(|error| {
-            RuntimeManagerError::StartupFailed(format!("failed to run docker launcher: {error}"))
-        })?;
-        if !output.status.success() {
-            return Err(RuntimeManagerError::StartupFailed(format!(
-                "docker run failed: {}",
-                String::from_utf8_lossy(&output.stderr).trim()
-            )));
+                let output = command.output().await.map_err(|error| {
+                    RuntimeManagerError::StartupFailed(format!(
+                        "failed to run docker launcher: {error}"
+                    ))
+                })?;
+                if !output.status.success() {
+                    return Err(RuntimeManagerError::StartupFailed(format!(
+                        "docker run failed: {}",
+                        String::from_utf8_lossy(&output.stderr).trim()
+                    )));
+                }
+            }
+            BrowserContainerControl::Broker(_) => {
+                self.launch_browser_with_broker(lease, session_file_bindings)
+                    .await?;
+            }
         }
 
-        self.wait_for_socket(&lease.agent_socket_path, container_name)
+        self.wait_for_socket(lease.session_id, &lease.agent_socket_path, container_name)
             .await
     }
 
@@ -568,6 +581,7 @@ impl DockerRuntimeManager {
 
     async fn wait_for_socket(
         &self,
+        session_id: Uuid,
         socket_path: &str,
         container_name: &str,
     ) -> Result<(), RuntimeManagerError> {
@@ -577,7 +591,9 @@ impl DockerRuntimeManager {
                 return Ok(());
             }
             if Instant::now() >= deadline {
-                let _ = self.stop_container(container_name).await;
+                let _ = self
+                    .stop_browser_container(session_id, container_name)
+                    .await;
                 let _ = remove_socket_path(socket_path).await;
                 return Err(RuntimeManagerError::StartupFailed(format!(
                     "docker runtime did not create socket {socket_path} before startup timeout"

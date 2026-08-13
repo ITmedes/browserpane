@@ -35,4 +35,5 @@ tracing-subscriber.workspace = true
 uuid = { version = "1", features = ["serde", "v7"] }
 
 [dev-dependencies]
+tempfile = "3"
 tower = { version = "0.5", features = ["util"] }

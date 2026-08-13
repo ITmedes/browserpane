@@ -22,7 +22,8 @@ pub use model::{
     RecordingWorkerCredentials, RecordingWorkerLaunchRequest, RuntimeOperation,
     RuntimeOperationKind, RuntimeOperationRequest, RuntimeOperationResponse,
     RuntimeOperationResult, StorageHelperAction, StorageHelperRequest, VolumeLifecycleAction,
-    VolumeLifecycleRequest, WorkflowWorkerCredentials, WorkflowWorkerLaunchRequest,
+    VolumeLifecycleRequest, WorkerExecutionState, WorkflowWorkerCredentials,
+    WorkflowWorkerLaunchRequest,
 };
 pub use policy::{
     ContainerLaunchPolicy, ContainerLaunchSpec, ContainerMount, ContainerPolicyConfig,

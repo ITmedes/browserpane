@@ -1,0 +1,42 @@
+services:
+  runtime-broker:
+    environment:
+      BPANE_RUNTIME_BROKER_EXECUTOR: docker-browser
+      BPANE_RUNTIME_BROKER_DOCKER_API_URL: http://docker-proxy:2375
+      BPANE_RUNTIME_BROKER_BROWSER_IMAGE: ${BPANE_RUNTIME_BROKER_BROWSER_IMAGE:?set to an immutable repository digest or Docker image id}
+      BPANE_RUNTIME_BROKER_BROWSER_NETWORK: ${BPANE_GATEWAY_DOCKER_RUNTIME_NETWORK:-deploy_bpane-internal}
+      BPANE_RUNTIME_BROKER_BROWSER_SOCKET_VOLUME: ${BPANE_GATEWAY_DOCKER_RUNTIME_SOCKET_VOLUME:-deploy_agent-socket}
+      BPANE_RUNTIME_BROKER_SESSION_DATA_VOLUME_PREFIX: ${BPANE_GATEWAY_DOCKER_RUNTIME_SESSION_DATA_VOLUME_PREFIX:-deploy_bpane-session-data}
+      BPANE_RUNTIME_BROKER_CONTEXT_VOLUME_PREFIX: ${BPANE_GATEWAY_DOCKER_RUNTIME_SESSION_DATA_VOLUME_PREFIX:-deploy_bpane-session-data}-browser-context
+      BPANE_RUNTIME_BROKER_CONTAINER_PREFIX: bpane-runtime
+      BPANE_RUNTIME_BROKER_EXTENSION_REGISTRY_FILE: /runtime-config/extensions.json
+      BPANE_RUNTIME_BROKER_BROWSER_ENVIRONMENT_FILE: /runtime-config/host-runtime.env
+      BPANE_RUNTIME_BROKER_WORKER_CONFIG_FILE: /runtime-config/workers.json
+      BPANE_RUNTIME_BROKER_WORKFLOW_IMAGE: ${BPANE_RUNTIME_BROKER_WORKFLOW_IMAGE:?set to an immutable repository digest or Docker image id}
+      BPANE_RUNTIME_BROKER_RECORDING_IMAGE: ${BPANE_RUNTIME_BROKER_RECORDING_IMAGE:?set to an immutable repository digest or Docker image id}
+      BPANE_RUNTIME_BROKER_WORKER_OIDC_CLIENT_SECRET_FILE: /run/secrets/worker-oidc-client-secret
+    volumes:
+      - ./runtime-broker/extensions.json:/runtime-config/extensions.json:ro
+      - ./host-runtime.env:/runtime-config/host-runtime.env:ro
+      - ./runtime-broker/workers.json:/runtime-config/workers.json:ro
+      - ./runtime-broker/worker-oidc-client-secret:/run/secrets/worker-oidc-client-secret:ro
+      - ../dev/certs:/certs:ro
+    depends_on:
+      docker-proxy:
+        condition: service_healthy
+    networks:
+      - runtime-broker-api
+      - runtime-broker-auth
+      - docker-control
+
+  gateway:
+    environment:
+      BPANE_GATEWAY_RUNTIME_BROKER_URL: http://runtime-broker:8940
+      BPANE_GATEWAY_RUNTIME_BROKER_TOKEN_URL: http://keycloak:8080/realms/browserpane-dev/protocol/openid-connect/token
+      BPANE_GATEWAY_RUNTIME_BROKER_CLIENT_ID: bpane-runtime-broker-gateway
+      BPANE_GATEWAY_RUNTIME_BROKER_CLIENT_SECRET_FILE: /run/secrets/runtime-broker-client-secret
+    volumes:
+      - ./runtime-broker/gateway-client-secret:/run/secrets/runtime-broker-client-secret:ro
+    depends_on:
+      runtime-broker:
+        condition: service_healthy

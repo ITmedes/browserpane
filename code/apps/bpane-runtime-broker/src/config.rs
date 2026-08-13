@@ -1,11 +1,15 @@
 use std::net::SocketAddr;
 use std::num::{NonZeroU64, NonZeroUsize};
+use std::path::PathBuf;
 use std::time::Duration;
 
 use anyhow::{bail, Context};
 use clap::Parser;
 
-use crate::{BrokerApiSettings, LedgerConfig, OidcAuthenticatorConfig};
+use crate::{
+    BrokerApiSettings, BrowserAdapterSettings, LedgerConfig, OidcAuthenticatorConfig,
+    RuntimeExecutorMode, WorkerAdapterSettings,
+};
 
 const MAX_REQUEST_LIMIT_BYTES: usize = 1_048_576;
 const MAX_CONCURRENCY_LIMIT: usize = 1_024;
@@ -77,6 +81,93 @@ pub struct BrokerConfig {
         default_value_t = 600
     )]
     pub ledger_ttl_secs: u64,
+    /// Runtime executor. The default rejects every operation.
+    #[arg(
+        long,
+        env = "BPANE_RUNTIME_BROKER_EXECUTOR",
+        value_enum,
+        default_value_t = RuntimeExecutorMode::Rejecting
+    )]
+    pub executor: RuntimeExecutorMode,
+    /// Private Docker API URL used only by the docker-browser executor.
+    #[arg(long, env = "BPANE_RUNTIME_BROKER_DOCKER_API_URL")]
+    pub docker_api_url: Option<String>,
+    /// Immutable browser image reference used only by broker policy.
+    #[arg(long, env = "BPANE_RUNTIME_BROKER_BROWSER_IMAGE")]
+    pub browser_image: Option<String>,
+    /// Fixed private browser runtime network.
+    #[arg(long, env = "BPANE_RUNTIME_BROKER_BROWSER_NETWORK")]
+    pub browser_network: Option<String>,
+    /// Fixed shared socket volume.
+    #[arg(long, env = "BPANE_RUNTIME_BROKER_BROWSER_SOCKET_VOLUME")]
+    pub browser_socket_volume: Option<String>,
+    /// Prefix for broker-owned session data volumes.
+    #[arg(
+        long,
+        env = "BPANE_RUNTIME_BROKER_SESSION_DATA_VOLUME_PREFIX",
+        default_value = "bpane-session-data"
+    )]
+    pub session_data_volume_prefix: String,
+    /// Prefix for broker-owned reusable context volumes.
+    #[arg(
+        long,
+        env = "BPANE_RUNTIME_BROKER_CONTEXT_VOLUME_PREFIX",
+        default_value = "bpane-browser-context"
+    )]
+    pub browser_context_volume_prefix: String,
+    /// Prefix for broker-owned browser containers.
+    #[arg(
+        long,
+        env = "BPANE_RUNTIME_BROKER_CONTAINER_PREFIX",
+        default_value = "bpane-runtime"
+    )]
+    pub container_name_prefix: String,
+    /// Browser socket-volume mount root.
+    #[arg(
+        long,
+        env = "BPANE_RUNTIME_BROKER_SOCKET_MOUNT_ROOT",
+        default_value = "/run/bpane"
+    )]
+    pub socket_mount_root: String,
+    /// Session socket directory below the socket mount.
+    #[arg(
+        long,
+        env = "BPANE_RUNTIME_BROKER_SOCKET_PATH_ROOT",
+        default_value = "/run/bpane/sessions"
+    )]
+    pub socket_path_root: String,
+    /// Session-data mount root inside browser containers.
+    #[arg(
+        long,
+        env = "BPANE_RUNTIME_BROKER_SESSION_DATA_ROOT",
+        default_value = "/run/bpane/session"
+    )]
+    pub session_data_root: String,
+    /// Read-only version-one extension registry loaded once at startup.
+    #[arg(long, env = "BPANE_RUNTIME_BROKER_EXTENSION_REGISTRY_FILE")]
+    pub extension_registry_file: Option<PathBuf>,
+    /// Read-only allowlisted browser environment loaded once at startup.
+    #[arg(long, env = "BPANE_RUNTIME_BROKER_BROWSER_ENVIRONMENT_FILE")]
+    pub browser_environment_file: Option<PathBuf>,
+    /// Timeout for private Docker API calls.
+    #[arg(
+        long,
+        env = "BPANE_RUNTIME_BROKER_DOCKER_TIMEOUT_SECS",
+        default_value_t = 30
+    )]
+    pub docker_timeout_secs: u64,
+    /// Read-only version-one workflow/recording worker policy document.
+    #[arg(long, env = "BPANE_RUNTIME_BROKER_WORKER_CONFIG_FILE")]
+    pub worker_config_file: Option<PathBuf>,
+    /// Immutable workflow worker image reference used only by broker policy.
+    #[arg(long, env = "BPANE_RUNTIME_BROKER_WORKFLOW_IMAGE")]
+    pub workflow_image: Option<String>,
+    /// Immutable recording worker image reference used only by broker policy.
+    #[arg(long, env = "BPANE_RUNTIME_BROKER_RECORDING_IMAGE")]
+    pub recording_image: Option<String>,
+    /// Read-only OIDC client secret used by approved worker containers.
+    #[arg(long, env = "BPANE_RUNTIME_BROKER_WORKER_OIDC_CLIENT_SECRET_FILE")]
+    pub worker_oidc_client_secret_file: Option<PathBuf>,
 }
 
 impl BrokerConfig {
@@ -131,6 +222,35 @@ impl BrokerConfig {
             },
         ))
     }
+
+    /// Returns the separately validated executor configuration.
+    pub fn browser_adapter_settings(&self) -> BrowserAdapterSettings {
+        BrowserAdapterSettings {
+            mode: self.executor,
+            docker_api_url: self.docker_api_url.clone(),
+            image: self.browser_image.clone(),
+            network: self.browser_network.clone(),
+            socket_volume: self.browser_socket_volume.clone(),
+            session_data_volume_prefix: self.session_data_volume_prefix.clone(),
+            browser_context_volume_prefix: self.browser_context_volume_prefix.clone(),
+            container_name_prefix: self.container_name_prefix.clone(),
+            socket_mount_root: self.socket_mount_root.clone(),
+            socket_path_root: self.socket_path_root.clone(),
+            session_data_root: self.session_data_root.clone(),
+            extension_registry_file: self.extension_registry_file.clone(),
+            browser_environment_file: self.browser_environment_file.clone(),
+            docker_timeout_secs: self.docker_timeout_secs,
+        }
+    }
+
+    pub fn worker_adapter_settings(&self) -> WorkerAdapterSettings {
+        WorkerAdapterSettings {
+            config_file: self.worker_config_file.clone(),
+            workflow_image: self.workflow_image.clone(),
+            recording_image: self.recording_image.clone(),
+            oidc_client_secret_file: self.worker_oidc_client_secret_file.clone(),
+        }
+    }
 }
 
 fn nonzero_usize(value: usize, name: &str) -> anyhow::Result<NonZeroUsize> {
@@ -159,6 +279,24 @@ mod tests {
             operation_timeout_secs: 30,
             ledger_capacity: 4_096,
             ledger_ttl_secs: 600,
+            executor: RuntimeExecutorMode::Rejecting,
+            docker_api_url: None,
+            browser_image: None,
+            browser_network: None,
+            browser_socket_volume: None,
+            session_data_volume_prefix: "bpane-session-data".to_string(),
+            browser_context_volume_prefix: "bpane-browser-context".to_string(),
+            container_name_prefix: "bpane-runtime".to_string(),
+            socket_mount_root: "/run/bpane".to_string(),
+            socket_path_root: "/run/bpane/sessions".to_string(),
+            session_data_root: "/run/bpane/session".to_string(),
+            extension_registry_file: None,
+            browser_environment_file: None,
+            docker_timeout_secs: 30,
+            worker_config_file: None,
+            workflow_image: None,
+            recording_image: None,
+            worker_oidc_client_secret_file: None,
         }
     }
 

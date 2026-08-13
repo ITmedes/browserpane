@@ -397,6 +397,14 @@ fn validates_trusted_policy_configuration() {
     };
     RuntimeBrokerPolicy::new(valid).unwrap();
 
+    let mut local_image_id = launch_policy();
+    local_image_id.image = format!("sha256:{}", "a".repeat(64));
+    RuntimeBrokerPolicy::new(ContainerPolicyConfig {
+        launch: BTreeMap::from([(RuntimeOperationKind::BrowserRuntime, local_image_id)]),
+        lifecycle: BTreeMap::new(),
+    })
+    .unwrap();
+
     let mut mutable_image = launch_policy();
     mutable_image.image = "registry.example/bpane-host:latest".to_string();
     assert_eq!(

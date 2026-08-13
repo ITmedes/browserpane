@@ -237,7 +237,9 @@ impl DockerRuntimeManager {
 
     async fn cleanup_runtime_resources(&self, lease: &RuntimeLease) {
         if let Some(container_name) = lease.container_name.as_deref() {
-            let _ = self.stop_container(container_name).await;
+            let _ = self
+                .stop_browser_container(lease.session_id, container_name)
+                .await;
         }
         let _ = remove_socket_path(&lease.agent_socket_path).await;
         if lease.discard_session_data_on_release {

@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "oidc": {
+    "token_url": "http://keycloak:8080/realms/browserpane-dev/protocol/openid-connect/token",
+    "client_id": "bpane-mcp-bridge",
+    "scopes": ""
+  },
+  "workflow": {
+    "network": "deploy_bpane-internal",
+    "container_name_prefix": "bpane-workflow",
+    "gateway_api_url": "http://gateway:8932",
+    "work_root": "/tmp/bpane-workflows",
+    "request_timeout_ms": 30000,
+    "output_limit_bytes": 262144
+  },
+  "recording": {
+    "network": "deploy_bpane-internal",
+    "container_name_prefix": "bpane-recording",
+    "artifact_volume": "deploy_bpane-recordings",
+    "chrome_executable": "/usr/bin/chromium",
+    "gateway_api_url": "http://gateway:8932",
+    "page_url": "http://web:8080/recording-worker.html",
+    "connect_gateway_url": "https://gateway:4433",
+    "output_root": "/tmp/bpane-recordings",
+    "cert_spki": null,
+    "cert_spki_file": "/certs/cert-fingerprint.txt",
+    "headless": true,
+    "connect_timeout_ms": 120000,
+    "poll_interval_ms": 2000,
+    "request_timeout_ms": 30000
+  }
+}

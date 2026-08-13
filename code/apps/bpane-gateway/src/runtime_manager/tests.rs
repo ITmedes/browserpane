@@ -1,7 +1,16 @@
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::Mutex as StdMutex;
 use std::time::Duration;
 
+use bpane_runtime_client::{
+    RuntimeBrokerClient, RuntimeBrokerClientError, RuntimeBrokerClientErrorCode,
+};
+use bpane_runtime_contract::{
+    BrokerApiVersion, RuntimeOperation, RuntimeOperationRequest, RuntimeOperationResponse,
+    RuntimeOperationResult,
+};
 use chrono::Utc;
 use serde_json::{json, Value};
 use uuid::Uuid;
@@ -56,6 +65,127 @@ fn docker_profile(max_runtime_sessions: usize) -> RuntimeProfile {
         supports_legacy_global_routes: false,
         supports_session_extensions: true,
     }
+}
+
+#[derive(Default)]
+struct StatefulBrokerClient {
+    exists: AtomicBool,
+    requests: StdMutex<Vec<RuntimeOperationRequest>>,
+    failure: StdMutex<Option<RuntimeBrokerClientErrorCode>>,
+}
+
+#[async_trait::async_trait]
+impl RuntimeBrokerClient for StatefulBrokerClient {
+    async fn check_readiness(&self) -> Result<(), RuntimeBrokerClientError> {
+        match *self.failure.lock().unwrap() {
+            Some(code) => Err(code.into()),
+            None => Ok(()),
+        }
+    }
+
+    async fn execute(
+        &self,
+        request: &RuntimeOperationRequest,
+    ) -> Result<RuntimeOperationResponse, RuntimeBrokerClientError> {
+        if let Some(code) = *self.failure.lock().unwrap() {
+            return Err(code.into());
+        }
+        self.requests.lock().unwrap().push(request.clone());
+        let result = match &request.operation {
+            RuntimeOperation::LaunchBrowser(_) => {
+                self.exists.store(true, Ordering::SeqCst);
+                RuntimeOperationResult::Accepted
+            }
+            RuntimeOperation::ContainerLifecycle(operation) => match operation.action {
+                bpane_runtime_contract::ContainerLifecycleAction::Inspect => {
+                    if self.exists.load(Ordering::SeqCst) {
+                        RuntimeOperationResult::Exists
+                    } else {
+                        RuntimeOperationResult::Absent
+                    }
+                }
+                bpane_runtime_contract::ContainerLifecycleAction::Stop
+                | bpane_runtime_contract::ContainerLifecycleAction::Remove => {
+                    self.exists.store(false, Ordering::SeqCst);
+                    RuntimeOperationResult::Completed {
+                        exit_code: None,
+                        omitted_output_bytes: 0,
+                    }
+                }
+            },
+            _ => RuntimeOperationResult::Absent,
+        };
+        Ok(RuntimeOperationResponse {
+            api_version: BrokerApiVersion::V1,
+            request_id: request.request_id,
+            result,
+        })
+    }
+}
+
+#[tokio::test]
+async fn broker_browser_control_routes_readiness_inspect_and_stop_by_session_id() {
+    let client = Arc::new(StatefulBrokerClient::default());
+    let runtime_client: Arc<dyn RuntimeBrokerClient> = client.clone();
+    let manager = DockerRuntimeManager::new_with_browser_control(
+        docker_config(),
+        RuntimeProfile {
+            runtime_binding: "runtime_broker_pool".to_string(),
+            ..docker_profile(2)
+        },
+        BrowserContainerControl::Broker(runtime_client),
+    )
+    .unwrap();
+    let session_id = Uuid::now_v7();
+    let container_name = manager.container_name_for_session(session_id);
+
+    manager.check_readiness().await.unwrap();
+    assert!(client.requests.lock().unwrap().is_empty());
+    assert!(!manager
+        .browser_container_exists(session_id, &container_name)
+        .await
+        .unwrap());
+    client.exists.store(true, Ordering::SeqCst);
+    manager
+        .stop_browser_container(session_id, &container_name)
+        .await
+        .unwrap();
+
+    let requests = client.requests.lock().unwrap();
+    assert!(requests.len() >= 3);
+    assert!(requests
+        .iter()
+        .all(|request| request.api_version == BrokerApiVersion::V1));
+    assert!(requests
+        .iter()
+        .all(|request| request.idempotency_key.as_str().starts_with("browser:")));
+    assert!(requests.iter().any(|request| matches!(
+        &request.operation,
+        RuntimeOperation::ContainerLifecycle(operation)
+            if operation.resource_id == session_id
+                && operation.action == bpane_runtime_contract::ContainerLifecycleAction::Stop
+    )));
+}
+
+#[tokio::test]
+async fn broker_browser_control_maps_transport_failures_without_backend_detail() {
+    let client = Arc::new(StatefulBrokerClient::default());
+    *client.failure.lock().unwrap() = Some(RuntimeBrokerClientErrorCode::Unreachable);
+    let runtime_client: Arc<dyn RuntimeBrokerClient> = client;
+    let manager = DockerRuntimeManager::new_with_browser_control(
+        docker_config(),
+        docker_profile(2),
+        BrowserContainerControl::Broker(runtime_client),
+    )
+    .unwrap();
+
+    let error = manager.check_readiness().await.unwrap_err();
+
+    assert!(matches!(error, RuntimeManagerError::Unavailable(_)));
+    assert_eq!(
+        error.to_string(),
+        "runtime broker client failed: runtime broker is unreachable"
+    );
 }
 
 #[test]
@@ -539,6 +669,8 @@ fn docker_runtime_maps_network_identity_to_launch_env() {
         &manager.egress_custom_ca_bundle_path_for_session(),
         &manager.egress_proxy_auth_config_path_for_session(),
     );
+    let broker_features = super::broker_browser::browser_features(&session, Some(&profile), true)
+        .expect("gateway feature selections should map to the broker contract");
     let env = launch_options
         .env
         .iter()
@@ -553,6 +685,30 @@ fn docker_runtime_maps_network_identity_to_launch_env() {
         env.get("BPANE_CHROMIUM_ACCEPT_LANG").map(String::as_str),
         Some("de-DE,en-US")
     );
+    assert_eq!(
+        broker_features.network_identity.geolocation,
+        Some(bpane_runtime_contract::BrowserGeolocation {
+            latitude_e7: 525_200_000,
+            longitude_e7: 134_050_000,
+            accuracy_mm: Some(100_000),
+        })
+    );
+    let broker_egress = broker_features.egress.unwrap();
+    assert_eq!(broker_egress.profile_id, profile_id);
+    assert_eq!(
+        broker_egress.observation_mode,
+        bpane_runtime_contract::BrowserEgressObservationMode::TlsIntercept
+    );
+    assert_eq!(
+        broker_egress.proxy.unwrap().authentication,
+        Some(bpane_runtime_contract::BrowserSessionDataSource::SessionData)
+    );
+    assert_eq!(
+        broker_egress.custom_ca,
+        Some(bpane_runtime_contract::BrowserSessionDataSource::SessionData)
+    );
+    assert!(broker_egress.sensitive_log_sink_configured);
+    assert!(broker_features.session_file_bindings);
     assert_eq!(
         env.get("BPANE_CHROMIUM_USER_AGENT").map(String::as_str),
         Some("BrowserPane Test/1.0")

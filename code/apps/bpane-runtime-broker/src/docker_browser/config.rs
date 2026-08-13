@@ -44,6 +44,8 @@ pub struct BrowserRuntimeDockerConfig {
     pub resources: ResourceLimits,
     /// Trusted mapping from approved extension versions to install paths.
     pub extensions: BTreeMap<uuid::Uuid, BrowserRuntimeExtensionConfig>,
+    /// Trusted, allowlisted browser runtime defaults loaded at broker startup.
+    pub base_environment: BTreeMap<String, String>,
 }
 
 impl BrowserRuntimeDockerConfig {
@@ -80,6 +82,7 @@ impl BrowserRuntimeDockerConfig {
             .into_iter()
             .chain(self.feature_environment_keys())
             .map(str::to_string)
+            .chain(self.base_environment.keys().cloned())
             .collect();
         let launch = ContainerLaunchPolicy {
             image: self.image.clone(),

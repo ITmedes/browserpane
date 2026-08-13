@@ -21,6 +21,8 @@ import {
 } from './workflow-smoke-lib.mjs';
 
 const log = createLogger('workflow-restart-safety-smoke');
+const preserveRuntimeTopology =
+  process.env.BPANE_WORKFLOW_RESTART_PRESERVE_RUNTIME_TOPOLOGY === '1';
 
 function queueWorkflowEntrypoint() {
   return `export default async function run({ page, input, sessionId }) {
@@ -128,6 +130,11 @@ async function restartGateway(accessToken, options) {
 }
 
 async function configureGatewayForQueuedRestartSafety(accessToken, options) {
+  if (preserveRuntimeTopology) {
+    log('Using the preconfigured runtime topology and workflow worker backpressure');
+    await waitForWorkflowControlPlane(accessToken, options);
+    return;
+  }
   log('Recreating gateway in docker_pool mode with workflow worker backpressure enabled');
   recreateComposeServices(['gateway'], {
     envOverrides: {
