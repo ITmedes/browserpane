@@ -1,13 +1,13 @@
 # Admin-New Implementation Status
 
-Revalidated against current routes and package scripts: 2026-08-10
+Revalidated against current routes and package scripts: 2026-08-13
 
 This file maps the current `code/web/bpane-admin-unified` app to the
 consolidated redesign requirements. It is based on the current routes,
 libraries, components, and smoke scripts.
 
 Capability maturity: Prototype. The route coverage below is current product
-evidence, but default promotion remains a Phase 1 gate owned by #163. Use
+evidence, and the default-route promotion gate owned by #163 is complete. Use
 `DELIVERY_ROADMAP.md` for cross-product sequencing and
 `PRODUCT_PHASES_AND_RELEASE_GATES.md` for claim language.
 
@@ -60,7 +60,7 @@ evidence, but default promotion remains a Phase 1 gate owned by #163. Use
 | Step 15: Dashboard | Read-only resource counts, recent operational activity, and links to active work. | Done for first pass | Dashboard overview exists and has smoke coverage. |
 | Step 16: Command palette | Global navigation/session join/common creation actions without a second hidden state model. | Missing | No implemented command palette route/component. |
 | Step 17: API reference/coverage companion | Copyable API examples, operation classification, OpenAPI link, compatibility separation. | Done for current contract | `/api`, `/coverage`, and `/docs` load strictly validated committed evidence, expose 19 schema-validated examples and 14 separate compatibility surfaces, and are compose-smoke covered. |
-| Step 18: Promotion decision | Compare parity, pass smoke/manual gates, and keep `/admin/` side by side until a separate removal decision. | In progress | Root `/` now selects `/admin-new/`; `/admin/` remains directly available. The executable route/stage contract and live promotion smoke are implemented, while the complete Compose and manual evidence remains pending under #163. |
+| Step 18: Promotion decision | Compare parity, pass smoke/manual gates, and keep `/admin/` side by side until a separate removal decision. | Done | #163 closed after the executable route/stage contract, promotion smoke, and regression evidence were accepted; PR #211 made `/admin-new/` the root default while `/admin/` remains directly available. |
 
 ## Implemented Admin-New Smoke Coverage
 
@@ -80,21 +80,19 @@ Current `bpane-client` scripts include:
 - `smoke:admin-unified-api-companion`
 - `smoke:admin-unified-resource-catalogs`
 
-These remain mandatory through the executable #163 promotion contract. The
-hosted Compose workflow runs unified and compatibility promotion surfaces in
-parallel; the existence of scripts alone is not completion of the manual gate.
+These remain mandatory regression surfaces after the completed #163 promotion
+contract. The hosted Compose workflow runs unified and compatibility promotion
+surfaces in parallel.
 
 ## Promotion Assessment
 
-The unified app is now the local web-root default, but the #163 promotion gate
-is not complete:
+The unified app is the local web-root default and the #163 promotion gate is
+complete. Remaining work is deliberately separate:
 
-1. The full 24-stage unified/compatibility promotion inventory and final manual
-   regression sequence still need recorded execution evidence.
-2. Session-template catalog management (#124), command-palette behavior, and
+1. Session-template catalog management (#124), command-palette behavior, and
    dedicated operation counters are explicit post-promotion deferrals and are
    not advertised as implemented routes.
-3. `/admin/` must remain available until a dated observation and removal gate
+2. `/admin/` must remain available until a dated observation and removal gate
    is accepted.
-4. Production security/operability slices remain separate from admin route
+3. Production security/operability slices remain separate from admin route
    promotion and must not be implied by the default-route change.

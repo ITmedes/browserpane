@@ -18,9 +18,8 @@ BrowserPane consolidates live session operation, resource configuration,
 workflow execution, recordings, and project/egress governance in the
 route-backed `/admin-new/` application. Local Compose opens this standard admin
 experience from the web root. The legacy `/admin/` console remains directly
-available as a compatibility fallback while the
-[admin-new promotion gate in issue #163](https://github.com/ITmedes/browserpane/issues/163)
-completes regression evidence and defines its later removal criteria.
+available as an explicit compatibility fallback until a separate removal
+decision is implemented.
 
 The current prototype includes the dashboard; project, browser-context,
 egress-profile, and file-workspace catalogs; session create/detail and popup
@@ -133,9 +132,7 @@ Current support and scope:
   implemented, together with approved-extension, credential-binding, and signed
   workflow-event subscription catalogs. Session-template and operation-counter
   catalogs remain open. `/admin/` remains the directly addressable
-  compatibility fallback while
-  [issue #163](https://github.com/ITmedes/browserpane/issues/163) completes the
-  regression and removal-gate evidence.
+  compatibility fallback until a separate removal decision is implemented.
 - Workflow boundary: BrowserPane currently focuses on executing and supervising browser workflows. Broader scheduling, DAG orchestration, and cross-system coordination are expected to sit above BrowserPane rather than inside it.
 - External BPM integration: the stable project-scoped Workflow Endpoint is
   planned under [issue #172](https://github.com/ITmedes/browserpane/issues/172);
@@ -174,6 +171,7 @@ bpane-client renders the live session and sends input/media/file events back.
 
 bpane-gateway also talks to:
   - postgres
+  - docker-proxy (private Docker API boundary for local runtime launch)
   - mcp-bridge
   - workflow-worker
   - recording-worker
@@ -235,7 +233,7 @@ docker compose -f deploy/compose.yml up --build
 
 Then open `http://localhost:8080/` in Chromium. The web root redirects to the
 unified console at `/admin-new/`; `/admin/` remains the explicit compatibility
-fallback while issue #163 completes the regression and removal-gate evidence.
+fallback.
 
 The unified session preview popup includes a local `Metrics` drawer that can
 sample browser transition diagnostics from the BrowserPane client runtime
@@ -269,6 +267,7 @@ The compose stack starts:
 
 - `host`: Linux host runtime with Xorg dummy, Openbox, Chromium, and `bpane-host`
 - `gateway`: WebTransport relay on `:4433` and HTTP APIs on `:8932`
+- `docker-proxy`: internal-only, allowlisted Docker API proxy used by the gateway
 - `postgres`: session-control database on `:5433`
 - `vault`: local HashiCorp Vault dev server on `:8200` for workflow credential bindings
 - `keycloak`: local OIDC provider on `:8091`
@@ -335,7 +334,26 @@ BPANE_GATEWAY_MAX_ACTIVE_RUNTIMES=2 \
 docker compose -f deploy/compose.yml up --build
 ```
 
-`deploy/compose.yml` now mounts Docker access into the gateway and forwards a shared host-worker env profile automatically. If your compose project name is not the default `deploy`, override these defaults too:
+`deploy/compose.yml` mounts the host Docker socket only into an internal,
+digest-pinned `docker-proxy`. The gateway has no socket mount; its Docker CLI
+uses `DOCKER_HOST=tcp://docker-proxy:2375`. The proxy publishes no host port and
+allows only the container, volume, daemon-info, ping, and version API families
+needed by current local runtime operations. Validate the static manifest and
+live API denials with:
+
+```bash
+node scripts/validate-docker-runtime-boundary.mjs
+```
+
+This proxy is defense-in-depth for the local and production-like Compose path,
+not a complete production authorization boundary. The required container and
+volume APIs can still expose unrelated daemon resources, and a generic proxy
+does not validate image, mount, network, capability, or privileged-mode fields
+inside create requests. Production deployments must put runtime launch behind
+a purpose-specific broker or an orchestrator adapter with typed policy.
+
+Compose also forwards a shared host-worker env profile automatically. If your
+compose project name is not the default `deploy`, override these defaults too:
 
 - `BPANE_GATEWAY_DOCKER_RUNTIME_IMAGE`
 - `BPANE_GATEWAY_DOCKER_RUNTIME_NETWORK`

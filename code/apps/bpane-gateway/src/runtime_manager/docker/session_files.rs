@@ -1,7 +1,7 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::process::Stdio;
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 use uuid::Uuid;
@@ -100,13 +100,15 @@ chown -R --no-dereference bpane:bpane /bpane-target
 chmod 0770 /bpane-target
 "#;
 
-#[derive(Deserialize)]
-struct DockerVolumeUsageEntry {
-    #[serde(rename = "Name")]
-    name: String,
-    #[serde(rename = "Size")]
-    size: String,
-}
+const BROWSER_CONTEXT_PROFILE_USAGE_SCRIPT: &str = r#"
+set -eu
+for profile_dir in /bpane-contexts/*; do
+  [ -d "$profile_dir" ] || continue
+  context_key="${profile_dir##*/}"
+  byte_count="$(du -sb "$profile_dir" | cut -f1)"
+  printf '%s\t%s\n' "$context_key" "$byte_count"
+done
+"#;
 
 #[derive(Serialize)]
 struct SessionFileBindingsManifest {
@@ -407,57 +409,96 @@ impl DockerRuntimeManager {
             return Ok(HashMap::new());
         }
 
-        let volume_by_name = context_ids
-            .iter()
-            .copied()
-            .map(|context_id| {
-                (
-                    self.browser_context_profile_volume_for_context(context_id),
-                    context_id,
-                )
-            })
-            .collect::<HashMap<_, _>>();
-
         let output = Command::new(&self.config.docker_bin)
-            .arg("system")
-            .arg("df")
-            .arg("-v")
-            .arg("--format")
-            .arg("{{json .Volumes}}")
+            .args(["volume", "ls", "--format", "{{.Name}}"])
             .output()
             .await
             .map_err(|error| {
                 RuntimeManagerError::StartupFailed(format!(
-                    "failed to inspect docker browser context profile volume usage: {error}"
+                    "failed to list docker browser context profile volumes: {error}"
                 ))
             })?;
         if !output.status.success() {
             return Err(RuntimeManagerError::StartupFailed(format!(
-                "failed to inspect docker browser context profile volume usage: {}",
+                "failed to list docker browser context profile volumes: {}",
                 String::from_utf8_lossy(&output.stderr).trim()
             )));
         }
 
-        let entries = serde_json::from_slice::<Vec<DockerVolumeUsageEntry>>(&output.stdout)
+        let available_volumes = String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned)
+            .collect::<HashSet<_>>();
+        let existing_contexts = context_ids
+            .iter()
+            .copied()
+            .filter_map(|context_id| {
+                let volume = self.browser_context_profile_volume_for_context(context_id);
+                available_volumes
+                    .contains(&volume)
+                    .then_some((context_id, volume))
+            })
+            .collect::<Vec<_>>();
+        let mut storage_by_context = context_ids
+            .iter()
+            .copied()
+            .map(|context_id| (context_id, 0))
+            .collect::<HashMap<_, _>>();
+        if existing_contexts.is_empty() {
+            return Ok(storage_by_context);
+        }
+
+        let output = Command::new(&self.config.docker_bin)
+            .args(self.docker_browser_context_profile_usage_args(&existing_contexts))
+            .output()
+            .await
             .map_err(|error| {
                 RuntimeManagerError::StartupFailed(format!(
-                    "failed to parse docker browser context profile volume usage: {error}"
+                    "failed to measure docker browser context profile volume usage: {error}"
                 ))
             })?;
-        let mut storage_by_context = HashMap::new();
-        for entry in entries {
-            let Some(context_id) = volume_by_name.get(&entry.name).copied() else {
-                continue;
-            };
-            let Some(bytes) = parse_docker_size_bytes(&entry.size) else {
-                continue;
-            };
-            storage_by_context.insert(context_id, bytes);
+        if !output.status.success() {
+            return Err(RuntimeManagerError::StartupFailed(format!(
+                "failed to measure docker browser context profile volume usage: {}",
+                String::from_utf8_lossy(&output.stderr).trim()
+            )));
         }
-        for context_id in context_ids {
-            storage_by_context.entry(*context_id).or_insert(0);
-        }
+        storage_by_context.extend(parse_browser_context_profile_usage(
+            &output.stdout,
+            &existing_contexts,
+        )?);
         Ok(storage_by_context)
+    }
+
+    pub(in crate::runtime_manager) fn docker_browser_context_profile_usage_args(
+        &self,
+        contexts: &[(Uuid, String)],
+    ) -> Vec<String> {
+        let mut args = vec![
+            "run".to_string(),
+            "--rm".to_string(),
+            "--network".to_string(),
+            "none".to_string(),
+        ];
+        for (context_id, volume) in contexts {
+            args.push("-v".to_string());
+            args.push(format!(
+                "{volume}:/bpane-contexts/{}:ro",
+                context_id.as_simple()
+            ));
+        }
+        args.extend([
+            "--user".to_string(),
+            "0:0".to_string(),
+            "--entrypoint".to_string(),
+            "/bin/sh".to_string(),
+            self.config.image.clone(),
+            "-ec".to_string(),
+            BROWSER_CONTEXT_PROFILE_USAGE_SCRIPT.to_string(),
+        ]);
+        args
     }
 
     async fn remove_docker_volume(
@@ -783,34 +824,41 @@ impl DockerRuntimeManager {
     }
 }
 
-pub(in crate::runtime_manager) fn parse_docker_size_bytes(value: &str) -> Option<u64> {
-    let trimmed = value.trim();
-    if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("n/a") {
-        return None;
+pub(in crate::runtime_manager) fn parse_browser_context_profile_usage(
+    output: &[u8],
+    contexts: &[(Uuid, String)],
+) -> Result<HashMap<Uuid, u64>, RuntimeManagerError> {
+    let mut expected = contexts
+        .iter()
+        .map(|(context_id, _)| (context_id.as_simple().to_string(), *context_id))
+        .collect::<HashMap<_, _>>();
+    let mut usage = HashMap::new();
+    for line in String::from_utf8_lossy(output).lines() {
+        let (context_key, byte_count) = line.split_once('\t').ok_or_else(|| {
+            RuntimeManagerError::StartupFailed(
+                "docker browser context profile usage output was malformed".to_string(),
+            )
+        })?;
+        let context_id = expected.remove(context_key).ok_or_else(|| {
+            RuntimeManagerError::StartupFailed(
+                "docker browser context profile usage output referenced an unexpected context"
+                    .to_string(),
+            )
+        })?;
+        let byte_count = byte_count.parse::<u64>().map_err(|_| {
+            RuntimeManagerError::StartupFailed(
+                "docker browser context profile usage output contained an invalid byte count"
+                    .to_string(),
+            )
+        })?;
+        usage.insert(context_id, byte_count);
     }
-    let split_at = trimmed
-        .char_indices()
-        .find(|(_, character)| !(character.is_ascii_digit() || *character == '.'))
-        .map(|(index, _)| index)
-        .unwrap_or(trimmed.len());
-    let number = trimmed[..split_at].trim().parse::<f64>().ok()?;
-    if !number.is_finite() || number < 0.0 {
-        return None;
+    if !expected.is_empty() {
+        return Err(RuntimeManagerError::StartupFailed(
+            "docker browser context profile usage output omitted a requested context".to_string(),
+        ));
     }
-    let unit = trimmed[split_at..].trim().to_ascii_lowercase();
-    let multiplier = match unit.as_str() {
-        "" | "b" => 1.0,
-        "kb" => 1_000.0,
-        "mb" => 1_000_000.0,
-        "gb" => 1_000_000_000.0,
-        "tb" => 1_000_000_000_000.0,
-        "kib" => 1_024.0,
-        "mib" => 1_048_576.0,
-        "gib" => 1_073_741_824.0,
-        "tib" => 1_099_511_627_776.0,
-        _ => return None,
-    };
-    Some((number * multiplier).round() as u64)
+    Ok(usage)
 }
 
 fn materialization_file_mode(mode: SessionFileBindingMode) -> &'static str {

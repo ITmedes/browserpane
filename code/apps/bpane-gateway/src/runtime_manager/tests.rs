@@ -347,15 +347,55 @@ fn docker_runtime_names_and_sockets_are_session_scoped() {
 }
 
 #[test]
-fn docker_runtime_parses_volume_size_units() {
-    assert_eq!(docker::parse_docker_size_bytes("176B"), Some(176));
-    assert_eq!(docker::parse_docker_size_bytes("4.62MB"), Some(4_620_000));
-    assert_eq!(
-        docker::parse_docker_size_bytes("1.5GiB"),
-        Some(1_610_612_736)
+fn docker_runtime_parses_exact_context_profile_usage() {
+    let context_a = Uuid::parse_str("019db438-c74a-7ef2-810c-792e298faf11").unwrap();
+    let context_b = Uuid::parse_str("019db438-c74a-7ef2-810c-792e298faf22").unwrap();
+    let contexts = vec![
+        (context_a, "bpane-context-a".to_string()),
+        (context_b, "bpane-context-b".to_string()),
+    ];
+    let output = format!(
+        "{}\t176\n{}\t4620000\n",
+        context_a.as_simple(),
+        context_b.as_simple()
     );
-    assert_eq!(docker::parse_docker_size_bytes("N/A"), None);
-    assert_eq!(docker::parse_docker_size_bytes("unknown"), None);
+
+    let usage = docker::parse_browser_context_profile_usage(output.as_bytes(), &contexts).unwrap();
+
+    assert_eq!(usage.get(&context_a), Some(&176));
+    assert_eq!(usage.get(&context_b), Some(&4_620_000));
+}
+
+#[test]
+fn docker_runtime_rejects_invalid_context_profile_usage() {
+    let context_id = Uuid::parse_str("019db438-c74a-7ef2-810c-792e298faf11").unwrap();
+    let contexts = vec![(context_id, "bpane-context".to_string())];
+
+    assert!(docker::parse_browser_context_profile_usage(b"", &contexts).is_err());
+    assert!(docker::parse_browser_context_profile_usage(
+        format!("{}\tnot-a-number\n", context_id.as_simple()).as_bytes(),
+        &contexts
+    )
+    .is_err());
+    assert!(docker::parse_browser_context_profile_usage(b"unexpected\t12\n", &contexts).is_err());
+}
+
+#[test]
+fn docker_runtime_context_profile_usage_helper_is_read_only_and_offline() {
+    let manager = DockerRuntimeManager::new(docker_config(), docker_profile(2)).unwrap();
+    let context_id = Uuid::parse_str("019db438-c74a-7ef2-810c-792e298faf11").unwrap();
+
+    let args = manager.docker_browser_context_profile_usage_args(&[(
+        context_id,
+        "deploy_bpane-session-data-browser-context-profile".to_string(),
+    )]);
+
+    assert!(args.windows(2).any(|pair| pair == ["--network", "none"]));
+    assert!(args.contains(
+        &"deploy_bpane-session-data-browser-context-profile:/bpane-contexts/019db438c74a7ef2810c792e298faf11:ro"
+            .to_string()
+    ));
+    assert!(args.windows(2).any(|pair| pair == ["--user", "0:0"]));
 }
 
 #[test]

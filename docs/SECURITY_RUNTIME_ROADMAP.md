@@ -341,20 +341,30 @@ Risk:
 - raw Docker socket exposure in a gateway container amplifies a gateway
   compromise into host control.
 
-Required implementation:
+Implemented compose boundary:
 
-1. Document raw Docker socket use as local-dev only.
-2. Introduce a scoped runtime-launch boundary:
-   - Docker socket proxy with allowlisted API subset, or
-   - internal runtime-launch broker, or
-   - future non-Docker production runtime manager.
-3. Keep local dev session/workflow/recording launch working.
-4. Update production topology docs.
+1. The gateway has no raw Docker socket mount.
+2. A digest-pinned proxy owns the read-only socket mount on a private network
+   shared only with the gateway.
+3. The proxy permits only current container, volume, daemon-info, ping, and
+   version API families; unrelated API families are denied.
+4. `scripts/validate-docker-runtime-boundary.mjs` checks the structured Compose
+   contract and live API denials.
+
+Remaining production boundary:
+
+- The proxy is defense-in-depth, not resource-level authorization. Required
+  container and volume families remain broad, and allowed create payloads are
+  not validated.
+- A purpose-specific launch broker or non-Docker orchestrator adapter must
+  validate owned images, names, networks, mounts, privileges, resource limits,
+  and lifecycle operations before production promotion. The typed broker is
+  owned by #214.
 
 Validation:
 
 - compose smoke for local runtime launch,
-- negative validation for denied Docker API operations if a proxy is used,
+- negative validation for denied Docker API operations,
 - docs proving production guidance no longer presents raw socket as safe
   default.
 
