@@ -157,6 +157,7 @@ fn config() -> BrowserRuntimeDockerConfig {
             output_limit_bytes: 65_536,
         },
         extensions: BTreeMap::new(),
+        base_environment: BTreeMap::new(),
     }
 }
 
@@ -293,6 +294,13 @@ async fn launch_materializes_identity_tls_egress_and_approved_extensions() {
             install_path: "/home/bpane/extensions/approved".to_string(),
         },
     );
+    runtime_config
+        .base_environment
+        .insert("BPANE_FPS".to_string(), "60".to_string());
+    runtime_config.base_environment.insert(
+        "BPANE_URL".to_string(),
+        "https://runtime-default.example".to_string(),
+    );
     let backend = Arc::new(FakeDockerBackend::default());
     let adapter =
         BrowserRuntimeDockerAdapter::with_backend(runtime_config, backend.clone()).unwrap();
@@ -357,6 +365,7 @@ async fn launch_materializes_identity_tls_egress_and_approved_extensions() {
         "BPANE_CHROMIUM_TRUSTED_CA_NAME=BrowserPane Egress Interception CA",
         "BPANE_EXTENSION_DIRS=/home/bpane/extensions/approved",
         "BPANE_SESSION_FILE_BINDINGS_MANIFEST=/run/bpane/session/session-file-bindings.json",
+        "BPANE_FPS=60",
         "BPANE_URL=about:blank",
     ] {
         assert!(
@@ -364,6 +373,14 @@ async fn launch_materializes_identity_tls_egress_and_approved_extensions() {
             "{expected}"
         );
     }
+    assert_eq!(
+        environment
+            .iter()
+            .filter(|value| value.starts_with("BPANE_URL="))
+            .count(),
+        1,
+        "feature-derived values must override trusted defaults without duplicates"
+    );
     let geolocation = environment
         .iter()
         .find_map(|value| value.strip_prefix("BPANE_SESSION_GEOLOCATION="))

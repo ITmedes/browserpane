@@ -17,6 +17,7 @@ fn settings() -> BrowserAdapterSettings {
         socket_path_root: "/run/bpane/sessions".to_string(),
         session_data_root: "/run/bpane/session".to_string(),
         extension_registry_file: None,
+        browser_environment_file: None,
         docker_timeout_secs: 30,
     }
 }
@@ -34,9 +35,43 @@ fn rejecting_mode_denies_ignored_adapter_configuration() {
         network: None,
         socket_volume: None,
         extension_registry_file: None,
+        browser_environment_file: None,
         ..settings()
     };
     rejecting.build_executor().unwrap();
+}
+
+#[test]
+fn browser_environment_is_allowlisted_bounded_and_startup_scoped() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("host-runtime.env");
+    std::fs::write(
+        &path,
+        "# trusted runtime defaults\nBPANE_FPS=60\nBPANE_SESSION_ID=static-default\nBPANE_URL=https://example.org\n",
+    )
+    .unwrap();
+    let loaded = load_browser_environment(Some(&path)).unwrap();
+    assert_eq!(loaded["BPANE_FPS"], "60");
+    assert_eq!(loaded["BPANE_URL"], "https://example.org");
+    assert!(!loaded.contains_key("BPANE_SESSION_ID"));
+
+    std::fs::write(&path, "BPANE_FPS=30\n").unwrap();
+    assert_eq!(loaded["BPANE_FPS"], "60");
+}
+
+#[test]
+fn browser_environment_rejects_unknown_duplicate_and_control_values() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("host-runtime.env");
+    for value in [
+        "UNAPPROVED=value\n",
+        "BPANE_FPS=60\nBPANE_FPS=30\n",
+        "BPANE_URL=unsafe\u{0007}value\n",
+        "missing-separator\n",
+    ] {
+        std::fs::write(&path, value).unwrap();
+        assert!(load_browser_environment(Some(&path)).is_err());
+    }
 }
 
 #[test]

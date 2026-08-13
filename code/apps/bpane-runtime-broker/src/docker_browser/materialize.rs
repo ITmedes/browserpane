@@ -165,7 +165,12 @@ fn environment(
     request: &BrowserRuntimeLaunchRequest,
 ) -> Result<Vec<String>, &'static str> {
     let session_id = request.session_id;
-    let mut environment = vec![
+    let mut environment = config
+        .base_environment
+        .iter()
+        .map(|(key, value)| format!("{key}={value}"))
+        .collect::<Vec<_>>();
+    environment.extend([
         format!("BPANE_SESSION_ID={session_id}"),
         format!("BPANE_SOCKET_PATH={}", config.socket_path(session_id)),
         format!("BPANE_SESSION_DATA_DIR={}", config.session_data_root),
@@ -180,7 +185,7 @@ fn environment(
             "BPANE_SESSION_FILE_BINDINGS_MANIFEST={}",
             config.session_file_manifest()
         ),
-    ];
+    ]);
     add_identity_environment(&mut environment, &request.features.network_identity);
     if let Some(egress) = &request.features.egress {
         add_egress_environment(&mut environment, config, egress);
@@ -350,6 +355,8 @@ fn add_egress_labels(labels: &mut BTreeMap<String, String>, request: &BrowserRun
 }
 
 fn push_env(environment: &mut Vec<String>, key: &str, value: &str) {
+    let prefix = format!("{key}=");
+    environment.retain(|entry| !entry.starts_with(&prefix));
     environment.push(format!("{key}={value}"));
 }
 

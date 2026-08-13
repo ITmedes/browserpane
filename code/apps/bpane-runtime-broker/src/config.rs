@@ -146,6 +146,9 @@ pub struct BrokerConfig {
     /// Read-only version-one extension registry loaded once at startup.
     #[arg(long, env = "BPANE_RUNTIME_BROKER_EXTENSION_REGISTRY_FILE")]
     pub extension_registry_file: Option<PathBuf>,
+    /// Read-only allowlisted browser environment loaded once at startup.
+    #[arg(long, env = "BPANE_RUNTIME_BROKER_BROWSER_ENVIRONMENT_FILE")]
+    pub browser_environment_file: Option<PathBuf>,
     /// Timeout for private Docker API calls.
     #[arg(
         long,
@@ -223,6 +226,7 @@ impl BrokerConfig {
             socket_path_root: self.socket_path_root.clone(),
             session_data_root: self.session_data_root.clone(),
             extension_registry_file: self.extension_registry_file.clone(),
+            browser_environment_file: self.browser_environment_file.clone(),
             docker_timeout_secs: self.docker_timeout_secs,
         }
     }
@@ -266,6 +270,7 @@ mod tests {
             socket_path_root: "/run/bpane/sessions".to_string(),
             session_data_root: "/run/bpane/session".to_string(),
             extension_registry_file: None,
+            browser_environment_file: None,
             docker_timeout_secs: 30,
         }
     }

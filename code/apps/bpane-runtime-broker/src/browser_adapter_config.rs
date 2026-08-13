@@ -16,6 +16,37 @@ use crate::{
 
 const MAX_EXTENSION_REGISTRY_BYTES: usize = 65_536;
 const MAX_EXTENSION_REGISTRY_ENTRIES: usize = 128;
+const MAX_BROWSER_ENVIRONMENT_BYTES: usize = 16_384;
+const MAX_BROWSER_ENVIRONMENT_ENTRIES: usize = 64;
+const TRUSTED_BROWSER_ENVIRONMENT_KEYS: [&str; 27] = [
+    "BPANE_H264_MODE",
+    "BPANE_H264_BITRATE",
+    "BPANE_H264_MAXRATE",
+    "BPANE_H264_BUFSIZE",
+    "BPANE_H264_PRESET",
+    "BPANE_H264_PROFILE",
+    "BPANE_H264_LEVEL",
+    "BPANE_H264_TUNE",
+    "BPANE_H264_BFRAMES",
+    "BPANE_FPS",
+    "BPANE_CDP_MIN_VIDEO_WIDTH",
+    "BPANE_CDP_MIN_VIDEO_HEIGHT",
+    "BPANE_CDP_MIN_VIDEO_AREA_RATIO",
+    "BPANE_CDP_PAUSE_VIDEOS_ON_SCROLL",
+    "BPANE_CDP_SCROLL_PAUSE_WINDOW_MS",
+    "BPANE_VIDEO_CLICK_ARM_MS",
+    "BPANE_AUDIO_CODEC",
+    "BPANE_TILE_CODEC",
+    "RUST_LOG",
+    "BPANE_URL",
+    "BPANE_DPI",
+    "GDK_SCALE",
+    "GDK_DPI_SCALE",
+    "BPANE_PROFILE_ROOT",
+    "BPANE_SESSION_ID",
+    "BPANE_CDP_PROXY_PORT",
+    "BPANE_CHROMIUM_POLICY_FILE",
+];
 
 /// Runtime operation executor selected by trusted broker configuration.
 #[derive(Debug, Clone, Copy, Default, Eq, PartialEq, ValueEnum)]
@@ -42,6 +73,7 @@ pub struct BrowserAdapterSettings {
     pub socket_path_root: String,
     pub session_data_root: String,
     pub extension_registry_file: Option<PathBuf>,
+    pub browser_environment_file: Option<PathBuf>,
     pub docker_timeout_secs: u64,
 }
 
@@ -55,6 +87,7 @@ impl BrowserAdapterSettings {
                     || self.network.is_some()
                     || self.socket_volume.is_some()
                     || self.extension_registry_file.is_some()
+                    || self.browser_environment_file.is_some()
                 {
                     bail!("browser adapter settings require docker-browser executor mode");
                 }
@@ -84,6 +117,9 @@ impl BrowserAdapterSettings {
                         output_limit_bytes: 65_536,
                     },
                     extensions: load_extension_registry(self.extension_registry_file.as_deref())?,
+                    base_environment: load_browser_environment(
+                        self.browser_environment_file.as_deref(),
+                    )?,
                 };
                 let timeout = Duration::from_secs(self.docker_timeout_secs);
                 if timeout.is_zero() || timeout > Duration::from_secs(300) {
@@ -145,6 +181,44 @@ fn load_extension_registry(
         }
     }
     Ok(extensions)
+}
+
+fn load_browser_environment(path: Option<&Path>) -> anyhow::Result<BTreeMap<String, String>> {
+    let Some(path) = path else {
+        return Ok(BTreeMap::new());
+    };
+    let bytes = std::fs::read(path).context("failed to read browser environment file")?;
+    if bytes.is_empty() || bytes.len() > MAX_BROWSER_ENVIRONMENT_BYTES {
+        bail!("browser environment file size is invalid");
+    }
+    let content = std::str::from_utf8(&bytes).context("browser environment file is not UTF-8")?;
+    let mut environment = BTreeMap::new();
+    for line in content.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let (key, value) = line
+            .split_once('=')
+            .context("browser environment entry is malformed")?;
+        let key = key.trim();
+        if !TRUSTED_BROWSER_ENVIRONMENT_KEYS.contains(&key)
+            || value.len() > 2_048
+            || value
+                .bytes()
+                .any(|byte| byte == 0 || byte.is_ascii_control())
+            || environment.contains_key(key)
+        {
+            bail!("browser environment entry is invalid");
+        }
+        if key != "BPANE_SESSION_ID" {
+            environment.insert(key.to_string(), value.to_string());
+        }
+        if environment.len() > MAX_BROWSER_ENVIRONMENT_ENTRIES {
+            bail!("browser environment contains too many entries");
+        }
+    }
+    Ok(environment)
 }
 
 fn required<'a>(value: &'a Option<String>, name: &str) -> anyhow::Result<&'a str> {
