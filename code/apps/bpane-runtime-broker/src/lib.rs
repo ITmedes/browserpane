@@ -19,7 +19,9 @@ pub use auth::{
     OidcBrokerAuthenticator, ServicePrincipal,
 };
 pub use config::BrokerConfig;
-pub use docker_browser::{BrowserRuntimeDockerAdapter, BrowserRuntimeDockerConfig};
+pub use docker_browser::{
+    BrowserRuntimeDockerAdapter, BrowserRuntimeDockerConfig, BrowserRuntimeExtensionConfig,
+};
 pub use executor::{
     ExecutionError, ExecutionErrorCode, RejectingRuntimeExecutor, RuntimeOperationExecutor,
 };

@@ -38,6 +38,7 @@ fn launch_policy() -> ContainerLaunchPolicy {
             "browserpane.runtime.managed".to_string(),
             "true".to_string(),
         )]),
+        derived_label_keys: BTreeSet::new(),
         entrypoint: vec!["/usr/local/bin/start-host.sh".to_string()],
         added_capabilities: BTreeSet::new(),
         seccomp_profiles: BTreeSet::from(["browserpane-default".to_string()]),
@@ -209,6 +210,34 @@ fn denies_unknown_environment_keys_and_label_changes() {
     let mut spec = launch_spec();
     spec.labels.remove("browserpane.runtime.resource_id");
     assert_launch_denied(&spec, PolicyErrorCode::LabelsInvalid);
+}
+
+#[test]
+fn accepts_only_explicit_broker_derived_label_keys() {
+    let mut policy = launch_policy();
+    policy
+        .derived_label_keys
+        .insert("browserpane.egress_profile_id".to_string());
+    let evaluator = RuntimeBrokerPolicy::new(ContainerPolicyConfig {
+        launch: BTreeMap::from([(RuntimeOperationKind::BrowserRuntime, policy)]),
+        lifecycle: BTreeMap::from([(RuntimeOperationKind::BrowserRuntime, lifecycle_policy())]),
+    })
+    .unwrap();
+    let mut spec = launch_spec();
+    spec.labels.insert(
+        "browserpane.egress_profile_id".to_string(),
+        Uuid::now_v7().to_string(),
+    );
+    evaluator.authorize_launch(&spec).unwrap();
+
+    spec.labels.insert(
+        "browserpane.egress_profile_id".to_string(),
+        "unsafe\nvalue".to_string(),
+    );
+    assert_eq!(
+        evaluator.authorize_launch(&spec),
+        Err(PolicyErrorCode::LabelsInvalid.into())
+    );
 }
 
 #[test]
@@ -417,6 +446,16 @@ fn rejects_reserved_labels_unsafe_paths_and_unbounded_limits() {
                     "browserpane.runtime.resource_id".to_string(),
                     "override".to_string(),
                 );
+                policy
+            },
+            PolicyConfigurationErrorCode::InvalidLabels,
+        ),
+        (
+            {
+                let mut policy = launch_policy();
+                policy
+                    .derived_label_keys
+                    .insert("browserpane.runtime.resource_id".to_string());
                 policy
             },
             PolicyConfigurationErrorCode::InvalidLabels,

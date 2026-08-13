@@ -4,6 +4,14 @@ use uuid::Uuid;
 
 use crate::SecretValue;
 
+mod browser_features;
+
+pub use browser_features::{
+    BrowserEgressObservationMode, BrowserEgressSelection, BrowserGeolocation,
+    BrowserNetworkIdentity, BrowserProxySelection, BrowserRuntimeFeatures,
+    BrowserRuntimeLaunchRequest, BrowserSessionDataSource,
+};
+
 /// Version of the runtime broker wire contract.
 #[derive(Debug, Clone, Copy, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -201,7 +209,8 @@ impl RuntimeOperation {
         match self {
             Self::LaunchBrowser(request) => {
                 require_ids([request.session_id])?;
-                require_optional_ids([request.browser_context_id])
+                require_optional_ids([request.browser_context_id])?;
+                request.features.validate()
             }
             Self::LaunchWorkflow(request) => require_ids([
                 request.workflow_run_id,
@@ -216,16 +225,6 @@ impl RuntimeOperation {
             Self::VolumeLifecycle(request) => require_ids([request.resource_id]),
         }
     }
-}
-
-/// Browser runtime launch intent. Docker-sensitive fields are broker-owned.
-#[derive(Debug, Clone, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct BrowserRuntimeLaunchRequest {
-    /// Session that owns the runtime.
-    pub session_id: Uuid,
-    /// Optional reusable browser context mounted by broker policy.
-    pub browser_context_id: Option<Uuid>,
 }
 
 /// Workflow worker launch intent.
