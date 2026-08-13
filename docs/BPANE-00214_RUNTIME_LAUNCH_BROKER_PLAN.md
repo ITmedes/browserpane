@@ -900,8 +900,15 @@ Checkpoint 6 implementation evidence:
 - Gateway restart reconciliation passed with one-worker workflow backpressure:
   the active stale run failed, the queued follower completed, and the
   awaiting-input run survived and resumed.
-- `npm run check` passed for the browser-client package; final repository,
-  package, Rust, documentation, and hosted checks remain the PR gate.
+- All 42 canonical fast validation stages passed, including dependency policy,
+  repository/docs checks, Rust format/Clippy/workspace tests/coverage, both
+  admin applications, browser-client tests/coverage/build, MCP bridge,
+  recording/workflow workers, OpenAPI, and egress observer checks. Hosted
+  required checks remain the PR gate.
+- Live broker audit output was inspected after the parity journeys. It contains
+  request/resource ids, operation kind, outcome, and a hashed idempotency-key
+  fingerprint, with no credentials, payload content, paths, or raw Docker
+  diagnostics. A final live gateway-isolation smoke passed after validation.
 
 ## Validation Strategy
 
