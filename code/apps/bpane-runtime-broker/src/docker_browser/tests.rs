@@ -187,6 +187,7 @@ async fn launch_materializes_only_broker_owned_container_fields() {
             BrowserRuntimeLaunchRequest {
                 session_id,
                 browser_context_id: None,
+                features: Default::default(),
             },
         )))
         .await
@@ -259,6 +260,7 @@ async fn reusable_context_adds_only_the_owned_profile_volume() {
             BrowserRuntimeLaunchRequest {
                 session_id,
                 browser_context_id: Some(context_id),
+                features: Default::default(),
             },
         )))
         .await
@@ -325,6 +327,7 @@ async fn launch_failure_is_sanitized_and_removes_partial_container() {
             BrowserRuntimeLaunchRequest {
                 session_id,
                 browser_context_id: None,
+                features: Default::default(),
             },
         )))
         .await
@@ -393,6 +396,7 @@ async fn bollard_backend_uses_only_owned_container_lifecycle_routes() {
                 BrowserRuntimeLaunchRequest {
                     session_id,
                     browser_context_id: None,
+                    features: Default::default(),
                 },
             )))
             .await

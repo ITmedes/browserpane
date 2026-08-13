@@ -87,6 +87,7 @@ fn operation_request() -> RuntimeOperationRequest {
         operation: RuntimeOperation::LaunchBrowser(BrowserRuntimeLaunchRequest {
             session_id: Uuid::now_v7(),
             browser_context_id: None,
+            features: Default::default(),
         }),
     }
 }
@@ -289,6 +290,7 @@ async fn exact_retry_is_cached_and_conflicting_reuse_is_denied() {
     conflicting.operation = RuntimeOperation::LaunchBrowser(BrowserRuntimeLaunchRequest {
         session_id: Uuid::now_v7(),
         browser_context_id: None,
+        features: Default::default(),
     });
     let response = app
         .clone()

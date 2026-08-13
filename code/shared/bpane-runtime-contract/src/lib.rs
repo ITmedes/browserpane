@@ -15,7 +15,9 @@ pub use audit::{
     AuditOutcome, AuditResource, RuntimeBrokerAuditEvent, RuntimeBrokerAuditEventBuilder,
 };
 pub use model::{
-    BrokerApiVersion, BrowserRuntimeLaunchRequest, ContainerLifecycleAction,
+    BrokerApiVersion, BrowserEgressObservationMode, BrowserEgressSelection, BrowserGeolocation,
+    BrowserNetworkIdentity, BrowserProxySelection, BrowserRuntimeFeatures,
+    BrowserRuntimeLaunchRequest, BrowserSessionDataSource, ContainerLifecycleAction,
     ContainerLifecycleRequest, ContractErrorCode, ContractViolation, IdempotencyKey,
     RecordingWorkerCredentials, RecordingWorkerLaunchRequest, RuntimeOperation,
     RuntimeOperationKind, RuntimeOperationRequest, RuntimeOperationResponse,

@@ -13,6 +13,7 @@ categories = ["api-bindings", "config"]
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 thiserror.workspace = true
+url = "2"
 uuid = { version = "1", features = ["serde", "v7"] }
 
 [dev-dependencies]

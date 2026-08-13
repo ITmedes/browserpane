@@ -32,6 +32,7 @@ fn operation_request() -> RuntimeOperationRequest {
         operation: RuntimeOperation::LaunchBrowser(BrowserRuntimeLaunchRequest {
             session_id: Uuid::now_v7(),
             browser_context_id: None,
+            features: Default::default(),
         }),
     }
 }
