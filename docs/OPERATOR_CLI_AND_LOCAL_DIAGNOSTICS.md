@@ -157,6 +157,8 @@ work around a rejected path.
 
 ### 6. Docker Runtime Access
 
+Direct local compatibility:
+
 ```bash
 docker info >/dev/null
 docker compose -f deploy/compose.yml exec -T gateway \
@@ -172,6 +174,23 @@ the proxy mounts the host socket. An inactive host daemon, unhealthy proxy,
 denied required API, or permission failure can leave process liveness available
 while readiness and runtime admission fail. The validator checks the structured
 Compose contract and live allowed/denied API behavior.
+
+Production-like broker topology:
+
+```bash
+./scripts/start-runtime-broker-browser-overlay.sh
+node scripts/validate-runtime-broker-browser-overlay.mjs
+./scripts/smoke-runtime-broker-isolation.sh
+./scripts/smoke-runtime-broker-storage.sh
+cd code/web/bpane-client
+npm run smoke:runtime-broker-restart -- --headless
+```
+
+In this topology, `docker info` inside the gateway is expected to fail: the
+gateway has no `DOCKER_HOST`, socket, proxy dependency, or shared Docker-control
+network. Diagnose container/volume operations through runtime-broker readiness,
+safe broker audit metadata, and proxy/broker logs rather than granting the
+gateway direct Docker access.
 
 ### 7. Optional Camera Ingress
 

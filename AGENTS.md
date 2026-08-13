@@ -121,8 +121,9 @@ Current product shape:
     gateway with audience-bound OIDC service credentials, applies bounded
     request, concurrency, timeout, replay, and idempotency controls, and keeps
     backend-specific launch construction behind a fail-closed executor boundary.
-  - The broker foundation is present but is not yet the default runtime path;
-    operation adapters are being migrated incrementally under issue #214.
+  - Base Compose keeps the broker fail-closed. The production-like
+    `deploy/compose.runtime-broker.yml` topology enables all current Docker
+    adapters and routes browser, worker, and storage operations through it.
   - `docker_browser/`: broker-owned browser container materialization and
     launch/inspect/stop/remove adapter built on Bollard. It derives names,
     volumes, environment, labels, network, security, and resource bounds from
@@ -199,11 +200,13 @@ Current product shape:
     orchestrator adapter.
   - Local compose uses a one-shot helper to build the `deploy-recording-worker` image and configures the gateway to launch short-lived recorder containers for `recording.mode=always`; artifact handoff uses the trusted `bpane-recordings` staging volume and finalized artifacts use the separate `bpane-recording-artifacts` gateway store.
   - The gateway is configured to auto-launch workflow workers against the `deploy-workflow-worker` image on the compose network. Build that image before workflow-run smoke tests or local workflow execution.
-  - `deploy/compose.runtime-broker.yml` is an opt-in migration overlay. It pins
+  - `deploy/compose.runtime-broker.yml` is the opt-in production-like
+    Docker-host topology. It pins
     browser and worker images by immutable image id and moves their container
-    lifecycle plus typed storage operations through the broker; the gateway
-    retains Docker-proxy network access only until checkpoint 6 of issue #214
-    validates and switches the broker-only topology.
+    lifecycle plus typed storage operations through the broker. The gateway has
+    no `DOCKER_HOST`, Docker socket, `docker-control` membership, or proxy
+    dependency in this topology. Base Compose remains the explicit local direct
+    `docker_pool` compatibility path.
   - The gateway mounts the repo at `/workspace:ro` so local git-backed workflow sources can be resolved and materialized during development smokes.
 - `deploy/examples/egress-observer`
   - Local egress observation fixtures. `compose.yml` runs a metadata-only Squid forward proxy at `bpane-egress-observer:3128` and an auth-enforcing Squid proxy at `bpane-egress-auth-observer:3130` for proxy-auth validation. `compose.tls.yml` runs a mitmproxy TLS-intercept proxy at `bpane-egress-tls-observer:3129` using local CA material prepared by `prepare-mitmproxy-ca.sh`. `egress-usage-reporter.mjs` is the local sanitized usage-ingestion example: it joins Squid logs with docker runtime labels and calls `/api/v1/sessions/{id}/egress-usage` with byte counters and safe observer metadata only.
@@ -251,6 +254,8 @@ Current product shape:
 - Gateway docker-pool compose e2e suite: `cargo test -p bpane-gateway --test compose_api_surface_docker_pool -- --ignored --test-threads=1`
 - Gateway compose e2e wrapper: `scripts/run-gateway-compose-e2e.sh --suite all`
 - Runtime-broker storage smoke: `scripts/smoke-runtime-broker-storage.sh`
+- Runtime-broker isolation smoke: `scripts/smoke-runtime-broker-isolation.sh`
+- Runtime-broker restart smoke: run `npm run smoke:runtime-broker-restart -- --headless` in `code/web/bpane-client`
 - Host tests: `cargo test -p bpane-host`
 - Protocol tests: `cargo test -p bpane-protocol`
 
