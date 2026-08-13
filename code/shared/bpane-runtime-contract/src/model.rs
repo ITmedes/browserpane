@@ -473,6 +473,16 @@ pub struct RuntimeOperationResponse {
     pub result: RuntimeOperationResult,
 }
 
+/// Sanitized execution state for a detached broker-owned worker.
+#[derive(Debug, Clone, Copy, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkerExecutionState {
+    /// The worker container is created, starting, running, or stopping.
+    Running,
+    /// The worker container reached a terminal process state.
+    Exited,
+}
+
 /// Sanitized operation results. Docker response models are never exposed.
 #[derive(Debug, Clone, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "state", rename_all = "snake_case")]
@@ -483,6 +493,13 @@ pub enum RuntimeOperationResult {
     Exists,
     /// An owned resource does not exist.
     Absent,
+    /// A detached workflow or recording worker was inspected.
+    WorkerState {
+        /// Stable worker lifecycle state.
+        execution_state: WorkerExecutionState,
+        /// Process exit code for an exited worker when the backend provides it.
+        exit_code: Option<i32>,
+    },
     /// An owned resource reached its terminal state.
     Completed {
         /// Process exit code when available.
