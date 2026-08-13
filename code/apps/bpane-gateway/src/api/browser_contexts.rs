@@ -5,7 +5,7 @@ use axum::extract::Request;
 use axum::routing::{get, post};
 
 use super::browser_context_archive::{
-    build_browser_context_export_archive, parse_browser_context_import_archive,
+    build_browser_context_export_archive_off_thread, parse_browser_context_import_archive,
     BrowserContextExportManifest, BrowserContextImportArchiveError,
     BROWSER_CONTEXT_PROFILE_ARCHIVE_PATH,
 };
@@ -445,7 +445,8 @@ async fn export_browser_context(
             .as_ref()
             .map(|_| BROWSER_CONTEXT_PROFILE_ARCHIVE_PATH.to_string()),
     };
-    let bytes = build_browser_context_export_archive(&manifest, profile_archive.as_deref())
+    let bytes = build_browser_context_export_archive_off_thread(manifest, profile_archive)
+        .await
         .map_err(|error| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -455,13 +456,14 @@ async fn export_browser_context(
             )
         })?;
     let filename = format!("browserpane-browser-context-{context_id}.zip");
-    let mut response = Response::new(axum::body::Body::from(bytes.clone()));
+    let content_length = bytes.len();
+    let mut response = Response::new(axum::body::Body::from(bytes));
     response
         .headers_mut()
         .insert(CONTENT_TYPE, HeaderValue::from_static("application/zip"));
     response.headers_mut().insert(
         CONTENT_LENGTH,
-        HeaderValue::from_str(&bytes.len().to_string()).map_err(|error| {
+        HeaderValue::from_str(&content_length.to_string()).map_err(|error| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ErrorResponse {

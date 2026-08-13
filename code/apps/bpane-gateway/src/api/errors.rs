@@ -251,7 +251,8 @@ pub(super) fn map_recording_playback_error(
         RecordingPlaybackError::Artifact(inner) => map_recording_artifact_store_error(inner),
         RecordingPlaybackError::ManifestEncode(_)
         | RecordingPlaybackError::Io(_)
-        | RecordingPlaybackError::Package(_) => (
+        | RecordingPlaybackError::Package(_)
+        | RecordingPlaybackError::TaskJoin(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse {
                 error: error.to_string(),
