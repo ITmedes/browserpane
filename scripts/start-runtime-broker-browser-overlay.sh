@@ -9,6 +9,9 @@ cd "${ROOT_DIR}"
 docker compose -f "${BASE_COMPOSE}" build host runtime-broker gateway
 
 browser_image_id="$(docker compose -f "${BASE_COMPOSE}" images -q host)"
+if [[ "${browser_image_id}" =~ ^[0-9a-fA-F]{64}$ ]]; then
+  browser_image_id="sha256:${browser_image_id}"
+fi
 if [[ ! "${browser_image_id}" =~ ^sha256:[0-9a-fA-F]{64}$ ]]; then
   echo "failed to resolve an immutable browser image id" >&2
   exit 1
