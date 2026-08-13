@@ -38,6 +38,8 @@ pub struct WorkflowWorkerConfig {
     pub container_name_prefix: String,
     pub gateway_api_url: String,
     pub work_root: PathBuf,
+    pub request_timeout: Duration,
+    pub output_limit_bytes: usize,
     pub bearer_token: Option<String>,
     pub oidc_token_url: Option<String>,
     pub oidc_client_id: Option<String>,
@@ -194,6 +196,16 @@ fn validate_config(
     if config.gateway_api_url.trim().is_empty() {
         return Err(WorkflowLifecycleError::InvalidConfiguration(
             "workflow worker gateway api url must not be empty".to_string(),
+        ));
+    }
+    if config.request_timeout.is_zero() {
+        return Err(WorkflowLifecycleError::InvalidConfiguration(
+            "workflow worker request timeout must be greater than zero".to_string(),
+        ));
+    }
+    if config.output_limit_bytes == 0 {
+        return Err(WorkflowLifecycleError::InvalidConfiguration(
+            "workflow worker output limit must be greater than zero".to_string(),
         ));
     }
     if auth_validator.is_oidc()

@@ -86,7 +86,7 @@ Current product shape:
   - `session_hub.rs`: fan-out, late-join bootstrap, viewer cap, telemetry.
   - `session_control.rs`: versioned session-control store and Postgres integration, including projects with admission quotas and template/egress/extension/context/file-workspace policy bindings, service principals, session templates, browser contexts, workflows, credential bindings, file workspaces, and approved extension metadata.
   - `browser_contexts/retention.rs`: background cleanup for ready reusable browser contexts whose per-context retention window expired; runtime-backed cleanup skips active writers and removes docker profile volumes through the session manager. Browser context resources can also carry per-context profile storage limits; the API reports over-limit usage and blocks new reusable sessions from contexts whose inspected profile storage exceeds that limit. Inactive reusable contexts can be cloned into new owner-scoped reusable contexts, exported as zip archives, or imported from BrowserPane export archives into new reusable contexts; docker-backed runtimes copy, package, or restore profile volume data when present.
-  - `api/browser_context_archive.rs`: bounded BrowserPane browser-context export/import format handling. Import authentication and concurrency are enforced at the API boundary; nested profile archives are size-, count-, path-, and entry-type validated before runtime materialization.
+  - `api/browser_context_archive.rs`: bounded BrowserPane browser-context export/import format handling. Import authentication and concurrency are enforced at the API boundary; nested profile archives are size-, count-, path-, and entry-type validated before runtime materialization. Export ZIP assembly runs on Tokio's blocking pool instead of an asynchronous request thread.
   - `session_manager.rs`: internal gateway boundary for session runtime lifecycle. The rest of the gateway should depend on this façade instead of backend details.
   - `credentials/provider.rs`: credential binding secret-provider boundary. Local compose uses HashiCorp Vault dev mode and the current implementation targets Vault KV v2. Credential bindings can be owner-scoped or project-scoped; workflow runs and egress-backed sessions must not consume project-bound bindings from another project.
   - `workflow/source.rs`: workflow source contract and git ref resolution. Workflow definition versions can pin git-backed source metadata to an immutable commit at publish time without embedding source blobs into the control plane.
@@ -95,10 +95,11 @@ Current product shape:
   - `session_files/`: session-scoped file binding resource shapes. Owners can bind workspace files to relative session mount paths; automation access can read/list those bindings before runtime materialization.
   - `recording/artifact_store.rs`: recording artifact storage boundary. `local_fs` accepts only the deterministic regular file under the configured recorder staging root, rejects aliases and symlinks, derives retained bytes from file metadata, and persists opaque artifact refs instead of raw filesystem paths.
   - `recording_lifecycle.rs`: recorder-worker launch, persisted assignment tracking, and restart reconciliation for session-scoped recording, including `recording.mode=always`. Recording resources are contiguous segments; restart recovery fails the stale in-flight segment and starts a linked fresh one instead of pretending the artifact is continuous.
-  - `recording/playback/`: derives session-level playback/export resources from retained recording segments and packages a zipped playback bundle with manifest + player + included media files.
+  - `recording/playback/`: derives session-level playback/export resources from retained recording segments. Artifact reads remain asynchronous; CPU-bound ZIP assembly for the manifest, player, and included media files runs on Tokio's blocking pool.
   - `recording/observability.rs`: gateway-local counters/timestamps for recording finalization, playback export generation, and retention passes.
   - `recording/retention.rs`: periodic cleanup of completed recording artifacts after the session-scoped retention window expires; it clears artifact refs but preserves recording segment metadata.
   - `workflow_lifecycle.rs`: control-plane launch/supervision for workflow workers. The gateway can auto-start Playwright workflow workers as short-lived Docker jobs, persist run-worker assignments, fail stale active runs after restart instead of leaving them orphaned, and manage awaiting-input runtime hold/release semantics for paused workflow runs.
+  - `worker_process_output.rs`: bounded concurrent stdout/stderr draining shared by workflow and recording worker supervisors.
   - `workflow_event_delivery/`: owner-scoped workflow event subscriptions,
     signed outbound webhook delivery, retry/backoff, and persisted delivery
     diagnostics. Its destination policy uses standard URL/DNS/HTTP facilities,
@@ -148,10 +149,10 @@ Current product shape:
   - Can resolve an explicit control-plane session via `/api/v1/sessions`, accepts delegated-session assignment through its bridge-local `/control-session` compatibility API, supports per-connection session routing through `/sessions/{session_id}/mcp` and `/sessions/{session_id}/sse`, resolves the managed session's runtime CDP endpoint from the session resource, and uses session-scoped `status` / `mcp-owner` APIs when a managed session is configured, including in `docker_pool` mode. In local compose, browser/admin callers mutate the bridge-global control session through the authenticated gateway proxy at `/api/v1/mcp-bridge/control-session`; the direct bridge-local control target is protected by an internal bearer token.
 - `code/integrations/recording-worker`
   - Playwright-driven recorder worker that attaches as a `recorder` browser client through the control plane.
-  - Creates or adopts session recording resources via `/api/v1/sessions/{id}/recordings`, waits for stop/finalize signals, writes the deterministic staged WebM, and uses a gateway-issued session/recording-bound worker capability for completion or failure. Ordinary session automation credentials cannot finalize artifacts.
+  - Creates or adopts session recording resources via `/api/v1/sessions/{id}/recordings`, waits for stop/finalize signals with sequential polling and finite HTTP/OIDC deadlines, writes the deterministic staged WebM, and uses a gateway-issued session/recording-bound worker capability for completion or failure. Ordinary session automation credentials cannot finalize artifacts.
 - `code/integrations/workflow-worker`
   - One-off workflow executor worker for owner-scoped workflow runs with git-backed source snapshots.
-  - Loads the workflow run through the gateway using an owner bearer token, mints session automation access, downloads the run source snapshot and workspace inputs, materializes them locally, uploads produced files back through run-scoped artifact APIs, and executes the pinned Playwright entrypoint against the bound BrowserPane session.
+  - Loads the workflow run through the gateway using an owner bearer token, mints session automation access, downloads the run source snapshot and workspace inputs, materializes them locally, uploads produced files back through run-scoped artifact APIs, and executes the pinned Playwright entrypoint against the bound BrowserPane session with finite HTTP/OIDC deadlines and bounded stdout/stderr capture.
 - `deploy/compose.yml`
   - Source of truth for local dev runtime defaults.
   - Local auth in compose is OIDC via Keycloak on `:8091`.
@@ -250,9 +251,9 @@ Run these in `code/web/bpane-client`:
 Run these where applicable:
 - `cd code/web/bpane-admin-auth && npm run test:coverage`
 - `cd code/web/bpane-admin-unified && npm run test:coverage`
-- `cd code/integrations/mcp-bridge && npm run build`
-- `cd code/integrations/recording-worker && npm run build`
-- `cd code/integrations/workflow-worker && npm run build`
+- `cd code/integrations/mcp-bridge && npm test && npm run build`
+- `cd code/integrations/recording-worker && npm test && npm run build`
+- `cd code/integrations/workflow-worker && npm test && npm run build`
 - `node --test deploy/examples/egress-observer/egress-usage-reporter.test.mjs`
 - `node --check deploy/examples/egress-observer/egress-usage-reporter.mjs`
 - `npm ci --ignore-scripts --prefix scripts/openapi`

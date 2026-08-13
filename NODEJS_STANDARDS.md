@@ -41,9 +41,9 @@ TypeScript changes should normally pass the narrowest relevant set of:
 - `cd code/web/bpane-client && npm run test:coverage`
 - `cd code/web/bpane-admin && npm run check && npm test && npm run build`
 - `cd code/web/bpane-admin-unified && npm run check && npm test && npm run build`
-- `cd code/integrations/mcp-bridge && npm run build`
-- `cd code/integrations/recording-worker && npm run build`
-- `cd code/integrations/workflow-worker && npm run build`
+- `cd code/integrations/mcp-bridge && npm test && npm run build`
+- `cd code/integrations/recording-worker && npm test && npm run build`
+- `cd code/integrations/workflow-worker && npm test && npm run build`
 
 When linting is added or expanded, use typed linting rather than syntax-only linting.
 

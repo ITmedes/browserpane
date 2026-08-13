@@ -132,6 +132,17 @@ pub(super) fn build_browser_context_export_archive(
     Ok(cursor.into_inner())
 }
 
+pub(super) async fn build_browser_context_export_archive_off_thread(
+    manifest: BrowserContextExportManifest,
+    profile_archive: Option<Vec<u8>>,
+) -> Result<Vec<u8>, String> {
+    tokio::task::spawn_blocking(move || {
+        build_browser_context_export_archive(&manifest, profile_archive.as_deref())
+    })
+    .await
+    .map_err(|error| format!("browser context export packaging task failed: {error}"))?
+}
+
 pub(super) fn parse_browser_context_import_archive(
     bytes: &[u8],
     limits: BrowserContextImportArchiveLimits,

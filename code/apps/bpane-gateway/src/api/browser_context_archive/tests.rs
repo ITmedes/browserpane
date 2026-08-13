@@ -33,6 +33,32 @@ fn accepts_regular_profile_files_and_directories() {
     assert_eq!(parsed.profile_archive.as_deref(), Some(profile.as_slice()));
 }
 
+#[tokio::test(flavor = "current_thread")]
+async fn packages_large_profile_export_off_the_async_runtime() {
+    let profile = vec![0x5a; 4 * 1024 * 1024];
+    let export =
+        build_browser_context_export_archive_off_thread(test_manifest(true), Some(profile.clone()));
+    tokio::pin!(export);
+
+    tokio::select! {
+        biased;
+        () = tokio::task::yield_now() => {}
+        result = &mut export => panic!(
+            "archive packaging completed before the async runtime regained control: {result:?}"
+        ),
+    }
+
+    let archive = export.await.unwrap();
+
+    let mut zip = zip::ZipArchive::new(std::io::Cursor::new(archive)).unwrap();
+    let mut packaged_profile = Vec::new();
+    zip.by_name(BROWSER_CONTEXT_PROFILE_ARCHIVE_PATH)
+        .unwrap()
+        .read_to_end(&mut packaged_profile)
+        .unwrap();
+    assert_eq!(packaged_profile, profile);
+}
+
 #[test]
 fn rejects_outer_archive_over_limit() {
     let archive = build_browser_context_export_archive(&test_manifest(false), None).unwrap();
