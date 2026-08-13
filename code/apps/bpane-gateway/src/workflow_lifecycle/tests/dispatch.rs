@@ -56,15 +56,19 @@ async fn launches_worker_and_marks_unfinished_run_failed() {
         .await
         .unwrap();
 
-    for _ in 0..200 {
-        if capture_file.exists() {
-            break;
+    let capture = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if let Ok(capture) = fs::read_to_string(&capture_file) {
+                if capture.contains("BPANE_SESSION_AUTOMATION_ACCESS_TOKEN") {
+                    break capture;
+                }
+            }
+            sleep(Duration::from_millis(20)).await;
         }
-        sleep(Duration::from_millis(20)).await;
-    }
-    assert!(capture_file.exists());
+    })
+    .await
+    .expect("workflow worker arguments should be written to the capture");
 
-    let capture = fs::read_to_string(&capture_file).unwrap();
     assert!(capture.contains("run"));
     assert!(capture.contains("BPANE_WORKFLOW_RUN_ID"));
     assert!(capture.contains(&run.id.to_string()));
