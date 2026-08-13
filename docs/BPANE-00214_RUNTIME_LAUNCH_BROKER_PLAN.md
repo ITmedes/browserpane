@@ -501,7 +501,7 @@ Slice 3 evidence:
   Direct workflow cancellation and direct always-on recording/playback/download
   smokes also passed.
 - Workflow-worker and recording-worker package tests/builds pass, along with 45
-  broker tests, 445 gateway tests, strict changed-crate Clippy/formatting, and
+  broker tests, 447 gateway tests, strict changed-crate Clippy/formatting, and
   the expanded Compose contract tests. README, ARCH, and AGENTS now describe
   the transitional browser-and-worker broker topology; storage remains the
   reason the gateway still joins Docker control.
