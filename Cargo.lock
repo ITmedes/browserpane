@@ -449,6 +449,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "bpane-runtime-broker"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "axum",
+ "bpane-runtime-contract",
+ "clap",
+ "hex",
+ "jsonwebtoken",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror 2.0.18",
+ "tokio",
+ "tower",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
 name = "bpane-runtime-contract"
 version = "0.1.0"
 dependencies = [

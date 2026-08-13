@@ -1,0 +1,47 @@
+# BrowserPane policy-validating runtime broker
+ARG BPANE_RUST_BUILDER_IMAGE=ubuntu:24.04@sha256:561618e2c15bf2397621dd04f96926663a3b5616c189cf7e38db7e82f5c538ea
+FROM ${BPANE_RUST_BUILDER_IMAGE} AS builder
+
+ENV CARGO_HOME=/opt/cargo \
+    RUSTUP_HOME=/opt/rustup \
+    PATH=/opt/cargo/bin:${PATH} \
+    CARGO_INCREMENTAL=0
+
+COPY deploy/install-rust-toolchain.sh rust-toolchain.toml /tmp/
+RUN if ! command -v cargo >/dev/null 2>&1; then \
+      apt-get update \
+      && apt-get install -y --no-install-recommends \
+        build-essential ca-certificates curl pkg-config \
+      && rm -rf /var/lib/apt/lists/* \
+      && rust_toolchain="$(awk -F '"' '/^[[:space:]]*channel[[:space:]]*=/{print $2}' /tmp/rust-toolchain.toml)" \
+      && /tmp/install-rust-toolchain.sh "${rust_toolchain}"; \
+    fi \
+    && rm /tmp/install-rust-toolchain.sh /tmp/rust-toolchain.toml
+
+WORKDIR /build
+COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
+COPY code/shared/bpane-runtime-contract code/shared/bpane-runtime-contract
+COPY code/apps/bpane-runtime-broker code/apps/bpane-runtime-broker
+
+# Stub unrelated workspace members required by Cargo metadata discovery.
+COPY code/shared/bpane-protocol/Cargo.toml code/shared/bpane-protocol/Cargo.toml
+COPY code/apps/bpane-host/Cargo.toml code/apps/bpane-host/Cargo.toml
+COPY code/apps/bpane-gateway/Cargo.toml code/apps/bpane-gateway/Cargo.toml
+RUN mkdir -p code/shared/bpane-protocol/src code/apps/bpane-host/src code/apps/bpane-gateway/src \
+    && printf '%s\n' 'pub fn dependency_seed() {}' > code/shared/bpane-protocol/src/lib.rs \
+    && printf '%s\n' 'fn main() {}' > code/apps/bpane-host/src/main.rs \
+    && printf '%s\n' 'fn main() {}' > code/apps/bpane-gateway/src/main.rs
+
+RUN cargo build --release --locked -p bpane-runtime-broker
+
+FROM ubuntu:24.04
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /build/target/release/bpane-runtime-broker /usr/local/bin/bpane-runtime-broker
+
+USER 65532:65532
+EXPOSE 8940/tcp
+CMD ["/usr/local/bin/bpane-runtime-broker"]
