@@ -344,6 +344,7 @@ fn rejects_nil_identifiers_for_every_operation_family() {
                 connect_ticket: secret(),
                 session_automation_access_token: secret(),
                 recording_worker_access_token: secret(),
+                gateway_bearer_token: None,
             },
         }),
         RuntimeOperation::RunStorageHelper(StorageHelperRequest {
@@ -381,6 +382,27 @@ fn rejects_nil_identifiers_for_every_operation_family() {
         nil_request_id.validate(),
         Err(ContractErrorCode::InvalidResourceId.into())
     );
+}
+
+#[test]
+fn recording_worker_credentials_redact_every_secret() {
+    let credentials = RecordingWorkerCredentials {
+        connect_ticket: SecretValue::new("connect-secret").unwrap(),
+        session_automation_access_token: SecretValue::new("automation-secret").unwrap(),
+        recording_worker_access_token: SecretValue::new("worker-secret").unwrap(),
+        gateway_bearer_token: Some(SecretValue::new("gateway-secret").unwrap()),
+    };
+
+    let debug = format!("{credentials:?}");
+    assert!(debug.contains("[REDACTED]"));
+    for secret in [
+        "connect-secret",
+        "automation-secret",
+        "worker-secret",
+        "gateway-secret",
+    ] {
+        assert!(!debug.contains(secret));
+    }
 }
 
 #[test]

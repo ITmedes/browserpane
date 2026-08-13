@@ -9,7 +9,7 @@ use bpane_runtime_contract::{
 
 use crate::{ExecutionError, ExecutionErrorCode, RuntimeOperationExecutor};
 
-mod backend;
+pub(crate) mod backend;
 mod config;
 mod materialize;
 
@@ -92,23 +92,20 @@ impl BrowserRuntimeDockerAdapter {
         self.policy
             .authorize_container_lifecycle(&target)
             .map_err(|_| ExecutionErrorCode::AdapterFailed)?;
-        let result = match request.action {
-            ContainerLifecycleAction::Inspect => self.backend.inspect(&target.container_name).await,
-            ContainerLifecycleAction::Stop => self.backend.stop(&target.container_name).await,
-            ContainerLifecycleAction::Remove => self.backend.remove(&target.container_name).await,
-        };
-        match result {
-            Ok(()) => match request.action {
-                ContainerLifecycleAction::Inspect => Ok(RuntimeOperationResult::Exists),
-                ContainerLifecycleAction::Stop | ContainerLifecycleAction::Remove => {
-                    Ok(RuntimeOperationResult::Completed {
-                        exit_code: None,
-                        omitted_output_bytes: 0,
-                    })
+        match request.action {
+            ContainerLifecycleAction::Inspect => {
+                match self.backend.inspect(&target.container_name).await {
+                    Ok(_) => Ok(RuntimeOperationResult::Exists),
+                    Err(DockerBackendError::NotFound) => Ok(RuntimeOperationResult::Absent),
+                    Err(error) => Err(map_backend_error(error)),
                 }
-            },
-            Err(DockerBackendError::NotFound) => Ok(RuntimeOperationResult::Absent),
-            Err(error) => Err(map_backend_error(error)),
+            }
+            ContainerLifecycleAction::Stop => {
+                lifecycle_result(self.backend.stop(&target.container_name).await)
+            }
+            ContainerLifecycleAction::Remove => {
+                lifecycle_result(self.backend.remove(&target.container_name).await)
+            }
         }
     }
 }
@@ -139,6 +136,19 @@ impl RuntimeOperationExecutor for BrowserRuntimeDockerAdapter {
 fn ignore_absent(result: Result<(), DockerBackendError>) -> Result<(), ExecutionError> {
     match result {
         Ok(()) | Err(DockerBackendError::NotFound) => Ok(()),
+        Err(error) => Err(map_backend_error(error)),
+    }
+}
+
+fn lifecycle_result(
+    result: Result<(), DockerBackendError>,
+) -> Result<RuntimeOperationResult, ExecutionError> {
+    match result {
+        Ok(()) => Ok(RuntimeOperationResult::Completed {
+            exit_code: None,
+            omitted_output_bytes: 0,
+        }),
+        Err(DockerBackendError::NotFound) => Ok(RuntimeOperationResult::Absent),
         Err(error) => Err(map_backend_error(error)),
     }
 }

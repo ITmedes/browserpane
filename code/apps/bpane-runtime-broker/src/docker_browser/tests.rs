@@ -18,6 +18,7 @@ use bpane_runtime_contract::{
 use uuid::Uuid;
 
 use super::*;
+use crate::docker_browser::backend::DockerContainerState;
 
 #[derive(Debug)]
 enum BackendCall {
@@ -92,7 +93,7 @@ impl DockerContainerApi for FakeDockerBackend {
         self.failure("start").map_or(Ok(()), Err)
     }
 
-    async fn inspect(&self, name: &str) -> Result<(), DockerBackendError> {
+    async fn inspect(&self, name: &str) -> Result<DockerContainerState, DockerBackendError> {
         self.calls
             .lock()
             .unwrap()
@@ -101,7 +102,7 @@ impl DockerContainerApi for FakeDockerBackend {
             return Err(error);
         }
         if self.exists.load(Ordering::SeqCst) {
-            Ok(())
+            Ok(DockerContainerState::Running)
         } else {
             Err(DockerBackendError::NotFound)
         }
@@ -643,6 +644,41 @@ async fn bollard_backend_uses_only_owned_container_lifecycle_routes() {
         "/containers/bpane-runtime-{}/start",
         session_id.simple()
     )));
+}
+
+#[tokio::test]
+async fn bollard_backend_normalizes_detached_container_exit_state() {
+    async fn docker_api(method: Method, uri: Uri) -> Response {
+        if method == Method::GET && uri.path().ends_with("/containers/worker/json") {
+            return axum::Json(serde_json::json!({
+                "Id": "container-id",
+                "State": {
+                    "Status": "exited",
+                    "ExitCode": 23
+                }
+            }))
+            .into_response();
+        }
+        StatusCode::NOT_FOUND.into_response()
+    }
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, Router::new().fallback(docker_api))
+            .await
+            .unwrap();
+    });
+    let backend =
+        BollardDockerContainerApi::connect(&format!("http://{address}"), Duration::from_secs(2))
+            .unwrap();
+
+    assert_eq!(
+        backend.inspect("worker").await.unwrap(),
+        DockerContainerState::Exited {
+            exit_code: Some(23)
+        }
+    );
 }
 
 #[tokio::test]

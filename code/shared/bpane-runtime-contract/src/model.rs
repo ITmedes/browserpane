@@ -286,6 +286,8 @@ pub struct RecordingWorkerCredentials {
     pub session_automation_access_token: SecretValue,
     /// Recording completion credential.
     pub recording_worker_access_token: SecretValue,
+    /// Optional gateway service credential.
+    pub gateway_bearer_token: Option<SecretValue>,
 }
 
 impl std::fmt::Debug for RecordingWorkerCredentials {
@@ -295,6 +297,10 @@ impl std::fmt::Debug for RecordingWorkerCredentials {
             .field("connect_ticket", &"[REDACTED]")
             .field("session_automation_access_token", &"[REDACTED]")
             .field("recording_worker_access_token", &"[REDACTED]")
+            .field(
+                "gateway_bearer_token",
+                &self.gateway_bearer_token.as_ref().map(|_| "[REDACTED]"),
+            )
             .finish()
     }
 }

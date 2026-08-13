@@ -11,6 +11,7 @@ mod auth;
 mod browser_adapter_config;
 mod config;
 mod docker_browser;
+mod docker_workers;
 mod executor;
 mod ledger;
 
@@ -23,6 +24,10 @@ pub use browser_adapter_config::{BrowserAdapterSettings, RuntimeExecutorMode};
 pub use config::BrokerConfig;
 pub use docker_browser::{
     BrowserRuntimeDockerAdapter, BrowserRuntimeDockerConfig, BrowserRuntimeExtensionConfig,
+};
+pub use docker_workers::{
+    RecordingWorkerDockerConfig, WorkerOidcConfig, WorkerRuntimeDockerAdapter,
+    WorkerRuntimeDockerConfig, WorkflowWorkerDockerConfig,
 };
 pub use executor::{
     ExecutionError, ExecutionErrorCode, RejectingRuntimeExecutor, RuntimeOperationExecutor,
