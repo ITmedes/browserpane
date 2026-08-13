@@ -2,7 +2,7 @@
 
 Governance issue: [#173](https://github.com/ITmedes/browserpane/issues/173)
 
-Last reviewed: 2026-08-10
+Last reviewed: 2026-08-13
 
 ## Scale
 
@@ -22,7 +22,6 @@ Last reviewed: 2026-08-10
 | R-006 | Public OpenAPI can drift from code or break clients silently. | Low | High | #179 | Review-ready on `feature/BPANE-00179`: 131-operation inventory, pinned lint, executable examples, Axum route coverage, semantic diff, policy, CI stages, and full fast/Compose validation. Close after merge and required-check confirmation. | Foundation |
 | R-007 | Protocol version is not enforced and compatibility is undocumented. | Medium | Critical | #175 | Version negotiation, shared vectors, fuzzing, compatibility matrix. | Production |
 | R-008 | In-memory and Postgres behavior can diverge. | Medium | High | #152 | Shared store contract suite and compose verification. | Foundation |
-| R-009 | Recording finalization can cross an unsafe filesystem/artifact boundary. | Low | High | #149 | Review-ready on `feature/BPANE-00149-recording-artifact-finalization`: purpose-scoped worker capability, exact regular-file staging contract, measured-byte accounting, negative API/store coverage, and real worker/admin/CLI Compose evidence. Close after merge and required-check confirmation. | Phase 0 conditional |
 | R-010 | Platform failures and saturation are not observable through standard telemetry/SLOs. | High | High | #178 | OTel/metrics contract, alerts, runbooks, load evidence. | Phase 1 / Production |
 | R-011 | Organization/project mappings are descriptive rather than a complete enforced authorization model. | High | Critical | #176 | Role/grant matrix, enforcement, migration, denial/audit tests. | Phase N |
 | R-012 | Deprovisioned identities or emergency access lack deterministic lifecycle controls. | Medium | Critical | #177 | Lifecycle API/SCIM path, stale review, break-glass controls. | Phase N |
@@ -31,7 +30,13 @@ Last reviewed: 2026-08-10
 | R-015 | Investor/product claims drift ahead of implementation maturity. | Medium | High | #173 and investment claim register | Claim maturity/evidence links and publication review. | Every external release |
 | R-016 | A Phase 0 Pilot expands into an undefined enterprise platform commitment. | High | High | #174 | Qualification, explicit non-goals, bounded agreement, Stop/Operate/Phase 1 gate. | Phase 0 |
 | R-017 | Large overlapping planning documents produce conflicting priorities. | High | High | #173 | Canonical roadmap; historical docs marked supporting; only bounded Ready plans are executable. | Governance |
-| R-018 | Workflow/recording workers lack the same unit-test floor as core packages. | High | High | #165 / #151 | Worker unit/integration suites and enforced package checks. | Foundation / Phase 1 |
+| R-018 | Workflow/recording workers lack the same unit-test floor as core packages. | Low | High | #165 / #151 | Review-ready on `feature/BPANE-00165-worker-runtime-hardening`: 8 recording-worker and 11 workflow-worker tests, enforced package checks, finite request deadlines, bounded process output, single-flight polling evidence, and compose worker journeys. Close after merge and required-check confirmation. | Foundation / Phase 1 |
+
+## Closed Risks
+
+| ID | Risk | Closure evidence |
+| --- | --- | --- |
+| R-009 | Recording finalization could cross an unsafe filesystem/artifact boundary. | Closed by #149 through merged PR #212: purpose-scoped worker capability, exact regular-file staging contract, measured-byte accounting, negative API/store coverage, and real worker/admin/CLI compose evidence. |
 
 ## Review Rules
 
