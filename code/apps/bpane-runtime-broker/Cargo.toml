@@ -1,0 +1,38 @@
+[package]
+name = "bpane-runtime-broker"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Policy-validating runtime operation broker for BrowserPane"
+repository = "https://github.com/ITmedes/browserpane"
+readme = "../../../README.md"
+keywords = ["browserpane", "runtime", "broker", "security"]
+categories = ["web-programming::http-server", "virtualization"]
+
+[[bin]]
+name = "bpane-runtime-broker"
+path = "src/main.rs"
+
+[dependencies]
+bpane-runtime-contract.workspace = true
+anyhow.workspace = true
+async-trait = "0.1"
+axum = "0.8"
+bollard.workspace = true
+clap = { version = "4", features = ["derive", "env"] }
+hex = "0.4"
+jsonwebtoken = { version = "9", features = ["use_pem"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+thiserror.workspace = true
+tokio.workspace = true
+tower = { version = "0.5", features = ["util"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true
+uuid = { version = "1", features = ["serde", "v7"] }
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }

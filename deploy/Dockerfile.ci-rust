@@ -41,24 +41,38 @@ WORKDIR /build
 # source is replaced by stubs so later source changes reuse third-party output.
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
 COPY code/shared/bpane-protocol/Cargo.toml code/shared/bpane-protocol/Cargo.toml
+COPY code/shared/bpane-runtime-contract/Cargo.toml code/shared/bpane-runtime-contract/Cargo.toml
+COPY code/shared/bpane-runtime-client/Cargo.toml code/shared/bpane-runtime-client/Cargo.toml
 COPY code/apps/bpane-host/Cargo.toml code/apps/bpane-host/Cargo.toml
 COPY code/apps/bpane-gateway/Cargo.toml code/apps/bpane-gateway/Cargo.toml
+COPY code/apps/bpane-runtime-broker/Cargo.toml code/apps/bpane-runtime-broker/Cargo.toml
 
 RUN mkdir -p \
       code/shared/bpane-protocol/src \
+      code/shared/bpane-runtime-contract/src \
+      code/shared/bpane-runtime-client/src \
       code/apps/bpane-host/src \
       code/apps/bpane-gateway/src \
+      code/apps/bpane-runtime-broker/src \
     && printf '%s\n' 'pub fn dependency_seed() {}' \
       > code/shared/bpane-protocol/src/lib.rs \
+    && printf '%s\n' 'pub fn dependency_seed() {}' \
+      > code/shared/bpane-runtime-contract/src/lib.rs \
+    && printf '%s\n' 'pub fn dependency_seed() {}' \
+      > code/shared/bpane-runtime-client/src/lib.rs \
     && printf '%s\n' 'fn main() {}' > code/apps/bpane-host/src/main.rs \
-    && printf '%s\n' 'fn main() {}' > code/apps/bpane-gateway/src/main.rs
+    && printf '%s\n' 'fn main() {}' > code/apps/bpane-gateway/src/main.rs \
+    && printf '%s\n' 'pub fn dependency_seed() {}' \
+      > code/apps/bpane-runtime-broker/src/lib.rs \
+    && printf '%s\n' 'fn main() {}' > code/apps/bpane-runtime-broker/src/main.rs
 
 RUN cargo build --workspace --release --locked
 
 # Remove only local workspace artifacts. This forces real BrowserPane source to
 # rebuild while preserving the expensive third-party dependency graph.
 RUN cargo clean --release \
-      -p bpane-protocol -p bpane-host -p bpane-gateway \
+      -p bpane-protocol -p bpane-runtime-contract -p bpane-runtime-client -p bpane-host \
+      -p bpane-gateway -p bpane-runtime-broker \
     && rm -rf Cargo.toml Cargo.lock rust-toolchain.toml code
 
 # Keep commit-specific metadata after the expensive dependency layers so a new

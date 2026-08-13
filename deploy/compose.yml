@@ -22,6 +22,7 @@
 #   keycloak  - local OIDC provider for dev/testing (port 8091)
 #   postgres  - session control-plane database
 #   mcp-bridge - MCP bridge for Claude Code (port 8931)
+#   runtime-broker - typed, authenticated runtime-operation boundary (internal)
 
 services:
   postgres:
@@ -71,6 +72,7 @@ services:
       - ./keycloak/browserpane-dev-realm.json:/opt/keycloak/data/import/browserpane-dev-realm.json:ro
     networks:
       - bpane-internal
+      - runtime-broker-auth
 
   host:
     build:
@@ -143,6 +145,39 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - docker-control
+
+  runtime-broker:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.runtime-broker
+      args:
+        BPANE_RUST_BUILDER_IMAGE: ${BPANE_RUST_BUILDER_IMAGE:-ubuntu:24.04@sha256:561618e2c15bf2397621dd04f96926663a3b5616c189cf7e38db7e82f5c538ea}
+    command: >
+      /usr/local/bin/bpane-runtime-broker
+      --listen 0.0.0.0:8940
+      --oidc-issuer http://localhost:8091/realms/browserpane-dev
+      --oidc-audience bpane-runtime-broker
+      --oidc-jwks-url http://keycloak:8080/realms/browserpane-dev/protocol/openid-connect/certs
+      --allowed-client-id bpane-runtime-broker-gateway
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8940/readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    depends_on:
+      keycloak:
+        condition: service_started
+    networks:
+      - runtime-broker-api
+      - runtime-broker-auth
 
   gateway:
     build:
@@ -299,6 +334,7 @@ services:
     networks:
       - bpane-internal
       - docker-control
+      - runtime-broker-api
 
   web:
     build:
@@ -397,5 +433,11 @@ networks:
       config:
         - subnet: 172.28.0.0/24
   docker-control:
+    driver: bridge
+    internal: true
+  runtime-broker-api:
+    driver: bridge
+    internal: true
+  runtime-broker-auth:
     driver: bridge
     internal: true

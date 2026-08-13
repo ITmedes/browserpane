@@ -268,6 +268,9 @@ The compose stack starts:
 - `host`: Linux host runtime with Xorg dummy, Openbox, Chromium, and `bpane-host`
 - `gateway`: WebTransport relay on `:4433` and HTTP APIs on `:8932`
 - `docker-proxy`: internal-only, allowlisted Docker API proxy used by the gateway
+- `runtime-broker`: internal-only authenticated typed-operation boundary; its
+  adapter is intentionally fail-closed while runtime operation families are
+  migrated, so the gateway continues to use `docker-proxy` in this checkpoint
 - `postgres`: session-control database on `:5433`
 - `vault`: local HashiCorp Vault dev server on `:8200` for workflow credential bindings
 - `keycloak`: local OIDC provider on `:8091`
@@ -351,6 +354,23 @@ volume APIs can still expose unrelated daemon resources, and a generic proxy
 does not validate image, mount, network, capability, or privileged-mode fields
 inside create requests. Production deployments must put runtime launch behind
 a purpose-specific broker or an orchestrator adapter with typed policy.
+
+The compose stack includes the first fail-closed runtime-broker foundation on
+two isolated internal networks: only the gateway can reach its operation API,
+and only the broker can reach Keycloak on its auth network. The broker accepts
+the versioned BrowserPane runtime-operation media type and audience-bound OAuth2
+service credentials, but it has no Docker network or socket access in this
+checkpoint. Validate its static confinement and live authentication denials
+with:
+
+```bash
+node scripts/validate-runtime-broker-foundation.mjs
+node scripts/smoke-runtime-broker-foundation.mjs
+```
+
+The existing gateway-to-proxy path remains active until browser, workflow,
+recording, and storage-helper operation families have broker parity. Do not
+treat the foundation service alone as the production authorization boundary.
 
 Compose also forwards a shared host-worker env profile automatically. If your
 compose project name is not the default `deploy`, override these defaults too:

@@ -24,10 +24,18 @@ RUN if ! command -v cargo >/dev/null 2>&1; then \
 WORKDIR /build
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
 COPY code/shared/bpane-protocol code/shared/bpane-protocol
+COPY code/shared/bpane-runtime-contract code/shared/bpane-runtime-contract
+RUN mkdir -p code/shared/bpane-runtime-client/src
+COPY code/shared/bpane-runtime-client/Cargo.toml code/shared/bpane-runtime-client/Cargo.toml
+RUN printf '%s\n' 'pub fn dependency_seed() {}' > code/shared/bpane-runtime-client/src/lib.rs
 COPY code/apps/bpane-host code/apps/bpane-host
 RUN mkdir -p code/apps/bpane-gateway/src
 COPY code/apps/bpane-gateway/Cargo.toml code/apps/bpane-gateway/Cargo.toml
 RUN echo 'fn main() {}' > code/apps/bpane-gateway/src/main.rs
+RUN mkdir -p code/apps/bpane-runtime-broker/src
+COPY code/apps/bpane-runtime-broker/Cargo.toml code/apps/bpane-runtime-broker/Cargo.toml
+RUN printf '%s\n' 'pub fn dependency_seed() {}' > code/apps/bpane-runtime-broker/src/lib.rs \
+    && printf '%s\n' 'fn main() {}' > code/apps/bpane-runtime-broker/src/main.rs
 
 RUN cargo build --release --locked -p bpane-host
 
