@@ -11,6 +11,7 @@ function requiredEnv(name: string): string {
 }
 
 async function main(): Promise<void> {
+  const requestTimeoutMs = positiveIntegerEnv("BPANE_WORKER_REQUEST_TIMEOUT_MS", 30_000);
   const tokenManager = new GatewayTokenManager({
     staticAutomationAccessToken: process.env.BPANE_SESSION_AUTOMATION_ACCESS_TOKEN ?? "",
     staticBearerToken: process.env.BPANE_WORKFLOW_BEARER_TOKEN ?? "",
@@ -18,18 +19,33 @@ async function main(): Promise<void> {
     clientId: process.env.BPANE_GATEWAY_OIDC_CLIENT_ID ?? "",
     clientSecret: process.env.BPANE_GATEWAY_OIDC_CLIENT_SECRET ?? "",
     scopes: process.env.BPANE_GATEWAY_OIDC_SCOPES ?? "",
+    requestTimeoutMs,
   });
   const controlClient = new WorkflowControlClient({
     gatewayApiUrl: process.env.BPANE_GATEWAY_API_URL ?? "http://localhost:8932",
+    requestTimeoutMs,
     getHeaders: (extraHeaders) => tokenManager.getAuthHeaders(extraHeaders),
   });
   const service = new WorkflowWorkerService({
     runId: requiredEnv("BPANE_WORKFLOW_RUN_ID"),
     workRoot: process.env.BPANE_WORKFLOW_WORK_ROOT ?? "/tmp/bpane-workflows",
+    maxOutputBytes: positiveIntegerEnv("BPANE_WORKER_MAX_OUTPUT_BYTES", 262_144),
     controlClient,
   });
 
   await service.run();
+}
+
+function positiveIntegerEnv(name: string, fallback: number): number {
+  const raw = (process.env[name] ?? "").trim();
+  if (!raw) {
+    return fallback;
+  }
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new Error(`${name} must be a positive integer`);
+  }
+  return value;
 }
 
 main().catch((error) => {

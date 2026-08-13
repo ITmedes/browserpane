@@ -154,10 +154,10 @@ jobs:
             stages: --stage mcp-bridge-install --stage mcp-bridge-test --stage mcp-bridge-build
           - label: Recording worker
             lockfile: code/integrations/recording-worker/package-lock.json
-            stages: --stage recording-worker-install --stage recording-worker-build
+            stages: --stage recording-worker-install --stage recording-worker-test --stage recording-worker-build
           - label: Workflow worker
             lockfile: code/integrations/workflow-worker/package-lock.json
-            stages: --stage workflow-worker-install --stage workflow-worker-build
+            stages: --stage workflow-worker-install --stage workflow-worker-test --stage workflow-worker-build
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1

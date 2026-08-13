@@ -56,9 +56,9 @@ Review reconciliation update:
   #146; webhook SSRF controls are implemented by #147; gateway graceful
   shutdown/readiness is implemented by #150; browser-context import limits
   remain confirmed-open,
-- recording artifact finalization is review-ready on
-  `feature/BPANE-00149-recording-artifact-finalization`, with the remaining
-  generalized artifact and worker-test gaps retained under #21 and #165.
+- recording artifact finalization merged through PR #212, with the remaining
+  generalized artifact model retained under #21 and worker runtime/test
+  hardening implemented for review under #165.
 
 ### Slice A: Token Domain Separation And URL Credential Cleanup
 
@@ -133,8 +133,7 @@ Validation:
 
 ### Slice C: Recording Artifact Finalization Boundary
 
-State: implemented, battle-tested, and review-ready on
-`feature/BPANE-00149-recording-artifact-finalization`.
+State: merged through PR #212; retained as a regression baseline.
 
 Priority: medium/high security/runtime cleanup.
 

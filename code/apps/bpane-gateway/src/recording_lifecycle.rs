@@ -38,6 +38,8 @@ pub struct RecordingWorkerConfig {
     pub connect_timeout: Duration,
     pub poll_interval: Duration,
     pub finalize_timeout: Duration,
+    pub request_timeout: Duration,
+    pub output_limit_bytes: usize,
     pub bearer_token: Option<String>,
     pub oidc_token_url: Option<String>,
     pub oidc_client_id: Option<String>,
@@ -306,6 +308,16 @@ fn validate_config(
     if config.chrome_executable.as_os_str().is_empty() {
         return Err(RecordingLifecycleError::InvalidConfiguration(
             "recording worker chrome path must not be empty".to_string(),
+        ));
+    }
+    if config.request_timeout.is_zero() {
+        return Err(RecordingLifecycleError::InvalidConfiguration(
+            "recording worker request timeout must be greater than zero".to_string(),
+        ));
+    }
+    if config.output_limit_bytes == 0 {
+        return Err(RecordingLifecycleError::InvalidConfiguration(
+            "recording worker output limit must be greater than zero".to_string(),
         ));
     }
     if auth_validator.is_oidc()

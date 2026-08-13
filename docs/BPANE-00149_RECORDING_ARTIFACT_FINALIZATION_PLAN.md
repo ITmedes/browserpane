@@ -3,7 +3,7 @@
 ## Metadata
 
 - Issue: [#149](https://github.com/ITmedes/browserpane/issues/149)
-- State: Review Ready
+- State: Merged through PR #212; issue closed
 - Lane: Foundation with a conditional Phase 0 dependency
 - Target gate: Foundation Gate; required before recordings are accepted as
   Phase 0 evidence
@@ -375,10 +375,10 @@ Implementation is complete on
 
 ### Residual Boundaries
 
-- `recording-worker` still has no package-local unit-test script. Its build,
-  gateway token tests, deployed negative API tests, and three real browser
-  smokes cover this slice; the broader worker unit-test floor remains owned by
-  #165 / R-018.
+- `recording-worker` now has an enforced package-local unit-test script through
+  #165. General worker request deadlines, bounded output, and polling evidence
+  remain review-ready on `feature/BPANE-00165-worker-runtime-hardening` until
+  that issue merges.
 - Generalized/object-backed artifact storage remains #21. This slice hardens
   the current local filesystem staging/finalization contract without promoting
   recordings beyond Prototype maturity.

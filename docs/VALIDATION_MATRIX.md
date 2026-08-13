@@ -1,6 +1,6 @@
 # Consolidated Validation Matrix
 
-Revalidated against current package scripts: 2026-08-10
+Revalidated against current package scripts: 2026-08-13
 
 This matrix defines the available validation surfaces for product slices. Use
 `PRODUCT_PHASES_AND_RELEASE_GATES.md` to decide which evidence is required for
@@ -12,16 +12,19 @@ one important surface, but it is not the only delivery lane.
 The current coverage ratchet records:
 
 - all non-ignored Rust workspace tests passed under `cargo llvm-cov`, with
-  54.88% line coverage on the canonical pinned Ubuntu runner and 57.32% on
-  local macOS; the cross-platform floor is 54.8%,
+  54.88% line coverage on the canonical pinned Ubuntu runner and 57.58% on the
+  current local macOS run; the cross-platform floor is 54.8%,
 - browser-client tests pass on pinned Node 22/Linux with 92.88% lines, 92.88%
-  statements, 93.19% functions, and 87.57% branches across all maintained `js`
+  statements, 93.19% functions, and 87.58% branches across all maintained `js`
   sources; the cross-platform function floor is 92.9%,
-- admin-new's 618 tests pass with 90.43% lines, 92.28% statements, 93.86%
-  functions, and 76.74% branches across `src/lib`,
+- admin-new's 620 tests pass with 90.43% lines, 92.28% statements, 93.86%
+  functions, and 76.76% branches across `src/lib`,
 - MCP bridge has focused unit tests,
-- recording-worker and workflow-worker have build checks but no unit-test
-  suites,
+- recording-worker has 8 package tests and workflow-worker has 11 package
+  tests covering finite request deadlines, parent cancellation, OIDC refresh
+  coalescing, bounded output, UTF-8 truncation, and single-flight recording
+  finalization polling; both packages run tests before builds in the canonical
+  fast validation and hosted validation jobs,
 - compose and docker-pool tests remain ignored unless the supported stack is
   explicitly started,
 - Slice 1 of #151 now provides a repository dependency scanner and an expiring
@@ -33,7 +36,7 @@ The current coverage ratchet records:
   them in strict mode as GitHub Actions checks.
 
 This is meaningful Prototype evidence, not a Production gate. #151 owns the
-enforced baseline; #165 owns missing worker test/runtime hygiene.
+enforced baseline; #165 adds the worker test floor and bounded runtime hygiene.
 
 ## Canonical Local Runner
 
@@ -57,10 +60,10 @@ local stack and leaves it running for inspection. Smokes that temporarily
 change gateway admission limits restore the normal compose configuration before
 returning.
 
-Verified catalog on 2026-08-10:
+Verified catalog on 2026-08-13:
 
-- the fast profile contains 40 stages, including Rust, browser-client, and
-  admin-new coverage ratchets,
+- the fast profile contains 42 stages, including Rust, browser-client,
+  recording-worker, workflow-worker, and admin-new coverage ratchets,
 - the compose profile contains 33 bounded stages, including 24 admin promotion
   stages plus API, CLI, MCP, recording, session-file, and workflow evidence,
 - the compose gateway stage passes 17 default API and four docker-pool cases,
@@ -346,6 +349,7 @@ cargo test -p bpane-gateway --test compose_api_surface compose_recording_artifac
 
 ```bash
 cd code/integrations/recording-worker
+npm test
 npm run build
 ```
 
@@ -375,6 +379,7 @@ cargo test -p bpane-gateway workflow
 
 ```bash
 cd code/integrations/workflow-worker
+npm test
 npm run build
 ```
 

@@ -92,12 +92,19 @@ pub enum RecordingPlaybackError {
     Artifact(#[from] RecordingArtifactStoreError),
     #[error("failed to package playback export: {0}")]
     Package(#[from] zip::result::ZipError),
+    #[error("recording playback packaging task failed: {0}")]
+    TaskJoin(#[from] tokio::task::JoinError),
 }
 
 #[derive(Debug, Clone)]
 pub(super) struct PreparedPlaybackSegmentArtifact {
     pub(super) file_name: String,
     pub(super) artifact_ref: String,
+}
+
+struct LoadedPlaybackSegmentArtifact {
+    file_name: String,
+    bytes: Vec<u8>,
 }
 
 #[derive(Debug, Clone)]
@@ -116,27 +123,41 @@ impl PreparedSessionRecordingPlayback {
             return Err(RecordingPlaybackError::Empty);
         }
 
-        let manifest_json = serde_json::to_vec_pretty(&self.manifest)?;
-        let player_html = build_player_html(&self.manifest)?;
-        let cursor = std::io::Cursor::new(Vec::new());
-        let mut zip = zip::ZipWriter::new(cursor);
-        let file_options =
-            SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
-
-        zip.start_file("manifest.json", file_options)?;
-        zip.write_all(&manifest_json)?;
-        zip.start_file("player.html", file_options)?;
-        zip.write_all(player_html.as_bytes())?;
-
+        let mut segments = Vec::with_capacity(self.segment_artifacts.len());
         for segment in &self.segment_artifacts {
-            let bytes = artifact_store.read(&segment.artifact_ref).await?;
-            zip.start_file(&segment.file_name, file_options)?;
-            zip.write_all(&bytes)?;
+            segments.push(LoadedPlaybackSegmentArtifact {
+                file_name: segment.file_name.clone(),
+                bytes: artifact_store.read(&segment.artifact_ref).await?,
+            });
         }
-
-        let cursor = zip.finish()?;
-        Ok(cursor.into_inner())
+        let manifest = self.manifest.clone();
+        tokio::task::spawn_blocking(move || build_export_bundle(&manifest, segments)).await?
     }
+}
+
+fn build_export_bundle(
+    manifest: &SessionRecordingPlaybackManifest,
+    segments: Vec<LoadedPlaybackSegmentArtifact>,
+) -> Result<Vec<u8>, RecordingPlaybackError> {
+    let manifest_json = serde_json::to_vec_pretty(manifest)?;
+    let player_html = build_player_html(manifest)?;
+    let cursor = std::io::Cursor::new(Vec::new());
+    let mut zip = zip::ZipWriter::new(cursor);
+    let file_options =
+        SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+
+    zip.start_file("manifest.json", file_options)?;
+    zip.write_all(&manifest_json)?;
+    zip.start_file("player.html", file_options)?;
+    zip.write_all(player_html.as_bytes())?;
+
+    for segment in segments {
+        zip.start_file(segment.file_name, file_options)?;
+        zip.write_all(&segment.bytes)?;
+    }
+
+    let cursor = zip.finish()?;
+    Ok(cursor.into_inner())
 }
 
 pub(super) fn omitted_segment(

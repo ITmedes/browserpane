@@ -51,13 +51,14 @@ pub(super) async fn get_session_recording_playback_export(
         .await;
 
     let filename = format!("browserpane-{session_id}-recording-playback.zip");
-    let mut response = Response::new(axum::body::Body::from(bytes.clone()));
+    let content_length = bytes.len();
+    let mut response = Response::new(axum::body::Body::from(bytes));
     response
         .headers_mut()
         .insert(CONTENT_TYPE, HeaderValue::from_static("application/zip"));
     response.headers_mut().insert(
         CONTENT_LENGTH,
-        HeaderValue::from_str(&bytes.len().to_string()).map_err(|error| {
+        HeaderValue::from_str(&content_length.to_string()).map_err(|error| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ErrorResponse {

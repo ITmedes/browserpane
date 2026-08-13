@@ -4,6 +4,7 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 import { materializeSourceSnapshot } from "./source-snapshot.js";
+import { BoundedStreamReader } from "./bounded-output-capture.js";
 import { WorkflowControlClient } from "./workflow-control-client.js";
 import type {
   GatewayAutomationTaskLogStream,
@@ -16,6 +17,7 @@ import type {
 type WorkflowWorkerServiceOptions = {
   runId: string;
   workRoot: string;
+  maxOutputBytes: number;
   controlClient: WorkflowControlClient;
 };
 
@@ -29,11 +31,13 @@ type WorkflowExecutionResult = {
 export class WorkflowWorkerService {
   private readonly runId: string;
   private readonly workRoot: string;
+  private readonly outputReader: BoundedStreamReader;
   private readonly controlClient: WorkflowControlClient;
 
   constructor(options: WorkflowWorkerServiceOptions) {
     this.runId = options.runId.trim();
     this.workRoot = options.workRoot;
+    this.outputReader = new BoundedStreamReader(options.maxOutputBytes);
     this.controlClient = options.controlClient;
   }
 
@@ -220,16 +224,16 @@ export class WorkflowWorkerService {
     );
 
     const [stdout, stderr, exitCode] = await Promise.all([
-      readStream(child.stdout),
-      readStream(child.stderr),
+      this.outputReader.read(child.stdout),
+      this.outputReader.read(child.stderr),
       new Promise<number | null>((resolve, reject) => {
         child.once("error", reject);
         child.once("close", resolve);
       }),
     ]);
 
-    const stdoutLines = splitLogLines(stdout);
-    const stderrLines = splitLogLines(stderr);
+    const stdoutLines = splitLogLines(stdout.text);
+    const stderrLines = splitLogLines(stderr.text);
 
     if (exitCode !== 0) {
       return {
@@ -351,17 +355,6 @@ export class WorkflowWorkerService {
     }
     return { bindings, files };
   }
-}
-
-async function readStream(stream: NodeJS.ReadableStream | null): Promise<string> {
-  if (!stream) {
-    return "";
-  }
-  const chunks: Buffer[] = [];
-  for await (const chunk of stream) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-  }
-  return Buffer.concat(chunks).toString("utf8");
 }
 
 function splitLogLines(value: string): string[] {

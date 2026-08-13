@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "tsx src/index.ts",
+    "test": "node --import tsx --test src/*.test.ts",
     "build": "tsc",
     "dev": "tsx watch src/index.ts"
   },

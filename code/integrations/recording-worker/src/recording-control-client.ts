@@ -4,11 +4,14 @@ import type {
   GatewaySessionAccessTokenResponse,
   GatewaySessionResource,
 } from "./types.js";
+import { HttpRequestDeadline } from "./http-request-deadline.js";
 
 type RecordingControlClientOptions = {
   gatewayApiUrl: string;
   sessionAutomationAccessToken: string;
   recordingWorkerAccessToken: string;
+  requestTimeoutMs: number;
+  fetchImpl?: typeof fetch;
   getHeaders: (extraHeaders?: Record<string, string>) => Promise<Record<string, string>>;
 };
 
@@ -16,6 +19,8 @@ export class RecordingControlClient {
   private readonly gatewayApiUrl: string;
   private readonly sessionAutomationAccessToken: string;
   private readonly recordingWorkerAccessToken: string;
+  private readonly deadline: HttpRequestDeadline;
+  private readonly fetchImpl: typeof fetch;
   private readonly getHeaders: (
     extraHeaders?: Record<string, string>,
   ) => Promise<Record<string, string>>;
@@ -24,6 +29,8 @@ export class RecordingControlClient {
     this.gatewayApiUrl = options.gatewayApiUrl.replace(/\/$/, "");
     this.sessionAutomationAccessToken = options.sessionAutomationAccessToken.trim();
     this.recordingWorkerAccessToken = options.recordingWorkerAccessToken.trim();
+    this.deadline = new HttpRequestDeadline(options.requestTimeoutMs);
+    this.fetchImpl = options.fetchImpl ?? fetch;
     this.getHeaders = options.getHeaders;
   }
 
@@ -105,30 +112,38 @@ export class RecordingControlClient {
   }
 
   private async fetchJson<T>(path: string, init: RequestInit = {}): Promise<T> {
-    const headers = await this.getHeaders({
-      Accept: "application/json",
-      ...(this.sessionAutomationAccessToken
-        ? { "x-bpane-automation-access-token": this.sessionAutomationAccessToken }
-        : {}),
-      ...(init.headers as Record<string, string> | undefined),
-    });
-    const response = await fetch(`${this.gatewayApiUrl}${path}`, {
-      ...init,
-      headers,
-    });
-    if (!response.ok) {
-      let message = `${response.status} ${response.statusText}`.trim();
-      try {
-        const payload = (await response.json()) as { error?: string };
-        if (payload?.error) {
-          message = payload.error;
+    const method = init.method?.toUpperCase() ?? "GET";
+    return this.deadline.run(
+      `${method} ${path}`,
+      async (signal) => {
+        const headers = await this.getHeaders({
+          Accept: "application/json",
+          ...(this.sessionAutomationAccessToken
+            ? { "x-bpane-automation-access-token": this.sessionAutomationAccessToken }
+            : {}),
+          ...(init.headers as Record<string, string> | undefined),
+        });
+        const response = await this.fetchImpl(`${this.gatewayApiUrl}${path}`, {
+          ...init,
+          headers,
+          signal,
+        });
+        if (!response.ok) {
+          let message = `${response.status} ${response.statusText}`.trim();
+          try {
+            const payload = (await response.json()) as { error?: string };
+            if (payload?.error) {
+              message = payload.error;
+            }
+          } catch {
+            // Ignore malformed error bodies.
+          }
+          throw new RecordingControlClientError(message, response.status);
         }
-      } catch {
-        // Ignore malformed error bodies.
-      }
-      throw new RecordingControlClientError(message, response.status);
-    }
-    return (await response.json()) as T;
+        return (await response.json()) as T;
+      },
+      init.signal,
+    );
   }
 }
 
