@@ -76,6 +76,13 @@ struct StatefulBrokerClient {
 
 #[async_trait::async_trait]
 impl RuntimeBrokerClient for StatefulBrokerClient {
+    async fn check_readiness(&self) -> Result<(), RuntimeBrokerClientError> {
+        match *self.failure.lock().unwrap() {
+            Some(code) => Err(code.into()),
+            None => Ok(()),
+        }
+    }
+
     async fn execute(
         &self,
         request: &RuntimeOperationRequest,
@@ -133,6 +140,7 @@ async fn broker_browser_control_routes_readiness_inspect_and_stop_by_session_id(
     let container_name = manager.container_name_for_session(session_id);
 
     manager.check_readiness().await.unwrap();
+    assert!(client.requests.lock().unwrap().is_empty());
     assert!(!manager
         .browser_container_exists(session_id, &container_name)
         .await
@@ -144,7 +152,7 @@ async fn broker_browser_control_routes_readiness_inspect_and_stop_by_session_id(
         .unwrap();
 
     let requests = client.requests.lock().unwrap();
-    assert!(requests.len() >= 4);
+    assert!(requests.len() >= 3);
     assert!(requests
         .iter()
         .all(|request| request.api_version == BrokerApiVersion::V1));

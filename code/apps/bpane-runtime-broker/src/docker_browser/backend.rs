@@ -19,6 +19,7 @@ pub(super) enum DockerBackendError {
 
 #[async_trait]
 pub(super) trait DockerContainerApi: Send + Sync {
+    async fn ping(&self) -> Result<(), DockerBackendError>;
     async fn create(&self, name: &str, body: ContainerCreateBody)
         -> Result<(), DockerBackendError>;
     async fn start(&self, name: &str) -> Result<(), DockerBackendError>;
@@ -54,6 +55,14 @@ impl BollardDockerContainerApi {
 
 #[async_trait]
 impl DockerContainerApi for BollardDockerContainerApi {
+    async fn ping(&self) -> Result<(), DockerBackendError> {
+        self.docker
+            .ping()
+            .await
+            .map(|_| ())
+            .map_err(map_bollard_error)
+    }
+
     async fn create(
         &self,
         name: &str,

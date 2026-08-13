@@ -115,6 +115,10 @@ impl BrowserRuntimeDockerAdapter {
 
 #[async_trait]
 impl RuntimeOperationExecutor for BrowserRuntimeDockerAdapter {
+    async fn check_readiness(&self) -> Result<(), ExecutionError> {
+        self.backend.ping().await.map_err(map_backend_error)
+    }
+
     async fn execute(
         &self,
         request: &RuntimeOperationRequest,

@@ -21,6 +21,7 @@ use super::*;
 
 #[derive(Debug)]
 enum BackendCall {
+    Ping,
     Create {
         name: String,
         body: Box<ContainerCreateBody>,
@@ -62,6 +63,11 @@ impl FakeDockerBackend {
 
 #[async_trait]
 impl DockerContainerApi for FakeDockerBackend {
+    async fn ping(&self) -> Result<(), DockerBackendError> {
+        self.calls.lock().unwrap().push(BackendCall::Ping);
+        self.failure("ping").map_or(Ok(()), Err)
+    }
+
     async fn create(
         &self,
         name: &str,
@@ -178,6 +184,22 @@ fn lifecycle(resource_id: Uuid, action: ContainerLifecycleAction) -> RuntimeOper
             action,
         },
     ))
+}
+
+#[tokio::test]
+async fn readiness_pings_the_docker_dependency_and_sanitizes_failures() {
+    let backend = Arc::new(FakeDockerBackend::default());
+    let adapter = BrowserRuntimeDockerAdapter::with_backend(config(), backend.clone()).unwrap();
+
+    adapter.check_readiness().await.unwrap();
+    assert!(matches!(
+        backend.calls.lock().unwrap().as_slice(),
+        [BackendCall::Ping]
+    ));
+
+    backend.fail_next("ping", DockerBackendError::Failed);
+    let error = adapter.check_readiness().await.unwrap_err();
+    assert_eq!(error.code, ExecutionErrorCode::AdapterFailed);
 }
 
 #[tokio::test]

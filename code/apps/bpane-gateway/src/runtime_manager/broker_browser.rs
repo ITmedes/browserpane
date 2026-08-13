@@ -85,27 +85,10 @@ impl DockerRuntimeManager {
         let BrowserContainerControl::Broker(client) = &self.browser_control else {
             return Ok(());
         };
-        let resource_id = Uuid::now_v7();
-        let result = execute(
-            client,
-            RuntimeOperation::ContainerLifecycle(ContainerLifecycleRequest {
-                operation_kind: RuntimeOperationKind::BrowserRuntime,
-                resource_id,
-                action: ContainerLifecycleAction::Inspect,
-            }),
-            "readiness",
-        )
-        .await?;
-        if matches!(
-            result,
-            RuntimeOperationResult::Absent | RuntimeOperationResult::Exists
-        ) {
-            Ok(())
-        } else {
-            Err(RuntimeManagerError::Unavailable(
-                "runtime broker returned an invalid readiness result".to_string(),
-            ))
-        }
+        client
+            .check_readiness()
+            .await
+            .map_err(|error| RuntimeManagerError::Unavailable(error.to_string()))
     }
 
     pub(super) async fn launch_browser_with_broker(

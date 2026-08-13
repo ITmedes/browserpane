@@ -33,6 +33,11 @@ impl From<ExecutionErrorCode> for ExecutionError {
 /// Adapter boundary for approved BrowserPane runtime operations.
 #[async_trait]
 pub trait RuntimeOperationExecutor: Send + Sync {
+    /// Checks whether the selected adapter dependency is reachable.
+    async fn check_readiness(&self) -> Result<(), ExecutionError> {
+        Ok(())
+    }
+
     /// Executes one already-authenticated and contract-valid operation.
     async fn execute(
         &self,
