@@ -6,6 +6,11 @@ use uuid::Uuid;
 
 use crate::{ContainerLifecycleAction, RuntimeOperationKind, VolumeLifecycleAction};
 
+mod config;
+
+use self::config::validate_config;
+pub use self::config::{PolicyConfigurationError, PolicyConfigurationErrorCode};
+
 /// Stable policy denial codes safe to return and audit.
 #[derive(Debug, Clone, Copy, Deserialize, Eq, Error, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -146,6 +151,8 @@ pub struct ContainerLaunchSpec {
     pub operation_kind: RuntimeOperationKind,
     /// Primary BrowserPane resource identifier.
     pub resource_id: Uuid,
+    /// Resource identifiers allowed to own operation-scoped named volumes.
+    pub owned_volume_ids: BTreeSet<Uuid>,
     /// Candidate immutable image reference.
     pub image: String,
     /// Candidate container name.
@@ -177,6 +184,8 @@ pub struct ContainerLaunchPolicy {
     pub network: Option<String>,
     /// Allowed named-volume prefixes.
     pub volume_prefixes: Vec<String>,
+    /// Exact broker-owned shared volumes that are not resource-scoped.
+    pub fixed_volumes: BTreeSet<String>,
     /// Fixed approved container mount targets.
     pub mount_targets: BTreeSet<String>,
     /// Whether every approved mount must be read-only.
@@ -253,8 +262,15 @@ pub struct RuntimeBrokerPolicy {
 
 impl RuntimeBrokerPolicy {
     /// Creates a policy from trusted local configuration.
-    pub fn new(config: ContainerPolicyConfig) -> Self {
-        Self { config }
+    ///
+    /// # Errors
+    ///
+    /// Returns a sanitized configuration error when local policy could admit
+    /// mutable images, unsafe ownership names, host networking, malformed
+    /// container paths, reserved labels, or unbounded resources.
+    pub fn new(config: ContainerPolicyConfig) -> Result<Self, PolicyConfigurationError> {
+        validate_config(&config)?;
+        Ok(Self { config })
     }
 
     /// Validates a fully materialized container launch specification.
@@ -271,7 +287,9 @@ impl RuntimeBrokerPolicy {
         if spec.image != policy.image {
             return Err(PolicyErrorCode::ImageNotAllowed.into());
         }
-        if spec.container_name != owned_name(&policy.container_name_prefix, spec.resource_id) {
+        if spec.resource_id.is_nil()
+            || spec.container_name != owned_name(&policy.container_name_prefix, spec.resource_id)
+        {
             return Err(PolicyErrorCode::ContainerNameNotOwned.into());
         }
         if spec.network != policy.network {
@@ -356,15 +374,23 @@ fn validate_mounts(
     spec: &ContainerLaunchSpec,
     policy: &ContainerLaunchPolicy,
 ) -> Result<(), PolicyViolation> {
+    if !spec.owned_volume_ids.contains(&spec.resource_id)
+        || spec.owned_volume_ids.iter().any(Uuid::is_nil)
+    {
+        return Err(PolicyErrorCode::MountNotAllowed.into());
+    }
     let mut targets = BTreeSet::new();
     for mount in &spec.mounts {
         let MountSource::NamedVolume(volume) = &mount.source else {
             return Err(PolicyErrorCode::MountNotAllowed.into());
         };
-        if !policy
-            .volume_prefixes
-            .iter()
-            .any(|prefix| has_owned_prefix(volume, prefix))
+        let fixed = policy.fixed_volumes.contains(volume);
+        let resource_owned = policy.volume_prefixes.iter().any(|prefix| {
+            spec.owned_volume_ids
+                .iter()
+                .any(|resource_id| volume == &owned_name(prefix, *resource_id))
+        });
+        if !(fixed || resource_owned)
             || !policy.mount_targets.contains(&mount.target)
             || !targets.insert(&mount.target)
             || (policy.require_read_only_mounts && !mount.read_only)
@@ -373,13 +399,6 @@ fn validate_mounts(
         }
     }
     Ok(())
-}
-
-fn has_owned_prefix(value: &str, prefix: &str) -> bool {
-    value == prefix
-        || value
-            .strip_prefix(prefix)
-            .is_some_and(|suffix| suffix.starts_with('-'))
 }
 
 fn expected_labels(

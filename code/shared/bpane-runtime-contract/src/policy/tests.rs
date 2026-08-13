@@ -3,6 +3,9 @@ use super::*;
 type SecurityMutation = Box<dyn Fn(&mut ContainerSecurity)>;
 type ResourceMutation = Box<dyn Fn(&mut ResourceLimits)>;
 
+const IMAGE: &str =
+    "registry.example/bpane-host@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
 fn resource_id() -> Uuid {
     Uuid::parse_str("019db438-c74a-7ef2-810c-792e298faf11").unwrap()
 }
@@ -20,10 +23,11 @@ fn limits() -> ResourceLimits {
 
 fn launch_policy() -> ContainerLaunchPolicy {
     ContainerLaunchPolicy {
-        image: "registry.example/bpane-host@sha256:approved".to_string(),
+        image: IMAGE.to_string(),
         container_name_prefix: "bpane-runtime".to_string(),
         network: Some("bpane-runtime-internal".to_string()),
         volume_prefixes: vec!["bpane-session-data".to_string()],
+        fixed_volumes: BTreeSet::from(["bpane-runtime-socket".to_string()]),
         mount_targets: BTreeSet::from(["/run/bpane/session".to_string()]),
         require_read_only_mounts: false,
         environment_keys: BTreeSet::from([
@@ -60,6 +64,7 @@ fn broker_policy() -> RuntimeBrokerPolicy {
         launch: BTreeMap::from([(RuntimeOperationKind::BrowserRuntime, launch_policy())]),
         lifecycle: BTreeMap::from([(RuntimeOperationKind::BrowserRuntime, lifecycle_policy())]),
     })
+    .unwrap()
 }
 
 fn expected_labels() -> BTreeMap<String, String> {
@@ -83,7 +88,8 @@ fn launch_spec() -> ContainerLaunchSpec {
     ContainerLaunchSpec {
         operation_kind: RuntimeOperationKind::BrowserRuntime,
         resource_id: resource_id(),
-        image: "registry.example/bpane-host@sha256:approved".to_string(),
+        owned_volume_ids: BTreeSet::from([resource_id()]),
+        image: IMAGE.to_string(),
         container_name: format!("bpane-runtime-{}", resource_id().simple()),
         network: Some("bpane-runtime-internal".to_string()),
         mounts: vec![ContainerMount {
@@ -180,7 +186,8 @@ fn enforces_read_only_mount_policy_when_selected() {
     let evaluator = RuntimeBrokerPolicy::new(ContainerPolicyConfig {
         launch: BTreeMap::from([(RuntimeOperationKind::BrowserRuntime, policy)]),
         lifecycle: BTreeMap::new(),
-    });
+    })
+    .unwrap();
 
     assert_eq!(
         evaluator.authorize_launch(&launch_spec()),
@@ -236,7 +243,8 @@ fn enforces_read_only_root_filesystem_when_selected() {
     let evaluator = RuntimeBrokerPolicy::new(ContainerPolicyConfig {
         launch: BTreeMap::from([(RuntimeOperationKind::BrowserRuntime, policy)]),
         lifecycle: BTreeMap::new(),
-    });
+    })
+    .unwrap();
 
     assert_eq!(
         evaluator.authorize_launch(&launch_spec()),
@@ -292,7 +300,9 @@ fn validates_owned_container_lifecycle_target_and_action() {
         .container_actions
         .remove(&ContainerLifecycleAction::Stop);
     assert_eq!(
-        RuntimeBrokerPolicy::new(config).authorize_container_lifecycle(&target),
+        RuntimeBrokerPolicy::new(config)
+            .unwrap()
+            .authorize_container_lifecycle(&target),
         Err(PolicyErrorCode::LifecycleActionNotAllowed.into())
     );
 }
@@ -333,4 +343,163 @@ fn policy_errors_do_not_echo_submitted_values() {
 
     assert!(!message.contains(submitted));
     assert_eq!(error.code, PolicyErrorCode::MountNotAllowed);
+}
+
+#[test]
+fn accepts_fixed_shared_volume_and_rejects_other_resource_volume() {
+    let mut fixed = launch_spec();
+    fixed.mounts[0].source = MountSource::NamedVolume("bpane-runtime-socket".to_string());
+    broker_policy().authorize_launch(&fixed).unwrap();
+
+    let mut other = launch_spec();
+    other.mounts[0].source =
+        MountSource::NamedVolume(format!("bpane-session-data-{}", Uuid::now_v7().simple()));
+    assert_launch_denied(&other, PolicyErrorCode::MountNotAllowed);
+
+    other.owned_volume_ids.insert(Uuid::nil());
+    assert_launch_denied(&other, PolicyErrorCode::MountNotAllowed);
+}
+
+#[test]
+fn validates_trusted_policy_configuration() {
+    let valid = ContainerPolicyConfig {
+        launch: BTreeMap::from([(RuntimeOperationKind::BrowserRuntime, launch_policy())]),
+        lifecycle: BTreeMap::from([(RuntimeOperationKind::BrowserRuntime, lifecycle_policy())]),
+    };
+    RuntimeBrokerPolicy::new(valid).unwrap();
+
+    let mut mutable_image = launch_policy();
+    mutable_image.image = "registry.example/bpane-host:latest".to_string();
+    assert_eq!(
+        RuntimeBrokerPolicy::new(ContainerPolicyConfig {
+            launch: BTreeMap::from([(RuntimeOperationKind::BrowserRuntime, mutable_image)]),
+            lifecycle: BTreeMap::new(),
+        })
+        .unwrap_err(),
+        PolicyConfigurationErrorCode::InvalidImage.into()
+    );
+
+    let mut host_network = launch_policy();
+    host_network.network = Some("host".to_string());
+    assert_eq!(
+        RuntimeBrokerPolicy::new(ContainerPolicyConfig {
+            launch: BTreeMap::from([(RuntimeOperationKind::BrowserRuntime, host_network)]),
+            lifecycle: BTreeMap::new(),
+        })
+        .unwrap_err(),
+        PolicyConfigurationErrorCode::InvalidNetwork.into()
+    );
+}
+
+#[test]
+fn rejects_reserved_labels_unsafe_paths_and_unbounded_limits() {
+    let cases = [
+        (
+            {
+                let mut policy = launch_policy();
+                policy.container_name_prefix = "/unsafe".to_string();
+                policy
+            },
+            PolicyConfigurationErrorCode::InvalidContainerNamePrefix,
+        ),
+        (
+            {
+                let mut policy = launch_policy();
+                policy.fixed_volumes.insert("/host/path".to_string());
+                policy
+            },
+            PolicyConfigurationErrorCode::InvalidVolumePolicy,
+        ),
+        (
+            {
+                let mut policy = launch_policy();
+                policy.static_labels.insert(
+                    "browserpane.runtime.resource_id".to_string(),
+                    "override".to_string(),
+                );
+                policy
+            },
+            PolicyConfigurationErrorCode::InvalidLabels,
+        ),
+        (
+            {
+                let mut policy = launch_policy();
+                policy.mount_targets.insert("/run/../host".to_string());
+                policy
+            },
+            PolicyConfigurationErrorCode::InvalidMountTarget,
+        ),
+        (
+            {
+                let mut policy = launch_policy();
+                policy.environment_keys.insert("lowercase".to_string());
+                policy
+            },
+            PolicyConfigurationErrorCode::InvalidEnvironmentKey,
+        ),
+        (
+            {
+                let mut policy = launch_policy();
+                policy.entrypoint.clear();
+                policy
+            },
+            PolicyConfigurationErrorCode::InvalidEntrypoint,
+        ),
+        (
+            {
+                let mut policy = launch_policy();
+                policy.seccomp_profiles = BTreeSet::from(["unconfined".to_string()]);
+                policy
+            },
+            PolicyConfigurationErrorCode::InvalidSeccompProfile,
+        ),
+        (
+            {
+                let mut policy = launch_policy();
+                policy.maximum_resources.memory_bytes = 0;
+                policy
+            },
+            PolicyConfigurationErrorCode::InvalidResourceLimits,
+        ),
+    ];
+
+    for (policy, code) in cases {
+        assert_eq!(
+            RuntimeBrokerPolicy::new(ContainerPolicyConfig {
+                launch: BTreeMap::from([(RuntimeOperationKind::BrowserRuntime, policy)]),
+                lifecycle: BTreeMap::new(),
+            })
+            .unwrap_err(),
+            code.into()
+        );
+    }
+}
+
+#[test]
+fn rejects_incomplete_or_inconsistent_lifecycle_policy() {
+    let empty = LifecyclePolicy {
+        container_name_prefix: "bpane-runtime".to_string(),
+        volume_name_prefixes: Vec::new(),
+        container_actions: BTreeSet::new(),
+        volume_actions: BTreeSet::new(),
+    };
+    assert_eq!(
+        RuntimeBrokerPolicy::new(ContainerPolicyConfig {
+            launch: BTreeMap::new(),
+            lifecycle: BTreeMap::from([(RuntimeOperationKind::BrowserRuntime, empty)]),
+        })
+        .unwrap_err(),
+        PolicyConfigurationErrorCode::InvalidLifecyclePolicy.into()
+    );
+
+    let mut mismatched = lifecycle_policy();
+    mismatched.container_name_prefix = "different-runtime".to_string();
+    assert_eq!(
+        RuntimeBrokerPolicy::new(ContainerPolicyConfig {
+            launch: BTreeMap::from([(RuntimeOperationKind::BrowserRuntime, launch_policy())]),
+            lifecycle: BTreeMap::from([(RuntimeOperationKind::BrowserRuntime, mismatched)]),
+        })
+        .unwrap_err(),
+        PolicyConfigurationErrorCode::InvalidLifecyclePolicy.into()
+    );
 }

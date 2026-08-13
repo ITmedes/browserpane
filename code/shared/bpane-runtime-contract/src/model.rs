@@ -89,6 +89,38 @@ pub enum IdempotencyKeyError {
     UnsafeCharacter,
 }
 
+/// Stable semantic-validation codes for runtime operation requests.
+#[derive(Debug, Clone, Copy, Deserialize, Eq, Error, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ContractErrorCode {
+    /// A required BrowserPane resource identifier is nil.
+    #[error("runtime operation contains an invalid resource identifier")]
+    InvalidResourceId,
+    /// Fields do not form a valid request for the selected operation.
+    #[error("runtime operation parameters are invalid")]
+    InvalidOperationParameters,
+    /// An inbound payload size must be declared for the selected operation.
+    #[error("runtime operation requires a positive payload declaration")]
+    PayloadDeclarationRequired,
+    /// The selected operation does not accept an inbound payload.
+    #[error("runtime operation does not accept a payload declaration")]
+    PayloadDeclarationNotAllowed,
+}
+
+/// A sanitized runtime operation contract violation.
+#[derive(Debug, Clone, Copy, Eq, Error, PartialEq)]
+#[error("runtime operation contract rejected the request: {code}")]
+pub struct ContractViolation {
+    /// Stable code. Submitted values are intentionally omitted.
+    pub code: ContractErrorCode,
+}
+
+impl From<ContractErrorCode> for ContractViolation {
+    fn from(code: ContractErrorCode) -> Self {
+        Self { code }
+    }
+}
+
 /// Versioned request envelope sent from the gateway to the broker.
 #[derive(Debug, Clone, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -101,6 +133,21 @@ pub struct RuntimeOperationRequest {
     pub idempotency_key: IdempotencyKey,
     /// Typed BrowserPane operation.
     pub operation: RuntimeOperation,
+}
+
+impl RuntimeOperationRequest {
+    /// Validates semantic invariants that cannot be expressed by JSON shape.
+    ///
+    /// # Errors
+    ///
+    /// Returns a sanitized violation for nil identifiers, invalid field
+    /// combinations, or missing and unexpected payload declarations.
+    pub fn validate(&self) -> Result<(), ContractViolation> {
+        if self.request_id.is_nil() {
+            return Err(ContractErrorCode::InvalidResourceId.into());
+        }
+        self.operation.validate()
+    }
 }
 
 /// Typed operation accepted by the broker.
@@ -147,6 +194,26 @@ impl RuntimeOperation {
                 .unwrap_or(Uuid::nil()),
             Self::ContainerLifecycle(request) => request.resource_id,
             Self::VolumeLifecycle(request) => request.resource_id,
+        }
+    }
+
+    fn validate(&self) -> Result<(), ContractViolation> {
+        match self {
+            Self::LaunchBrowser(request) => {
+                require_ids([request.session_id])?;
+                require_optional_ids([request.browser_context_id])
+            }
+            Self::LaunchWorkflow(request) => require_ids([
+                request.workflow_run_id,
+                request.session_id,
+                request.automation_task_id,
+            ]),
+            Self::LaunchRecording(request) => {
+                require_ids([request.session_id, request.recording_id])
+            }
+            Self::RunStorageHelper(request) => request.validate(),
+            Self::ContainerLifecycle(request) => require_ids([request.resource_id]),
+            Self::VolumeLifecycle(request) => require_ids([request.resource_id]),
         }
     }
 }
@@ -269,6 +336,86 @@ pub struct StorageHelperRequest {
     pub declared_payload_bytes: Option<u64>,
 }
 
+impl StorageHelperRequest {
+    fn validate(&self) -> Result<(), ContractViolation> {
+        require_optional_ids([
+            self.session_id,
+            self.source_context_id,
+            self.target_context_id,
+        ])?;
+        match self.action {
+            StorageHelperAction::InitializeSessionData => {
+                require_storage_fields(self, true, false, false)?;
+                reject_payload(self.declared_payload_bytes)
+            }
+            StorageHelperAction::MaterializeSessionFiles => {
+                require_storage_fields(self, true, false, false)?;
+                require_payload(self.declared_payload_bytes)
+            }
+            StorageHelperAction::CloneBrowserContext => {
+                require_storage_fields(self, false, true, true)?;
+                if self.source_context_id == self.target_context_id {
+                    return Err(ContractErrorCode::InvalidOperationParameters.into());
+                }
+                reject_payload(self.declared_payload_bytes)
+            }
+            StorageHelperAction::ExportBrowserContext
+            | StorageHelperAction::MeasureBrowserContext
+            | StorageHelperAction::DeleteBrowserContext => {
+                require_storage_fields(self, false, true, false)?;
+                reject_payload(self.declared_payload_bytes)
+            }
+            StorageHelperAction::ImportBrowserContext => {
+                require_storage_fields(self, false, false, true)?;
+                require_payload(self.declared_payload_bytes)
+            }
+        }
+    }
+}
+
+fn require_ids<const N: usize>(ids: [Uuid; N]) -> Result<(), ContractViolation> {
+    if ids.into_iter().any(|id| id.is_nil()) {
+        return Err(ContractErrorCode::InvalidResourceId.into());
+    }
+    Ok(())
+}
+
+fn require_optional_ids<const N: usize>(ids: [Option<Uuid>; N]) -> Result<(), ContractViolation> {
+    if ids.into_iter().flatten().any(|id| id.is_nil()) {
+        return Err(ContractErrorCode::InvalidResourceId.into());
+    }
+    Ok(())
+}
+
+fn require_storage_fields(
+    request: &StorageHelperRequest,
+    session: bool,
+    source: bool,
+    target: bool,
+) -> Result<(), ContractViolation> {
+    let valid = request.session_id.is_some() == session
+        && request.source_context_id.is_some() == source
+        && request.target_context_id.is_some() == target;
+    if !valid {
+        return Err(ContractErrorCode::InvalidOperationParameters.into());
+    }
+    Ok(())
+}
+
+fn require_payload(payload: Option<u64>) -> Result<(), ContractViolation> {
+    if payload.is_none_or(|bytes| bytes == 0) {
+        return Err(ContractErrorCode::PayloadDeclarationRequired.into());
+    }
+    Ok(())
+}
+
+fn reject_payload(payload: Option<u64>) -> Result<(), ContractViolation> {
+    if payload.is_some() {
+        return Err(ContractErrorCode::PayloadDeclarationNotAllowed.into());
+    }
+    Ok(())
+}
+
 /// Owned-container lifecycle actions.
 #[derive(Debug, Clone, Copy, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -347,19 +494,4 @@ pub enum RuntimeOperationResult {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn idempotency_keys_reject_unsafe_values() {
-        assert_eq!(IdempotencyKey::new(""), Err(IdempotencyKeyError::Empty));
-        assert_eq!(
-            IdempotencyKey::new("unsafe/value"),
-            Err(IdempotencyKeyError::UnsafeCharacter)
-        );
-        assert_eq!(
-            IdempotencyKey::new("x".repeat(129)),
-            Err(IdempotencyKeyError::TooLarge)
-        );
-    }
-}
+mod tests;

@@ -16,16 +16,17 @@ pub use audit::{
 };
 pub use model::{
     BrokerApiVersion, BrowserRuntimeLaunchRequest, ContainerLifecycleAction,
-    ContainerLifecycleRequest, IdempotencyKey, RecordingWorkerCredentials,
-    RecordingWorkerLaunchRequest, RuntimeOperation, RuntimeOperationKind, RuntimeOperationRequest,
-    RuntimeOperationResponse, RuntimeOperationResult, StorageHelperAction, StorageHelperRequest,
-    VolumeLifecycleAction, VolumeLifecycleRequest, WorkflowWorkerCredentials,
-    WorkflowWorkerLaunchRequest,
+    ContainerLifecycleRequest, ContractErrorCode, ContractViolation, IdempotencyKey,
+    RecordingWorkerCredentials, RecordingWorkerLaunchRequest, RuntimeOperation,
+    RuntimeOperationKind, RuntimeOperationRequest, RuntimeOperationResponse,
+    RuntimeOperationResult, StorageHelperAction, StorageHelperRequest, VolumeLifecycleAction,
+    VolumeLifecycleRequest, WorkflowWorkerCredentials, WorkflowWorkerLaunchRequest,
 };
 pub use policy::{
     ContainerLaunchPolicy, ContainerLaunchSpec, ContainerMount, ContainerPolicyConfig,
     ContainerSecurity, LifecyclePolicy, MountSource, OwnedContainerTarget, OwnedVolumeTarget,
-    PolicyErrorCode, PolicyViolation, ResourceLimits, RuntimeBrokerPolicy,
+    PolicyConfigurationError, PolicyConfigurationErrorCode, PolicyErrorCode, PolicyViolation,
+    ResourceLimits, RuntimeBrokerPolicy,
 };
 pub use secret::{SecretValue, SecretValueError};
 
