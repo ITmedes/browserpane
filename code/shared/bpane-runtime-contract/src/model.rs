@@ -340,6 +340,37 @@ impl StorageHelperAction {
     }
 }
 
+/// Broker-derived destination for one session-data payload.
+#[derive(Debug, Clone, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "purpose", rename_all = "snake_case", deny_unknown_fields)]
+pub enum SessionDataFileTarget {
+    /// A workspace file bound below the fixed session mounts root.
+    SessionBinding {
+        /// Safe relative path below the broker-owned mounts root.
+        relative_path: String,
+        /// Whether the browser runtime may modify the materialized file.
+        writable: bool,
+    },
+    /// Broker-owned session binding manifest at its fixed path.
+    SessionBindingManifest,
+    /// Broker-owned proxy-authentication material at its fixed path.
+    EgressProxyAuthentication,
+    /// Broker-owned trusted CA material at its fixed path.
+    EgressTrustedCa,
+}
+
+impl SessionDataFileTarget {
+    fn validate(&self) -> Result<(), ContractViolation> {
+        let Self::SessionBinding { relative_path, .. } = self else {
+            return Ok(());
+        };
+        if !is_safe_relative_path(relative_path) {
+            return Err(ContractErrorCode::InvalidOperationParameters.into());
+        }
+        Ok(())
+    }
+}
+
 /// Storage helper intent. Payload bytes are carried by a separately bounded stream.
 #[derive(Debug, Clone, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -352,6 +383,9 @@ pub struct StorageHelperRequest {
     pub source_context_id: Option<Uuid>,
     /// Optional target browser context.
     pub target_context_id: Option<Uuid>,
+    /// Typed broker-derived destination for session-data writes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_target: Option<SessionDataFileTarget>,
     /// Declared stream size for bounded transfer admission.
     pub declared_payload_bytes: Option<u64>,
 }
@@ -365,11 +399,20 @@ impl StorageHelperRequest {
         ])?;
         match self.action {
             StorageHelperAction::InitializeSessionData => {
-                require_storage_fields(self, true, false, false)?;
+                if self.session_id.is_none()
+                    || self.source_context_id.is_some()
+                    || self.file_target.is_some()
+                {
+                    return Err(ContractErrorCode::InvalidOperationParameters.into());
+                }
                 reject_payload(self.declared_payload_bytes)
             }
             StorageHelperAction::MaterializeSessionFiles => {
                 require_storage_fields(self, true, false, false)?;
+                self.file_target
+                    .as_ref()
+                    .ok_or(ContractErrorCode::InvalidOperationParameters)?
+                    .validate()?;
                 require_payload(self.declared_payload_bytes)
             }
             StorageHelperAction::CloneBrowserContext => {
@@ -389,7 +432,12 @@ impl StorageHelperRequest {
                 require_storage_fields(self, false, false, true)?;
                 require_payload(self.declared_payload_bytes)
             }
+        }?;
+        if self.action != StorageHelperAction::MaterializeSessionFiles && self.file_target.is_some()
+        {
+            return Err(ContractErrorCode::InvalidOperationParameters.into());
         }
+        Ok(())
     }
 }
 
@@ -434,6 +482,20 @@ fn reject_payload(payload: Option<u64>) -> Result<(), ContractViolation> {
         return Err(ContractErrorCode::PayloadDeclarationNotAllowed.into());
     }
     Ok(())
+}
+
+fn is_safe_relative_path(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 1024
+        && !value.starts_with('/')
+        && !value.ends_with('/')
+        && !value.contains('\\')
+        && !value
+            .bytes()
+            .any(|byte| byte == 0 || byte.is_ascii_control())
+        && value
+            .split('/')
+            .all(|segment| !segment.is_empty() && segment != "." && segment != "..")
 }
 
 /// Owned-container lifecycle actions.

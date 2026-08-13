@@ -124,6 +124,7 @@ fn storage_request(action: StorageHelperAction, declared: Option<u64>) -> Runtim
             session_id: None,
             source_context_id: None,
             target_context_id: Some(context_id),
+            file_target: None,
             declared_payload_bytes: declared,
         },
         StorageHelperAction::MaterializeSessionFiles => StorageHelperRequest {
@@ -131,6 +132,9 @@ fn storage_request(action: StorageHelperAction, declared: Option<u64>) -> Runtim
             session_id: Some(context_id),
             source_context_id: None,
             target_context_id: None,
+            file_target: Some(
+                bpane_runtime_contract::SessionDataFileTarget::SessionBindingManifest,
+            ),
             declared_payload_bytes: declared,
         },
         _ => StorageHelperRequest {
@@ -138,6 +142,7 @@ fn storage_request(action: StorageHelperAction, declared: Option<u64>) -> Runtim
             session_id: None,
             source_context_id: Some(context_id),
             target_context_id: None,
+            file_target: None,
             declared_payload_bytes: declared,
         },
     };

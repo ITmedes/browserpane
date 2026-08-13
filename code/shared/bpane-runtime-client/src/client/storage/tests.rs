@@ -60,6 +60,8 @@ fn request(action: StorageHelperAction, declared: Option<u64>) -> RuntimeOperati
             source_context_id: action.produces_output_payload().then_some(context_id),
             target_context_id: (action == StorageHelperAction::ImportBrowserContext)
                 .then_some(context_id),
+            file_target: (action == StorageHelperAction::MaterializeSessionFiles)
+                .then_some(bpane_runtime_contract::SessionDataFileTarget::SessionBindingManifest),
             declared_payload_bytes: declared,
         }),
     }

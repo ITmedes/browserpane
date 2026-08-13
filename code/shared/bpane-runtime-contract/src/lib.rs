@@ -21,8 +21,8 @@ pub use model::{
     ContainerLifecycleRequest, ContractErrorCode, ContractViolation, IdempotencyKey,
     RecordingWorkerCredentials, RecordingWorkerLaunchRequest, RuntimeOperation,
     RuntimeOperationKind, RuntimeOperationRequest, RuntimeOperationResponse,
-    RuntimeOperationResult, StorageHelperAction, StorageHelperRequest, VolumeLifecycleAction,
-    VolumeLifecycleRequest, WorkerExecutionState, WorkflowWorkerCredentials,
+    RuntimeOperationResult, SessionDataFileTarget, StorageHelperAction, StorageHelperRequest,
+    VolumeLifecycleAction, VolumeLifecycleRequest, WorkerExecutionState, WorkflowWorkerCredentials,
     WorkflowWorkerLaunchRequest,
 };
 pub use policy::{

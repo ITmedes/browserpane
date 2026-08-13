@@ -355,6 +355,7 @@ async fn json_route_rejects_streaming_storage_actions() {
             session_id: None,
             source_context_id: None,
             target_context_id: Some(Uuid::now_v7()),
+            file_target: None,
             declared_payload_bytes: Some(4),
         }),
     };
@@ -380,6 +381,7 @@ async fn json_route_rejects_streaming_storage_actions() {
             session_id: None,
             source_context_id: Some(Uuid::now_v7()),
             target_context_id: None,
+            file_target: None,
             declared_payload_bytes: None,
         }),
     };
