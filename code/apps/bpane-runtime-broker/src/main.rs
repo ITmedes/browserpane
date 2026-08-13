@@ -18,6 +18,11 @@ async fn main() -> anyhow::Result<()> {
     let config = BrokerConfig::parse();
     let (api_settings, ledger_config, oidc_config) = config.validated()?;
     let executor = config.browser_adapter_settings().build_executor()?;
+    let executor = config.worker_adapter_settings().combine_executor(
+        executor,
+        config.docker_api_url.as_deref(),
+        config.docker_timeout_secs,
+    )?;
     let authenticator = Arc::new(OidcBrokerAuthenticator::new(oidc_config).await?);
     let state = BrokerState::new(
         authenticator,

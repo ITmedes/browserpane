@@ -8,7 +8,7 @@ use clap::Parser;
 
 use crate::{
     BrokerApiSettings, BrowserAdapterSettings, LedgerConfig, OidcAuthenticatorConfig,
-    RuntimeExecutorMode,
+    RuntimeExecutorMode, WorkerAdapterSettings,
 };
 
 const MAX_REQUEST_LIMIT_BYTES: usize = 1_048_576;
@@ -156,6 +156,18 @@ pub struct BrokerConfig {
         default_value_t = 30
     )]
     pub docker_timeout_secs: u64,
+    /// Read-only version-one workflow/recording worker policy document.
+    #[arg(long, env = "BPANE_RUNTIME_BROKER_WORKER_CONFIG_FILE")]
+    pub worker_config_file: Option<PathBuf>,
+    /// Immutable workflow worker image reference used only by broker policy.
+    #[arg(long, env = "BPANE_RUNTIME_BROKER_WORKFLOW_IMAGE")]
+    pub workflow_image: Option<String>,
+    /// Immutable recording worker image reference used only by broker policy.
+    #[arg(long, env = "BPANE_RUNTIME_BROKER_RECORDING_IMAGE")]
+    pub recording_image: Option<String>,
+    /// Read-only OIDC client secret used by approved worker containers.
+    #[arg(long, env = "BPANE_RUNTIME_BROKER_WORKER_OIDC_CLIENT_SECRET_FILE")]
+    pub worker_oidc_client_secret_file: Option<PathBuf>,
 }
 
 impl BrokerConfig {
@@ -230,6 +242,15 @@ impl BrokerConfig {
             docker_timeout_secs: self.docker_timeout_secs,
         }
     }
+
+    pub fn worker_adapter_settings(&self) -> WorkerAdapterSettings {
+        WorkerAdapterSettings {
+            config_file: self.worker_config_file.clone(),
+            workflow_image: self.workflow_image.clone(),
+            recording_image: self.recording_image.clone(),
+            oidc_client_secret_file: self.worker_oidc_client_secret_file.clone(),
+        }
+    }
 }
 
 fn nonzero_usize(value: usize, name: &str) -> anyhow::Result<NonZeroUsize> {
@@ -272,6 +293,10 @@ mod tests {
             extension_registry_file: None,
             browser_environment_file: None,
             docker_timeout_secs: 30,
+            worker_config_file: None,
+            workflow_image: None,
+            recording_image: None,
+            worker_oidc_client_secret_file: None,
         }
     }
 

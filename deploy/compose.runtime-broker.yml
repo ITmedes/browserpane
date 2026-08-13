@@ -11,9 +11,16 @@ services:
       BPANE_RUNTIME_BROKER_CONTAINER_PREFIX: bpane-runtime
       BPANE_RUNTIME_BROKER_EXTENSION_REGISTRY_FILE: /runtime-config/extensions.json
       BPANE_RUNTIME_BROKER_BROWSER_ENVIRONMENT_FILE: /runtime-config/host-runtime.env
+      BPANE_RUNTIME_BROKER_WORKER_CONFIG_FILE: /runtime-config/workers.json
+      BPANE_RUNTIME_BROKER_WORKFLOW_IMAGE: ${BPANE_RUNTIME_BROKER_WORKFLOW_IMAGE:?set to an immutable repository digest or Docker image id}
+      BPANE_RUNTIME_BROKER_RECORDING_IMAGE: ${BPANE_RUNTIME_BROKER_RECORDING_IMAGE:?set to an immutable repository digest or Docker image id}
+      BPANE_RUNTIME_BROKER_WORKER_OIDC_CLIENT_SECRET_FILE: /run/secrets/worker-oidc-client-secret
     volumes:
       - ./runtime-broker/extensions.json:/runtime-config/extensions.json:ro
       - ./host-runtime.env:/runtime-config/host-runtime.env:ro
+      - ./runtime-broker/workers.json:/runtime-config/workers.json:ro
+      - ./runtime-broker/worker-oidc-client-secret:/run/secrets/worker-oidc-client-secret:ro
+      - ../dev/certs:/certs:ro
     depends_on:
       docker-proxy:
         condition: service_healthy

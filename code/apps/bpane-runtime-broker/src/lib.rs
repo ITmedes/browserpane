@@ -14,6 +14,7 @@ mod docker_browser;
 mod docker_workers;
 mod executor;
 mod ledger;
+mod worker_adapter_config;
 
 pub use api::{build_router, BrokerApiErrorCode, BrokerApiSettings, BrokerState};
 pub use auth::{
@@ -33,3 +34,4 @@ pub use executor::{
     ExecutionError, ExecutionErrorCode, RejectingRuntimeExecutor, RuntimeOperationExecutor,
 };
 pub use ledger::{LedgerConfig, OperationLedger};
+pub use worker_adapter_config::WorkerAdapterSettings;

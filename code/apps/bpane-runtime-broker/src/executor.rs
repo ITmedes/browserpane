@@ -1,5 +1,9 @@
+use std::sync::Arc;
+
 use async_trait::async_trait;
-use bpane_runtime_contract::{RuntimeOperationRequest, RuntimeOperationResult};
+use bpane_runtime_contract::{
+    RuntimeOperationKind, RuntimeOperationRequest, RuntimeOperationResult,
+};
 use thiserror::Error;
 
 /// Stable executor failure codes safe to return and audit.
@@ -48,6 +52,49 @@ pub trait RuntimeOperationExecutor: Send + Sync {
 /// Safe foundation executor used until operation adapters are enabled.
 #[derive(Debug, Default)]
 pub struct RejectingRuntimeExecutor;
+
+pub(crate) struct RoutedRuntimeExecutor {
+    browser: Arc<dyn RuntimeOperationExecutor>,
+    workers: Arc<dyn RuntimeOperationExecutor>,
+}
+
+impl RoutedRuntimeExecutor {
+    pub(crate) fn new(
+        browser: Arc<dyn RuntimeOperationExecutor>,
+        workers: Arc<dyn RuntimeOperationExecutor>,
+    ) -> Self {
+        Self { browser, workers }
+    }
+}
+
+impl std::fmt::Debug for RoutedRuntimeExecutor {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("RoutedRuntimeExecutor([REDACTED])")
+    }
+}
+
+#[async_trait]
+impl RuntimeOperationExecutor for RoutedRuntimeExecutor {
+    async fn check_readiness(&self) -> Result<(), ExecutionError> {
+        self.browser.check_readiness().await?;
+        self.workers.check_readiness().await
+    }
+
+    async fn execute(
+        &self,
+        request: &RuntimeOperationRequest,
+    ) -> Result<RuntimeOperationResult, ExecutionError> {
+        match request.operation.kind() {
+            RuntimeOperationKind::BrowserRuntime => self.browser.execute(request).await,
+            RuntimeOperationKind::WorkflowWorker | RuntimeOperationKind::RecordingWorker => {
+                self.workers.execute(request).await
+            }
+            RuntimeOperationKind::StorageHelper => {
+                Err(ExecutionErrorCode::AdapterUnavailable.into())
+            }
+        }
+    }
+}
 
 #[async_trait]
 impl RuntimeOperationExecutor for RejectingRuntimeExecutor {
