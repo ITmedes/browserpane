@@ -13,6 +13,7 @@ use crate::session_control::SessionStore;
 use crate::workspaces::WorkspaceFileStore;
 
 mod broker_browser;
+mod broker_storage;
 mod docker;
 mod static_single;
 

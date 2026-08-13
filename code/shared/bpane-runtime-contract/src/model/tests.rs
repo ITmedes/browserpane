@@ -281,6 +281,25 @@ fn validates_storage_helper_field_combinations() {
 }
 
 #[test]
+fn permits_empty_typed_session_file_materialization() {
+    let storage = StorageHelperRequest {
+        action: StorageHelperAction::MaterializeSessionFiles,
+        session_id: Some(Uuid::now_v7()),
+        source_context_id: None,
+        target_context_id: None,
+        file_target: Some(SessionDataFileTarget::SessionBinding {
+            relative_path: "inputs/empty.txt".to_string(),
+            writable: false,
+        }),
+        declared_payload_bytes: Some(0),
+    };
+
+    request(RuntimeOperation::RunStorageHelper(storage))
+        .validate()
+        .unwrap();
+}
+
+#[test]
 fn classifies_storage_payload_directions() {
     assert!(StorageHelperAction::MaterializeSessionFiles.accepts_input_payload());
     assert!(StorageHelperAction::ImportBrowserContext.accepts_input_payload());

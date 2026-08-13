@@ -595,8 +595,9 @@ Execution slices:
 
 Slice 1 acceptance:
 
-- input-bearing actions require an exact non-zero payload declaration and
-  reject absent, short, long, or over-limit request streams before execution;
+- input-bearing actions require an exact payload declaration and reject absent,
+  short, long, or over-limit request streams before execution; context imports
+  must be non-empty while typed session files may be empty;
 - output-bearing actions return only an explicitly declared, bounded binary
   stream and reject invalid content type, missing declarations, excessive
   output, and response/request correlation mismatches;
