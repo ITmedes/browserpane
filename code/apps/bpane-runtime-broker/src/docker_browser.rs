@@ -14,7 +14,7 @@ mod config;
 mod materialize;
 
 use backend::{BollardDockerContainerApi, DockerBackendError, DockerContainerApi};
-pub use config::BrowserRuntimeDockerConfig;
+pub use config::{BrowserRuntimeDockerConfig, BrowserRuntimeExtensionConfig};
 use materialize::MaterializedBrowserLaunch;
 
 /// Policy-validating Docker adapter for browser runtime operations.
@@ -67,7 +67,8 @@ impl BrowserRuntimeDockerAdapter {
         &self,
         request: &bpane_runtime_contract::BrowserRuntimeLaunchRequest,
     ) -> Result<RuntimeOperationResult, ExecutionError> {
-        let launch = MaterializedBrowserLaunch::new(&self.config, request);
+        let launch = MaterializedBrowserLaunch::new(&self.config, request)
+            .map_err(|_| ExecutionErrorCode::AdapterFailed)?;
         self.policy
             .authorize_launch(&launch.policy_spec)
             .map_err(|_| ExecutionErrorCode::AdapterFailed)?;

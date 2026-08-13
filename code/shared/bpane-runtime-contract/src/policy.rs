@@ -194,6 +194,8 @@ pub struct ContainerLaunchPolicy {
     pub environment_keys: BTreeSet<String>,
     /// Static labels in addition to broker-derived ownership labels.
     pub static_labels: BTreeMap<String, String>,
+    /// Additional metadata label keys derived only by the trusted adapter.
+    pub derived_label_keys: BTreeSet<String>,
     /// Exact approved entrypoint and command.
     pub entrypoint: Vec<String>,
     /// Approved additional capabilities, normally empty.
@@ -299,7 +301,7 @@ impl RuntimeBrokerPolicy {
         if !spec.environment_keys.is_subset(&policy.environment_keys) {
             return Err(PolicyErrorCode::EnvironmentNotAllowed.into());
         }
-        if spec.labels != expected_labels(spec, policy) {
+        if !labels_match_policy(spec, policy) {
             return Err(PolicyErrorCode::LabelsInvalid.into());
         }
         if spec.entrypoint != policy.entrypoint {
@@ -415,6 +417,24 @@ fn expected_labels(
         spec.resource_id.to_string(),
     );
     labels
+}
+
+fn labels_match_policy(spec: &ContainerLaunchSpec, policy: &ContainerLaunchPolicy) -> bool {
+    let expected = expected_labels(spec, policy);
+    if expected
+        .iter()
+        .any(|(key, value)| spec.labels.get(key) != Some(value))
+    {
+        return false;
+    }
+    spec.labels.iter().all(|(key, value)| {
+        expected.contains_key(key)
+            || (policy.derived_label_keys.contains(key)
+                && value.len() <= 1_024
+                && !value
+                    .bytes()
+                    .any(|byte| byte == 0 || byte.is_ascii_control()))
+    })
 }
 
 fn operation_kind_name(kind: RuntimeOperationKind) -> &'static str {

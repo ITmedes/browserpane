@@ -2,7 +2,7 @@
 
 Issue: [#214 Implement a policy-validating runtime launch broker](https://github.com/ITmedes/browserpane/issues/214)
 
-Status: active; checkpoints 1 and 2 complete; checkpoint 3 next
+Status: active; checkpoints 1 and 2 complete; checkpoint 3 execution slice 3 next
 
 ## Business Case
 
@@ -212,7 +212,7 @@ Execution slices:
    persistence ownership, and run lifecycle/reconnect/MCP parity before the
    compose default or gateway Docker network changes.
 
-Progress: execution slice 1 is complete; execution slice 2 is next.
+Progress: execution slices 1 and 2 are complete; execution slice 3 is next.
 
 Slice 1 evidence:
 
@@ -230,6 +230,85 @@ Slice 1 evidence:
   release-image build, and the existing live fail-closed authentication smoke
   pass. The compose service still selects `RejectingRuntimeExecutor`.
 - Commit: `93a829c5`.
+
+Execution slice 2 scope:
+
+- Extend the browser launch intent with bounded, typed network-identity and
+  egress selections, approved extension-version identifiers, and fixed
+  session-data prerequisites.
+- Keep proxy credentials, CA bytes, arbitrary environment maps, extension
+  install paths, host paths, and Docker request models out of the wire
+  contract. Proxy-auth, custom-CA, and session-file selections refer only to
+  data prepared at broker-owned fixed paths by the later typed storage path.
+- Resolve extension-version identifiers through trusted broker configuration;
+  reject unknown or duplicate identifiers instead of accepting caller-selected
+  paths.
+- Derive every environment key and egress correlation label in the broker,
+  validate proxy URLs and bounded identity values, and extend launch policy
+  only for those broker-derived keys.
+- Keep the compose executor fail-closed and the gateway on its existing path.
+  Gateway integration remains execution slice 3 after storage prerequisites
+  and feature parity are testable.
+
+Slice 2 acceptance:
+
+- positive materialization tests cover identity, metadata-only proxy, TLS
+  interception prerequisites, authenticated proxy prerequisites, reusable
+  context, approved extensions, and session-file bindings;
+- negative contract and adapter tests cover malformed identity, credentialed
+  or unsupported proxy URLs, unsafe bypass rules, invalid combinations,
+  duplicate or unknown extension ids, and policy drift;
+- contract golden tests prove that secrets, install paths, host paths, raw
+  Docker arguments, and Docker API fields are absent from browser launch JSON;
+- broker unit, strict Clippy/Rustdoc/formatting, dependency, image-build, and
+  existing fail-closed authentication smoke checks pass.
+
+Slice 2 evidence:
+
+- `BrowserRuntimeLaunchRequest` now carries bounded semantic feature intent for
+  locale/languages, timezone, fixed-point geolocation, user agent, browser
+  identity, egress profile/proxy/observation prerequisites, approved extension
+  version ids, and prepared session-file bindings. Empty features retain the
+  original v1 JSON shape.
+- Contract validation matches the existing gateway constraints for HTTP/HTTPS
+  proxies, inline-credential denial, BCP-47-like locale tags, IANA-style
+  timezones, geolocation bounds, TLS-interception prerequisites, bypass-rule
+  safety, and extension count/identity uniqueness.
+- The broker derives the exact environment and safe egress-correlation labels
+  already consumed by the browser runtime. Proxy-auth and trusted-CA material
+  use fixed broker-owned session-data paths; values and paths cannot be chosen
+  by the caller.
+- Extension install paths remain outside the wire contract and resolve only
+  through a trusted broker registry keyed by extension-version id. Unknown ids
+  fail before any Docker request.
+- Policy authorization now supports an explicit set of broker-derived label
+  keys while still requiring exact ownership/static labels and rejecting every
+  unexpected key, control character, or oversized value.
+- Feature contract and materialization were split into focused modules to keep
+  production files and functions within `RUST_STANDARDS.md` guidance.
+- Validation passed: 28 contract unit tests, 3 wire/golden tests, 27 broker
+  tests, 8 client tests, the full Rust workspace, strict changed-crate
+  Clippy/Rustdoc/formatting, repository and dependency gates, five runtime-path
+  integration tests, release-image build, compose topology inspection, and the
+  live Keycloak authentication/denial smoke.
+- Changed-crate LLVM coverage reports 87.21% total line coverage; the new
+  broker materializer reports 99.01%, broker browser config 100%, runtime
+  policy 98.37%, and the extracted browser-feature contract module 95.60%.
+- Compose remains intentionally fail-closed through
+  `RejectingRuntimeExecutor`; no gateway behavior or user-facing API changed,
+  so `README.md` does not require an update in this slice.
+- Commits: `afd31dbf`, `99c86285`, `74b0fdbf`.
+
+Execution slice 3 prerequisite:
+
+- Define the broker-side extension registry/configuration source and refresh
+  semantics before enabling extension-bearing sessions. The gateway must send
+  extension-version ids only; it must not become able to populate arbitrary
+  broker install paths through each launch request.
+- Keep existing gateway storage preparation for proxy-auth, custom CA, and
+  session files during browser launch parity. Those Docker helper operations
+  move behind typed broker storage operations in checkpoint 5 before the
+  gateway loses Docker-control access.
 
 Manual checkpoint: opt into broker mode locally and operate two concurrent
 sessions plus reconnect and MCP delegation before changing the default.

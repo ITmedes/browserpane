@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
@@ -9,7 +9,9 @@ use axum::response::{IntoResponse, Response};
 use axum::Router;
 use bollard::models::ContainerCreateBody;
 use bpane_runtime_contract::{
-    BrokerApiVersion, BrowserRuntimeLaunchRequest, ContainerLifecycleAction,
+    BrokerApiVersion, BrowserEgressObservationMode, BrowserEgressSelection, BrowserGeolocation,
+    BrowserNetworkIdentity, BrowserProxySelection, BrowserRuntimeFeatures,
+    BrowserRuntimeLaunchRequest, BrowserSessionDataSource, ContainerLifecycleAction,
     ContainerLifecycleRequest, IdempotencyKey, ResourceLimits, RuntimeOperation,
     RuntimeOperationKind, VolumeLifecycleAction, VolumeLifecycleRequest,
 };
@@ -154,6 +156,7 @@ fn config() -> BrowserRuntimeDockerConfig {
             timeout_secs: 120,
             output_limit_bytes: 65_536,
         },
+        extensions: BTreeMap::new(),
     }
 }
 
@@ -187,6 +190,7 @@ async fn launch_materializes_only_broker_owned_container_fields() {
             BrowserRuntimeLaunchRequest {
                 session_id,
                 browser_context_id: None,
+                features: Default::default(),
             },
         )))
         .await
@@ -259,6 +263,7 @@ async fn reusable_context_adds_only_the_owned_profile_volume() {
             BrowserRuntimeLaunchRequest {
                 session_id,
                 browser_context_id: Some(context_id),
+                features: Default::default(),
             },
         )))
         .await
@@ -275,6 +280,182 @@ async fn reusable_context_adds_only_the_owned_profile_volume() {
             == Some(format!("bpane-browser-context-{}", context_id.simple()).as_str())
             && mount.target.as_deref() == Some("/run/bpane/session/chromium")
     }));
+}
+
+#[tokio::test]
+async fn launch_materializes_identity_tls_egress_and_approved_extensions() {
+    let extension_id = Uuid::now_v7();
+    let mut runtime_config = config();
+    runtime_config.extensions.insert(
+        extension_id,
+        BrowserRuntimeExtensionConfig {
+            extension_version_id: extension_id,
+            install_path: "/home/bpane/extensions/approved".to_string(),
+        },
+    );
+    let backend = Arc::new(FakeDockerBackend::default());
+    let adapter =
+        BrowserRuntimeDockerAdapter::with_backend(runtime_config, backend.clone()).unwrap();
+    let session_id = Uuid::now_v7();
+    let profile_id = Uuid::now_v7();
+
+    adapter
+        .execute(&operation(RuntimeOperation::LaunchBrowser(
+            BrowserRuntimeLaunchRequest {
+                session_id,
+                browser_context_id: None,
+                features: BrowserRuntimeFeatures {
+                    network_identity: BrowserNetworkIdentity {
+                        locale: Some("de-DE".to_string()),
+                        languages: vec!["de-DE".to_string(), "en-US".to_string()],
+                        timezone: Some("Europe/Berlin".to_string()),
+                        geolocation: Some(BrowserGeolocation {
+                            latitude_e7: 525_200_000,
+                            longitude_e7: 134_050_000,
+                            accuracy_mm: Some(25_000),
+                        }),
+                        user_agent: Some("BrowserPane test agent".to_string()),
+                        browser_identity: Some("regulated-pilot".to_string()),
+                    },
+                    egress: Some(BrowserEgressSelection {
+                        profile_id,
+                        proxy: Some(BrowserProxySelection {
+                            url: "http://proxy.internal:3128".to_string(),
+                            authentication: Some(BrowserSessionDataSource::SessionData),
+                        }),
+                        bypass_rules: vec!["localhost".to_string(), "*.internal".to_string()],
+                        observation_mode: BrowserEgressObservationMode::TlsIntercept,
+                        custom_ca: Some(BrowserSessionDataSource::SessionData),
+                        sensitive_log_sink_configured: true,
+                    }),
+                    extension_version_ids: vec![extension_id],
+                    session_file_bindings: true,
+                },
+            },
+        )))
+        .await
+        .unwrap();
+
+    let calls = backend.calls.lock().unwrap();
+    let BackendCall::Create { body, .. } = &calls[1] else {
+        panic!("second backend call must create the container");
+    };
+    let environment = body.env.as_ref().unwrap();
+    for expected in [
+        "LANG=de_DE.UTF-8",
+        "LC_ALL=de_DE.UTF-8",
+        "LANGUAGE=de-DE:en-US",
+        "BPANE_CHROMIUM_LANG=de-DE",
+        "BPANE_CHROMIUM_ACCEPT_LANG=de-DE,en-US",
+        "TZ=Europe/Berlin",
+        "BPANE_CHROMIUM_USER_AGENT=BrowserPane test agent",
+        "BPANE_BROWSER_IDENTITY=regulated-pilot",
+        "BPANE_CHROMIUM_PROXY_SERVER=http://proxy.internal:3128",
+        "BPANE_CHROMIUM_PROXY_AUTH_FILE=/run/bpane/session/egress/proxy-auth.json",
+        "BPANE_CHROMIUM_PROXY_BYPASS_LIST=localhost;*.internal",
+        "BPANE_CHROMIUM_TRUSTED_CA_BUNDLE=/run/bpane/session/egress/custom-ca.pem",
+        "BPANE_CHROMIUM_TRUSTED_CA_NAME=BrowserPane Egress Interception CA",
+        "BPANE_EXTENSION_DIRS=/home/bpane/extensions/approved",
+        "BPANE_SESSION_FILE_BINDINGS_MANIFEST=/run/bpane/session/session-file-bindings.json",
+        "BPANE_URL=about:blank",
+    ] {
+        assert!(
+            environment.iter().any(|value| value == expected),
+            "{expected}"
+        );
+    }
+    let geolocation = environment
+        .iter()
+        .find_map(|value| value.strip_prefix("BPANE_SESSION_GEOLOCATION="))
+        .unwrap();
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(geolocation).unwrap(),
+        serde_json::json!({
+            "latitude": 52.52,
+            "longitude": 13.405,
+            "accuracy_meters": 25.0
+        })
+    );
+    assert!(environment
+        .iter()
+        .all(|value| !value.contains("password") && !value.contains("secret")));
+    let labels = body.labels.as_ref().unwrap();
+    assert_eq!(
+        labels.get("browserpane.egress_profile_id"),
+        Some(&profile_id.to_string())
+    );
+    assert_eq!(
+        labels.get("browserpane.egress_observation_mode"),
+        Some(&"tls_intercept".to_string())
+    );
+    assert_eq!(
+        labels.get("browserpane.egress_proxy_auth_configured"),
+        Some(&"true".to_string())
+    );
+}
+
+#[tokio::test]
+async fn metadata_only_egress_does_not_materialize_tls_or_auth_prerequisites() {
+    let backend = Arc::new(FakeDockerBackend::default());
+    let adapter = BrowserRuntimeDockerAdapter::with_backend(config(), backend.clone()).unwrap();
+    adapter
+        .execute(&operation(RuntimeOperation::LaunchBrowser(
+            BrowserRuntimeLaunchRequest {
+                session_id: Uuid::now_v7(),
+                browser_context_id: None,
+                features: BrowserRuntimeFeatures {
+                    egress: Some(BrowserEgressSelection {
+                        profile_id: Uuid::now_v7(),
+                        proxy: Some(BrowserProxySelection {
+                            url: "https://proxy.internal:8443".to_string(),
+                            authentication: None,
+                        }),
+                        bypass_rules: Vec::new(),
+                        observation_mode: BrowserEgressObservationMode::MetadataOnly,
+                        custom_ca: None,
+                        sensitive_log_sink_configured: false,
+                    }),
+                    ..Default::default()
+                },
+            },
+        )))
+        .await
+        .unwrap();
+
+    let calls = backend.calls.lock().unwrap();
+    let BackendCall::Create { body, .. } = &calls[1] else {
+        panic!("second backend call must create the container");
+    };
+    let environment = body.env.as_ref().unwrap();
+    assert!(environment
+        .iter()
+        .any(|value| value == "BPANE_CHROMIUM_PROXY_SERVER=https://proxy.internal:8443"));
+    assert!(environment.iter().all(|value| {
+        !value.starts_with("BPANE_CHROMIUM_PROXY_AUTH_FILE=")
+            && !value.starts_with("BPANE_CHROMIUM_TRUSTED_CA_BUNDLE=")
+    }));
+}
+
+#[tokio::test]
+async fn unknown_extension_version_is_denied_before_docker_dispatch() {
+    let backend = Arc::new(FakeDockerBackend::default());
+    let adapter = BrowserRuntimeDockerAdapter::with_backend(config(), backend.clone()).unwrap();
+    let error = adapter
+        .execute(&operation(RuntimeOperation::LaunchBrowser(
+            BrowserRuntimeLaunchRequest {
+                session_id: Uuid::now_v7(),
+                browser_context_id: None,
+                features: BrowserRuntimeFeatures {
+                    extension_version_ids: vec![Uuid::now_v7()],
+                    ..Default::default()
+                },
+            },
+        )))
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.code, ExecutionErrorCode::AdapterFailed);
+    assert!(backend.calls.lock().unwrap().is_empty());
 }
 
 #[tokio::test]
@@ -325,6 +506,7 @@ async fn launch_failure_is_sanitized_and_removes_partial_container() {
             BrowserRuntimeLaunchRequest {
                 session_id,
                 browser_context_id: None,
+                features: Default::default(),
             },
         )))
         .await
@@ -393,6 +575,7 @@ async fn bollard_backend_uses_only_owned_container_lifecycle_routes() {
                 BrowserRuntimeLaunchRequest {
                     session_id,
                     browser_context_id: None,
+                    features: Default::default(),
                 },
             )))
             .await
@@ -467,6 +650,22 @@ fn rejects_mutable_images_escaping_socket_paths_and_unsafe_endpoints() {
         ambiguous_prefixes.session_data_volume_prefix.clone();
     assert_eq!(
         BrowserRuntimeDockerAdapter::with_backend(ambiguous_prefixes, Arc::clone(&backend))
+            .unwrap_err()
+            .code,
+        ExecutionErrorCode::AdapterFailed
+    );
+
+    let extension_id = Uuid::now_v7();
+    let mut unsafe_extension = config();
+    unsafe_extension.extensions.insert(
+        extension_id,
+        BrowserRuntimeExtensionConfig {
+            extension_version_id: extension_id,
+            install_path: "/home/bpane/extensions/one,/tmp/unapproved".to_string(),
+        },
+    );
+    assert_eq!(
+        BrowserRuntimeDockerAdapter::with_backend(unsafe_extension, Arc::clone(&backend))
             .unwrap_err()
             .code,
         ExecutionErrorCode::AdapterFailed
