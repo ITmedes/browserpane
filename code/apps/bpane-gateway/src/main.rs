@@ -21,6 +21,7 @@ mod session_manager;
 mod session_registry;
 mod transport;
 mod worker_process_output;
+mod worker_runtime_control;
 mod workflow;
 mod workflow_event_delivery;
 mod workflow_lifecycle;

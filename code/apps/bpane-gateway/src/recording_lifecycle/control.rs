@@ -14,6 +14,23 @@ impl RecordingLifecycleInner {
             "reconciling persisted recorder worker assignment after gateway restart"
         );
 
+        if self.worker_control.is_broker() {
+            if let Err(error) = self
+                .worker_control
+                .remove(
+                    bpane_runtime_contract::RuntimeOperationKind::RecordingWorker,
+                    assignment.recording_id,
+                )
+                .await
+            {
+                warn!(
+                    session_id = %assignment.session_id,
+                    recording_id = %assignment.recording_id,
+                    "failed to remove stale recording worker during reconcile: {error}"
+                );
+            }
+        }
+
         let stale_recording = self
             .session_store
             .get_recording_for_session(assignment.session_id, assignment.recording_id)

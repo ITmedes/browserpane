@@ -13,6 +13,7 @@ use crate::config::Config;
 use crate::lifecycle::GatewayLifecycle;
 use crate::readiness::GatewayReadiness;
 use crate::transport::{TransportServer, TransportServerConfig};
+use crate::worker_runtime_control::WorkerRuntimeControl;
 use crate::workspaces::WorkspaceFileStore;
 
 mod builders;
@@ -70,6 +71,9 @@ impl GatewayApp {
             .session_manager
             .attach_credential_provider(credential_provider.clone())
             .await;
+        let worker_control = WorkerRuntimeControl::from_broker(
+            runtime_services.session_manager.runtime_broker_client(),
+        );
         let recording_services = RecordingServices::build(
             &config,
             auth_services.auth_validator.clone(),
@@ -77,6 +81,7 @@ impl GatewayApp {
             auth_services.automation_access_token_manager.clone(),
             auth_services.recording_worker_access_token_manager.clone(),
             runtime_services.session_store.clone(),
+            worker_control.clone(),
         )
         .await?;
         let workflow_services = WorkflowServices::build(
@@ -86,6 +91,7 @@ impl GatewayApp {
             runtime_services.session_store.clone(),
             runtime_services.session_manager.clone(),
             runtime_services.registry.clone(),
+            worker_control,
         )
         .await?;
         let RuntimeServices {

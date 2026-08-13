@@ -81,6 +81,13 @@ impl std::fmt::Debug for BrowserContainerControl {
 }
 
 impl DockerRuntimeManager {
+    pub(super) fn runtime_broker_client(&self) -> Option<Arc<dyn RuntimeBrokerClient>> {
+        match &self.browser_control {
+            BrowserContainerControl::Direct => None,
+            BrowserContainerControl::Broker(client) => Some(Arc::clone(client)),
+        }
+    }
+
     pub(super) async fn check_browser_control_readiness(&self) -> Result<(), RuntimeManagerError> {
         let BrowserContainerControl::Broker(client) = &self.browser_control else {
             return Ok(());

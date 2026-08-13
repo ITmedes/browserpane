@@ -13,6 +13,7 @@ use crate::session_access::{
     SessionConnectTicketManager,
 };
 use crate::session_control::SessionStore;
+use crate::worker_runtime_control::WorkerRuntimeControl;
 
 use super::RecordingServices;
 
@@ -24,14 +25,16 @@ impl RecordingServices {
         automation_access_token_manager: Arc<SessionAutomationAccessTokenManager>,
         recording_worker_access_token_manager: Arc<RecordingWorkerAccessTokenManager>,
         session_store: SessionStore,
+        worker_control: WorkerRuntimeControl,
     ) -> anyhow::Result<Self> {
-        let lifecycle = Arc::new(RecordingLifecycleManager::new(
+        let lifecycle = Arc::new(RecordingLifecycleManager::new_with_worker_control(
             build_recording_worker_config(config)?,
             auth_validator,
             connect_ticket_manager,
             automation_access_token_manager,
             recording_worker_access_token_manager,
             session_store.clone(),
+            worker_control,
         )?);
         lifecycle.reconcile_persisted_state().await?;
 

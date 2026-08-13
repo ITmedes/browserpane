@@ -2,7 +2,7 @@
 
 Issue: [#214 Implement a policy-validating runtime launch broker](https://github.com/ITmedes/browserpane/issues/214)
 
-Status: active; checkpoints 1 through 3 complete; checkpoint 4 execution slice 1 active
+Status: active; checkpoints 1 through 3 complete; checkpoint 4 execution slices 1 and 2 complete; execution slice 3 active
 
 ## Business Case
 
@@ -32,11 +32,13 @@ operations use separate typed request variants and separate allowlists.
 
 - Browser runtime launch, readiness, stop, inspect, and context/session-file
   helper operations are implemented in `runtime_manager/docker/`.
-- Workflow worker launch, wait, bounded output, and removal are implemented in
-  `workflow_lifecycle/workers.rs` and currently invoke the Docker CLI directly.
-- Recording worker launch and bounded process supervision are implemented in
-  `recording_lifecycle/workers.rs`; compose currently supplies raw Docker CLI
-  arguments through gateway flags.
+- Workflow worker launch, supervision, cancellation, and removal use a shared
+  gateway worker-control boundary. `docker_pool` retains the direct Docker CLI
+  path; `broker_pool` sends typed operations through the existing authenticated
+  broker client.
+- Recording worker launch and supervision use the same direct/broker boundary.
+  Base compose still supplies direct Docker CLI arguments; the broker path uses
+  typed credentials and broker-owned container materialization.
 - Browser-context and session-file helpers use short-lived containers, named
   volumes, stdin/stdout archive streams, and exact storage measurements.
 - `SessionManager` is the control-plane boundary for browser session runtimes,
@@ -422,6 +424,53 @@ Execution slices:
    failure, cancellation, restart safety, runtime hold, produced-file, always-
    on recording, playback/export/download, disconnect/stop/kill finalization,
    and cleanup smokes before considering any default switch.
+
+Progress: execution slices 1 and 2 are complete on
+`feature/BPANE-00214-gateway-runtime-broker`; execution slice 3 remains.
+
+Slice 1 evidence:
+
+- The v1 contract reports detached workers as typed `running`, `exited`, or
+  `absent` state with an optional exit code. Recording launch credentials now
+  preserve the direct path's optional static gateway bearer without exposing
+  it through debug output or audit resources.
+- The broker derives immutable images, owned names, fixed networks, exact
+  commands, worker-specific environment allowlists, no-new-privileges,
+  CPU/memory/PID/shared-memory bounds, and bounded local Docker logs.
+- Workflow workers receive no mounts. Recording workers receive only the fixed
+  configured artifact volume at the fixed output root. Host binds, devices,
+  capabilities, privileged mode, host namespaces, mutable images, unknown
+  operation families, and unowned lifecycle targets remain denied.
+- Docker inspect responses are normalized behind the adapter and retain a
+  detached worker's exit code without returning Docker models or raw logs.
+- Validation passed with 29 contract tests, 4 exact wire tests, 42 broker tests,
+  strict changed-crate Clippy/Rustdoc/formatting, and a real HTTP-shaped Bollard
+  inspect regression test.
+- Commits: `f62f144f`, `f4b8ee9c`.
+
+Slice 2 evidence:
+
+- `broker_pool` reuses the browser runtime's existing cached OAuth broker
+  client for workflow and recording workers. It does not create a second token
+  implementation or expose the client outside the gateway runtime boundary.
+- The lifecycle managers retain admission, persisted assignments, project
+  quotas, direct-process supervision, workflow terminal-state reconciliation,
+  recording finalization waits, and direct Docker behavior. Broker mode adds
+  typed launch/inspect/remove plus bounded detached-worker polling.
+- Worker exit, cancellation, and gateway-restart reconciliation remove only
+  the broker-owned resource derived from its workflow-run or recording id.
+  Three consecutive broker inspection failures become a stable sanitized
+  lifecycle failure rather than leaving an assignment indefinitely healthy.
+- Workflow logs/events/outputs and recording artifacts still flow through the
+  existing worker APIs. Broker-side raw container logs are not copied into
+  gateway errors.
+- Direct workflow and recording lifecycle regression tests pass alongside
+  broker launch/monitor/remove integration tests, credential-redaction tests,
+  broker unavailable/invalid-result tests, and bounded monitor retry tests.
+- The full gateway run passed 445 tests with one external Postgres contract
+  test ignored, all integration test binaries, the source-size gate, and strict
+  Clippy. README does not change yet because the opt-in compose worker topology
+  is not available until execution slice 3.
 
 Checkpoint 4 design constraints:
 

@@ -10,6 +10,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
 
+use bpane_runtime_client::RuntimeBrokerClient;
+
 pub type SessionManagerConfig = RuntimeManagerConfig;
 pub type SessionManagerDockerConfig = DockerRuntimeConfig;
 pub type SessionManagerBrokerConfig = BrokerRuntimeConfig;
@@ -39,6 +41,10 @@ impl SessionManager {
 
     pub fn profile(&self) -> &SessionManagerProfile {
         self.inner.profile()
+    }
+
+    pub(crate) fn runtime_broker_client(&self) -> Option<Arc<dyn RuntimeBrokerClient>> {
+        self.inner.runtime_broker_client()
     }
 
     pub async fn attach_session_store(&self, store: SessionStore) {
@@ -213,6 +219,25 @@ mod tests {
                 .as_deref(),
             Some("http://bpane-runtime-00000000000000000000000000000000:9223")
         );
+        assert!(manager.runtime_broker_client().is_none());
+    }
+
+    #[test]
+    fn session_manager_exposes_the_shared_broker_client_only_for_broker_pool() {
+        let manager = SessionManager::new(SessionManagerConfig::BrokerPool(
+            SessionManagerBrokerConfig {
+                docker: docker_config(),
+                base_url: "http://runtime-broker:9070".to_string(),
+                token_url: "http://keycloak:8080/realms/browserpane/token".to_string(),
+                client_id: "bpane-gateway".to_string(),
+                client_secret: bpane_runtime_contract::SecretValue::new("broker-secret").unwrap(),
+                request_timeout: Duration::from_secs(5),
+                max_response_bytes: 65_536,
+            },
+        ))
+        .unwrap();
+
+        assert!(manager.runtime_broker_client().is_some());
     }
 
     #[tokio::test]

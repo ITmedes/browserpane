@@ -1,14 +1,24 @@
 use std::process::Stdio;
+use std::time::Duration;
 
+use bpane_runtime_contract::{
+    RuntimeOperationKind, SecretValue, WorkflowWorkerCredentials, WorkflowWorkerLaunchRequest,
+};
 use tokio::process::Command;
 use tracing::{info, warn};
 
 use super::*;
 use crate::worker_process_output::{wait_with_bounded_output, BoundedProcessOutput};
+use crate::worker_runtime_control::{BrokerWorkerState, WorkerRuntimeControlError};
 
 #[derive(Debug, Clone)]
 pub(super) struct LaunchedWorkflowWorker {
     pub(super) container_name: String,
+}
+
+enum WorkflowWorkerExit {
+    Direct(std::io::Result<BoundedProcessOutput>),
+    Broker(Result<BrokerWorkerState, WorkerRuntimeControlError>),
 }
 
 impl WorkflowLifecycleInner {
@@ -57,11 +67,110 @@ impl WorkflowLifecycleInner {
             })
             .await?;
 
+        self.launched
+            .lock()
+            .expect("workflow launched mutex poisoned")
+            .insert(
+                run.id,
+                LaunchedWorkflowWorker {
+                    container_name: container_name.clone(),
+                },
+            );
+
+        let bearer_token = self.resolve_bearer_token();
+        let launch = if self.worker_control.is_broker() {
+            self.launch_broker_worker(run, automation_access_token.token, bearer_token)
+                .await
+        } else {
+            self.launch_direct_worker(
+                run,
+                automation_access_token.token,
+                bearer_token,
+                &container_name,
+            )
+            .await
+        };
+        if let Err(error) = launch {
+            self.launched
+                .lock()
+                .expect("workflow launched mutex poisoned")
+                .remove(&run.id);
+            let _ = self
+                .session_store
+                .clear_workflow_run_worker_assignment(run.id)
+                .await;
+            return Err(error);
+        }
+
+        info!(
+            run_id = %run.id,
+            session_id = %run.session_id,
+            automation_task_id = %run.automation_task_id,
+            container_name,
+            launch_mode = if self.worker_control.is_broker() { "broker" } else { "direct" },
+            "launched workflow worker for run"
+        );
+        Ok(())
+    }
+
+    async fn launch_broker_worker(
+        self: &Arc<Self>,
+        run: &crate::workflow::StoredWorkflowRun,
+        automation_access_token: String,
+        bearer_token: Option<String>,
+    ) -> Result<(), WorkflowLifecycleError> {
+        let request = WorkflowWorkerLaunchRequest {
+            workflow_run_id: run.id,
+            session_id: run.session_id,
+            automation_task_id: run.automation_task_id,
+            credentials: WorkflowWorkerCredentials {
+                session_automation_access_token: worker_secret(automation_access_token, run.id)?,
+                gateway_bearer_token: bearer_token
+                    .map(|value| worker_secret(value, run.id))
+                    .transpose()?,
+            },
+        };
+        if let Err(error) = self.worker_control.launch_workflow(request).await {
+            let _ = self
+                .session_store
+                .clear_workflow_run_worker_assignment(run.id)
+                .await;
+            return Err(WorkflowLifecycleError::LaunchFailed(format!(
+                "runtime broker failed to launch workflow worker for run {}: {error}",
+                run.id
+            )));
+        }
+
+        let manager = Arc::clone(self);
+        let run_id = run.id;
+        tokio::spawn(async move {
+            let status = manager
+                .worker_control
+                .wait_for_exit(
+                    RuntimeOperationKind::WorkflowWorker,
+                    run_id,
+                    Duration::from_millis(500),
+                )
+                .await;
+            manager
+                .handle_worker_exit(run_id, WorkflowWorkerExit::Broker(status))
+                .await;
+        });
+        Ok(())
+    }
+
+    async fn launch_direct_worker(
+        self: &Arc<Self>,
+        run: &crate::workflow::StoredWorkflowRun,
+        automation_access_token: String,
+        bearer_token: Option<String>,
+        container_name: &str,
+    ) -> Result<(), WorkflowLifecycleError> {
         let mut command = Command::new(&self.config.docker_bin);
         command.arg("run");
         command.arg("--rm");
         command.arg("--name");
-        command.arg(&container_name);
+        command.arg(container_name);
         if let Some(network) = self.config.network.as_deref() {
             command.arg("--network");
             command.arg(network);
@@ -90,9 +199,9 @@ impl WorkflowLifecycleInner {
         append_container_env(
             &mut command,
             "BPANE_SESSION_AUTOMATION_ACCESS_TOKEN",
-            automation_access_token.token,
+            automation_access_token,
         );
-        if let Some(bearer_token) = self.resolve_bearer_token() {
+        if let Some(bearer_token) = bearer_token {
             append_container_env(&mut command, "BPANE_WORKFLOW_BEARER_TOKEN", bearer_token);
         }
         if let Some(token_url) = self.config.oidc_token_url.as_deref() {
@@ -142,31 +251,15 @@ impl WorkflowLifecycleInner {
             }
         };
 
-        self.launched
-            .lock()
-            .expect("workflow launched mutex poisoned")
-            .insert(
-                run.id,
-                LaunchedWorkflowWorker {
-                    container_name: container_name.clone(),
-                },
-            );
-
         let manager = Arc::clone(self);
         let run_id = run.id;
         let output_limit_bytes = self.config.output_limit_bytes;
         tokio::spawn(async move {
             let status = wait_with_bounded_output(child, output_limit_bytes).await;
-            manager.handle_worker_exit(run_id, status).await;
+            manager
+                .handle_worker_exit(run_id, WorkflowWorkerExit::Direct(status))
+                .await;
         });
-
-        info!(
-            run_id = %run.id,
-            session_id = %run.session_id,
-            automation_task_id = %run.automation_task_id,
-            container_name,
-            "launched workflow worker for run"
-        );
         Ok(())
     }
 
@@ -177,11 +270,7 @@ impl WorkflowLifecycleInner {
             .or_else(|| self.auth_validator.generate_token())
     }
 
-    pub(super) async fn handle_worker_exit(
-        self: Arc<Self>,
-        run_id: Uuid,
-        status: std::io::Result<BoundedProcessOutput>,
-    ) {
+    async fn handle_worker_exit(self: Arc<Self>, run_id: Uuid, status: WorkflowWorkerExit) {
         let container_name = self
             .launched
             .lock()
@@ -190,14 +279,14 @@ impl WorkflowLifecycleInner {
             .map(|worker| worker.container_name);
 
         if let Some(container_name) = container_name.as_deref() {
-            let _ = self.remove_container(container_name).await;
+            let _ = self.remove_worker(run_id, container_name).await;
         }
 
         let exit_message = match status {
-            Ok(output) if output.status.success() => {
+            WorkflowWorkerExit::Direct(Ok(output)) if output.status.success() => {
                 format!("workflow worker exited before completing workflow run {run_id}")
             }
-            Ok(output) => {
+            WorkflowWorkerExit::Direct(Ok(output)) => {
                 let detail = last_non_empty_line(&output.stderr)
                     .or_else(|| last_non_empty_line(&output.stdout))
                     .unwrap_or_else(|| {
@@ -211,7 +300,21 @@ impl WorkflowLifecycleInner {
                     "workflow worker exited before completing workflow run {run_id}: {detail}{truncation}"
                 )
             }
-            Err(error) => format!("workflow worker failed while waiting for run {run_id}: {error}"),
+            WorkflowWorkerExit::Direct(Err(error)) => {
+                format!("workflow worker failed while waiting for run {run_id}: {error}")
+            }
+            WorkflowWorkerExit::Broker(Ok(BrokerWorkerState::Exited { exit_code })) => format!(
+                "workflow worker exited before completing workflow run {run_id} with status {exit_code:?}"
+            ),
+            WorkflowWorkerExit::Broker(Ok(BrokerWorkerState::Absent)) => {
+                format!("workflow worker disappeared before completing workflow run {run_id}")
+            }
+            WorkflowWorkerExit::Broker(Ok(BrokerWorkerState::Running)) => {
+                format!("workflow worker monitor ended unexpectedly for run {run_id}")
+            }
+            WorkflowWorkerExit::Broker(Err(error)) => format!(
+                "workflow worker monitoring failed for run {run_id}: {error}"
+            ),
         };
 
         let Ok(Some(run)) = self.session_store.get_workflow_run_by_id(run_id).await else {
@@ -284,10 +387,22 @@ impl WorkflowLifecycleInner {
         Ok(())
     }
 
-    pub(super) async fn remove_container(
+    pub(super) async fn remove_worker(
         &self,
+        run_id: Uuid,
         container_name: &str,
     ) -> Result<(), WorkflowLifecycleError> {
+        if self.worker_control.is_broker() {
+            return self
+                .worker_control
+                .remove(RuntimeOperationKind::WorkflowWorker, run_id)
+                .await
+                .map_err(|error| {
+                    WorkflowLifecycleError::LaunchFailed(format!(
+                        "runtime broker failed to remove workflow worker for run {run_id}: {error}"
+                    ))
+                });
+        }
         let output = Command::new(&self.config.docker_bin)
             .arg("rm")
             .arg("-f")
@@ -319,6 +434,14 @@ impl WorkflowLifecycleInner {
             }
         )))
     }
+}
+
+fn worker_secret(value: String, run_id: Uuid) -> Result<SecretValue, WorkflowLifecycleError> {
+    SecretValue::new(value).map_err(|_| {
+        WorkflowLifecycleError::LaunchFailed(format!(
+            "workflow worker credential for run {run_id} is invalid"
+        ))
+    })
 }
 
 fn output_truncation_detail(omitted_bytes: u64) -> String {

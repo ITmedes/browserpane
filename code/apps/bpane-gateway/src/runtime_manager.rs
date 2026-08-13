@@ -6,6 +6,8 @@ use std::time::Duration;
 
 use uuid::Uuid;
 
+use bpane_runtime_client::RuntimeBrokerClient;
+
 use crate::credentials::CredentialProvider;
 use crate::session_control::SessionStore;
 use crate::workspaces::WorkspaceFileStore;
@@ -270,6 +272,13 @@ impl SessionRuntimeManager {
 
     pub fn profile(&self) -> &RuntimeProfile {
         &self.profile
+    }
+
+    pub(crate) fn runtime_broker_client(&self) -> Option<Arc<dyn RuntimeBrokerClient>> {
+        match &self.backend {
+            RuntimeBackend::StaticSingle(_) => None,
+            RuntimeBackend::Docker(manager) => manager.runtime_broker_client(),
+        }
     }
 
     pub async fn attach_session_store(&self, store: SessionStore) {

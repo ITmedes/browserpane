@@ -1,8 +1,15 @@
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::time::Duration;
 
+use async_trait::async_trait;
+use bpane_runtime_client::{RuntimeBrokerClient, RuntimeBrokerClientError};
+use bpane_runtime_contract::{
+    BrokerApiVersion, RuntimeOperation, RuntimeOperationRequest, RuntimeOperationResponse,
+    RuntimeOperationResult, WorkerExecutionState,
+};
 use tempfile::tempdir;
 use tokio::time::sleep;
 
@@ -13,6 +20,112 @@ use crate::session_control::{
     PersistProjectRequest, PersistedWorkflowRunWorkerAssignment, ProjectPolicy, ProjectQuotas,
     ProjectState,
 };
+use crate::worker_runtime_control::WorkerRuntimeControl;
+
+#[derive(Default)]
+struct WorkflowBrokerClient {
+    requests: Mutex<Vec<RuntimeOperationRequest>>,
+}
+
+#[async_trait]
+impl RuntimeBrokerClient for WorkflowBrokerClient {
+    async fn check_readiness(&self) -> Result<(), RuntimeBrokerClientError> {
+        Ok(())
+    }
+
+    async fn execute(
+        &self,
+        request: &RuntimeOperationRequest,
+    ) -> Result<RuntimeOperationResponse, RuntimeBrokerClientError> {
+        self.requests.lock().unwrap().push(request.clone());
+        let result = match &request.operation {
+            RuntimeOperation::LaunchWorkflow(_) => RuntimeOperationResult::Accepted,
+            RuntimeOperation::ContainerLifecycle(request)
+                if request.action == bpane_runtime_contract::ContainerLifecycleAction::Inspect =>
+            {
+                RuntimeOperationResult::WorkerState {
+                    execution_state: WorkerExecutionState::Exited,
+                    exit_code: Some(7),
+                }
+            }
+            RuntimeOperation::ContainerLifecycle(_) => RuntimeOperationResult::Completed {
+                exit_code: None,
+                omitted_output_bytes: 0,
+            },
+            _ => RuntimeOperationResult::Absent,
+        };
+        Ok(RuntimeOperationResponse {
+            api_version: BrokerApiVersion::V1,
+            request_id: request.request_id,
+            result,
+        })
+    }
+}
+
+#[tokio::test]
+async fn broker_mode_launches_monitors_and_removes_workflow_worker() {
+    let store = SessionStore::in_memory();
+    let auth = Arc::new(AuthValidator::from_hmac_secret(vec![9; 32]));
+    let automation_access_token_manager = Arc::new(SessionAutomationAccessTokenManager::new(
+        vec![7; 32],
+        Duration::from_secs(300),
+    ));
+    let client = Arc::new(WorkflowBrokerClient::default());
+    let broker: Arc<dyn RuntimeBrokerClient> = client.clone();
+    let mut config = test_config(PathBuf::from("/docker-must-not-run"));
+    config.bearer_token = Some("workflow-lifecycle-secret".to_string());
+    let manager = WorkflowLifecycleManager::new_with_worker_control(
+        Some(config),
+        auth,
+        automation_access_token_manager,
+        store.clone(),
+        test_session_manager(),
+        test_registry(),
+        WorkerRuntimeControl::from_broker(Some(broker)),
+    )
+    .unwrap();
+    let run = create_workflow_run(&store).await;
+
+    manager
+        .ensure_run_started("playwright", run.id)
+        .await
+        .unwrap();
+
+    let failed = tokio::time::timeout(Duration::from_secs(3), async {
+        loop {
+            let current = store.get_workflow_run_by_id(run.id).await.unwrap().unwrap();
+            if current.state.is_terminal() {
+                break current;
+            }
+            sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("broker worker should reach its terminal state");
+
+    assert_eq!(failed.state, WorkflowRunState::Failed);
+    assert!(failed.error.unwrap().contains("status Some(7)"));
+    assert!(store
+        .get_workflow_run_worker_assignment(run.id)
+        .await
+        .unwrap()
+        .is_none());
+    let requests = client.requests.lock().unwrap();
+    assert!(matches!(
+        &requests[0].operation,
+        RuntimeOperation::LaunchWorkflow(_)
+    ));
+    assert!(matches!(
+        &requests[1].operation,
+        RuntimeOperation::ContainerLifecycle(_)
+    ));
+    assert!(matches!(
+        &requests[2].operation,
+        RuntimeOperation::ContainerLifecycle(_)
+    ));
+    let debug = format!("{requests:?}");
+    assert!(!debug.contains("workflow-lifecycle-secret"));
+}
 
 #[tokio::test]
 async fn launches_worker_and_marks_unfinished_run_failed() {
