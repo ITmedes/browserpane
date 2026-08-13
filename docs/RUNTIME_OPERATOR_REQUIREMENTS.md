@@ -34,7 +34,8 @@ Required behavior:
 
 Local troubleshooting runbook topics to preserve in README/setup docs:
 
-- Docker socket activation checks and recovery commands,
+- host Docker activation, internal proxy health, boundary validation, and
+  recovery commands,
 - sudo-safe environment passing for local compose runs,
 - compose buildx/Bake warning behavior,
 - HTTP API port usage versus WebTransport/TLS endpoints,

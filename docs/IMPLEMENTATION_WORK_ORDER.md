@@ -687,27 +687,33 @@ Validation:
 
 ### 23. Docker Runtime Launch Boundary
 
-Tier: P3/P4 production hardening.
+Tier: P1 production hardening, review-ready under #167.
 
 Why here:
 
-- Raw Docker socket access is acceptable for local development but not a safe
-  production boundary.
-- This is important, but it is larger than the immediate admin-new promotion
-  path unless production deployment becomes the active goal.
+- A direct gateway socket mount is not a safe production boundary.
+- The generic proxy selected by #167 reduces API exposure but cannot validate
+  allowed container/volume request bodies or enforce resource ownership.
 
-Scope:
+Current #167 scope:
 
-- document raw Docker socket use as local-dev only,
-- evaluate Docker socket proxy, runtime-launch broker, or non-Docker runtime
-  manager,
-- keep local dev session, workflow, and recording launch working,
-- update production topology docs.
+- remove the direct gateway socket mount,
+- add a digest-pinned internal Docker API proxy with explicit API allowlists,
+- keep local session, workflow, recording, context, and file-helper behavior,
+- add structured manifest and live API denial checks,
+- update production topology docs without claiming full authorization.
+
+Production follow-up:
+
+- #214 owns a policy-validating launch broker and shared typed adapter contract.
+- The broker must validate owned images, names, networks, mounts, privileges,
+  resource limits, and lifecycle operations before Docker-host production
+  promotion.
 
 Validation:
 
 - local compose runtime-launch smoke,
-- denied Docker API operations if a proxy is introduced,
+- denied Docker API operations through the proxy,
 - production docs no longer present raw socket as a safe default.
 
 ### 24. Host And Client Render Hot-Path Work

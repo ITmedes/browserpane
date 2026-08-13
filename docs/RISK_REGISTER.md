@@ -31,6 +31,7 @@ Last reviewed: 2026-08-13
 | R-016 | A Phase 0 Pilot expands into an undefined enterprise platform commitment. | High | High | #174 | Qualification, explicit non-goals, bounded agreement, Stop/Operate/Phase 1 gate. | Phase 0 |
 | R-017 | Large overlapping planning documents produce conflicting priorities. | High | High | #173 | Canonical roadmap; historical docs marked supporting; only bounded Ready plans are executable. | Governance |
 | R-018 | Workflow/recording workers lack the same unit-test floor as core packages. | Low | High | #165 / #151 | Review-ready on `feature/BPANE-00165-worker-runtime-hardening`: 8 recording-worker and 11 workflow-worker tests, enforced package checks, finite request deadlines, bounded process output, single-flight polling evidence, and compose worker journeys. Close after merge and required-check confirmation. | Foundation / Phase 1 |
+| R-019 | A compromised gateway can use permitted Docker container/volume APIs with unsafe request fields. | High | Critical | #167 / #214 | #167 removes direct socket access and limits API families; #214 must add an authenticated typed broker that validates images, names, mounts, networks, privileges, resources, ownership, and lifecycle requests. | Production |
 
 ## Closed Risks
 

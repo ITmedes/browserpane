@@ -5,7 +5,7 @@ mod resolve;
 pub(in crate::runtime_manager) mod session_files;
 
 #[cfg(test)]
-pub(in crate::runtime_manager) use session_files::parse_docker_size_bytes;
+pub(in crate::runtime_manager) use session_files::parse_browser_context_profile_usage;
 
 use std::collections::HashMap;
 use std::sync::Arc;

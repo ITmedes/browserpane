@@ -2800,7 +2800,10 @@
       }
       try {
         const url = new URL(controlUrl, window.location.href);
-        url.pathname = '/health';
+        const controlPathSuffix = '/control-session';
+        url.pathname = url.pathname.endsWith(controlPathSuffix)
+          ? `${url.pathname.slice(0, -controlPathSuffix.length)}/health`
+          : '/health';
         url.search = '';
         url.hash = '';
         return url.toString();
@@ -2916,7 +2919,12 @@
       }
 
       try {
-        const response = await fetch(`${healthUrl}?_=${Date.now()}`, { cache: 'no-store' });
+        const response = await fetch(`${healthUrl}?_=${Date.now()}`, {
+          headers: {
+            Authorization: `Bearer ${authState.tokens.access_token}`,
+          },
+          cache: 'no-store',
+        });
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
         }
@@ -3659,7 +3667,7 @@
       }
     }
 
-    async function assignMcpBridgeControlSession(sessionId) {
+    async function assignMcpBridgeControlSession(sessionId, accessToken) {
       const controlUrl = authState.config?.mcpBridge?.controlUrl;
       if (!controlUrl) {
         log(`MCP delegation created. Configure the bridge with BPANE_SESSION_ID=${sessionId} to attach manually.`, 'warn');
@@ -3669,6 +3677,7 @@
       const response = await fetch(controlUrl, {
         method: 'PUT',
         headers: {
+          Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ session_id: sessionId }),
@@ -3745,7 +3754,7 @@
       controlSessionState.resource = await response.json();
       renderSessionState();
       log(`Delegated session ${controlSession.id} to ${authState.config.mcpBridge.clientId}`, 'ok');
-      await assignMcpBridgeControlSession(controlSession.id);
+      await assignMcpBridgeControlSession(controlSession.id, accessToken);
       await clearMcpBridgeDelegationSessionIds(accessToken, previousMcpDelegationSessionIds);
       await refreshMcpBridgeState({ silent: true });
     }

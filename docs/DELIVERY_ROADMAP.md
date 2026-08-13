@@ -4,9 +4,9 @@ Status: Canonical execution roadmap
 
 Governance issue: [#173](https://github.com/ITmedes/browserpane/issues/173)
 
-Last implementation audit: 2026-08-10 on
-`feature/BPANE-00163-admin-new-promotion-routing` through the default-route and
-fallback-smoke checkpoint.
+Last implementation audit: 2026-08-13 on
+`feature/BPANE-00167-docker-runtime-boundary` through the complete proxy-boundary
+and compose/browser regression checkpoint.
 
 ## How To Use This Document
 
@@ -48,8 +48,8 @@ or capacity decision.
 | --- | --- | --- | --- |
 | Foundation | Trusted build, auth, contracts, storage, and lifecycle baseline. | Complete through #179 | Foundation Gate |
 | Pilot Value | One bounded reference workflow with accepted evidence and runbook. | #174 | Phase 0 Gate |
-| Operator Product | Complete and promote `/admin-new/` as the default operator console. | #161 | Phase 1 Gate |
-| Production | Harden deployment, security, recovery, supply chain, and telemetry. | #72 / #66 / #178 | Production Baseline |
+| Operator Product | Complete and promote `/admin-new/` as the default operator console. | Default promoted through #163; #124 is the next focused catalog gap | Phase 1 Gate |
+| Production | Harden deployment, security, recovery, supply chain, and telemetry. | #167 in review; #214 qualified, then #178 / #72 / #66 | Production Baseline |
 | Enterprise | Organization controls, policy, residency, HA, and governed integrations. | #176 / #70 / #79 | Phase N Gate |
 | Innovation | Teach Mode and controlled repair after stable execution contracts. | #171 | Phase N capability gate |
 
@@ -88,8 +88,11 @@ PR #196, #155 through PR #197, #156 through PR #198, and #157 through PR #199.
 #158 merged through PR #200, #159 through PR #201, and #148 through PR #202.
 #160 merged through PR #203 after required and manually dispatched Compose
 validation passed. #161 merged through PR #204 and #162 through PR #209. #163
-is the active Operator Product promotion and fallback slice; its validation
-contract foundation merged through PR #210.
+closed after its validation contract merged through PR #210 and the unified
+admin became the default web-root route through PR #211. #149 merged through
+PR #212, and #165 worker-runtime hardening merged through PR #213. #167 is
+review-ready through PR #215; #214 owns the remaining typed production launch
+broker rather than expanding the proxy slice.
 
 ## Foundation Gate Sequence
 
@@ -110,8 +113,9 @@ Conditional Foundation work:
 - #149 merged through PR #212 and supplies the purpose-scoped recording-worker
   capability, exact staging boundary, and measured artifact finalization
   contract required when recordings form part of Pilot acceptance evidence.
-- #167 is required before a Docker runtime boundary is promoted as a production
-  deployment contract.
+- #167 removes the gateway's direct socket mount and adds a checked proxy
+  boundary. #214 owns the typed launch broker that remains necessary for a
+  production Docker-host trust boundary.
 
 ## Phase 0 Pilot Value Sequence
 
@@ -155,6 +159,7 @@ beside #159 when that resource group is selected.
 Production and enterprise work is gate-driven, not one large precondition for a
 bounded Pilot:
 
+- #167 Docker proxy boundary and #214 policy-validating runtime broker,
 - #72 threat model and enterprise hardening baseline,
 - #178 platform telemetry, SLOs, alerts, and capacity evidence,
 - #66 deployment packaging and validated runtime targets,
