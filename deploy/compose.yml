@@ -100,9 +100,11 @@ services:
   docker-proxy:
     image: ghcr.io/tecnativa/docker-socket-proxy@sha256:1f5038b54f06c3e18422902cf00ba21803d1c97805aae032e5e6673d532d3459
     environment:
+      ALLOW_PAUSE: "0"
       ALLOW_RESTARTS: "0"
       ALLOW_START: "1"
       ALLOW_STOP: "1"
+      ALLOW_UNPAUSE: "0"
       AUTH: "0"
       BUILD: "0"
       COMMIT: "0"
@@ -117,6 +119,7 @@ services:
       NETWORKS: "0"
       NODES: "0"
       PLUGINS: "0"
+      PING: "1"
       POST: "1"
       SECRETS: "0"
       SERVICES: "0"
@@ -124,6 +127,7 @@ services:
       SWARM: "0"
       SYSTEM: "0"
       TASKS: "0"
+      VERSION: "1"
       VOLUMES: "1"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:2375/_ping"]
