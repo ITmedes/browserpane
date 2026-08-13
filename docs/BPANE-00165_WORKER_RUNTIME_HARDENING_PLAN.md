@@ -188,8 +188,11 @@ Package and unit evidence:
   intentionally ignored test. Focused lifecycle, bounded-output, invalid-zero
   configuration, large 4 MiB archive, and async-runtime responsiveness tests
   passed.
-- repository baseline, document checks, validation-tool tests, and compose
-  manifest validation passed.
+- the canonical fast profile passed all 42 stages, including the 57.58% local
+  Rust line-coverage ratchet, 620 admin-new tests and coverage, 674
+  browser-client tests and coverage, dependency policy, repository/document
+  checks, both worker packages, builds, and OpenAPI governance.
+- compose manifest validation passed.
 
 Compose and browser evidence against images rebuilt from this branch:
 

@@ -12,13 +12,13 @@ one important surface, but it is not the only delivery lane.
 The current coverage ratchet records:
 
 - all non-ignored Rust workspace tests passed under `cargo llvm-cov`, with
-  54.88% line coverage on the canonical pinned Ubuntu runner and 57.32% on
-  local macOS; the cross-platform floor is 54.8%,
+  54.88% line coverage on the canonical pinned Ubuntu runner and 57.58% on the
+  current local macOS run; the cross-platform floor is 54.8%,
 - browser-client tests pass on pinned Node 22/Linux with 92.88% lines, 92.88%
-  statements, 93.19% functions, and 87.57% branches across all maintained `js`
+  statements, 93.19% functions, and 87.58% branches across all maintained `js`
   sources; the cross-platform function floor is 92.9%,
-- admin-new's 618 tests pass with 90.43% lines, 92.28% statements, 93.86%
-  functions, and 76.74% branches across `src/lib`,
+- admin-new's 620 tests pass with 90.43% lines, 92.28% statements, 93.86%
+  functions, and 76.76% branches across `src/lib`,
 - MCP bridge has focused unit tests,
 - recording-worker has 8 package tests and workflow-worker has 11 package
   tests covering finite request deadlines, parent cancellation, OIDC refresh
