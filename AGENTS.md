@@ -115,6 +115,27 @@ Current product shape:
     rejected even though all managers derive keys from one configured root.
   - `api/health.rs`: unauthenticated, resource-free `/healthz` process liveness and `/readyz` lifecycle/dependency readiness probes.
   - `api.rs`: legacy compatibility endpoints plus the frozen owner-scoped `/api/v1/sessions` surface, scoped admin-event token issuance/first-message WebSocket authentication, and session-scoped `access-tokens`, `automation-owner`, `status`, `mcp-owner`, `egress-diagnostics`, and `egress-usage` routes.
+- `code/apps/bpane-runtime-broker`
+  - Internal policy-validating runtime operation service. It authenticates the
+    gateway with audience-bound OIDC service credentials, applies bounded
+    request, concurrency, timeout, replay, and idempotency controls, and keeps
+    backend-specific launch construction behind a fail-closed executor boundary.
+  - The broker foundation is present but is not yet the default runtime path;
+    operation adapters are being migrated incrementally under issue #214.
+  - `docker_browser/`: broker-owned browser container materialization and
+    launch/inspect/stop/remove adapter built on Bollard. It derives names,
+    volumes, environment, labels, network, security, and resource bounds from
+    trusted policy plus typed resource ids. The service does not enable this
+    adapter until browser feature parity and gateway opt-in wiring are complete.
+- `code/shared/bpane-runtime-contract`
+  - Versioned typed runtime operations, redacted secret values, sanitized audit
+    resources, and deny-by-default launch and lifecycle policy.
+  - The wire contract intentionally contains no raw Docker arguments, host
+    paths, environment maps, privilege switches, or Docker response models.
+- `code/shared/bpane-runtime-client`
+  - OAuth2 client-credentials token acquisition and bounded typed HTTP transport
+    from the gateway to the runtime broker. Redirects, response sizes, request
+    deadlines, token lifetimes, and error exposure are constrained centrally.
 - `code/shared/bpane-protocol`
   - Shared wire protocol, frame envelope, channel IDs, and message types.
 - `code/web/bpane-client/js`

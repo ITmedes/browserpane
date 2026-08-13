@@ -1,0 +1,19 @@
+[package]
+name = "bpane-runtime-contract"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Typed BrowserPane runtime broker contract and launch policy"
+repository = "https://github.com/ITmedes/browserpane"
+readme = "../../../README.md"
+keywords = ["browserpane", "runtime", "broker", "policy"]
+categories = ["api-bindings", "config"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+thiserror.workspace = true
+uuid = { version = "1", features = ["serde", "v7"] }
+
+[dev-dependencies]
+serde_json = "1"
