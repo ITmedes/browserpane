@@ -2,7 +2,7 @@
 
 Issue: [#214 Implement a policy-validating runtime launch broker](https://github.com/ITmedes/browserpane/issues/214)
 
-Status: active; checkpoints 1 and 2 complete; checkpoint 3 execution slice 3 next
+Status: active; checkpoints 1 and 2 complete; checkpoint 3 execution slice 3 active
 
 ## Business Case
 
@@ -212,7 +212,8 @@ Execution slices:
    persistence ownership, and run lifecycle/reconnect/MCP parity before the
    compose default or gateway Docker network changes.
 
-Progress: execution slices 1 and 2 are complete; execution slice 3 is next.
+Progress: execution slices 1 and 2 are complete; execution slice 3 is active on
+`feature/BPANE-00214-gateway-runtime-broker`.
 
 Slice 1 evidence:
 
@@ -299,16 +300,70 @@ Slice 2 evidence:
   so `README.md` does not require an update in this slice.
 - Commits: `afd31dbf`, `99c86285`, `74b0fdbf`.
 
-Execution slice 3 prerequisite:
+Execution slice 3 scope:
 
-- Define the broker-side extension registry/configuration source and refresh
-  semantics before enabling extension-bearing sessions. The gateway must send
-  extension-version ids only; it must not become able to populate arbitrary
-  broker install paths through each launch request.
+- Load the broker-side extension registry from a bounded, read-only JSON file at
+  startup. Treat it as an immutable process snapshot: changes require a broker
+  restart and invalid, duplicate, nil-id, or unsafe-path entries fail startup.
+  The gateway sends extension-version ids only and cannot populate broker
+  install paths through launch requests.
+- Add an explicit `broker_pool` gateway runtime backend. Reuse the current
+  Docker pool's capacity, reusable-context writer exclusion, assignment
+  persistence, startup readiness, idle cleanup, egress/session-file
+  preparation, and reconciliation state machine, but route browser container
+  launch/inspect/stop/remove through `bpane-runtime-client`.
+- Keep `docker_pool` as the compose and CLI default. Enable the broker Docker
+  adapter and gateway broker backend only through a dedicated local compose
+  overlay until parity and manual checkpoints pass.
+- Preserve stable gateway runtime errors. OAuth, HTTP, broker, and Docker
+  response details must remain sanitized and broker request retries must use
+  operation-specific idempotency keys.
 - Keep existing gateway storage preparation for proxy-auth, custom CA, and
   session files during browser launch parity. Those Docker helper operations
   move behind typed broker storage operations in checkpoint 5 before the
   gateway loses Docker-control access.
+
+Slice 3 example use case:
+
+An operator starts two project-scoped sessions with different reusable browser
+contexts and egress profiles through the opt-in broker topology. The gateway
+still enforces capacity and single-writer context admission and persists each
+assignment, while the broker alone chooses the browser image, container name,
+network, mounts, labels, extension install paths, and security settings. A
+reconnect returns to the existing runtime and MCP resolves the same session CDP
+endpoint; stopping a session removes only its broker-owned browser container.
+
+Slice 3 acceptance:
+
+- broker startup rejects missing or malformed adapter configuration and unsafe
+  extension registry entries before opening the operation service;
+- default compose remains fail-closed and `docker_pool` behavior is unchanged;
+- `broker_pool` maps stored session intent to typed launch/lifecycle requests
+  without install paths, secrets, arbitrary environment maps, or Docker models;
+- launch, readiness wait, reconnect, persisted-assignment recovery, idle stop,
+  explicit stop, capacity, context exclusion, egress, extensions, and prepared
+  session-file behavior have direct-vs-broker parity coverage;
+- OAuth/token, unreachable broker, denial, timeout, malformed response, and
+  conflicting idempotency cases map to stable sanitized gateway failures;
+- the opt-in compose overlay completes two-session, reconnect, stop, and MCP
+  delegation smoke checks before any default topology change.
+
+Slice 3 smoke sequence:
+
+1. Validate base compose and prove the broker still has no Docker-control
+   network and rejects browser operations.
+2. Start the broker overlay and verify malformed registry/configuration startup
+   fails closed, then start it with the approved immutable registry.
+3. Create and connect two sessions through `broker_pool`; verify distinct
+   persisted assignments, sockets, CDP endpoints, and broker-owned containers.
+4. Reconnect one session and delegate it to MCP; verify both use the same live
+   runtime and no replacement container is launched.
+5. Exercise reusable-context exclusion, egress metadata, approved and unknown
+   extension ids, and prepared session-file bindings.
+6. Stop both sessions and verify browser containers and ephemeral data are
+   removed while reusable context data remains.
+7. Run runtime contract/client/broker/gateway unit tests, full Rust workspace,
+   compose API, multi-session, reconnect, MCP, repository, and dependency gates.
 
 Manual checkpoint: opt into broker mode locally and operate two concurrent
 sessions plus reconnect and MCP delegation before changing the default.
