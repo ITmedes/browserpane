@@ -28,6 +28,7 @@ function validConfig() {
           BPANE_RUNTIME_BROKER_BROWSER_IMAGE: digest,
           BPANE_RUNTIME_BROKER_WORKFLOW_IMAGE: digest,
           BPANE_RUNTIME_BROKER_RECORDING_IMAGE: digest,
+          BPANE_RUNTIME_BROKER_STORAGE_HELPER_IMAGE: digest,
           BPANE_RUNTIME_BROKER_WORKER_CONFIG_FILE: "/runtime-config/workers.json",
           BPANE_RUNTIME_BROKER_WORKER_OIDC_CLIENT_SECRET_FILE:
             "/run/secrets/worker-oidc-client-secret",
@@ -110,6 +111,23 @@ test("rejects mutable worker images and unsafe worker inputs", () => {
       environment.BPANE_RUNTIME_BROKER_WORKER_OIDC_CLIENT_SECRET_FILE = undefined;
     },
     "file-backed worker OIDC secret",
+  );
+});
+
+test("rejects mutable or divergent storage helper images", () => {
+  mutationFails(
+    (config) => {
+      config.services["runtime-broker"].environment.BPANE_RUNTIME_BROKER_STORAGE_HELPER_IMAGE =
+        "deploy-host:latest";
+    },
+    "storage helper image must be immutable",
+  );
+  mutationFails(
+    (config) => {
+      config.services["runtime-broker"].environment.BPANE_RUNTIME_BROKER_STORAGE_HELPER_IMAGE =
+        `sha256:${"b".repeat(64)}`;
+    },
+    "storage helper must use the pinned host image",
   );
 });
 

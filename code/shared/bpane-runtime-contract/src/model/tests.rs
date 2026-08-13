@@ -19,6 +19,7 @@ fn storage_request(action: StorageHelperAction) -> StorageHelperRequest {
         session_id: None,
         source_context_id: None,
         target_context_id: None,
+        file_target: None,
         declared_payload_bytes: None,
     }
 }
@@ -240,8 +241,13 @@ fn validates_storage_helper_field_combinations() {
         },
         StorageHelperRequest {
             session_id: Some(session_id),
+            file_target: Some(SessionDataFileTarget::SessionBindingManifest),
             declared_payload_bytes: Some(1),
             ..storage_request(StorageHelperAction::MaterializeSessionFiles)
+        },
+        StorageHelperRequest {
+            session_id: Some(session_id),
+            ..storage_request(StorageHelperAction::DeleteSessionData)
         },
         StorageHelperRequest {
             source_context_id: Some(source_id),
@@ -272,6 +278,15 @@ fn validates_storage_helper_field_combinations() {
             .validate()
             .unwrap();
     }
+}
+
+#[test]
+fn classifies_storage_payload_directions() {
+    assert!(StorageHelperAction::MaterializeSessionFiles.accepts_input_payload());
+    assert!(StorageHelperAction::ImportBrowserContext.accepts_input_payload());
+    assert!(StorageHelperAction::ExportBrowserContext.produces_output_payload());
+    assert!(!StorageHelperAction::CloneBrowserContext.accepts_input_payload());
+    assert!(!StorageHelperAction::MeasureBrowserContext.produces_output_payload());
 }
 
 #[test]
@@ -321,6 +336,89 @@ fn rejects_storage_helper_ambiguity_and_invalid_payloads() {
     assert_eq!(
         request(RuntimeOperation::RunStorageHelper(unexpected_payload)).validate(),
         Err(ContractErrorCode::PayloadDeclarationNotAllowed.into())
+    );
+}
+
+#[test]
+fn validates_typed_session_data_targets_and_optional_context_initialization() {
+    let session_id = Uuid::now_v7();
+    let context_id = Uuid::now_v7();
+    let initialized = StorageHelperRequest {
+        session_id: Some(session_id),
+        target_context_id: Some(context_id),
+        ..storage_request(StorageHelperAction::InitializeSessionData)
+    };
+    request(RuntimeOperation::RunStorageHelper(initialized))
+        .validate()
+        .unwrap();
+
+    for target in [
+        SessionDataFileTarget::SessionBinding {
+            relative_path: "inputs/report.pdf".to_string(),
+            writable: false,
+        },
+        SessionDataFileTarget::SessionBindingManifest,
+        SessionDataFileTarget::EgressProxyAuthentication,
+        SessionDataFileTarget::EgressTrustedCa,
+    ] {
+        let materialize = StorageHelperRequest {
+            session_id: Some(session_id),
+            file_target: Some(target),
+            declared_payload_bytes: Some(1),
+            ..storage_request(StorageHelperAction::MaterializeSessionFiles)
+        };
+        request(RuntimeOperation::RunStorageHelper(materialize))
+            .validate()
+            .unwrap();
+    }
+}
+
+#[test]
+fn rejects_unsafe_or_ambiguous_session_data_targets() {
+    for relative_path in [
+        "",
+        "/absolute",
+        "../escape",
+        "nested/../escape",
+        "nested//file",
+        "nested/./file",
+        "windows\\escape",
+        "trailing/",
+        "line\nbreak",
+    ] {
+        let invalid = StorageHelperRequest {
+            session_id: Some(Uuid::now_v7()),
+            file_target: Some(SessionDataFileTarget::SessionBinding {
+                relative_path: relative_path.to_string(),
+                writable: false,
+            }),
+            declared_payload_bytes: Some(1),
+            ..storage_request(StorageHelperAction::MaterializeSessionFiles)
+        };
+        assert_eq!(
+            request(RuntimeOperation::RunStorageHelper(invalid)).validate(),
+            Err(ContractErrorCode::InvalidOperationParameters.into())
+        );
+    }
+
+    let missing_target = StorageHelperRequest {
+        session_id: Some(Uuid::now_v7()),
+        declared_payload_bytes: Some(1),
+        ..storage_request(StorageHelperAction::MaterializeSessionFiles)
+    };
+    assert!(request(RuntimeOperation::RunStorageHelper(missing_target))
+        .validate()
+        .is_err());
+
+    let unexpected_target = StorageHelperRequest {
+        source_context_id: Some(Uuid::now_v7()),
+        file_target: Some(SessionDataFileTarget::EgressTrustedCa),
+        ..storage_request(StorageHelperAction::ExportBrowserContext)
+    };
+    assert!(
+        request(RuntimeOperation::RunStorageHelper(unexpected_target))
+            .validate()
+            .is_err()
     );
 }
 

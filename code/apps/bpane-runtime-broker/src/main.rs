@@ -23,6 +23,11 @@ async fn main() -> anyhow::Result<()> {
         config.docker_api_url.as_deref(),
         config.docker_timeout_secs,
     )?;
+    let executor = config.storage_adapter_settings().combine_executor(
+        executor,
+        config.docker_api_url.as_deref(),
+        config.docker_timeout_secs,
+    )?;
     let authenticator = Arc::new(OidcBrokerAuthenticator::new(oidc_config).await?);
     let state = BrokerState::new(
         authenticator,

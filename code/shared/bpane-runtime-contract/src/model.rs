@@ -313,6 +313,8 @@ pub enum StorageHelperAction {
     InitializeSessionData,
     /// Materialize approved session files.
     MaterializeSessionFiles,
+    /// Delete session-owned data storage after runtime release.
+    DeleteSessionData,
     /// Clone one inactive browser context into another.
     CloneBrowserContext,
     /// Export an inactive browser context.
@@ -323,6 +325,52 @@ pub enum StorageHelperAction {
     MeasureBrowserContext,
     /// Delete inactive browser context data.
     DeleteBrowserContext,
+}
+
+impl StorageHelperAction {
+    /// Returns whether this action consumes a binary request payload.
+    pub const fn accepts_input_payload(self) -> bool {
+        matches!(
+            self,
+            Self::MaterializeSessionFiles | Self::ImportBrowserContext
+        )
+    }
+
+    /// Returns whether this action produces a binary response payload.
+    pub const fn produces_output_payload(self) -> bool {
+        matches!(self, Self::ExportBrowserContext)
+    }
+}
+
+/// Broker-derived destination for one session-data payload.
+#[derive(Debug, Clone, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "purpose", rename_all = "snake_case", deny_unknown_fields)]
+pub enum SessionDataFileTarget {
+    /// A workspace file bound below the fixed session mounts root.
+    SessionBinding {
+        /// Safe relative path below the broker-owned mounts root.
+        relative_path: String,
+        /// Whether the browser runtime may modify the materialized file.
+        writable: bool,
+    },
+    /// Broker-owned session binding manifest at its fixed path.
+    SessionBindingManifest,
+    /// Broker-owned proxy-authentication material at its fixed path.
+    EgressProxyAuthentication,
+    /// Broker-owned trusted CA material at its fixed path.
+    EgressTrustedCa,
+}
+
+impl SessionDataFileTarget {
+    fn validate(&self) -> Result<(), ContractViolation> {
+        let Self::SessionBinding { relative_path, .. } = self else {
+            return Ok(());
+        };
+        if !is_safe_relative_path(relative_path) {
+            return Err(ContractErrorCode::InvalidOperationParameters.into());
+        }
+        Ok(())
+    }
 }
 
 /// Storage helper intent. Payload bytes are carried by a separately bounded stream.
@@ -337,6 +385,9 @@ pub struct StorageHelperRequest {
     pub source_context_id: Option<Uuid>,
     /// Optional target browser context.
     pub target_context_id: Option<Uuid>,
+    /// Typed broker-derived destination for session-data writes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_target: Option<SessionDataFileTarget>,
     /// Declared stream size for bounded transfer admission.
     pub declared_payload_bytes: Option<u64>,
 }
@@ -350,12 +401,25 @@ impl StorageHelperRequest {
         ])?;
         match self.action {
             StorageHelperAction::InitializeSessionData => {
-                require_storage_fields(self, true, false, false)?;
+                if self.session_id.is_none()
+                    || self.source_context_id.is_some()
+                    || self.file_target.is_some()
+                {
+                    return Err(ContractErrorCode::InvalidOperationParameters.into());
+                }
                 reject_payload(self.declared_payload_bytes)
             }
             StorageHelperAction::MaterializeSessionFiles => {
                 require_storage_fields(self, true, false, false)?;
+                self.file_target
+                    .as_ref()
+                    .ok_or(ContractErrorCode::InvalidOperationParameters)?
+                    .validate()?;
                 require_payload(self.declared_payload_bytes)
+            }
+            StorageHelperAction::DeleteSessionData => {
+                require_storage_fields(self, true, false, false)?;
+                reject_payload(self.declared_payload_bytes)
             }
             StorageHelperAction::CloneBrowserContext => {
                 require_storage_fields(self, false, true, true)?;
@@ -374,7 +438,12 @@ impl StorageHelperRequest {
                 require_storage_fields(self, false, false, true)?;
                 require_payload(self.declared_payload_bytes)
             }
+        }?;
+        if self.action != StorageHelperAction::MaterializeSessionFiles && self.file_target.is_some()
+        {
+            return Err(ContractErrorCode::InvalidOperationParameters.into());
         }
+        Ok(())
     }
 }
 
@@ -419,6 +488,20 @@ fn reject_payload(payload: Option<u64>) -> Result<(), ContractViolation> {
         return Err(ContractErrorCode::PayloadDeclarationNotAllowed.into());
     }
     Ok(())
+}
+
+fn is_safe_relative_path(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 1024
+        && !value.starts_with('/')
+        && !value.ends_with('/')
+        && !value.contains('\\')
+        && !value
+            .bytes()
+            .any(|byte| byte == 0 || byte.is_ascii_control())
+        && value
+            .split('/')
+            .all(|segment| !segment.is_empty() && segment != "." && segment != "..")
 }
 
 /// Owned-container lifecycle actions.
@@ -512,6 +595,18 @@ pub enum RuntimeOperationResult {
         exit_code: Option<i32>,
         /// Number of omitted output bytes after bounding.
         omitted_output_bytes: u64,
+    },
+    /// A storage helper measured one owned resource.
+    StorageUsage {
+        /// Exact storage bytes reported by the helper.
+        storage_bytes: u64,
+    },
+    /// A storage helper produced a separately transferred binary payload.
+    StoragePayload {
+        /// Exact payload size carried by the response body.
+        payload_bytes: u64,
+        /// Lowercase SHA-256 digest of the response body.
+        sha256_hex: String,
     },
 }
 

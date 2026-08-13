@@ -59,6 +59,7 @@ pub(super) fn build_broker_pool(
                 base_url: config.base_url,
                 request_timeout: config.request_timeout,
                 max_response_bytes: config.max_response_bytes,
+                max_storage_payload_bytes: 536_870_912,
             },
             token_provider,
         )

@@ -43,6 +43,7 @@ fn client(base_url: String, timeout: Duration) -> HttpRuntimeBrokerClient {
             base_url,
             request_timeout: timeout,
             max_response_bytes: 8_192,
+            max_storage_payload_bytes: 1024 * 1024,
         },
         Arc::new(StaticTokenProvider {
             token: SecretValue::new("service-token-never-log").unwrap(),
@@ -246,21 +247,24 @@ fn rejects_unsafe_or_unbounded_client_configuration() {
         token: SecretValue::new("token").unwrap(),
     });
     let cases = [
-        ("file:///tmp/socket", Duration::from_secs(1), 1),
-        ("http://user:secret@broker", Duration::from_secs(1), 1),
-        ("http://broker/internal", Duration::from_secs(1), 1),
-        ("http://broker?secret=value", Duration::from_secs(1), 1),
-        ("http://broker", Duration::ZERO, 1),
-        ("http://broker", Duration::from_secs(1), 0),
-        ("http://broker", Duration::from_secs(1), 1_048_577),
+        ("file:///tmp/socket", Duration::from_secs(1), 1, 1),
+        ("http://user:secret@broker", Duration::from_secs(1), 1, 1),
+        ("http://broker/internal", Duration::from_secs(1), 1, 1),
+        ("http://broker?secret=value", Duration::from_secs(1), 1, 1),
+        ("http://broker", Duration::ZERO, 1, 1),
+        ("http://broker", Duration::from_secs(1), 0, 1),
+        ("http://broker", Duration::from_secs(1), 1_048_577, 1),
+        ("http://broker", Duration::from_secs(1), 1, 0),
+        ("http://broker", Duration::from_secs(1), 1, 1_073_741_825),
     ];
-    for (base_url, request_timeout, max_response_bytes) in cases {
+    for (base_url, request_timeout, max_response_bytes, max_storage_payload_bytes) in cases {
         assert_eq!(
             HttpRuntimeBrokerClient::new(
                 RuntimeBrokerClientConfig {
                     base_url: base_url.to_string(),
                     request_timeout,
                     max_response_bytes,
+                    max_storage_payload_bytes,
                 },
                 Arc::clone(&provider),
             )

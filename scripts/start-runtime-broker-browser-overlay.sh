@@ -24,6 +24,7 @@ immutable_image_id() {
 }
 
 export BPANE_RUNTIME_BROKER_BROWSER_IMAGE="$(immutable_image_id "${BPANE_GATEWAY_DOCKER_RUNTIME_IMAGE:-deploy-host}")"
+export BPANE_RUNTIME_BROKER_STORAGE_HELPER_IMAGE="${BPANE_RUNTIME_BROKER_BROWSER_IMAGE}"
 export BPANE_RUNTIME_BROKER_WORKFLOW_IMAGE="$(immutable_image_id "${BPANE_WORKFLOW_WORKER_IMAGE:-deploy-workflow-worker}")"
 export BPANE_RUNTIME_BROKER_RECORDING_IMAGE="$(immutable_image_id "${BPANE_RECORDING_WORKER_IMAGE:-deploy-recording-worker}")"
 export BPANE_GATEWAY_RUNTIME_BACKEND=broker_pool

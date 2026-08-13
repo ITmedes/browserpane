@@ -61,6 +61,27 @@ fn worker_state_response_has_stable_sanitized_shape() {
 }
 
 #[test]
+fn storage_payload_result_has_stable_sanitized_shape() {
+    let result = RuntimeOperationResult::StoragePayload {
+        payload_bytes: 4096,
+        sha256_hex: "a".repeat(64),
+    };
+
+    let json = serde_json::to_string(&result).unwrap();
+
+    assert_eq!(
+        json,
+        format!(
+            r#"{{"state":"storage_payload","payload_bytes":4096,"sha256_hex":"{}"}}"#,
+            "a".repeat(64)
+        )
+    );
+    for forbidden in ["path", "volume", "docker", "content"] {
+        assert!(!json.contains(forbidden));
+    }
+}
+
+#[test]
 fn request_rejects_unknown_docker_shaped_fields() {
     let json = r#"{
       "api_version":"v1",
