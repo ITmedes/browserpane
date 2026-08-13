@@ -275,6 +275,15 @@ fn validates_storage_helper_field_combinations() {
 }
 
 #[test]
+fn classifies_storage_payload_directions() {
+    assert!(StorageHelperAction::MaterializeSessionFiles.accepts_input_payload());
+    assert!(StorageHelperAction::ImportBrowserContext.accepts_input_payload());
+    assert!(StorageHelperAction::ExportBrowserContext.produces_output_payload());
+    assert!(!StorageHelperAction::CloneBrowserContext.accepts_input_payload());
+    assert!(!StorageHelperAction::MeasureBrowserContext.produces_output_payload());
+}
+
+#[test]
 fn rejects_storage_helper_ambiguity_and_invalid_payloads() {
     let mut missing_target = storage_request(StorageHelperAction::CloneBrowserContext);
     missing_target.source_context_id = Some(Uuid::now_v7());

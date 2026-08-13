@@ -11,6 +11,8 @@ use crate::{AccessTokenProvider, RuntimeBrokerClientError, RuntimeBrokerClientEr
 
 const MAX_REQUEST_BYTES: usize = 65_536;
 
+mod storage;
+
 /// Bounded broker HTTP client settings.
 #[derive(Debug, Clone)]
 pub struct RuntimeBrokerClientConfig {
@@ -20,6 +22,17 @@ pub struct RuntimeBrokerClientConfig {
     pub request_timeout: Duration,
     /// Maximum accepted JSON response bytes.
     pub max_response_bytes: usize,
+    /// Maximum binary storage payload accepted in either direction.
+    pub max_storage_payload_bytes: usize,
+}
+
+/// Typed storage response with optional separately transferred bytes.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct RuntimeStorageOperationResponse {
+    /// Sanitized correlated broker response.
+    pub response: RuntimeOperationResponse,
+    /// Optional verified binary response payload.
+    pub payload: Option<Vec<u8>>,
 }
 
 /// Typed runtime operation client boundary used by the gateway.
@@ -33,14 +46,25 @@ pub trait RuntimeBrokerClient: Send + Sync {
         &self,
         request: &RuntimeOperationRequest,
     ) -> Result<RuntimeOperationResponse, RuntimeBrokerClientError>;
+
+    /// Submits one typed storage operation plus its optional binary input.
+    async fn execute_storage(
+        &self,
+        _request: &RuntimeOperationRequest,
+        _payload: Option<&[u8]>,
+    ) -> Result<RuntimeStorageOperationResponse, RuntimeBrokerClientError> {
+        Err(RuntimeBrokerClientErrorCode::InvalidRequest.into())
+    }
 }
 
 /// OAuth-authenticated HTTP implementation of the runtime broker client.
 pub struct HttpRuntimeBrokerClient {
     operation_url: Url,
+    storage_transfer_url: Url,
     readiness_url: Url,
     request_timeout: Duration,
     max_response_bytes: usize,
+    max_storage_payload_bytes: usize,
     token_provider: Arc<dyn AccessTokenProvider>,
     client: Client,
 }
@@ -67,11 +91,15 @@ impl HttpRuntimeBrokerClient {
             || config.request_timeout.is_zero()
             || config.max_response_bytes == 0
             || config.max_response_bytes > 1_048_576
+            || config.max_storage_payload_bytes == 0
+            || config.max_storage_payload_bytes > 1_073_741_824
         {
             return Err(RuntimeBrokerClientErrorCode::InvalidConfiguration.into());
         }
         let mut readiness_url = base_url.clone();
         readiness_url.set_path("/readyz");
+        let mut storage_transfer_url = base_url.clone();
+        storage_transfer_url.set_path("/v1/storage-transfers");
         base_url.set_path("/v1/operations");
         let client = Client::builder()
             .redirect(reqwest::redirect::Policy::none())
@@ -80,9 +108,11 @@ impl HttpRuntimeBrokerClient {
             .map_err(|_| RuntimeBrokerClientErrorCode::InvalidConfiguration)?;
         Ok(Self {
             operation_url: base_url,
+            storage_transfer_url,
             readiness_url,
             request_timeout: config.request_timeout,
             max_response_bytes: config.max_response_bytes,
+            max_storage_payload_bytes: config.max_storage_payload_bytes,
             token_provider,
             client,
         })
@@ -180,6 +210,14 @@ impl RuntimeBrokerClient for HttpRuntimeBrokerClient {
         }
         Ok(response)
     }
+
+    async fn execute_storage(
+        &self,
+        request: &RuntimeOperationRequest,
+        payload: Option<&[u8]>,
+    ) -> Result<RuntimeStorageOperationResponse, RuntimeBrokerClientError> {
+        self.execute_storage_http(request, payload).await
+    }
 }
 
 fn has_contract_media_type(headers: &reqwest::header::HeaderMap) -> bool {
@@ -214,6 +252,7 @@ impl std::fmt::Debug for HttpRuntimeBrokerClient {
             .field("operation_url", &self.operation_url)
             .field("request_timeout", &self.request_timeout)
             .field("max_response_bytes", &self.max_response_bytes)
+            .field("max_storage_payload_bytes", &self.max_storage_payload_bytes)
             .finish_non_exhaustive()
     }
 }

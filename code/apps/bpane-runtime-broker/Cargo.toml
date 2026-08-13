@@ -18,7 +18,7 @@ path = "src/main.rs"
 bpane-runtime-contract.workspace = true
 anyhow.workspace = true
 async-trait = "0.1"
-axum = "0.8"
+axum = { version = "0.8", features = ["multipart"] }
 bollard.workspace = true
 clap = { version = "4", features = ["derive", "env"] }
 hex = "0.4"

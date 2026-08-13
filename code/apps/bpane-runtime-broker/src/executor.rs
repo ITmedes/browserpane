@@ -47,6 +47,24 @@ pub trait RuntimeOperationExecutor: Send + Sync {
         &self,
         request: &RuntimeOperationRequest,
     ) -> Result<RuntimeOperationResult, ExecutionError>;
+
+    /// Executes a storage operation with a separately bounded binary payload.
+    async fn execute_storage(
+        &self,
+        _request: &RuntimeOperationRequest,
+        _payload: Option<&[u8]>,
+    ) -> Result<StorageExecutionOutput, ExecutionError> {
+        Err(ExecutionErrorCode::AdapterUnavailable.into())
+    }
+}
+
+/// Storage executor result with optional binary response bytes.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct StorageExecutionOutput {
+    /// Sanitized operation result persisted in the idempotency ledger.
+    pub result: RuntimeOperationResult,
+    /// Optional separately transferred response payload.
+    pub payload: Option<Vec<u8>>,
 }
 
 /// Safe foundation executor used until operation adapters are enabled.

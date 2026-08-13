@@ -325,6 +325,21 @@ pub enum StorageHelperAction {
     DeleteBrowserContext,
 }
 
+impl StorageHelperAction {
+    /// Returns whether this action consumes a binary request payload.
+    pub const fn accepts_input_payload(self) -> bool {
+        matches!(
+            self,
+            Self::MaterializeSessionFiles | Self::ImportBrowserContext
+        )
+    }
+
+    /// Returns whether this action produces a binary response payload.
+    pub const fn produces_output_payload(self) -> bool {
+        matches!(self, Self::ExportBrowserContext)
+    }
+}
+
 /// Storage helper intent. Payload bytes are carried by a separately bounded stream.
 #[derive(Debug, Clone, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -512,6 +527,18 @@ pub enum RuntimeOperationResult {
         exit_code: Option<i32>,
         /// Number of omitted output bytes after bounding.
         omitted_output_bytes: u64,
+    },
+    /// A storage helper measured one owned resource.
+    StorageUsage {
+        /// Exact storage bytes reported by the helper.
+        storage_bytes: u64,
+    },
+    /// A storage helper produced a separately transferred binary payload.
+    StoragePayload {
+        /// Exact payload size carried by the response body.
+        payload_bytes: u64,
+        /// Lowercase SHA-256 digest of the response body.
+        sha256_hex: String,
     },
 }
 

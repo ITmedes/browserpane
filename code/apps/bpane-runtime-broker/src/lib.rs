@@ -32,6 +32,7 @@ pub use docker_workers::{
 };
 pub use executor::{
     ExecutionError, ExecutionErrorCode, RejectingRuntimeExecutor, RuntimeOperationExecutor,
+    StorageExecutionOutput,
 };
 pub use ledger::{LedgerConfig, OperationLedger};
 pub use worker_adapter_config::WorkerAdapterSettings;

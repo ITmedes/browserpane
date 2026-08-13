@@ -12,6 +12,7 @@ use crate::{
 };
 
 const MAX_REQUEST_LIMIT_BYTES: usize = 1_048_576;
+const MAX_STORAGE_PAYLOAD_LIMIT_BYTES: usize = 1_073_741_824;
 const MAX_CONCURRENCY_LIMIT: usize = 1_024;
 const MAX_TIMEOUT_SECS: u64 = 300;
 
@@ -53,6 +54,13 @@ pub struct BrokerConfig {
         default_value_t = 65_536
     )]
     pub max_request_bytes: usize,
+    /// Maximum binary storage-helper request or response payload size.
+    #[arg(
+        long,
+        env = "BPANE_RUNTIME_BROKER_MAX_STORAGE_PAYLOAD_BYTES",
+        default_value_t = 536_870_912
+    )]
+    pub max_storage_payload_bytes: usize,
     /// Maximum concurrent operation executions.
     #[arg(
         long,
@@ -193,6 +201,11 @@ impl BrokerConfig {
         if max_request_bytes.get() > MAX_REQUEST_LIMIT_BYTES {
             bail!("max request bytes exceeds the 1 MiB safety bound");
         }
+        let max_storage_payload_bytes =
+            nonzero_usize(self.max_storage_payload_bytes, "max storage payload bytes")?;
+        if max_storage_payload_bytes.get() > MAX_STORAGE_PAYLOAD_LIMIT_BYTES {
+            bail!("max storage payload bytes exceeds the 1 GiB safety bound");
+        }
         let max_concurrent = nonzero_usize(self.max_concurrent, "max concurrent operations")?;
         if max_concurrent.get() > MAX_CONCURRENCY_LIMIT {
             bail!("max concurrent operations exceeds the safety bound");
@@ -207,6 +220,7 @@ impl BrokerConfig {
         Ok((
             BrokerApiSettings {
                 max_request_bytes,
+                max_storage_payload_bytes,
                 max_concurrent,
                 operation_timeout: Duration::from_secs(timeout_secs.get()),
             },
@@ -275,6 +289,7 @@ mod tests {
             oidc_jwks_url: Some("https://issuer.example/jwks".to_string()),
             allowed_client_id: "bpane-runtime-broker-gateway".to_string(),
             max_request_bytes: 65_536,
+            max_storage_payload_bytes: 536_870_912,
             max_concurrent: 16,
             operation_timeout_secs: 30,
             ledger_capacity: 4_096,
@@ -311,6 +326,10 @@ mod tests {
             Box::new(|config| config.oidc_issuer.clear()),
             Box::new(|config| config.max_request_bytes = 0),
             Box::new(|config| config.max_request_bytes = MAX_REQUEST_LIMIT_BYTES + 1),
+            Box::new(|config| config.max_storage_payload_bytes = 0),
+            Box::new(|config| {
+                config.max_storage_payload_bytes = MAX_STORAGE_PAYLOAD_LIMIT_BYTES + 1;
+            }),
             Box::new(|config| config.max_concurrent = 0),
             Box::new(|config| config.max_concurrent = MAX_CONCURRENCY_LIMIT + 1),
             Box::new(|config| config.operation_timeout_secs = MAX_TIMEOUT_SECS + 1),

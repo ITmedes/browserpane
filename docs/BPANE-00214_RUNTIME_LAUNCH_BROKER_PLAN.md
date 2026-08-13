@@ -2,7 +2,7 @@
 
 Issue: [#214 Implement a policy-validating runtime launch broker](https://github.com/ITmedes/browserpane/issues/214)
 
-Status: active; checkpoints 1 through 4 complete; checkpoint 5 is next
+Status: active; checkpoints 1 through 4 complete; checkpoint 5 slice 1 complete
 
 ## Business Case
 
@@ -567,6 +567,96 @@ broker, inspect their evidence, and verify cleanup after normal and forced stop.
 - Preserve clone/export/import, storage quotas, materialization, and cleanup.
 - Add negative tests for wrong prefixes, unexpected volumes, unsafe paths,
   malformed archives, excessive payloads, and interrupted transfers.
+
+Execution slices:
+
+1. Add a separately authenticated storage-transfer route and client method
+   around the existing typed `StorageHelperRequest`. Stream request and response
+   payloads with explicit byte declarations and hard limits, keep payload bytes
+   out of JSON/audit/idempotency resources, and expose them to a dedicated
+   storage executor boundary. Cover missing, unexpected, truncated, excessive,
+   and malformed transfers while leaving the gateway on its current direct
+   helper path.
+2. Add a broker-owned Docker storage adapter for session-data initialization,
+   bounded file writes, browser-context clone/export/import/measure/delete, and
+   owned-volume inspect/remove. Derive volume names, helper image, mounts,
+   commands, paths, modes, user, network isolation, and resource limits from
+   trusted broker configuration. Reject unsafe paths, malformed archives,
+   unsupported entries, wrong volume prefixes, unexpected resources, helper
+   failures, and interrupted transfers without exposing archive content or raw
+   Docker errors.
+3. Add a gateway storage-control boundary that preserves workspace-file
+   reads, manifest construction, binding state, active-context exclusion,
+   profile quotas, retention, and direct `docker_pool` compatibility while
+   routing every `broker_pool` helper through the broker. Extend the opt-in
+   Compose topology and run clone/export/import, file-binding, storage-usage,
+   retention, reconnect, workflow, recording, API, CLI, and admin-new parity
+   smokes before removing gateway Docker-control access in checkpoint 6.
+
+Slice 1 acceptance:
+
+- input-bearing actions require an exact non-zero payload declaration and
+  reject absent, short, long, or over-limit request streams before execution;
+- output-bearing actions return only an explicitly declared, bounded binary
+  stream and reject invalid content type, missing declarations, excessive
+  output, and response/request correlation mismatches;
+- non-streaming storage actions continue through the JSON operation route and
+  reject payload bodies or declarations that do not match their action;
+- authentication, concurrency, deadlines, replay/idempotency, stable errors,
+  and sanitized audits apply equally to JSON and streaming operations;
+- contract, broker API, client, strict formatting/Clippy/Rustdoc, and full
+  workspace tests pass while base Compose and user-visible behavior remain
+  unchanged.
+
+Slice 1 example use case:
+
+The gateway imports a reusable browser-context archive by submitting typed
+context identity metadata plus a declared binary length. The broker authenticates
+the service principal, bounds and hashes the stream, and invokes only the
+storage executor. A truncated body, undeclared body, oversized archive, replay
+with different bytes, or export response above the configured limit fails with
+a stable sanitized error and never reaches Docker.
+
+Slice 1 smoke sequence:
+
+1. Run storage contract tests for all action/field/payload combinations and
+   exact wire resources.
+2. Exercise authenticated import and export against a deterministic fake
+   storage executor and verify byte-for-byte transfer plus request correlation.
+3. Deny missing, unexpected, truncated, excessive, wrong-media-type, replayed,
+   and executor-failed transfers without payload or backend detail leakage.
+4. Verify ordinary browser/worker JSON operations and fail-closed storage
+   behavior remain unchanged.
+5. Run changed-crate tests, strict Clippy/Rustdoc/formatting, full Rust
+   workspace, dependency, repository, and documentation checks.
+
+Slice 1 evidence:
+
+- The authenticated `/v1/storage-transfers` route accepts versioned typed
+  metadata plus an optional `application/octet-stream` multipart field. Request
+  metadata and binary payloads have independent hard limits; payload length is
+  checked against the typed declaration before executor dispatch.
+- Binary exports carry explicit API version, request id, byte count, and
+  lowercase SHA-256 headers. The client requires `Content-Length`, enforces its
+  own payload ceiling while reading chunks, and verifies correlation, exact
+  length, and digest before returning bytes to the gateway.
+- Idempotency fingerprints include typed metadata and input bytes without
+  retaining or logging payload content. Exact mutating retries reuse the
+  completed result; conflicting bytes are rejected. Export retries must produce
+  the same retained digest before the response is accepted.
+- Streaming storage actions cannot use the ordinary JSON route. The broker
+  exposes a dedicated fail-closed storage executor method, while existing
+  non-streaming JSON operations and the direct gateway helper path remain
+  unchanged until slices 2 and 3.
+- Negative coverage includes unauthenticated, wrong-media, non-storage,
+  malformed/interrupted multipart, missing, unexpected, short, excessive, and
+  conflicting input; invalid, empty, oversized, uncorrelated, or digest-mismatched
+  output; unsafe local client limits; adapter failure; and redaction behavior.
+- Validation passed with 51 broker tests, 13 runtime-client tests, 30 contract
+  tests, 5 exact wire tests, all 447 gateway tests, the full Rust workspace,
+  strict changed-crate Clippy/Rustdoc/formatting, repository documents, and
+  dependency safety. Base Compose and user-visible behavior are unchanged, so
+  README and ARCH do not require updates in this transport-only slice.
 
 Manual checkpoint: clone/export/import a context, bind a workspace file, run a
 session, and verify storage usage and cleanup without gateway Docker access.
