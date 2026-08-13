@@ -303,7 +303,7 @@ service.
   - `GET /api/v1/browser-contexts` — list owner-scoped browser contexts with optional project summary, visible-session, active-runtime, optional profile-storage, storage-limit, and retention-expiry summary
   - `GET /api/v1/browser-contexts/{id}` — fetch one browser context with optional project summary, visible-session, active-runtime, optional profile-storage, storage-limit, and retention-expiry summary
   - `POST /api/v1/browser-contexts/{id}/clone` — clone an inactive reusable context into a new owner-scoped or project-owned reusable context; docker-backed runtimes copy profile volume data when present
-  - `GET /api/v1/browser-contexts/{id}/export` — download an inactive reusable context as a zip archive with manifest and optional docker-backed profile payload
+  - `GET /api/v1/browser-contexts/{id}/export` — download an inactive reusable context as a zip archive with manifest and optional docker-backed profile payload; ZIP assembly runs on Tokio's blocking pool
   - `POST /api/v1/browser-contexts/import` — import a BrowserPane export archive into a new owner-scoped or project-owned reusable context; authentication precedes bounded body reads, archive preflight runs off the async executor with bounded concurrency, and docker-backed runtimes restore validated `profile.tar.gz` data when present
   - `DELETE /api/v1/browser-contexts/{id}` — delete one browser context; docker-backed runtimes remove the context profile volume and reject active writers
   - `POST /api/v1/session-templates` — create a reusable owner-scoped session template
@@ -661,6 +661,9 @@ support boundary and local decision path are maintained in
   error contract; resolved credentials stay worker-only. Egress-profile
   create/update commands can attach a proxy-auth credential binding with
   `--proxy-credential-binding-id`.
+- Recording playback exports read retained segment artifacts asynchronously and
+  move CPU-bound ZIP assembly onto Tokio's blocking pool so large exports do not
+  monopolize asynchronous request threads.
 - Session evidence commands expose read-only file and file-binding
   list/get/download operations plus recording segment inspection/download and
   session playback metadata, manifest, and zip export. Binary downloads require

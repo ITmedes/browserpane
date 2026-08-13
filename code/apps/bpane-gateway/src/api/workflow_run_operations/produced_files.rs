@@ -290,14 +290,15 @@ async fn get_workflow_run_produced_file_content(
         .media_type
         .clone()
         .unwrap_or_else(|| "application/octet-stream".to_string());
-    let mut response = Response::new(axum::body::Body::from(bytes.clone()));
+    let content_length = bytes.len();
+    let mut response = Response::new(axum::body::Body::from(bytes));
     response.headers_mut().insert(
         CONTENT_TYPE,
         header_value_or_default(&media_type, "application/octet-stream"),
     );
     response.headers_mut().insert(
         CONTENT_LENGTH,
-        HeaderValue::from_str(&bytes.len().to_string())
+        HeaderValue::from_str(&content_length.to_string())
             .unwrap_or_else(|_| HeaderValue::from_static("0")),
     );
     response.headers_mut().insert(
