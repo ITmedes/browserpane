@@ -17,6 +17,7 @@ pub(super) struct MaterializedStorageHelper {
     pub(super) container: ContainerCreateBody,
     pub(super) output_limit: usize,
     pub(super) action: StorageHelperAction,
+    pub(super) input_volume: Option<String>,
 }
 
 impl MaterializedStorageHelper {
@@ -27,6 +28,13 @@ impl MaterializedStorageHelper {
     ) -> Result<Self, &'static str> {
         let action = request.action;
         let mut inputs = storage_inputs(config, request_id, request)?;
+        let expects_input = action.accepts_input_payload();
+        let input_volume = expects_input.then(|| config.input_volume(request_id));
+        if let Some(volume) = input_volume.as_ref() {
+            inputs
+                .mounts
+                .push(mount(volume.clone(), config.input_mount_root(), false));
+        }
         let container_name = config.container_name(request_id);
         let labels = storage_labels(request_id, inputs.target_id, action);
         let policy_spec = ContainerLaunchSpec {
@@ -47,7 +55,6 @@ impl MaterializedStorageHelper {
             security: config.policy_security(),
             resources: config.resources.clone(),
         };
-        let expects_input = action.accepts_input_payload();
         if expects_input {
             let payload_bytes = request
                 .declared_payload_bytes
@@ -67,10 +74,10 @@ impl MaterializedStorageHelper {
             ]),
             labels: Some(labels.into_iter().collect::<HashMap<_, _>>()),
             user: Some("bpane:bpane".to_string()),
-            attach_stdin: Some(expects_input),
+            attach_stdin: Some(false),
             attach_stdout: Some(true),
             attach_stderr: Some(true),
-            open_stdin: Some(expects_input),
+            open_stdin: Some(false),
             network_disabled: Some(true),
             host_config: Some(host_config(config, inputs.mounts)),
             ..Default::default()
@@ -88,6 +95,7 @@ impl MaterializedStorageHelper {
             container,
             output_limit,
             action,
+            input_volume,
         })
     }
 

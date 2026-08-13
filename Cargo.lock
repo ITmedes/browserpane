@@ -501,6 +501,7 @@ dependencies = [
  "axum",
  "bollard",
  "bpane-runtime-contract",
+ "bytes",
  "clap",
  "flate2",
  "futures-util",

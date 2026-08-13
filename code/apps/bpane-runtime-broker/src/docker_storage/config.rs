@@ -46,6 +46,7 @@ impl StorageRuntimeDockerConfig {
             volume_prefixes: vec![
                 self.session_data_volume_prefix.clone(),
                 self.browser_context_volume_prefix.clone(),
+                self.input_volume_prefix(),
             ],
             fixed_volumes: BTreeSet::new(),
             mount_targets: BTreeSet::from([
@@ -53,6 +54,7 @@ impl StorageRuntimeDockerConfig {
                 self.profile_dir(),
                 self.source_mount_root().to_string(),
                 self.target_mount_root().to_string(),
+                self.input_mount_root().to_string(),
             ]),
             require_read_only_mounts: false,
             environment_keys: storage_environment_keys(),
@@ -104,6 +106,18 @@ impl StorageRuntimeDockerConfig {
 
     pub(super) const fn target_mount_root(&self) -> &'static str {
         "/run/bpane/storage-helper/target"
+    }
+
+    pub(super) const fn input_mount_root(&self) -> &'static str {
+        super::STORAGE_INPUT_MOUNT_ROOT
+    }
+
+    pub(super) fn input_volume(&self, request_id: uuid::Uuid) -> String {
+        owned_name(&self.input_volume_prefix(), request_id)
+    }
+
+    fn input_volume_prefix(&self) -> String {
+        format!("{}-input", self.container_name_prefix)
     }
 
     pub(super) fn profile_dir(&self) -> String {
