@@ -1,0 +1,365 @@
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
+use uuid::Uuid;
+
+use crate::SecretValue;
+
+/// Version of the runtime broker wire contract.
+#[derive(Debug, Clone, Copy, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BrokerApiVersion {
+    /// Initial typed runtime broker contract.
+    #[default]
+    V1,
+}
+
+/// Stable operation families understood by the runtime broker.
+#[derive(Debug, Clone, Copy, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RuntimeOperationKind {
+    /// Long-lived browser session runtime.
+    BrowserRuntime,
+    /// Short-lived workflow execution worker.
+    WorkflowWorker,
+    /// Session recording worker.
+    RecordingWorker,
+    /// Network-disabled storage helper.
+    StorageHelper,
+}
+
+/// A bounded idempotency key supplied by the gateway.
+#[derive(Debug, Clone, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(try_from = "String", into = "String")]
+pub struct IdempotencyKey(String);
+
+impl IdempotencyKey {
+    /// Creates an idempotency key containing only safe token characters.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for empty, oversized, or unsafe values.
+    pub fn new(value: impl Into<String>) -> Result<Self, IdempotencyKeyError> {
+        let value = value.into();
+        if value.is_empty() {
+            return Err(IdempotencyKeyError::Empty);
+        }
+        if value.len() > 128 {
+            return Err(IdempotencyKeyError::TooLarge);
+        }
+        if !value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b':'))
+        {
+            return Err(IdempotencyKeyError::UnsafeCharacter);
+        }
+        Ok(Self(value))
+    }
+
+    /// Returns the validated key.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl TryFrom<String> for IdempotencyKey {
+    type Error = IdempotencyKeyError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+
+impl From<IdempotencyKey> for String {
+    fn from(value: IdempotencyKey) -> Self {
+        value.0
+    }
+}
+
+/// Validation errors for [`IdempotencyKey`].
+#[derive(Debug, Clone, Copy, Eq, Error, PartialEq)]
+pub enum IdempotencyKeyError {
+    /// Empty keys are invalid.
+    #[error("idempotency key must not be empty")]
+    Empty,
+    /// Keys longer than 128 bytes are invalid.
+    #[error("idempotency key exceeds 128 bytes")]
+    TooLarge,
+    /// Keys may contain only token-safe ASCII characters.
+    #[error("idempotency key contains an unsafe character")]
+    UnsafeCharacter,
+}
+
+/// Versioned request envelope sent from the gateway to the broker.
+#[derive(Debug, Clone, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct RuntimeOperationRequest {
+    /// Wire contract version.
+    pub api_version: BrokerApiVersion,
+    /// Unique request correlation identifier.
+    pub request_id: Uuid,
+    /// Retry-safe operation identifier.
+    pub idempotency_key: IdempotencyKey,
+    /// Typed BrowserPane operation.
+    pub operation: RuntimeOperation,
+}
+
+/// Typed operation accepted by the broker.
+#[derive(Debug, Clone, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", content = "parameters", rename_all = "snake_case")]
+pub enum RuntimeOperation {
+    /// Launch a browser runtime.
+    LaunchBrowser(BrowserRuntimeLaunchRequest),
+    /// Launch a workflow worker.
+    LaunchWorkflow(WorkflowWorkerLaunchRequest),
+    /// Launch a recording worker.
+    LaunchRecording(RecordingWorkerLaunchRequest),
+    /// Run an approved storage helper operation.
+    RunStorageHelper(StorageHelperRequest),
+    /// Inspect, stop, or remove an owned container.
+    ContainerLifecycle(ContainerLifecycleRequest),
+    /// Inspect or remove an owned volume.
+    VolumeLifecycle(VolumeLifecycleRequest),
+}
+
+impl RuntimeOperation {
+    /// Returns the policy family for this operation.
+    pub fn kind(&self) -> RuntimeOperationKind {
+        match self {
+            Self::LaunchBrowser(_) => RuntimeOperationKind::BrowserRuntime,
+            Self::LaunchWorkflow(_) => RuntimeOperationKind::WorkflowWorker,
+            Self::LaunchRecording(_) => RuntimeOperationKind::RecordingWorker,
+            Self::RunStorageHelper(_) => RuntimeOperationKind::StorageHelper,
+            Self::ContainerLifecycle(request) => request.operation_kind,
+            Self::VolumeLifecycle(request) => request.operation_kind,
+        }
+    }
+
+    /// Returns the primary BrowserPane resource correlated with this operation.
+    pub fn resource_id(&self) -> Uuid {
+        match self {
+            Self::LaunchBrowser(request) => request.session_id,
+            Self::LaunchWorkflow(request) => request.workflow_run_id,
+            Self::LaunchRecording(request) => request.recording_id,
+            Self::RunStorageHelper(request) => request
+                .session_id
+                .or(request.target_context_id)
+                .or(request.source_context_id)
+                .unwrap_or(Uuid::nil()),
+            Self::ContainerLifecycle(request) => request.resource_id,
+            Self::VolumeLifecycle(request) => request.resource_id,
+        }
+    }
+}
+
+/// Browser runtime launch intent. Docker-sensitive fields are broker-owned.
+#[derive(Debug, Clone, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct BrowserRuntimeLaunchRequest {
+    /// Session that owns the runtime.
+    pub session_id: Uuid,
+    /// Optional reusable browser context mounted by broker policy.
+    pub browser_context_id: Option<Uuid>,
+}
+
+/// Workflow worker launch intent.
+#[derive(Debug, Clone, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct WorkflowWorkerLaunchRequest {
+    /// Workflow run executed by the worker.
+    pub workflow_run_id: Uuid,
+    /// Session controlled by the workflow.
+    pub session_id: Uuid,
+    /// Automation task correlated with the run.
+    pub automation_task_id: Uuid,
+    /// Purpose-scoped worker credentials.
+    pub credentials: WorkflowWorkerCredentials,
+}
+
+/// Purpose-scoped workflow worker secrets.
+#[derive(Clone, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct WorkflowWorkerCredentials {
+    /// Session automation credential.
+    pub session_automation_access_token: SecretValue,
+    /// Optional gateway service credential.
+    pub gateway_bearer_token: Option<SecretValue>,
+}
+
+impl std::fmt::Debug for WorkflowWorkerCredentials {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("WorkflowWorkerCredentials")
+            .field("session_automation_access_token", &"[REDACTED]")
+            .field(
+                "gateway_bearer_token",
+                &self.gateway_bearer_token.as_ref().map(|_| "[REDACTED]"),
+            )
+            .finish()
+    }
+}
+
+/// Recording worker launch intent.
+#[derive(Debug, Clone, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct RecordingWorkerLaunchRequest {
+    /// Session being recorded.
+    pub session_id: Uuid,
+    /// Recording segment produced by the worker.
+    pub recording_id: Uuid,
+    /// Purpose-scoped worker credentials.
+    pub credentials: RecordingWorkerCredentials,
+}
+
+/// Purpose-scoped recording worker secrets.
+#[derive(Clone, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct RecordingWorkerCredentials {
+    /// Short-lived WebTransport connect ticket.
+    pub connect_ticket: SecretValue,
+    /// Session automation credential.
+    pub session_automation_access_token: SecretValue,
+    /// Recording completion credential.
+    pub recording_worker_access_token: SecretValue,
+}
+
+impl std::fmt::Debug for RecordingWorkerCredentials {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("RecordingWorkerCredentials")
+            .field("connect_ticket", &"[REDACTED]")
+            .field("session_automation_access_token", &"[REDACTED]")
+            .field("recording_worker_access_token", &"[REDACTED]")
+            .finish()
+    }
+}
+
+/// Approved storage helper actions.
+#[derive(Debug, Clone, Copy, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StorageHelperAction {
+    /// Initialize session-owned data storage.
+    InitializeSessionData,
+    /// Materialize approved session files.
+    MaterializeSessionFiles,
+    /// Clone one inactive browser context into another.
+    CloneBrowserContext,
+    /// Export an inactive browser context.
+    ExportBrowserContext,
+    /// Import a browser context archive.
+    ImportBrowserContext,
+    /// Measure browser context storage usage.
+    MeasureBrowserContext,
+    /// Delete inactive browser context data.
+    DeleteBrowserContext,
+}
+
+/// Storage helper intent. Payload bytes are carried by a separately bounded stream.
+#[derive(Debug, Clone, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct StorageHelperRequest {
+    /// Approved helper action.
+    pub action: StorageHelperAction,
+    /// Optional owning session.
+    pub session_id: Option<Uuid>,
+    /// Optional source browser context.
+    pub source_context_id: Option<Uuid>,
+    /// Optional target browser context.
+    pub target_context_id: Option<Uuid>,
+    /// Declared stream size for bounded transfer admission.
+    pub declared_payload_bytes: Option<u64>,
+}
+
+/// Owned-container lifecycle actions.
+#[derive(Debug, Clone, Copy, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ContainerLifecycleAction {
+    /// Inspect existence/readiness metadata.
+    Inspect,
+    /// Request bounded graceful stop.
+    Stop,
+    /// Force-remove after policy and ownership validation.
+    Remove,
+}
+
+/// Lifecycle request for one BrowserPane-owned container.
+#[derive(Debug, Clone, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ContainerLifecycleRequest {
+    /// Product family that owns the container.
+    pub operation_kind: RuntimeOperationKind,
+    /// BrowserPane resource identifier encoded in the owned name.
+    pub resource_id: Uuid,
+    /// Requested lifecycle action.
+    pub action: ContainerLifecycleAction,
+}
+
+/// Owned-volume lifecycle actions.
+#[derive(Debug, Clone, Copy, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VolumeLifecycleAction {
+    /// Inspect owned volume metadata.
+    Inspect,
+    /// Remove an owned inactive volume.
+    Remove,
+}
+
+/// Lifecycle request for one BrowserPane-owned volume.
+#[derive(Debug, Clone, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct VolumeLifecycleRequest {
+    /// Product family that owns the volume.
+    pub operation_kind: RuntimeOperationKind,
+    /// BrowserPane resource identifier encoded in the owned name.
+    pub resource_id: Uuid,
+    /// Requested lifecycle action.
+    pub action: VolumeLifecycleAction,
+}
+
+/// Versioned response envelope returned by the broker.
+#[derive(Debug, Clone, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct RuntimeOperationResponse {
+    /// Wire contract version.
+    pub api_version: BrokerApiVersion,
+    /// Correlated request identifier.
+    pub request_id: Uuid,
+    /// Sanitized operation result.
+    pub result: RuntimeOperationResult,
+}
+
+/// Sanitized operation results. Docker response models are never exposed.
+#[derive(Debug, Clone, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "state", rename_all = "snake_case")]
+pub enum RuntimeOperationResult {
+    /// An owned runtime or worker was accepted.
+    Accepted,
+    /// An owned resource exists.
+    Exists,
+    /// An owned resource does not exist.
+    Absent,
+    /// An owned resource reached its terminal state.
+    Completed {
+        /// Process exit code when available.
+        exit_code: Option<i32>,
+        /// Number of omitted output bytes after bounding.
+        omitted_output_bytes: u64,
+    },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn idempotency_keys_reject_unsafe_values() {
+        assert_eq!(IdempotencyKey::new(""), Err(IdempotencyKeyError::Empty));
+        assert_eq!(
+            IdempotencyKey::new("unsafe/value"),
+            Err(IdempotencyKeyError::UnsafeCharacter)
+        );
+        assert_eq!(
+            IdempotencyKey::new("x".repeat(129)),
+            Err(IdempotencyKeyError::TooLarge)
+        );
+    }
+}
