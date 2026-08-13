@@ -1,6 +1,6 @@
 # BPANE-00165 Worker Runtime Hardening Plan
 
-Status: In Progress
+Status: Review Ready
 
 Issue: [#165](https://github.com/ITmedes/browserpane/issues/165)
 
@@ -33,7 +33,7 @@ tail of each worker stream, fail the slow control request with an actionable
 timeout, avoid starting a second poll while the first is outstanding, and keep
 unrelated API requests responsive while the ZIP is built.
 
-## Current Gaps
+## Baseline Gaps Closed By This Slice
 
 - The workflow worker buffers complete entrypoint stdout and stderr in memory.
 - Gateway workflow and recording supervisors use `wait_with_output`, which
@@ -169,5 +169,45 @@ node scripts/validate.mjs --profile fast
 
 ## Evidence
 
-Record exact commands, counts, coverage, compose fixtures, and hosted checks
-here as each implementation slice completes.
+Implementation commits:
+
+- `d0e5bc36` adds finite worker gateway/OIDC deadlines, cancellation-safe
+  request handling, refresh coalescing, package test commands, and validation
+  integration.
+- `0dbd5679` adds bounded workflow and supervisor output, explicit truncation
+  evidence, finite runtime configuration, and single-flight recorder polling
+  coverage.
+- `53e34129` moves browser-context and recording ZIP construction to Tokio's
+  blocking pool and removes avoidable full-buffer response clones.
+
+Package and unit evidence:
+
+- recording-worker: 8 tests passed, then TypeScript build passed.
+- workflow-worker: 11 tests passed, then TypeScript build passed.
+- gateway: formatting and strict Clippy passed; 433 unit tests passed with one
+  intentionally ignored test. Focused lifecycle, bounded-output, invalid-zero
+  configuration, large 4 MiB archive, and async-runtime responsiveness tests
+  passed.
+- repository baseline, document checks, validation-tool tests, and compose
+  manifest validation passed.
+
+Compose and browser evidence against images rebuilt from this branch:
+
+- canonical gateway compose suite: 17 default API cases and 4 docker-pool
+  capacity/admission/restart cases passed.
+- admin-new browser-context smoke cloned, exported, imported, bound, and
+  deleted Docker-backed context resources.
+- admin-new recordings smoke downloaded a 728,248-byte artifact and remained
+  responsive.
+- recording smoke produced a ready 966,815-byte WebM and a valid 972,699-byte
+  playback ZIP, verified UI and CLI downloads, and reported zero finalization
+  or playback-export failures.
+- workflow admission smoke validated worker-capacity and project-quota queueing
+  before all four runs succeeded.
+- workflow workspace smoke validated rejected and allowed project workspace
+  bindings, transferred the input, and completed with the expected output.
+
+Hosted checks remain the final merge gate after PR creation. The package unit
+tests deliberately use injected fetch implementations for deterministic timeout
+and cancellation evidence; compose verifies the real worker lifecycle and
+artifact paths without introducing a production-only delay endpoint.

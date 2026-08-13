@@ -107,10 +107,9 @@ Conditional Foundation work:
 
 - #148 merged through PR #202 and supplies the bounded import contract consumed
   by #160; no Pilot should bypass those archive safety limits.
-- #149 is review-ready on
-  `feature/BPANE-00149-recording-artifact-finalization`; it remains required
-  before recordings form part of Pilot acceptance evidence until merge and
-  required-check confirmation.
+- #149 merged through PR #212 and supplies the purpose-scoped recording-worker
+  capability, exact staging boundary, and measured artifact finalization
+  contract required when recordings form part of Pilot acceptance evidence.
 - #167 is required before a Docker runtime boundary is promoted as a production
   deployment contract.
 
