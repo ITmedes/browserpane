@@ -35,7 +35,7 @@ function brokerRequest({ bearer, body, contentType = MEDIA_TYPE }) {
     "--output /tmp/broker-smoke-body --write-out '%{http_code}'",
     "--request POST",
     `--header 'Content-Type: ${contentType}'`,
-    bearer ? "--header \"Authorization: Bearer ${token}\"" : "",
+    bearer ? "--header \"Authorization: Bearer $token\"" : "",
     "--data-binary @-",
     "http://runtime-broker:8940/v1/operations",
   ]
