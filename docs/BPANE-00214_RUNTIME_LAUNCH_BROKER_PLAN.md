@@ -212,6 +212,25 @@ Execution slices:
    persistence ownership, and run lifecycle/reconnect/MCP parity before the
    compose default or gateway Docker network changes.
 
+Progress: execution slice 1 is complete; execution slice 2 is next.
+
+Slice 1 evidence:
+
+- The broker owns browser container names, fixed image/command, private network,
+  named-volume mounts, base environment, ownership labels, no-new-privileges,
+  and CPU/memory/PID/shared-memory bounds. Lifecycle targets are derived from
+  typed resource ids rather than accepted as Docker names.
+- Bollard provides the private Docker Engine transport; Docker request models
+  do not enter the BrowserPane wire contract or gateway client.
+- Seven adapter tests cover base and reusable-context launch materialization,
+  inspect/stop absence semantics, partial-launch cleanup, unsupported-family
+  denial, malformed trusted configuration, sanitized failures, and actual
+  Bollard HTTP route/body behavior.
+- Broker unit tests, strict Clippy/Rustdoc/formatting, dependency safety,
+  release-image build, and the existing live fail-closed authentication smoke
+  pass. The compose service still selects `RejectingRuntimeExecutor`.
+- Commit: `93a829c5`.
+
 Manual checkpoint: opt into broker mode locally and operate two concurrent
 sessions plus reconnect and MCP delegation before changing the default.
 
