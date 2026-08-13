@@ -2,7 +2,7 @@
 
 Issue: [#214 Implement a policy-validating runtime launch broker](https://github.com/ITmedes/browserpane/issues/214)
 
-Status: active; checkpoints 1 and 2 complete; checkpoint 3 next
+Status: active; checkpoints 1 and 2 complete; checkpoint 3 execution slice 2 active
 
 ## Business Case
 
@@ -212,7 +212,39 @@ Execution slices:
    persistence ownership, and run lifecycle/reconnect/MCP parity before the
    compose default or gateway Docker network changes.
 
-Progress: execution slice 1 is complete; execution slice 2 is next.
+Progress: execution slice 1 is complete; execution slice 2 is active.
+
+Active execution slice 2 scope:
+
+- Extend the browser launch intent with bounded, typed network-identity and
+  egress selections, approved extension-version identifiers, and fixed
+  session-data prerequisites.
+- Keep proxy credentials, CA bytes, arbitrary environment maps, extension
+  install paths, host paths, and Docker request models out of the wire
+  contract. Proxy-auth, custom-CA, and session-file selections refer only to
+  data prepared at broker-owned fixed paths by the later typed storage path.
+- Resolve extension-version identifiers through trusted broker configuration;
+  reject unknown or duplicate identifiers instead of accepting caller-selected
+  paths.
+- Derive every environment key and egress correlation label in the broker,
+  validate proxy URLs and bounded identity values, and extend launch policy
+  only for those broker-derived keys.
+- Keep the compose executor fail-closed and the gateway on its existing path.
+  Gateway integration remains execution slice 3 after storage prerequisites
+  and feature parity are testable.
+
+Slice 2 acceptance:
+
+- positive materialization tests cover identity, metadata-only proxy, TLS
+  interception prerequisites, authenticated proxy prerequisites, reusable
+  context, approved extensions, and session-file bindings;
+- negative contract and adapter tests cover malformed identity, credentialed
+  or unsupported proxy URLs, unsafe bypass rules, invalid combinations,
+  duplicate or unknown extension ids, and policy drift;
+- contract golden tests prove that secrets, install paths, host paths, raw
+  Docker arguments, and Docker API fields are absent from browser launch JSON;
+- broker unit, strict Clippy/Rustdoc/formatting, dependency, image-build, and
+  existing fail-closed authentication smoke checks pass.
 
 Slice 1 evidence:
 
