@@ -23,4 +23,4 @@ docker compose \
   --env-file "${ENV_FILE}" \
   -f "${ROOT_DIR}/deploy/single-node/compose.yml" \
   -f "${ROOT_DIR}/deploy/single-node/fixture/compose.yml" \
-  down
+  down --remove-orphans
