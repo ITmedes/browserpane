@@ -21,6 +21,21 @@ const COMPOSE_ARGS = [
   'deploy/single-node/fixture/compose.yml',
 ];
 const TIMEOUT_MS = 180_000;
+const WORKER_SECRETS_FILE = '/run/browserpane-secrets/worker.json';
+const SENSITIVE_WORKER_ENVIRONMENT_KEYS = [
+  'BPANE_GATEWAY_OIDC_CLIENT_SECRET',
+  'BPANE_RECORDING_BEARER_TOKEN',
+  'BPANE_RECORDING_CONNECT_TICKET',
+  'BPANE_RECORDING_WORKER_ACCESS_TOKEN',
+  'BPANE_SESSION_AUTOMATION_ACCESS_TOKEN',
+  'BPANE_WORKFLOW_BEARER_TOKEN',
+];
+const SENSITIVE_MARKERS = [
+  'single-node-fixture-vault-token',
+  'bpane-runtime-broker-gateway-secret',
+  'bpane-mcp-bridge-secret',
+  'postgres://browserpane:single-node-fixture',
+];
 
 async function main() {
   assertFixtureReady();
@@ -63,6 +78,7 @@ async function main() {
           properties: {
             target_url: { type: 'string' },
             output_workspace_id: { type: 'string' },
+            hold_ms: { type: 'integer', minimum: 0, maximum: 30_000 },
           },
         },
         output_schema: {
@@ -87,6 +103,7 @@ async function main() {
         input: {
           target_url: 'http://web:8080/healthz',
           output_workspace_id: workspace.id,
+          hold_ms: 15_000,
         },
         labels: { suite: 'single-node-qualification' },
       },
@@ -94,6 +111,8 @@ async function main() {
     const sessionId = createdRun.session_id;
     assert(sessionId, 'workflow run did not create a session');
     sessionIds.push(sessionId);
+    const workflowWorker = await waitForWorkerContainer('workflow_worker', createdRun.id);
+    await assertWorkerSecretsProtected(workflowWorker);
 
     const succeededRun = await poll('workflow success', async () => {
       return await api(`/api/v1/workflow-runs/${createdRun.id}`, accessToken);
@@ -153,8 +172,28 @@ async function main() {
     assert(secondRuntimeAfterRestart === secondRuntimeBeforeRestart,
       'secondary session runtime changed across control-plane restart');
 
+    const recordingSession = await api('/api/v1/sessions', accessToken, {
+      method: 'POST',
+      body: {
+        owner_mode: 'collaborative',
+        idle_timeout_sec: 300,
+        recording: { mode: 'always', format: 'webm' },
+        labels: { suite: 'single-node-qualification', purpose: 'worker-secret-inspection' },
+      },
+    });
+    sessionIds.push(recordingSession.id);
+    const recording = await poll('recording worker assignment', async () => {
+      const catalog = await api(
+        `/api/v1/sessions/${recordingSession.id}/recordings`,
+        accessToken,
+      );
+      return catalog.recordings?.[0] ?? null;
+    }, Boolean);
+    const recordingWorker = await waitForWorkerContainer('recording_worker', recording.id);
+    await assertWorkerSecretsProtected(recordingWorker);
+
     assertGatewayDockerDenied();
-    assertSensitiveMarkersAbsent();
+    assertSensitiveMarkersAbsent([recordingWorker]);
 
     console.log(JSON.stringify({
       workflowId: workflow.id,
@@ -168,9 +207,10 @@ async function main() {
       producedFileBytes: afterRestart.length,
       retainedAcrossRestart: true,
       distinctRuntimeContainers: true,
-      runtimeCountAfterRestart: sessionIds.length,
+      runtimeCountAfterRestart: 2,
       gatewayDockerDenied: true,
       sensitiveMarkerScan: true,
+      protectedWorkerSecrets: true,
     }, null, 2));
   } finally {
     if (accessToken) {
@@ -292,6 +332,55 @@ async function waitForRuntimeCount(sessionId, expected) {
   }, (containers) => containers.length === expected);
 }
 
+async function waitForWorkerContainer(operation, resourceId) {
+  return await poll(`${operation} container for ${resourceId}`, () => {
+    const result = spawnSync('docker', [
+      'ps',
+      '--filter',
+      `label=browserpane.runtime.operation=${operation}`,
+      '--filter',
+      `label=browserpane.runtime.resource_id=${resourceId}`,
+      '--format',
+      '{{.Names}}',
+    ], { encoding: 'utf8' });
+    assert(result.status === 0, `${operation} Docker inspection failed`);
+    return result.stdout.trim();
+  }, Boolean);
+}
+
+async function assertWorkerSecretsProtected(containerName) {
+  const inspection = dockerInspect(containerName);
+  const environment = inspection.Config?.Env ?? [];
+  assert(
+    environment.includes(`BPANE_WORKER_SECRETS_FILE=${WORKER_SECRETS_FILE}`),
+    `${containerName} is missing the worker secret-file contract`,
+  );
+  for (const key of SENSITIVE_WORKER_ENVIRONMENT_KEYS) {
+    assert(
+      !environment.some((entry) => entry.startsWith(`${key}=`)),
+      `${containerName} exposes ${key} through Docker inspect`,
+    );
+  }
+  assert(
+    Object.hasOwn(inspection.HostConfig?.Tmpfs ?? {}, '/run/browserpane-secrets'),
+    `${containerName} does not mount the worker secrets tmpfs`,
+  );
+  await poll(`${containerName} secret-file consumption`, () => {
+    const result = spawnSync('docker', [
+      'exec',
+      containerName,
+      'sh',
+      '-c',
+      `test ! -e ${WORKER_SECRETS_FILE}`,
+    ]);
+    return result.status === 0;
+  }, Boolean);
+  const logs = spawnSync('docker', ['logs', containerName], { encoding: 'utf8' });
+  assertMarkersAbsent(
+    `${JSON.stringify(inspection)}\n${logs.stdout}\n${logs.stderr}`,
+  );
+}
+
 function assertGatewayDockerDenied() {
   const inspection = dockerInspect('bpane-single-node-fixture-gateway-1');
   const mounts = inspection.Mounts ?? [];
@@ -311,20 +400,22 @@ function assertGatewayDockerDenied() {
   assert(probe.status !== 0, 'gateway unexpectedly reached the Docker proxy');
 }
 
-function assertSensitiveMarkersAbsent() {
-  const markers = [
-    'single-node-fixture-vault-token',
-    'bpane-runtime-broker-gateway-secret',
-    'bpane-mcp-bridge-secret',
-    'postgres://browserpane:single-node-fixture',
-  ];
-  const evidence = ['gateway', 'runtime-broker', 'web', 'docker-proxy'].map((service) => {
-    const container = `bpane-single-node-fixture-${service}-1`;
+function assertSensitiveMarkersAbsent(dynamicContainers = []) {
+  const staticContainers = ['gateway', 'runtime-broker', 'web', 'docker-proxy'].map(
+    (service) => `bpane-single-node-fixture-${service}-1`,
+  );
+  const evidence = [...staticContainers, ...dynamicContainers].map((container) => {
     const inspect = execFileSync('docker', ['inspect', container], { encoding: 'utf8' });
     const logs = spawnSync('docker', ['logs', container], { encoding: 'utf8' });
     return `${inspect}\n${logs.stdout}\n${logs.stderr}`;
   }).join('\n');
-  for (const marker of markers) assert(!evidence.includes(marker), `sensitive marker leaked: ${marker}`);
+  assertMarkersAbsent(evidence);
+}
+
+function assertMarkersAbsent(evidence) {
+  for (const marker of SENSITIVE_MARKERS) {
+    assert(!evidence.includes(marker), `sensitive marker leaked: ${marker}`);
+  }
 }
 
 function assertFixtureReady() {
