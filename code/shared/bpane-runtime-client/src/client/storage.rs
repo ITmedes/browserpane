@@ -7,6 +7,7 @@ use bpane_runtime_contract::{
 use reqwest::header::{ACCEPT, CONTENT_TYPE};
 use reqwest::multipart::{Form, Part};
 use sha2::{Digest, Sha256};
+use tracing::Instrument;
 use uuid::Uuid;
 
 use super::{
@@ -50,9 +51,11 @@ impl HttpRuntimeBrokerClient {
             form = form.part("payload", payload_part);
         }
         let token = self.token_provider.access_token().await?;
-        let response = self
-            .client
-            .post(self.storage_transfer_url.clone())
+        let (span, request_builder) = self.traced_request(
+            "storage_transfer",
+            self.client.post(self.storage_transfer_url.clone()),
+        );
+        let response = request_builder
             .header(
                 ACCEPT,
                 format!(
@@ -63,8 +66,21 @@ impl HttpRuntimeBrokerClient {
             .multipart(form)
             .timeout(self.request_timeout)
             .send()
+            .instrument(span.clone())
             .await
-            .map_err(map_send_error)?;
+            .map_err(|error| {
+                span.record(
+                    "browserpane.result",
+                    if error.is_timeout() {
+                        "timed_out"
+                    } else {
+                        "unreachable"
+                    },
+                );
+                span.record("otel.status_code", "ERROR");
+                map_send_error(error)
+            })?;
+        super::record_http_result(&span, response.status());
         if !response.status().is_success() {
             return Err(map_status(response.status()).into());
         }

@@ -114,7 +114,7 @@ Assumptions common to all profiles:
 | Files/contexts to stores/runtimes | Uploads, workspace refs, session bindings, context archives | Opaque refs, relative mount paths, archive count/size/type/path limits, offloaded parsing, project policy | Remote object-store adapters, malware/DLP, residency, encryption remain #21/#76/#80 |
 | Recorder to gateway/artifact store | Worker credential, staged WebM, completion metadata | Purpose-scoped worker token, exact session/recording staging path, regular-file and measured-byte validation | Durable object storage and backup policy remain deployment-owned |
 | Gateway to callback receiver | Signed event, retry and delivery state | HTTPS/public-address default, DNS classification/pinning, no redirects/system proxy, exact-origin local exception, HMAC and retry tests | Receiver replay policy, key rotation, private connectivity, event export remain #28/#66/#70 |
-| Gateway to metrics/log collector | Aggregate RED/capacity metrics and sanitized logs | Bounded route/method/status labels, no raw path/session labels, private-network guidance | Collector isolation, traces, SLOs, alerts, retention and capacity evidence remain #178/#66 |
+| Gateway/broker to telemetry collector | Aggregate RED/capacity metrics, sanitized logs, and bounded browser-runtime traces | Fixed metric/span dimensions, W3C propagation, no raw path/session labels, no baggage, private-network guidance | Operator collector TLS/auth/access/retention and broader worker/store/event traces, SLOs, alerts, and capacity evidence remain #178/#66 |
 
 ## Threat And Control Matrix
 
@@ -132,7 +132,7 @@ Assumptions common to all profiles:
 | T-10 | Path traversal, symlink/hardlink escape, or arbitrary artifact finalization | Context import limits/type rejection, source preview containment, recording staging boundary, relative session file paths | General artifact API/storage adapters: #21 |
 | T-11 | Mutable or compromised build/runtime dependency | Proxy image digest and broker runtime-image immutability are enforced in the broker overlay; dependency scans run in CI | SBOM, signing, provenance, release and IP governance: #75/#180 |
 | T-12 | Resource exhaustion or saturation hides as generic failure | Runtime/worker admission, quotas, body/archive/output limits, readiness, and aggregate metrics exist | Reproducible load envelopes, queue/subsystem metrics and SLOs: #164/#168/#169/#178 |
-| T-13 | Sensitive or high-cardinality telemetry | Gateway metrics use fixed labels; egress usage excludes URLs, headers, payloads, credentials, decrypted traffic and CA material | Cross-process trace/log policy and collector retention: #178/#66 |
+| T-13 | Sensitive or high-cardinality telemetry | Gateway metrics and the gateway-to-broker browser-runtime trace checkpoint use fixed dimensions; trace export excludes baggage, resource ids, URLs, credentials, browser content and raw errors; egress usage excludes URLs, headers, payloads, credentials, decrypted traffic and CA material | Operator collector isolation/retention and broader cross-process trace/log policy: #178/#66 |
 | T-14 | MCP delegation or transport takeover | Bridge-global control mutation is internal-bearer protected and gateway-authorized; session-specific routing exists | MCP transports have no complete public inbound auth/origin boundary: #69/#72 |
 | T-15 | Admin XSS, clickjacking, token persistence, or stale auth | Shared verified OIDC core, in-memory tokens, CSP, frame denial, referrer/content/permission headers and expired-auth smokes | Infrastructure TLS/origin and future cookie CSRF rules: #66/#72 |
 | T-16 | Forged, redirected, replayed, or unavailable callback delivery | Signed events, destination policy, persisted retries/diagnostics and ordering tests | Key rotation, receiver replay window and generalized event export: #28/#70 |
@@ -217,7 +217,7 @@ The executable baseline is `node scripts/check-production-security-baseline.mjs`
 | Gateway/Vault production service identity and secret rotation incomplete | Dev token works; production credential lifecycle unresolved | #66/#70 |
 | Broker/Docker co-location and runtime sandbox envelope not qualified across targets | Local Docker evidence only | #66/#72 |
 | No formal protocol version/conformance/fuzz baseline | Current clients share implementation | #175 |
-| No complete trace/SLO/alert/load envelope | Gateway metrics foundation only | #178 |
+| No complete trace/SLO/alert/load envelope | Gateway metrics plus bounded gateway-to-broker browser-runtime trace prototype only | #178 |
 | Backup, restore, HA, and zero-downtime behavior not qualified | Restart reconciliation is not DR/HA | #73/#74 |
 | SBOM, signing, provenance, vulnerability intake, contribution and IP policy incomplete | CI dependency checks are not release governance | #75/#180 |
 | Residency, BYOK, central policy and DLP incomplete | Project policy and egress controls are partial | #76/#79/#80 |

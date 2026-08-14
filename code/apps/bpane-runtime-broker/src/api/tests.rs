@@ -178,6 +178,27 @@ async fn health_routes_are_public_but_operations_require_authentication() {
 }
 
 #[tokio::test]
+async fn malformed_trace_context_does_not_reject_an_operation() {
+    let request = operation_request();
+    let mut http_request = post(&request, Some("valid"));
+    http_request.headers_mut().insert(
+        "traceparent",
+        "malformed-sensitive-trace-marker".parse().unwrap(),
+    );
+
+    let response = app_with_executor(
+        Arc::new(AcceptingExecutor::default()),
+        settings(1, Duration::from_secs(1)),
+    )
+    .oneshot(http_request)
+    .await
+    .unwrap();
+
+    assert_eq!(response.status(), StatusCode::ACCEPTED);
+    assert!(!response.headers().contains_key("traceparent"));
+}
+
+#[tokio::test]
 async fn readiness_reflects_the_selected_adapter_without_requiring_authentication() {
     let app = app_with_executor(
         Arc::new(UnreadyExecutor),

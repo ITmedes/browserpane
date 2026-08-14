@@ -1,0 +1,23 @@
+[package]
+name = "bpane-telemetry"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Bounded OpenTelemetry setup and W3C propagation for BrowserPane services"
+repository = "https://github.com/ITmedes/browserpane"
+readme = "../../../README.md"
+keywords = ["browserpane", "opentelemetry", "tracing", "otlp"]
+categories = ["development-tools::debugging"]
+
+[dependencies]
+http = "1"
+opentelemetry = { version = "0.32", default-features = false, features = ["trace"] }
+opentelemetry-http = { version = "0.32", default-features = false }
+opentelemetry-otlp = { version = "0.32", default-features = false, features = ["trace", "grpc-tonic", "tls-ring", "tls-webpki-roots"] }
+opentelemetry_sdk = { version = "0.32", default-features = false, features = ["trace"] }
+thiserror.workspace = true
+tracing.workspace = true
+tracing-opentelemetry = { version = "0.33", default-features = false }
+tracing-subscriber.workspace = true
+url = "2"

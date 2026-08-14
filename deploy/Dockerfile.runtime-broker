@@ -21,6 +21,7 @@ RUN if ! command -v cargo >/dev/null 2>&1; then \
 WORKDIR /build
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
 COPY code/shared/bpane-runtime-contract code/shared/bpane-runtime-contract
+COPY code/shared/bpane-telemetry code/shared/bpane-telemetry
 COPY code/apps/bpane-runtime-broker code/apps/bpane-runtime-broker
 
 # Stub unrelated workspace members required by Cargo metadata discovery.

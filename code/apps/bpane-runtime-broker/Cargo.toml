@@ -16,6 +16,7 @@ path = "src/main.rs"
 
 [dependencies]
 bpane-runtime-contract.workspace = true
+bpane-telemetry.workspace = true
 anyhow.workspace = true
 async-trait = "0.1"
 axum = { version = "0.8", features = ["multipart"] }
@@ -39,5 +40,8 @@ tracing-subscriber.workspace = true
 uuid = { version = "1", features = ["serde", "v7"] }
 
 [dev-dependencies]
+opentelemetry = { version = "0.32", default-features = false, features = ["trace"] }
+opentelemetry_sdk = { version = "0.32", default-features = false, features = ["trace", "testing"] }
 tempfile = "3"
 tower = { version = "0.5", features = ["util"] }
+tracing-opentelemetry = { version = "0.33", default-features = false }

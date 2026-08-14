@@ -34,8 +34,10 @@ Current branch context:
 - `/admin/` remains directly addressable only as a compatibility fallback
   pending a separate removal decision.
 - The evidence-linked threat model and production-hardening baseline merged
-  through PR `#224`. Issue `#225` is locally implemented and qualified as the
-  bounded single-node Compose deployment profile under broader issue `#66`.
+  through PR `#224`. The bounded single-node Compose deployment profile merged
+  through PR `#226` under broader issue `#66`. Issue `#227` is locally
+  implemented and qualified as the gateway-to-runtime-broker tracing checkpoint
+  under `#178`, pending review.
 - Issue `#142` is closed as the historical redesign foundation. Follow-up
   implementation PRs use focused issues such as `#124` rather than reopening
   that lineage.
@@ -102,10 +104,13 @@ specifications and still require a bounded slice plan before coding.
 - `BPANE-00223_THREAT_MODEL_BASELINE_PLAN.md`: focused production checkpoint
   that composes the current threat model, hardening checklist, executable
   security contract, and negative-path evidence under issue #223.
-- `BPANE-00225_SINGLE_NODE_COMPOSE_BASELINE_PLAN.md`: current Production slice
+- `BPANE-00225_SINGLE_NODE_COMPOSE_BASELINE_PLAN.md`: implemented Production slice
   for an independent broker-only single-node Compose profile, deployment
   secret files, structured preflight, live fixture, and bounded operator
   runbook under issue #225/#66.
+- `BPANE-00227_OTEL_RUNTIME_TRACING_PLAN.md`: locally qualified Production
+  checkpoint for W3C/OpenTelemetry propagation across gateway and runtime
+  broker under #178; merge evidence remains pending.
 - `SINGLE_NODE_DEPLOYMENT.md`: operator runbook and exact support boundary for
   the independent single-host package.
 - `BPANE-00171_WORKFLOW_TEACH_MODE_PLAN.md`: Phase N Teach Mode contract,

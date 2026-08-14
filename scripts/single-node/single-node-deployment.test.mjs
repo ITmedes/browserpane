@@ -15,7 +15,8 @@ let validContractInput;
 
 before(() => {
   validEnvironment = new SingleNodeRepositoryFixture().createEnvironment();
-  validContractInput = new SingleNodePreflight(rootDirectory).run(validEnvironment);
+  const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "bpane-single-node-render-"));
+  validContractInput = new SingleNodePreflight(rootDirectory, outputDirectory).run(validEnvironment);
 });
 
 test("repository fixture passes the complete single-node preflight", () => {
@@ -107,9 +108,27 @@ test("preflight detects secret content copied into rendered Compose", () => {
     mode: 0o600,
   });
   assert.throws(
-    () => new SingleNodePreflight(rootDirectory).run(environment),
+    () => new SingleNodePreflight(
+      rootDirectory,
+      fs.mkdtempSync(path.join(os.tmpdir(), "bpane-single-node-render-")),
+    ).run(environment),
     /BPANE_DATABASE_URL_FILE content leaked into Compose/u,
   );
+});
+
+test("repository preflight does not overwrite a live generated configuration", () => {
+  const generatedDirectory = path.join(rootDirectory, "deploy/single-node/generated");
+  const workersFile = path.join(generatedDirectory, "workers.json");
+  const before = fs.existsSync(workersFile) ? fs.readFileSync(workersFile) : null;
+  const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "bpane-single-node-render-"));
+
+  new SingleNodePreflight(rootDirectory, outputDirectory).run(
+    new SingleNodeRepositoryFixture().createEnvironment(),
+  );
+
+  assert.equal(fs.existsSync(path.join(outputDirectory, "workers.json")), true);
+  const after = fs.existsSync(workersFile) ? fs.readFileSync(workersFile) : null;
+  assert.deepEqual(after, before);
 });
 
 test("environment file parser handles comments and rejects duplicates", () => {

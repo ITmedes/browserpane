@@ -1,14 +1,18 @@
 # Platform Telemetry
 
-Issue: [#178](https://github.com/ITmedes/browserpane/issues/178)
+Parent issue: [#178](https://github.com/ITmedes/browserpane/issues/178)
+
+Runtime-tracing checkpoint: [#227](https://github.com/ITmedes/browserpane/issues/227)
 
 BrowserPane exposes a standards-based gateway metrics foundation at
-`GET /metrics` on the gateway HTTP API port. The response uses the OpenMetrics
-text format and is suitable for Prometheus-compatible collectors.
+`GET /metrics` on the gateway HTTP API port. It also has an opt-in
+OpenTelemetry checkpoint for gateway-to-runtime-broker browser lifecycle
+operations. The metrics response uses OpenMetrics; traces use W3C Trace Context
+and OTLP gRPC.
 
-This is the first platform-telemetry checkpoint. It does not yet provide the
-complete cross-process tracing, SLO, dashboard, alert, synthetic-check, or load
-evidence required for a Production claim.
+These are bounded prototype checkpoints. They do not yet provide complete
+cross-process tracing, SLO, dashboard, alert, synthetic-check, or load evidence
+required for a Production claim.
 
 ## Current Metrics
 
@@ -71,6 +75,66 @@ scrape_configs:
 The example assumes the collector shares a private network with the gateway.
 Do not publish the scrape target merely to make the example reachable.
 
+## Runtime Tracing Checkpoint
+
+When explicitly enabled, `bpane-gateway` and `bpane-runtime-broker` export a
+shared trace for browser runtime lifecycle operations. The demonstrated path
+contains fixed spans for:
+
+- the matched gateway HTTP request,
+- the gateway runtime-broker client call,
+- broker authentication and operation execution,
+- broker policy evaluation, and
+- Docker browser create, start, inspect, stop, and remove stages as applicable.
+
+The shared `bpane-telemetry` crate owns SDK setup and standard W3C propagation;
+the shared `bpane-runtime-client` owns internal request injection. Valid caller
+`traceparent` and `tracestate` headers can continue the trace. Invalid context
+is ignored and cannot reject an otherwise valid BrowserPane request. Baggage is
+not configured or propagated.
+
+Tracing is disabled by default. Enable it for both services with a private
+collector endpoint:
+
+```env
+OTEL_TRACES_EXPORTER=otlp
+OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+OTEL_EXPORTER_OTLP_PROTOCOL=grpc
+OTEL_TRACES_SAMPLER=parentbased_always_on
+```
+
+`OTEL_SDK_DISABLED=true` or `OTEL_TRACES_EXPORTER=none` disables export. The
+endpoint must be an explicit credential-free root HTTP(S) URL; URL userinfo,
+queries, and fragments are rejected. This checkpoint supports OTLP gRPC only.
+Standard batch queue, batch size, schedule delay, export timeout, and sampler
+variables are validated against bounded settings at startup.
+
+Invalid explicit configuration fails startup with a redacted category-level
+error. Once initialized, collector unavailability does not fail runtime
+admission or readiness. The bounded batch queue may drop telemetry during an
+outage; it is not a durable audit channel. Export resumes for later operations
+after the collector recovers.
+
+## Trace Data Policy
+
+Trace span names and attributes are allowlisted and bounded. Current attributes
+are limited to fixed operation kind/action/result/stage plus standard matched
+HTTP route, method, and status. Do not add owner, project, session, workflow,
+recording, artifact, URL/path/query, header, secret, browser-content,
+egress-content, raw-error, source-location, thread, or log-event values.
+
+`tracestate` is standard vendor correlation metadata. Callers and collectors
+must never place credentials, tenant/resource identifiers, personal data, or
+browser data in it. BrowserPane does not reflect `traceparent` or `tracestate`
+to public callers and does not enable baggage propagation.
+
+The operator owns collector TLS/authentication, private network placement,
+sampling, redaction, backend access, encryption, retention, deletion, and
+availability. BrowserPane provides no collector or trace storage in its
+supported four-service single-node profile. The file-export collector under
+`deploy/single-node/fixture/` is test evidence only and must not be treated as a
+production backend.
+
 ## Validation
 
 Focused checks:
@@ -78,20 +142,28 @@ Focused checks:
 ```bash
 cargo test -p bpane-gateway metrics::tests
 cargo test -p bpane-gateway api::tests::health
+cargo test -p bpane-telemetry
+node --test scripts/runtime-tracing/*.test.mjs
+node scripts/validate-runtime-tracing-fixture.mjs
 cargo test -p bpane-gateway --test compose_api_surface \
   compose_gateway_health_and_readiness_surface -- --ignored --test-threads=1
 cargo test -p bpane-gateway --test compose_api_surface_docker_pool \
   compose_docker_pool_session_capacity_api_surface -- --ignored --test-threads=1
+./scripts/start-single-node-fixture.sh
+node scripts/smoke-runtime-tracing.mjs
 ```
 
-The Compose cases validate OpenMetrics headers and framing, health/readiness
-request labels, readiness failure labels, unmatched-path redaction, runtime
-active/starting/limit transitions, and absence of live session identifiers.
+The Compose metric cases validate OpenMetrics headers and framing,
+health/readiness request labels, readiness failure labels, unmatched-path
+redaction, runtime active/starting/limit transitions, and absence of live
+session identifiers. The tracing smoke proves caller-context continuation,
+gateway/broker parentage and stage coverage, malformed-context tolerance,
+collector outage and recovery, and absence of sensitive fixture markers.
 
 ## Remaining #178 Work
 
-- OpenTelemetry propagation and correlation across gateway, runtime broker,
-  workers, stores, and event delivery.
+- OpenTelemetry propagation and correlation across workers, stores, event
+  delivery, and runtime paths beyond the current browser lifecycle checkpoint.
 - Recording, workflow, queue, storage, transport, dependency, and host metrics.
 - Initial SLOs, recording rules, dashboards, alerts, synthetic checks, and
   response runbooks.

@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -13,7 +15,10 @@ class SingleNodePreflightCommand {
 
   run(args) {
     const environment = this.environment(args);
-    new SingleNodePreflight(this.rootDirectory).run(environment);
+    const outputDirectory = args[0] === "--repository-fixture"
+      ? fs.mkdtempSync(path.join(os.tmpdir(), "bpane-single-node-render-"))
+      : path.join(this.rootDirectory, "deploy/single-node/generated");
+    new SingleNodePreflight(this.rootDirectory, outputDirectory).run(environment);
     console.log("Single-node deployment preflight passed.");
   }
 

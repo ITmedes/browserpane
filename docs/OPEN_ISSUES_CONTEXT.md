@@ -1,8 +1,8 @@
 # Open GitHub Issues Context
 
 Created: 2026-07-10
-Revalidated: 2026-08-14 after #223 merged through PR #224 and focused
-single-node deployment issue #225 entered Review after local qualification
+Revalidated: 2026-08-14 after #225 merged through PR #226 and focused
+OpenTelemetry runtime-tracing issue #227 reached local qualification
 
 This document maps the current `docs/` workspace to the live open GitHub
 issues for `ITmedes/browserpane`. It is the bridge between the consolidated
@@ -11,7 +11,7 @@ local planning docs and the public issue tracker.
 Source check:
 
 - fetched through the GitHub API on 2026-08-14,
-- open issue range: `#6` through `#225`,
+- open issue range: `#6` through `#227`,
 - focused docs-derived implementation issues created on 2026-07-10: `#145`
   through `#170`,
 - focused Phase N Teach Mode issue created on 2026-07-31: `#171`,
@@ -84,13 +84,14 @@ Source check:
 | `#175` Remote protocol specification and conformance | `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md`, ADR 0003 | Production lane | Canonical owner for wire spec, version negotiation, golden vectors, fuzzing, and gateway/client compatibility. |
 | `#176` Organization/project-role/service-principal grant enforcement | `IDENTITY_ACCESS_REQUIREMENTS.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md` | Enterprise lane | Canonical owner for enforceable authorization and migration from owner-scoped deployments. |
 | `#177` Provisioning/deprovisioning and break-glass lifecycle | `IDENTITY_ACCESS_REQUIREMENTS.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md` | Enterprise lane | Canonical owner for remaining identity lifecycle scope from closed #52. |
-| `#178` Platform telemetry, SLOs, and capacity evidence | `BPANE-00178_PLATFORM_TELEMETRY_PLAN.md`, `PLATFORM_TELEMETRY.md`, `DELIVERY_ROADMAP.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md` | Production lane | The bounded gateway OpenMetrics/runtime-capacity checkpoint merged through PR #222; the issue remains canonical for traces, broader metrics, SLOs, alerts, runbooks, and tested envelopes. |
+| `#178` Platform telemetry, SLOs, and capacity evidence | `BPANE-00178_PLATFORM_TELEMETRY_PLAN.md`, `PLATFORM_TELEMETRY.md`, `DELIVERY_ROADMAP.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md` | Production lane | The gateway OpenMetrics/runtime-capacity checkpoint merged through PR #222 and #227 locally qualifies gateway-to-broker browser lifecycle tracing; this parent remains canonical for broader runtime/worker/store/event traces, metrics, SLOs, alerts, runbooks, and tested envelopes. |
 | `#179` Control API conformance and compatibility | `ADMIN_NEW_API_COVERAGE.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md` | Foundation/Production lane | Canonical owner for OpenAPI lint, route/schema conformance, examples, and breaking-change policy. |
 | `#180` Open-source license/contribution/IP governance | `PRODUCT_PHASES_AND_RELEASE_GATES.md`, `RISK_REGISTER.md`, ADR 0004 | Production governance | Canonical owner for resolving license metadata and contribution/security/IP policy. |
 | `#184` Reduce representative compose validation wall time | `BPANE-00184_COMPOSE_VALIDATION_PERFORMANCE_PLAN.md`, `VALIDATION_MATRIX.md` | Foundation maintenance | Canonical owner for hosted compose sharding and timing evidence without reducing the #151 scenario baseline. |
 | `#185` Persist deterministic Docker build cache | `BPANE-00185_CI_RUST_BUILDER_PLAN.md`, `BPANE-00184_COMPOSE_VALIDATION_PERFORMANCE_PLAN.md`, `VALIDATION_MATRIX.md` | Foundation maintenance | Follow-up owner for a deterministic GHCR Rust builder after #184; it must preserve coverage and cache trust boundaries. |
 | `#214` Policy-validating runtime launch broker | `BPANE-00214_RUNTIME_LAUNCH_BROKER_PLAN.md`, `BPANE-00167_DOCKER_RUNTIME_BOUNDARY_PLAN.md`, `DELIVERY_ROADMAP.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md`, `RUNTIME_OPERATOR_REQUIREMENTS.md`, `VALIDATION_MATRIX.md` | Production lane, completion of item 23 | Canonical owner for authenticated typed launch/lifecycle/storage operations, request-body policy enforcement, and the gateway-isolated production-like Docker-host topology. |
-| `#225` Hardened single-node Compose deployment | `BPANE-00225_SINGLE_NODE_COMPOSE_BASELINE_PLAN.md`, `SINGLE_NODE_DEPLOYMENT.md`, `THREAT_MODEL.md`, `PRODUCTION_SECURITY_BASELINE.md`, `RUNTIME_OPERATOR_REQUIREMENTS.md`, `DELIVERY_ROADMAP.md`, `RISK_REGISTER.md`, `VALIDATION_MATRIX.md` | Production lane, focused child of #66 | Review-ready implementation: independent broker-only manifest, secret-file configuration, production web surface, structured preflight, live workflow/recording/restart fixture, and bounded operator runbook. |
+| `#225` Hardened single-node Compose deployment | `BPANE-00225_SINGLE_NODE_COMPOSE_BASELINE_PLAN.md`, `SINGLE_NODE_DEPLOYMENT.md`, `THREAT_MODEL.md`, `PRODUCTION_SECURITY_BASELINE.md`, `RUNTIME_OPERATOR_REQUIREMENTS.md`, `DELIVERY_ROADMAP.md`, `RISK_REGISTER.md`, `VALIDATION_MATRIX.md` | Closed Production child of #66 | Independent broker-only manifest, preflight, live workflow/recording/restart qualification, and bounded runbook merged through PR #226. |
+| `#227` OpenTelemetry broker runtime tracing | `BPANE-00227_OTEL_RUNTIME_TRACING_PLAN.md`, `PLATFORM_TELEMETRY.md`, `DELIVERY_ROADMAP.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md`, `VALIDATION_MATRIX.md` | Production lane, focused child of #178 | Locally implemented and qualified pending review: W3C propagation and bounded browser runtime lifecycle spans across gateway and broker with private collector parentage, redaction, malformed-context, and outage/recovery smoke evidence. |
 
 ## Focused Work-Order Issue Matrix
 
@@ -203,7 +204,8 @@ The cross-reference pass also updated the issue bodies in both directions:
 | `#180` | Relevant open-source trust/governance gap. | Created on GitHub 2026-07-31 after detecting AGPL root versus MIT Cargo metadata and absent contributor policies. | No dedicated admin route; documentation and release artifacts must be consistent. |
 | `#214` | Implemented production-like runtime authorization boundary. | Typed browser/worker/storage operations and the gateway-isolated broker topology merged through PRs #220-#221. | Supplies runtime-boundary evidence to #223/#72/#66; it is not a supported production package by itself. |
 | `#223` | Implemented and closed Production checkpoint. | Merged through PR #224 on 2026-08-14. | Durable threat model, responsibility baseline, composed static contract, negative-evidence audit, and synchronized security docs. |
-| `#225` | Relevant and focused Production deployment checkpoint. | Created from #66 after #223; implementation and local qualification completed on 2026-08-14. | Review owns the independent broker-only single-node Compose package, preflight, live fixture, and bounded runbook; target acceptance remains #66 and focused production owners. |
+| `#225` | Implemented and closed Production deployment checkpoint. | Independent broker-only single-node package and local qualification merged through PR #226 on 2026-08-14. | Target acceptance, Kubernetes/Fargate, HA, and broader production controls remain with #66 and focused owners. |
+| `#227` | Focused Production telemetry checkpoint in local review. | Created from #178 after #225 merged; implementation and live qualification completed locally on 2026-08-14. | Owns W3C/OpenTelemetry propagation and bounded browser runtime lifecycle spans across gateway and broker; merge evidence remains pending. |
 
 ## Docs-To-Issue Context
 
@@ -226,6 +228,7 @@ shown as `closed #142`.
 | `BPANE-00214_RUNTIME_LAUNCH_BROKER_PLAN.md` | `#214`, typed broker, operation adapters, gateway routing, and broker-only topology completion |
 | `BPANE-00223_THREAT_MODEL_BASELINE_PLAN.md` | `#223`, focused evidence-linked threat model and hardening-baseline checkpoint under `#72` |
 | `BPANE-00225_SINGLE_NODE_COMPOSE_BASELINE_PLAN.md` | `#225`, focused single-node Compose package under parent `#66` |
+| `BPANE-00227_OTEL_RUNTIME_TRACING_PLAN.md` | `#227`, focused gateway-to-broker tracing checkpoint under parent `#178` |
 | `SINGLE_NODE_DEPLOYMENT.md` | `#225`, bounded operator runbook and support boundary under parent `#66` |
 | `BPANE-00171_WORKFLOW_TEACH_MODE_PLAN.md` | `#171`, with dependencies on `#20`, `#21`, `#47`, `#71`, and `#172` |
 | `BPANE-00172_BPM_WORKFLOW_ENDPOINT_INTEGRATION_PLAN.md` | `#172`, with dependencies on `#28`, `#47`, `#66`, `#69`-`#72`, `#74`, `#76`, `#79`, `#80`, `#147`, `#150`, `#161`, `#162`, `#164`, `#174`, `#176`, `#179`, and `#171` |
@@ -274,7 +277,7 @@ issue and capture the exact slice boundary in a checked-in `docs/*_PLAN.md`:
 | Items 10-19: admin-new parity and promotion work | `#154`-`#163`, with session templates still tracked by `#124` | Use the matching focused issue and keep old admin regression scope explicit. |
 | Items 20-26: scalability, runtime hygiene, docs, performance, and refactors | `#164`-`#170` | Use the matching focused issue and require validation evidence before broad refactors. |
 | Pilot Value | `#174`, conditional `#172`, `#149`, `#71`, `#66`, `#154` | Use the Phase 0 plan and select only dependencies required by the agreed process. |
-| Production/Enterprise and Innovation | `#225` Review; broad issues plus `#175`-`#180`, `#172`, `#171` qualified | Complete #225 review; then reassess #66/#178/#180 and preserve the default #172-before-#171 Phase N order. |
+| Production/Enterprise and Innovation | `#227` in Review; broad issues plus `#175`-`#180`, `#172`, `#171` qualified | Merge the focused #227 tracing checkpoint; then reassess #178/#180/#66 and preserve the default #172-before-#171 Phase N order. |
 
 ## Issue Hygiene Notes
 
