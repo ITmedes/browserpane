@@ -3,13 +3,12 @@
 ## Metadata
 
 - Issue: [#227](https://github.com/ITmedes/browserpane/issues/227)
-- State: Review
+- State: Done
 - Owner: BrowserPane maintainers
 - Lane: Production
 - Target gate: Production Baseline
 - Depends on: #150, #178 metrics checkpoint, #214, #225/PR #226
-- Last verified commit/date: implementation commits through `ee776b66` plus the
-  Slice 4 fixture/qualification changes in this changeset, 2026-08-14
+- Last verified commit/date: merged as `4fd35fba` through PR #228, 2026-08-14
 
 ## Business Outcome
 
@@ -291,6 +290,6 @@ Status: complete in this Slice 4 changeset; PR evidence pending.
 - The local collector is fixture-only. The supported single-node profile stays
   four services and requires an operator-owned collector when tracing is
   enabled.
-- PR, hosted checks, merge evidence, and #227 closure remain pending. Parent
-  #178 remains open for broader traces, metrics, SLOs, alerts, runbooks, and
-  capacity/load evidence.
+- PR #228 passed hosted checks, merged, and closed #227. Parent #178 remains
+  open for broader traces, metrics, SLOs, alerts, runbooks, and capacity/load
+  evidence.

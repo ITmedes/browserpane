@@ -603,6 +603,12 @@ Platform telemetry changes must additionally prove:
 - in-flight gauge release on normal completion and cancellation,
 - aggregate active/starting/limit runtime transitions for static and pooled
   backends,
+- every scoped workflow/recording counter has stable HELP/TYPE metadata, an
+  integer `_total` sample, and no labels,
+- authenticated workflow/recording operations snapshots and `/metrics` read
+  the same counter instances without duplicate increments,
+- representative workflow upload/callback and recording finalize/playback
+  smokes advance the expected counters and exported-byte total,
 - scraping has no readiness, session, or runtime lifecycle side effects.
 
 For OpenTelemetry runtime-tracing changes, additionally prove:
@@ -628,9 +634,12 @@ node scripts/smoke-runtime-tracing.mjs
 ```
 
 The default Compose health/readiness case exercises the real `/metrics` surface,
-including degraded readiness and unmatched-path redaction. The docker-pool
-capacity case verifies aggregate gauges while two, one, and zero runtimes are
-active and checks that live session ids are absent.
+including degraded readiness, unmatched-path redaction, and the complete
+label-free workflow/recording counter catalog. The workflow event-delivery case
+checks real upload/callback counter movement; the recording browser smoke checks
+finalize/playback/export-byte movement. The docker-pool capacity case verifies
+aggregate gauges while two, one, and zero runtimes are active and checks that
+live session ids are absent.
 
 ## Runtime, CLI, Identity, And Resource Lifecycle Checks
 

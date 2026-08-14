@@ -4,6 +4,8 @@ Parent issue: [#178](https://github.com/ITmedes/browserpane/issues/178)
 
 Runtime-tracing checkpoint: [#227](https://github.com/ITmedes/browserpane/issues/227)
 
+Subsystem-metrics checkpoint: [#229](https://github.com/ITmedes/browserpane/issues/229)
+
 BrowserPane exposes a standards-based gateway metrics foundation at
 `GET /metrics` on the gateway HTTP API port. It also has an opt-in
 OpenTelemetry checkpoint for gateway-to-runtime-broker browser lifecycle
@@ -24,10 +26,21 @@ required for a Production claim.
 | `browserpane_gateway_runtime_active_assignments` | Gauge | Runtime assignments in the ready state. |
 | `browserpane_gateway_runtime_starting_assignments` | Gauge | Runtime assignments still starting. |
 | `browserpane_gateway_runtime_assignment_limit` | Gauge | Configured maximum runtime assignments for the selected backend. |
+| `browserpane_gateway_workflow_produced_file_*_total` | Label-free counters | Produced-file upload attempts that succeed or fail. |
+| `browserpane_gateway_workflow_event_delivery_*_total` | Label-free counters | Signed callback attempts, successes, retries, and terminal failures. |
+| `browserpane_gateway_workflow_retention_*_total` | Label-free counters | Retention passes, candidates, deletions/clears, and failures. |
+| `browserpane_gateway_recording_artifact_finalize_*_total` | Label-free counters | Recording artifact finalization requests, successes, and failures. |
+| `browserpane_gateway_recording_failures_total` | Label-free counter | Recording segments moved into a failed state. |
+| `browserpane_gateway_recording_playback_*_total` | Label-free counters | Playback manifest/export requests, export outcomes, and exported bytes. |
+| `browserpane_gateway_recording_retention_*_total` | Label-free counters | Recording retention passes, candidates, deleted artifacts, and failures. |
 
 Runtime gauges are refreshed from the `SessionManager` facade when the endpoint
 is scraped. Scraping does not run dependency probes, start a browser, or mutate
-session lifecycle state.
+session lifecycle state. Workflow and recording counters share the exact
+`WorkflowObservability` and `RecordingObservability` instances used by the
+authenticated operations snapshots. They are monotonic only for the lifetime
+of a gateway process and reset on restart; the collector owns time-series
+continuity.
 
 ## Label And Data Policy
 
@@ -142,6 +155,7 @@ Focused checks:
 ```bash
 cargo test -p bpane-gateway metrics::tests
 cargo test -p bpane-gateway api::tests::health
+cargo test -p bpane-gateway observability::tests
 cargo test -p bpane-telemetry
 node --test scripts/runtime-tracing/*.test.mjs
 node scripts/validate-runtime-tracing-fixture.mjs
@@ -155,8 +169,12 @@ node scripts/smoke-runtime-tracing.mjs
 
 The Compose metric cases validate OpenMetrics headers and framing,
 health/readiness request labels, readiness failure labels, unmatched-path
-redaction, runtime active/starting/limit transitions, and absence of live
-session identifiers. The tracing smoke proves caller-context continuation,
+redaction, the complete label-free workflow/recording metric catalog, real
+workflow upload and callback counter movement, runtime active/starting/limit
+transitions, and absence of live resource identifiers. The recording browser
+smoke verifies finalization, playback request/outcome/byte movement and
+redaction against the real worker and artifact path. The tracing smoke proves
+caller-context continuation,
 gateway/broker parentage and stage coverage, malformed-context tolerance,
 collector outage and recovery, and absence of sensitive fixture markers.
 
@@ -164,7 +182,9 @@ collector outage and recovery, and absence of sensitive fixture markers.
 
 - OpenTelemetry propagation and correlation across workers, stores, event
   delivery, and runtime paths beyond the current browser lifecycle checkpoint.
-- Recording, workflow, queue, storage, transport, dependency, and host metrics.
+- Workflow queue/running gauges, operation latency, and storage, transport,
+  dependency, worker-process, and host metrics beyond the current bounded
+  workflow/recording counters.
 - Initial SLOs, recording rules, dashboards, alerts, synthetic checks, and
   response runbooks.
 - Reproducible load profiles and documented capacity envelopes.

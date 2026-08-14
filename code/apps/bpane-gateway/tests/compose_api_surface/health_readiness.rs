@@ -88,6 +88,21 @@ async fn assert_metrics_surface(harness: &ComposeHarness, sensitive_value: &str)
             bail!("/metrics response is missing {expected:?}");
         }
     }
+    for metric_name in subsystem_counter_names() {
+        for expected in [
+            format!("# HELP {metric_name} "),
+            format!("# TYPE {metric_name} counter"),
+            format!("{metric_name}_total "),
+        ] {
+            if !outcome.body.contains(&expected) {
+                bail!("/metrics response is missing {expected:?}");
+            }
+        }
+        if outcome.body.contains(&format!("{metric_name}_total{{")) {
+            bail!("subsystem metric {metric_name} unexpectedly contains labels");
+        }
+        openmetrics_gauge(&outcome.body, &format!("{metric_name}_total"))?;
+    }
     if outcome.body.contains(sensitive_value)
         || outcome.body.contains(harness.bearer_token())
         || outcome.body.contains("route=\"/metrics\"")
@@ -102,6 +117,36 @@ async fn assert_metrics_surface(harness: &ComposeHarness, sensitive_value: &str)
         bail!("runtime assignment limit must be positive");
     }
     Ok(())
+}
+
+fn subsystem_counter_names() -> [&'static str; 25] {
+    [
+        "browserpane_gateway_workflow_produced_file_uploads",
+        "browserpane_gateway_workflow_produced_file_upload_failures",
+        "browserpane_gateway_workflow_event_delivery_attempts",
+        "browserpane_gateway_workflow_event_delivery_successes",
+        "browserpane_gateway_workflow_event_delivery_retries",
+        "browserpane_gateway_workflow_event_delivery_failures",
+        "browserpane_gateway_workflow_retention_passes",
+        "browserpane_gateway_workflow_retention_log_candidates",
+        "browserpane_gateway_workflow_retention_output_candidates",
+        "browserpane_gateway_workflow_retention_deleted_logs",
+        "browserpane_gateway_workflow_retention_cleared_outputs",
+        "browserpane_gateway_workflow_retention_failures",
+        "browserpane_gateway_recording_artifact_finalize_requests",
+        "browserpane_gateway_recording_artifact_finalize_successes",
+        "browserpane_gateway_recording_artifact_finalize_failures",
+        "browserpane_gateway_recording_failures",
+        "browserpane_gateway_recording_playback_manifest_requests",
+        "browserpane_gateway_recording_playback_export_requests",
+        "browserpane_gateway_recording_playback_export_successes",
+        "browserpane_gateway_recording_playback_export_failures",
+        "browserpane_gateway_recording_playback_export_bytes",
+        "browserpane_gateway_recording_retention_passes",
+        "browserpane_gateway_recording_retention_candidates",
+        "browserpane_gateway_recording_retention_deleted_artifacts",
+        "browserpane_gateway_recording_retention_failures",
+    ]
 }
 
 async fn assert_probe_status(

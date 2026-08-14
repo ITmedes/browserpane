@@ -8,7 +8,7 @@
 - Lane: Production
 - Target gate: Production Baseline
 - Depends on: #150, #178 metrics checkpoint, #225, #227
-- Last verified commit/date: `4fd35fba`, 2026-08-14
+- Last verified commit/date: implementation through `b51c19ce`, 2026-08-14
 
 ## Business Outcome
 
@@ -121,6 +121,8 @@ collecting owner ids, workflow ids, target URLs, artifact refs, or payload data.
 
 Commit: `refactor(telemetry): share workflow and recording counters`.
 
+Status: complete in `0c6d5c1d`.
+
 ### Slice 2: Gateway registry integration
 
 1. Add explicit workflow and recording metric registration.
@@ -129,6 +131,8 @@ Commit: `refactor(telemetry): share workflow and recording counters`.
 3. Prove the snapshot and scrape observe the same increments exactly once.
 
 Commit: `feat(telemetry): export workflow and recording metrics`.
+
+Status: complete in `b51c19ce`.
 
 ### Slice 3: Integration smoke and documentation
 
@@ -139,6 +143,8 @@ Commit: `feat(telemetry): export workflow and recording metrics`.
 3. Run focused, full fast-profile, and representative live qualifications.
 
 Commit: `test(telemetry): qualify subsystem OpenMetrics`.
+
+Status: in progress.
 
 ## Test Strategy
 
