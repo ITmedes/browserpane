@@ -128,7 +128,11 @@ impl WorkflowLifecycleManager {
         let Some(config) = config else {
             return Ok(Self::disabled());
         };
-        validate_config(&config, &auth_validator)?;
+        validate_config(
+            &config,
+            auth_validator.is_oidc(),
+            worker_control.is_broker(),
+        )?;
         Ok(Self {
             inner: Some(Arc::new(WorkflowLifecycleInner {
                 config,
@@ -200,7 +204,8 @@ impl WorkflowLifecycleManager {
 
 fn validate_config(
     config: &WorkflowWorkerConfig,
-    auth_validator: &AuthValidator,
+    oidc_enabled: bool,
+    broker_managed: bool,
 ) -> Result<(), WorkflowLifecycleError> {
     if config.docker_bin.as_os_str().is_empty() {
         return Err(WorkflowLifecycleError::InvalidConfiguration(
@@ -232,7 +237,8 @@ fn validate_config(
             "workflow worker output limit must be greater than zero".to_string(),
         ));
     }
-    if auth_validator.is_oidc()
+    if oidc_enabled
+        && !broker_managed
         && config.bearer_token.is_none()
         && (config.oidc_token_url.is_none()
             || config.oidc_client_id.is_none()
