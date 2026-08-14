@@ -100,6 +100,15 @@ async fn health_and_readiness_are_public_and_drain_rejects_new_work() {
             .unwrap(),
         "application/openmetrics-text; version=1.0.0; charset=utf-8"
     );
+    assert_eq!(
+        metrics_response
+            .headers()
+            .get("cache-control")
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        "no-store"
+    );
     let metrics_body = to_bytes(metrics_response.into_body(), usize::MAX)
         .await
         .unwrap();
