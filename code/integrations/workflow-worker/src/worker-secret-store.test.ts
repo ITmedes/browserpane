@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { chmod, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { Readable } from "node:stream";
 import test from "node:test";
 
 import { WorkerSecretStore } from "./worker-secret-store.js";
@@ -16,6 +17,53 @@ test("loads only allowed environment secrets when no file is configured", async 
 
   assert.deepEqual(await store.load(), { PRIMARY_TOKEN: "primary" });
 });
+
+test("loads a bounded one-shot stdin payload before environment or file secrets", async () => {
+  const input = Readable.from([
+    `${JSON.stringify({ PRIMARY_TOKEN: "stdin-value", SECONDARY_TOKEN: "secondary" })}\n`,
+  ]);
+  const store = new WorkerSecretStore(
+    ALLOWED,
+    {
+      BPANE_WORKER_SECRETS_STDIN: "true",
+      BPANE_WORKER_SECRETS_FILE: "/not/read",
+      PRIMARY_TOKEN: "environment-value",
+    },
+    1_000,
+    5,
+    input,
+  );
+
+  assert.deepEqual(await store.load(), {
+    PRIMARY_TOKEN: "stdin-value",
+    SECONDARY_TOKEN: "secondary",
+  });
+});
+
+test("rejects invalid, unknown, and oversized stdin payloads without leaking values", async () => {
+  const store = (payload: string) => new WorkerSecretStore(
+    ALLOWED,
+    { BPANE_WORKER_SECRETS_STDIN: "true" },
+    1_000,
+    5,
+    Readable.from([`${payload}\n`]),
+  );
+
+  await assert.rejects(() => store("{secret").load(), /worker secrets file is invalid/u);
+  await assert.rejects(
+    () => store(JSON.stringify({ UNKNOWN_TOKEN: "do-not-leak" })).load(),
+    (error: unknown) => {
+      assert(error instanceof Error);
+      assert(!error.message.includes("do-not-leak"));
+      return true;
+    },
+  );
+  await assert.rejects(
+    () => store("x".repeat(64 * 1024 + 1)).load(),
+    /worker secrets stdin payload is invalid/u,
+  );
+});
+
 test("waits for a private file, loads it once, and deletes it", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "bpane-worker-secrets-"));
   const filePath = path.join(directory, "worker.json");

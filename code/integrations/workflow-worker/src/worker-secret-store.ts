@@ -12,11 +12,19 @@ export class WorkerSecretStore {
     private readonly environment: NodeJS.ProcessEnv = process.env,
     private readonly waitTimeoutMs = 10_000,
     private readonly pollIntervalMs = 25,
+    private readonly input: NodeJS.ReadableStream = process.stdin,
   ) {
     this.allowedKeys = new Set(allowedKeys);
   }
 
   public async load(): Promise<Readonly<Record<string, string>>> {
+    const stdinContract = (this.environment.BPANE_WORKER_SECRETS_STDIN ?? "").trim().toLowerCase();
+    if (stdinContract) {
+      if (stdinContract !== "true") {
+        throw new Error("worker secrets stdin contract is invalid");
+      }
+      return this.parse(await this.readStdinOnce());
+    }
     const filePath = (this.environment.BPANE_WORKER_SECRETS_FILE ?? "").trim();
     if (!filePath) {
       return this.fromEnvironment();
@@ -24,6 +32,52 @@ export class WorkerSecretStore {
     this.validatePath(filePath);
     const payload = await this.readOnceAndDelete(filePath);
     return this.parse(payload);
+  }
+
+  private async readStdinOnce(): Promise<string> {
+    return await new Promise<string>((resolve, reject) => {
+      let payload = Buffer.alloc(0);
+      let settled = false;
+      const finish = (error?: Error): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        this.input.removeListener("data", onData);
+        this.input.removeListener("end", onEnd);
+        this.input.removeListener("error", onError);
+        this.input.pause();
+        if (error) {
+          reject(error);
+        } else if (payload.length === 0) {
+          reject(new Error("worker secrets stdin payload is unavailable"));
+        } else {
+          resolve(payload.toString("utf8"));
+        }
+      };
+      const onData = (chunk: unknown): void => {
+        const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk), "utf8");
+        payload = Buffer.concat([payload, bytes]);
+        if (payload.length > MAX_SECRET_FILE_BYTES) {
+          finish(new Error("worker secrets stdin payload is invalid"));
+          return;
+        }
+        const newline = payload.indexOf(0x0a);
+        if (newline >= 0) {
+          payload = payload.subarray(0, newline);
+          finish();
+        }
+      };
+      const onEnd = (): void => finish();
+      const onError = (): void => finish(new Error("worker secrets stdin payload is unavailable"));
+      const timeout = setTimeout(
+        () => finish(new Error("worker secrets stdin payload is unavailable")),
+        this.waitTimeoutMs,
+      );
+      this.input.on("data", onData);
+      this.input.once("end", onEnd);
+      this.input.once("error", onError);
+      this.input.resume();
+    });
   }
 
   private fromEnvironment(): Readonly<Record<string, string>> {

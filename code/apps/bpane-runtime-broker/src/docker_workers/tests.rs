@@ -20,10 +20,8 @@ enum BackendCall {
         body: Box<ContainerCreateBody>,
     },
     Start(String),
-    Upload {
+    SendStdin {
         name: String,
-        directory: String,
-        file_name: String,
         contents: Vec<u8>,
     },
     Inspect,
@@ -104,20 +102,12 @@ impl DockerContainerApi for FakeDockerBackend {
         self.failure("start").map_or(Ok(()), Err)
     }
 
-    async fn upload_file(
-        &self,
-        name: &str,
-        directory: &str,
-        file_name: &str,
-        contents: Vec<u8>,
-    ) -> Result<(), DockerBackendError> {
-        self.calls.lock().unwrap().push(BackendCall::Upload {
+    async fn send_stdin(&self, name: &str, contents: Vec<u8>) -> Result<(), DockerBackendError> {
+        self.calls.lock().unwrap().push(BackendCall::SendStdin {
             name: name.to_string(),
-            directory: directory.to_string(),
-            file_name: file_name.to_string(),
             contents,
         });
-        self.failure("upload").map_or(Ok(()), Err)
+        self.failure("send_stdin").map_or(Ok(()), Err)
     }
 
     async fn inspect(&self, name: &str) -> Result<DockerContainerState, DockerBackendError> {
@@ -281,9 +271,9 @@ fn environment(body: &ContainerCreateBody) -> BTreeMap<String, String> {
         .collect()
 }
 
-fn uploaded_secrets(call: &BackendCall) -> BTreeMap<String, String> {
-    let BackendCall::Upload { contents, .. } = call else {
-        panic!("backend call must upload worker secrets");
+fn delivered_secrets(call: &BackendCall) -> BTreeMap<String, String> {
+    let BackendCall::SendStdin { contents, .. } = call else {
+        panic!("backend call must deliver worker secrets");
     };
     serde_json::from_slice(contents).unwrap()
 }
@@ -333,10 +323,7 @@ async fn workflow_launch_materializes_only_fixed_policy_fields() {
     assert!(host.mounts.is_none());
     assert!(host.devices.is_none());
     assert!(host.cap_add.is_none());
-    assert_eq!(
-        host.tmpfs.as_ref().unwrap().get(WORKER_SECRETS_DIRECTORY),
-        Some(&"rw,noexec,nosuid,nodev,size=64k,mode=0700".to_string())
-    );
+    assert!(host.tmpfs.is_none());
     assert_eq!(host.memory, Some(limits().memory_bytes as i64));
     assert_eq!(host.pids_limit, Some(i64::from(limits().pids)));
     assert_eq!(
@@ -350,28 +337,26 @@ async fn workflow_launch_materializes_only_fixed_policy_fields() {
     let env = environment(body);
     assert_eq!(env.get("BPANE_WORKFLOW_RUN_ID"), Some(&run_id.to_string()));
     assert_eq!(
-        env.get("BPANE_WORKER_SECRETS_FILE").map(String::as_str),
-        Some("/run/browserpane-secrets/worker.json")
+        env.get("BPANE_WORKER_SECRETS_STDIN").map(String::as_str),
+        Some("true")
     );
     assert!(!env.contains_key("BPANE_SESSION_AUTOMATION_ACCESS_TOKEN"));
     assert!(!env.contains_key("BPANE_WORKFLOW_BEARER_TOKEN"));
     assert!(!env.contains_key("BPANE_GATEWAY_OIDC_CLIENT_SECRET"));
     assert!(!env.contains_key("BPANE_GATEWAY_OIDC_SCOPES"));
     assert!(matches!(&calls[2], BackendCall::Start(value) if value == name));
-    let BackendCall::Upload {
-        name: upload_name,
-        directory,
-        file_name,
-        ..
+    assert_eq!(body.attach_stdin, Some(true));
+    assert_eq!(body.open_stdin, Some(true));
+    assert_eq!(body.stdin_once, Some(true));
+    let BackendCall::SendStdin {
+        name: target_name, ..
     } = &calls[3]
     else {
-        panic!("fourth backend call must upload worker secrets");
+        panic!("fourth backend call must deliver worker secrets");
     };
-    assert_eq!(upload_name, name);
-    assert_eq!(directory, WORKER_SECRETS_DIRECTORY);
-    assert_eq!(file_name, WORKER_SECRETS_FILE_NAME);
+    assert_eq!(target_name, name);
     assert_eq!(
-        uploaded_secrets(&calls[3]),
+        delivered_secrets(&calls[3]),
         BTreeMap::from([
             (
                 "BPANE_GATEWAY_OIDC_CLIENT_SECRET".to_string(),
@@ -445,7 +430,7 @@ async fn recording_launch_allows_only_the_fixed_artifact_volume() {
         Some("https://gateway:4433")
     );
     assert_eq!(
-        uploaded_secrets(&calls[3]),
+        delivered_secrets(&calls[3]),
         BTreeMap::from([
             (
                 "BPANE_GATEWAY_OIDC_CLIENT_SECRET".to_string(),
@@ -472,9 +457,9 @@ async fn recording_launch_allows_only_the_fixed_artifact_volume() {
 }
 
 #[tokio::test]
-async fn upload_failure_removes_the_started_worker_and_returns_a_sanitized_error() {
+async fn stdin_delivery_failure_removes_the_started_worker_and_returns_a_sanitized_error() {
     let backend = Arc::new(FakeDockerBackend::default());
-    backend.fail_next("upload", DockerBackendError::Failed);
+    backend.fail_next("send_stdin", DockerBackendError::Failed);
     let adapter = WorkerRuntimeDockerAdapter::with_backend(config(), backend.clone()).unwrap();
     let error = adapter
         .execute(&operation(RuntimeOperation::LaunchWorkflow(

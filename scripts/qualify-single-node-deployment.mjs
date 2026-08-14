@@ -21,7 +21,6 @@ const COMPOSE_ARGS = [
   'deploy/single-node/fixture/compose.yml',
 ];
 const TIMEOUT_MS = 180_000;
-const WORKER_SECRETS_FILE = '/run/browserpane-secrets/worker.json';
 const SENSITIVE_WORKER_ENVIRONMENT_KEYS = [
   'BPANE_GATEWAY_OIDC_CLIENT_SECRET',
   'BPANE_RECORDING_BEARER_TOKEN',
@@ -352,8 +351,12 @@ async function assertWorkerSecretsProtected(containerName) {
   const inspection = dockerInspect(containerName);
   const environment = inspection.Config?.Env ?? [];
   assert(
-    environment.includes(`BPANE_WORKER_SECRETS_FILE=${WORKER_SECRETS_FILE}`),
-    `${containerName} is missing the worker secret-file contract`,
+    environment.includes('BPANE_WORKER_SECRETS_STDIN=true'),
+    `${containerName} is missing the one-shot stdin secret contract`,
+  );
+  assert(
+    !environment.some((entry) => entry.startsWith('BPANE_WORKER_SECRETS_FILE=')),
+    `${containerName} unexpectedly exposes a worker secret-file path`,
   );
   for (const key of SENSITIVE_WORKER_ENVIRONMENT_KEYS) {
     assert(
@@ -362,19 +365,11 @@ async function assertWorkerSecretsProtected(containerName) {
     );
   }
   assert(
-    Object.hasOwn(inspection.HostConfig?.Tmpfs ?? {}, '/run/browserpane-secrets'),
-    `${containerName} does not mount the worker secrets tmpfs`,
+    inspection.Config?.AttachStdin === true
+      && inspection.Config?.OpenStdin === true
+      && inspection.Config?.StdinOnce === true,
+    `${containerName} is not configured for one-shot stdin delivery`,
   );
-  await poll(`${containerName} secret-file consumption`, () => {
-    const result = spawnSync('docker', [
-      'exec',
-      containerName,
-      'sh',
-      '-c',
-      `test ! -e ${WORKER_SECRETS_FILE}`,
-    ]);
-    return result.status === 0;
-  }, Boolean);
   const logs = spawnSync('docker', ['logs', containerName], { encoding: 'utf8' });
   assertMarkersAbsent(
     `${JSON.stringify(inspection)}\n${logs.stdout}\n${logs.stderr}`,

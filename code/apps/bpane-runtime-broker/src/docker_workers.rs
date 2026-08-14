@@ -20,7 +20,6 @@ pub use config::{
     WorkflowWorkerDockerConfig,
 };
 use materialize::MaterializedWorkerLaunch;
-use materialize::{WORKER_SECRETS_DIRECTORY, WORKER_SECRETS_FILE_NAME};
 
 /// Policy-validating Docker adapter for workflow and recording workers.
 pub struct WorkerRuntimeDockerAdapter {
@@ -86,12 +85,7 @@ impl WorkerRuntimeDockerAdapter {
         }
         if let Err(error) = self
             .backend
-            .upload_file(
-                &launch.container_name,
-                WORKER_SECRETS_DIRECTORY,
-                WORKER_SECRETS_FILE_NAME,
-                launch.secrets,
-            )
+            .send_stdin(&launch.container_name, launch.secrets)
             .await
         {
             let _ = self.backend.remove(&launch.container_name).await;

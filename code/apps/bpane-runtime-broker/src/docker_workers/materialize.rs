@@ -11,10 +11,6 @@ use super::config::{
     WorkflowWorkerDockerConfig,
 };
 
-pub(super) const WORKER_SECRETS_DIRECTORY: &str = "/run/browserpane-secrets";
-pub(super) const WORKER_SECRETS_FILE_NAME: &str = "worker.json";
-const WORKER_SECRETS_FILE: &str = "/run/browserpane-secrets/worker.json";
-
 pub(super) struct MaterializedWorkerLaunch {
     pub(super) container_name: String,
     pub(super) policy_spec: ContainerLaunchSpec,
@@ -121,6 +117,9 @@ fn build(
         cmd: Some(command.to_vec()),
         labels: Some(labels.into_iter().collect::<HashMap<_, _>>()),
         host_config: Some(host_config(network, resources, mounts)),
+        attach_stdin: Some(true),
+        open_stdin: Some(true),
+        stdin_once: Some(true),
         ..Default::default()
     };
     Ok(MaterializedWorkerLaunch {
@@ -159,10 +158,6 @@ fn host_config(
                 ("compress".to_string(), "false".to_string()),
             ])),
         }),
-        tmpfs: Some(HashMap::from([(
-            WORKER_SECRETS_DIRECTORY.to_string(),
-            "rw,noexec,nosuid,nodev,size=64k,mode=0700".to_string(),
-        )])),
         ..Default::default()
     }
 }
@@ -187,7 +182,7 @@ fn workflow_environment(
             "BPANE_WORKER_MAX_OUTPUT_BYTES",
             &config.output_limit_bytes.to_string(),
         )?,
-        pair("BPANE_WORKER_SECRETS_FILE", WORKER_SECRETS_FILE)?,
+        pair("BPANE_WORKER_SECRETS_STDIN", "true")?,
     ];
     insert_secret(
         &mut secrets,
@@ -223,7 +218,7 @@ fn recording_environment(
         pair("BPANE_GATEWAY_API_URL", &config.gateway_api_url)?,
         pair("BPANE_RECORDING_PAGE_URL", &config.page_url)?,
         pair("BPANE_RECORDING_OUTPUT_ROOT", &config.output_root)?,
-        pair("BPANE_WORKER_SECRETS_FILE", WORKER_SECRETS_FILE)?,
+        pair("BPANE_WORKER_SECRETS_STDIN", "true")?,
         pair("BPANE_RECORDING_CONNECT_TRANSPORT_PATH", "/session")?,
         pair(
             "BPANE_RECORDING_CONNECT_TIMEOUT_MS",
