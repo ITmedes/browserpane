@@ -136,6 +136,11 @@ node --test deploy/single-node/render-config.test.mjs
 node --test scripts/single-node/single-node-workflow-fixture.test.mjs
 ```
 
+The repository fixture renders synthetic configuration into an isolated
+temporary directory. Static validation must not overwrite
+`deploy/single-node/generated`, because that directory can be mounted by a
+running qualification deployment.
+
 Run the live qualification against the current pushed branch and commit:
 
 ```bash
@@ -599,6 +604,28 @@ Platform telemetry changes must additionally prove:
 - aggregate active/starting/limit runtime transitions for static and pooled
   backends,
 - scraping has no readiness, session, or runtime lifecycle side effects.
+
+For OpenTelemetry runtime-tracing changes, additionally prove:
+
+- valid W3C caller-context continuation plus absent/malformed fallback,
+- gateway client and broker server/auth/policy/runtime parentage in one trace,
+- fixed span names and allowlisted low-cardinality attributes only,
+- no credentials, resource identifiers, labels, URLs, baggage, browser content,
+  source/thread metadata, log events, or raw errors in exported evidence,
+- no public response reflection of `traceparent` or `tracestate`,
+- redacted startup failure for invalid explicit configuration,
+- bounded, non-blocking behavior during collector outage and export recovery,
+- collector isolation from public/owner networks in the qualification fixture.
+
+Run:
+
+```bash
+cargo test -p bpane-telemetry
+node --test scripts/runtime-tracing/*.test.mjs
+node scripts/validate-runtime-tracing-fixture.mjs
+./scripts/start-single-node-fixture.sh
+node scripts/smoke-runtime-tracing.mjs
+```
 
 The default Compose health/readiness case exercises the real `/metrics` surface,
 including degraded readiness and unmatched-path redaction. The docker-pool

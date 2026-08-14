@@ -31,16 +31,18 @@ mod workspaces;
 use app::GatewayApp;
 use clap::Parser;
 use config::Config;
-use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
-        )
-        .init();
+    let telemetry = bpane_telemetry::init("bpane-gateway", "info")?;
+    let result = async {
+        let config = Config::parse();
+        GatewayApp::build(config).await?.run().await
+    }
+    .await;
+    let shutdown_result = telemetry.shutdown();
 
-    let config = Config::parse();
-    GatewayApp::build(config).await?.run().await
+    result?;
+    shutdown_result?;
+    Ok(())
 }

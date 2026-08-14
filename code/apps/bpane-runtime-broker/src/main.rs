@@ -4,17 +4,22 @@ use bpane_runtime_broker::{
     build_router, BrokerConfig, BrokerState, OidcBrokerAuthenticator, OperationLedger,
 };
 use clap::Parser;
-use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| EnvFilter::new("bpane_runtime_broker=info,tower_http=info")),
-        )
-        .init();
+    let telemetry = bpane_telemetry::init(
+        "bpane-runtime-broker",
+        "bpane_runtime_broker=info,tower_http=info",
+    )?;
+    let result = run().await;
+    let shutdown_result = telemetry.shutdown();
 
+    result?;
+    shutdown_result?;
+    Ok(())
+}
+
+async fn run() -> anyhow::Result<()> {
     let config = BrokerConfig::parse();
     let (api_settings, ledger_config, oidc_config) = config.validated()?;
     let executor = config.browser_adapter_settings().build_executor()?;

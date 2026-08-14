@@ -125,6 +125,10 @@ and broader security roadmap [#72](https://github.com/ITmedes/browserpane/issues
   configure orchestrator probes and bounded drain behavior.
 - [ ] Expose `/metrics` only to trusted collectors. Preserve bounded labels and
   exclude owner/session IDs, credentials, requested URLs and browser content.
+- [ ] Keep OTLP trace ingress private and authenticated/encrypted for the
+  deployment boundary. Use credential-free endpoint URLs, prohibit sensitive
+  `tracestate`, and preserve the fixed span/attribute allowlist with baggage
+  disabled.
 - [ ] Define logs/metrics/traces access, encryption, retention and redaction;
   complete #178 before claiming end-to-end SLO or capacity evidence.
 - [ ] Alert and runbook dependency loss, runtime/worker saturation, callback

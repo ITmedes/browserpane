@@ -5,7 +5,8 @@ use async_trait::async_trait;
 use bpane_runtime_contract::{
     RuntimeOperationRequest, RuntimeOperationResponse, RUNTIME_BROKER_V1_MEDIA_TYPE,
 };
-use reqwest::{Client, StatusCode, Url};
+use reqwest::{Client, RequestBuilder, StatusCode, Url};
+use tracing::Instrument;
 
 use crate::{AccessTokenProvider, RuntimeBrokerClientError, RuntimeBrokerClientErrorCode};
 
@@ -141,24 +142,58 @@ impl HttpRuntimeBrokerClient {
         }
         Ok(bytes)
     }
+
+    fn with_trace_context(&self, request: RequestBuilder) -> RequestBuilder {
+        let mut headers = reqwest::header::HeaderMap::new();
+        bpane_telemetry::inject_current_context(&mut headers);
+        request.headers(headers)
+    }
+
+    fn traced_request(
+        &self,
+        stage: &'static str,
+        request: RequestBuilder,
+    ) -> (tracing::Span, RequestBuilder) {
+        let span = tracing::info_span!(
+            "browserpane.runtime_broker.client",
+            otel.kind = "client",
+            otel.status_code = tracing::field::Empty,
+            "browserpane.runtime.stage" = stage,
+            "browserpane.result" = tracing::field::Empty,
+            "http.response.status_code" = tracing::field::Empty,
+        );
+        let request = span.in_scope(|| self.with_trace_context(request));
+        (span, request)
+    }
 }
 
 #[async_trait]
 impl RuntimeBrokerClient for HttpRuntimeBrokerClient {
     async fn check_readiness(&self) -> Result<(), RuntimeBrokerClientError> {
-        let response = self
-            .client
-            .get(self.readiness_url.clone())
+        let (span, request) =
+            self.traced_request("readiness", self.client.get(self.readiness_url.clone()));
+        let response = request
             .timeout(self.request_timeout)
             .send()
+            .instrument(span.clone())
             .await
             .map_err(|error| {
+                span.record(
+                    "browserpane.result",
+                    if error.is_timeout() {
+                        "timed_out"
+                    } else {
+                        "unreachable"
+                    },
+                );
+                span.record("otel.status_code", "ERROR");
                 if error.is_timeout() {
                     RuntimeBrokerClientError::from(RuntimeBrokerClientErrorCode::TimedOut)
                 } else {
                     RuntimeBrokerClientError::from(RuntimeBrokerClientErrorCode::Unreachable)
                 }
             })?;
+        record_http_result(&span, response.status());
         if response.status().is_success() {
             Ok(())
         } else {
@@ -179,23 +214,34 @@ impl RuntimeBrokerClient for HttpRuntimeBrokerClient {
             return Err(RuntimeBrokerClientErrorCode::InvalidRequest.into());
         }
         let token = self.token_provider.access_token().await?;
-        let response = self
-            .client
-            .post(self.operation_url.clone())
+        let (span, request_builder) =
+            self.traced_request("operation", self.client.post(self.operation_url.clone()));
+        let response = request_builder
             .header(reqwest::header::CONTENT_TYPE, RUNTIME_BROKER_V1_MEDIA_TYPE)
             .header(reqwest::header::ACCEPT, RUNTIME_BROKER_V1_MEDIA_TYPE)
             .bearer_auth(token.expose_secret())
             .timeout(self.request_timeout)
             .body(body)
             .send()
+            .instrument(span.clone())
             .await
             .map_err(|error| {
+                span.record(
+                    "browserpane.result",
+                    if error.is_timeout() {
+                        "timed_out"
+                    } else {
+                        "unreachable"
+                    },
+                );
+                span.record("otel.status_code", "ERROR");
                 if error.is_timeout() {
                     RuntimeBrokerClientError::from(RuntimeBrokerClientErrorCode::TimedOut)
                 } else {
                     RuntimeBrokerClientError::from(RuntimeBrokerClientErrorCode::Unreachable)
                 }
             })?;
+        record_http_result(&span, response.status());
         if !response.status().is_success() {
             return Err(map_status(response.status()).into());
         }
@@ -218,6 +264,22 @@ impl RuntimeBrokerClient for HttpRuntimeBrokerClient {
     ) -> Result<RuntimeStorageOperationResponse, RuntimeBrokerClientError> {
         self.execute_storage_http(request, payload).await
     }
+}
+
+fn record_http_result(span: &tracing::Span, status: StatusCode) {
+    span.record("http.response.status_code", status.as_u16());
+    span.record(
+        "browserpane.result",
+        if status.is_success() {
+            "accepted"
+        } else {
+            "rejected"
+        },
+    );
+    span.record(
+        "otel.status_code",
+        if status.is_success() { "OK" } else { "ERROR" },
+    );
 }
 
 fn has_contract_media_type(headers: &reqwest::header::HeaderMap) -> bool {

@@ -153,6 +153,12 @@ Current product shape:
   - OAuth2 client-credentials token acquisition and bounded typed HTTP transport
     from the gateway to the runtime broker. Redirects, response sizes, request
     deadlines, token lifetimes, and error exposure are constrained centrally.
+- `code/shared/bpane-telemetry`
+  - Shared optional OpenTelemetry setup for Rust services, including standard
+    W3C Trace Context propagation, OTLP gRPC export, bounded batching/sampling,
+    and redacted startup errors. Export is disabled by default. Span names and
+    attributes stay fixed and must not contain resource ids, URLs, credentials,
+    browser content, baggage, or raw errors.
 - `code/shared/bpane-protocol`
   - Shared wire protocol, frame envelope, channel IDs, and message types.
 - `code/web/bpane-client/js`
@@ -271,6 +277,9 @@ Current product shape:
 - Runtime-broker storage smoke: `scripts/smoke-runtime-broker-storage.sh`
 - Runtime-broker isolation smoke: `scripts/smoke-runtime-broker-isolation.sh`
 - Runtime-broker restart smoke: run `npm run smoke:runtime-broker-restart -- --headless` in `code/web/bpane-client`
+- Runtime-tracing fixture contract: `node scripts/validate-runtime-tracing-fixture.mjs`
+- Runtime-tracing unit contracts: `node --test scripts/runtime-tracing/*.test.mjs`
+- Runtime-tracing live smoke: `node scripts/smoke-runtime-tracing.mjs` after starting the single-node fixture
 - Host tests: `cargo test -p bpane-host`
 - Protocol tests: `cargo test -p bpane-protocol`
 

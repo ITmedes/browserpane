@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "code/shared/bpane-protocol",
+    "code/shared/bpane-telemetry",
     "code/shared/bpane-runtime-contract",
     "code/shared/bpane-runtime-client",
     "code/apps/bpane-host",
@@ -17,6 +18,7 @@ rust-version = "1.93"
 
 [workspace.dependencies]
 bpane-protocol = { path = "code/shared/bpane-protocol" }
+bpane-telemetry = { path = "code/shared/bpane-telemetry" }
 bpane-runtime-contract = { path = "code/shared/bpane-runtime-contract" }
 bpane-runtime-client = { path = "code/shared/bpane-runtime-client" }
 bollard = { version = "0.21", default-features = false, features = ["http"] }

@@ -28,6 +28,9 @@ COPY code/shared/bpane-runtime-contract code/shared/bpane-runtime-contract
 RUN mkdir -p code/shared/bpane-runtime-client/src
 COPY code/shared/bpane-runtime-client/Cargo.toml code/shared/bpane-runtime-client/Cargo.toml
 RUN printf '%s\n' 'pub fn dependency_seed() {}' > code/shared/bpane-runtime-client/src/lib.rs
+RUN mkdir -p code/shared/bpane-telemetry/src
+COPY code/shared/bpane-telemetry/Cargo.toml code/shared/bpane-telemetry/Cargo.toml
+RUN printf '%s\n' 'pub fn dependency_seed() {}' > code/shared/bpane-telemetry/src/lib.rs
 COPY code/apps/bpane-host code/apps/bpane-host
 RUN mkdir -p code/apps/bpane-gateway/src
 COPY code/apps/bpane-gateway/Cargo.toml code/apps/bpane-gateway/Cargo.toml

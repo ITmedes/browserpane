@@ -4,9 +4,9 @@ use std::time::Duration;
 
 use axum::body::Bytes;
 use axum::extract::rejection::BytesRejection;
-use axum::extract::{Extension, Request, State};
+use axum::extract::{Extension, MatchedPath, Request, State};
 use axum::http::header::AUTHORIZATION;
-use axum::http::{HeaderMap, StatusCode};
+use axum::http::{HeaderMap, Method, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
@@ -19,6 +19,7 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tokio::sync::Semaphore;
 use tokio::time::timeout;
+use tracing::Instrument;
 
 use crate::auth::{AuthenticationError, AuthenticationErrorCode};
 use crate::executor::{ExecutionError, ExecutionErrorCode};
@@ -174,6 +175,35 @@ pub fn build_router(state: BrokerState) -> Router {
         .route("/readyz", get(readyz))
         .merge(authenticated)
         .with_state(state)
+        .layer(middleware::from_fn(trace_http_request))
+}
+
+async fn trace_http_request(request: Request, next: Next) -> Response {
+    let method = bounded_method(request.method());
+    let route = request
+        .extensions()
+        .get::<MatchedPath>()
+        .map_or("unmatched", MatchedPath::as_str);
+    let span = tracing::info_span!(
+        "browserpane.http.server",
+        otel.kind = "server",
+        otel.status_code = tracing::field::Empty,
+        "http.request.method" = method,
+        "http.route" = route,
+        "http.response.status_code" = tracing::field::Empty,
+    );
+    bpane_telemetry::set_parent_from_headers(&span, request.headers());
+    let response = next.run(request).instrument(span.clone()).await;
+    span.record("http.response.status_code", response.status().as_u16());
+    span.record(
+        "otel.status_code",
+        if response.status().is_server_error() {
+            "ERROR"
+        } else {
+            "OK"
+        },
+    );
+    response
 }
 
 async fn livez() -> StatusCode {
@@ -197,12 +227,37 @@ async fn authenticate_request(
     mut request: Request,
     next: Next,
 ) -> Result<Response, ApiError> {
-    let token = bearer_token(request.headers())?;
-    let principal = state
+    let span = tracing::info_span!(
+        "browserpane.runtime_broker.authenticate",
+        otel.kind = "internal",
+        otel.status_code = tracing::field::Empty,
+        "browserpane.result" = tracing::field::Empty,
+    );
+    let token = match bearer_token(request.headers()) {
+        Ok(token) => token,
+        Err(error) => {
+            span.record("browserpane.result", authentication_result(error.code));
+            span.record("otel.status_code", "ERROR");
+            return Err(error);
+        }
+    };
+    let result = state
         .authenticator
         .authenticate(token)
+        .instrument(span.clone())
         .await
-        .map_err(map_authentication_error)?;
+        .map_err(map_authentication_error);
+    match &result {
+        Ok(_) => {
+            span.record("browserpane.result", "accepted");
+            span.record("otel.status_code", "OK");
+        }
+        Err(error) => {
+            span.record("browserpane.result", authentication_result(error.code));
+            span.record("otel.status_code", "ERROR");
+        }
+    }
+    let principal = result?;
     request.extensions_mut().insert(principal);
     Ok(next.run(request).await)
 }
@@ -291,11 +346,35 @@ async fn run_operation(
             return Err(operation_overloaded());
         }
     };
+    let execution_span = tracing::info_span!(
+        "browserpane.runtime_broker.execute",
+        otel.kind = "internal",
+        otel.status_code = tracing::field::Empty,
+        "browserpane.operation.kind" = operation_kind_name(request.operation.kind()),
+        "browserpane.result" = tracing::field::Empty,
+    );
     let result = timeout(
         state.settings.operation_timeout,
-        state.executor.execute(&request),
+        state
+            .executor
+            .execute(&request)
+            .instrument(execution_span.clone()),
     )
     .await;
+    let execution_result = match &result {
+        Ok(Ok(_)) => "accepted",
+        Ok(Err(error)) => execution_error_name(error.code),
+        Err(_) => "timed_out",
+    };
+    execution_span.record("browserpane.result", execution_result);
+    execution_span.record(
+        "otel.status_code",
+        if matches!(&result, Ok(Ok(_))) {
+            "OK"
+        } else {
+            "ERROR"
+        },
+    );
     drop(permit);
     let result = match result {
         Ok(Ok(result)) => result,
@@ -346,6 +425,51 @@ fn reject_streaming_storage_on_json_route(
     Ok(())
 }
 
+fn bounded_method(method: &Method) -> &'static str {
+    match *method {
+        Method::GET => "GET",
+        Method::POST => "POST",
+        Method::PUT => "PUT",
+        Method::PATCH => "PATCH",
+        Method::DELETE => "DELETE",
+        Method::HEAD => "HEAD",
+        Method::OPTIONS => "OPTIONS",
+        Method::CONNECT => "CONNECT",
+        Method::TRACE => "TRACE",
+        _ => "OTHER",
+    }
+}
+
+fn operation_kind_name(kind: bpane_runtime_contract::RuntimeOperationKind) -> &'static str {
+    match kind {
+        bpane_runtime_contract::RuntimeOperationKind::BrowserRuntime => "browser_runtime",
+        bpane_runtime_contract::RuntimeOperationKind::WorkflowWorker => "workflow_worker",
+        bpane_runtime_contract::RuntimeOperationKind::RecordingWorker => "recording_worker",
+        bpane_runtime_contract::RuntimeOperationKind::StorageHelper => "storage_helper",
+    }
+}
+
+fn execution_error_name(code: ExecutionErrorCode) -> &'static str {
+    match code {
+        ExecutionErrorCode::AdapterUnavailable => "adapter_unavailable",
+        ExecutionErrorCode::TimedOut => "timed_out",
+        ExecutionErrorCode::AdapterFailed => "adapter_failed",
+    }
+}
+
+fn authentication_result(code: BrokerApiErrorCode) -> &'static str {
+    match code {
+        BrokerApiErrorCode::AuthenticationRequired => "required",
+        BrokerApiErrorCode::AuthenticationMalformed => "malformed",
+        BrokerApiErrorCode::AuthenticationExpired => "expired",
+        BrokerApiErrorCode::AuthenticationIssuerInvalid => "issuer_invalid",
+        BrokerApiErrorCode::AuthenticationAudienceInvalid => "audience_invalid",
+        BrokerApiErrorCode::AuthenticationClientDenied => "client_denied",
+        BrokerApiErrorCode::AuthenticationKeysUnavailable => "keys_unavailable",
+        _ => "rejected",
+    }
+}
+
 fn request_fingerprint(request: &RuntimeOperationRequest) -> Result<[u8; 32], ApiError> {
     let canonical = serde_json::to_vec(request).map_err(|_| {
         ApiError::new(
@@ -361,6 +485,7 @@ fn audit_accepted(request: &RuntimeOperationRequest) {
     let event =
         RuntimeBrokerAuditEventBuilder::new(request, idempotency_fingerprint(request)).accepted();
     tracing::info!(
+        parent: None,
         request_id = %event.request_id,
         operation_kind = ?event.resource.operation_kind,
         resource_id = %event.resource.resource_id,
@@ -374,6 +499,7 @@ fn audit_failure(request: &RuntimeOperationRequest) {
     let event =
         RuntimeBrokerAuditEventBuilder::new(request, idempotency_fingerprint(request)).failed();
     tracing::warn!(
+        parent: None,
         request_id = %event.request_id,
         operation_kind = ?event.resource.operation_kind,
         resource_id = %event.resource.resource_id,

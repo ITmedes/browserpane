@@ -11,15 +11,16 @@ import {
 } from "./single-node-input-contract.mjs";
 
 export class SingleNodePreflight {
-  constructor(rootDirectory) {
+  constructor(rootDirectory, outputDirectory) {
     this.rootDirectory = rootDirectory;
+    this.outputDirectory = outputDirectory;
   }
 
   run(environment) {
     new SingleNodeInputContract().validate(environment);
     new SingleNodeConfigRenderer().render(
       environment,
-      path.join(this.rootDirectory, "deploy/single-node/generated"),
+      this.outputDirectory,
     );
     const composeConfig = this.composeConfig(environment);
     const input = this.contractInput(composeConfig);

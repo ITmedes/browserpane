@@ -166,6 +166,27 @@ The current metrics are a foundation, not a complete SLO or capacity envelope.
 Set conservative admission limits and qualify the intended workload before
 increasing them.
 
+### Optional trace export
+
+The four-service profile does not bundle a telemetry collector. To enable the
+bounded gateway-to-runtime-broker browser lifecycle trace checkpoint, place an
+operator-owned OTLP gRPC collector on a private service path and configure the
+same credential-free endpoint for gateway and runtime broker:
+
+```env
+OTEL_TRACES_EXPORTER=otlp
+OTEL_EXPORTER_OTLP_ENDPOINT=https://otel-collector.internal:4317
+OTEL_EXPORTER_OTLP_PROTOCOL=grpc
+OTEL_TRACES_SAMPLER=parentbased_always_on
+```
+
+The operator owns collector TLS/authentication, network policy, sampling,
+redaction, storage, access, retention, and deletion. Do not place credentials,
+resource identifiers, personal data, or browser data in `tracestate`. Collector
+loss does not withdraw BrowserPane readiness and may drop queued spans. See
+[`PLATFORM_TELEMETRY.md`](PLATFORM_TELEMETRY.md) for the exact evidence and data
+boundary.
+
 ## Data, Backup, And Restore
 
 Postgres owns durable control-plane resources and runtime assignments. Back it
@@ -235,6 +256,7 @@ The local fixture is validation evidence, not the deployment procedure above:
 ```bash
 ./scripts/start-single-node-fixture.sh
 node scripts/qualify-single-node-deployment.mjs
+node scripts/smoke-runtime-tracing.mjs
 ./scripts/stop-single-node-fixture.sh
 ```
 
@@ -242,8 +264,11 @@ It builds local images, resolves immutable image IDs, supplies isolated fixture
 OIDC/Postgres/Vault services, and proves workflow execution, two-session runtime
 isolation, produced-file retention across control-plane restart, always-on
 recording worker launch, broker-only Docker authority, and inspect/log secret
-redaction. The qualification requires the current named branch and commit to be
-pushed because the test workflow resolves its source through Git.
+redaction. Its fixture overlay also starts a private file-export collector for
+the tracing smoke; that collector is test evidence and not part of the
+four-service deployment. The qualification requires the current named branch
+and commit to be pushed because the test workflow resolves its source through
+Git.
 
 ## Explicitly Unsupported
 

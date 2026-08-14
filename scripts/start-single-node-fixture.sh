@@ -4,10 +4,18 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GENERATED_DIR="${ROOT_DIR}/deploy/single-node/generated"
 SECRETS_DIR="${GENERATED_DIR}/secrets"
+TELEMETRY_DIR="${GENERATED_DIR}/telemetry"
 ENV_FILE="${GENERATED_DIR}/fixture.env"
 
-mkdir -p "${SECRETS_DIR}"
+mkdir -p "${SECRETS_DIR}" "${TELEMETRY_DIR}"
 chmod 700 "${GENERATED_DIR}" "${SECRETS_DIR}"
+# The collector image runs as UID 10001. The owner keeps evidence readable;
+# other users receive only the write/execute access needed by the fixture.
+chmod 733 "${TELEMETRY_DIR}"
+# Avoid unlinking evidence while an idempotently restarted collector still has
+# the previous file open. Compose recreates this fixture-only container below.
+docker rm -f bpane-single-node-fixture-otel-collector-1 >/dev/null 2>&1 || true
+rm -f "${TELEMETRY_DIR}"/*.jsonl
 
 build_image() {
   local tag="$1"
