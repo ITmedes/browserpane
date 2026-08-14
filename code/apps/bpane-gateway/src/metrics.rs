@@ -53,32 +53,32 @@ impl Default for GatewayMetrics {
 
         registry.register(
             "browserpane_gateway_http_requests",
-            "Completed gateway HTTP requests.",
+            "Completed gateway HTTP requests",
             http_requests.clone(),
         );
         registry.register(
             "browserpane_gateway_http_request_duration_seconds",
-            "Gateway HTTP request duration in seconds.",
+            "Gateway HTTP request duration in seconds",
             http_request_duration_seconds.clone(),
         );
         registry.register(
             "browserpane_gateway_http_requests_in_flight",
-            "Gateway HTTP requests currently in flight.",
+            "Gateway HTTP requests currently in flight",
             http_requests_in_flight.clone(),
         );
         registry.register(
             "browserpane_gateway_runtime_active_assignments",
-            "Runtime assignments in the ready state.",
+            "Runtime assignments in the ready state",
             runtime_active_assignments.clone(),
         );
         registry.register(
             "browserpane_gateway_runtime_starting_assignments",
-            "Runtime assignments currently starting.",
+            "Runtime assignments currently starting",
             runtime_starting_assignments.clone(),
         );
         registry.register(
             "browserpane_gateway_runtime_assignment_limit",
-            "Configured maximum number of runtime assignments.",
+            "Configured maximum number of runtime assignments",
             runtime_assignment_limit.clone(),
         );
 
