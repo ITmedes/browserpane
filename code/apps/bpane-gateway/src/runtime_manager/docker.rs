@@ -331,6 +331,19 @@ impl DockerRuntimeManager {
         }
     }
 
+    pub(super) async fn capacity_snapshot(&self) -> RuntimeCapacitySnapshot {
+        let leases = self.leases.lock().await;
+        let starting_assignments = leases
+            .values()
+            .filter(|lease| matches!(lease, DockerLeaseState::Starting { .. }))
+            .count();
+        RuntimeCapacitySnapshot {
+            active_assignments: leases.len().saturating_sub(starting_assignments),
+            starting_assignments,
+            assignment_limit: self.profile.max_runtime_sessions,
+        }
+    }
+
     pub(super) async fn active_browser_context_session_id(&self, context_id: Uuid) -> Option<Uuid> {
         let leases = self.leases.lock().await;
         active_browser_context_session_id(&leases, context_id)
