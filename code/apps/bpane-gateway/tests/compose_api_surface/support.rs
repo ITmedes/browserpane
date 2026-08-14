@@ -71,6 +71,12 @@ pub struct JsonOutcome {
     pub body: Value,
 }
 
+pub struct TextOutcome {
+    pub status: StatusCode,
+    pub content_type: Option<String>,
+    pub body: String,
+}
+
 impl ComposeHarness {
     pub async fn connect() -> Result<Self> {
         Self::connect_with_client_credentials(DEFAULT_OIDC_CLIENT_ID, DEFAULT_OIDC_CLIENT_SECRET)
@@ -278,6 +284,27 @@ impl ComposeHarness {
     ) -> Result<JsonOutcome> {
         self.send_json_outcome_without_bearer(Method::GET, path, None::<Value>, Some(headers))
             .await
+    }
+
+    pub async fn get_text_outcome_without_bearer(&self, path: &str) -> Result<TextOutcome> {
+        let response = self
+            .send_request_without_bearer(Method::GET, path, None::<Value>, None)
+            .await?;
+        let status = response.status();
+        let content_type = response
+            .headers()
+            .get(CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .map(ToOwned::to_owned);
+        let body = response
+            .text()
+            .await
+            .context("failed to read text response body")?;
+        Ok(TextOutcome {
+            status,
+            content_type,
+            body,
+        })
     }
 
     pub async fn get_json_with_headers(&self, path: &str, headers: HeaderMap) -> Result<Value> {
@@ -955,6 +982,15 @@ impl ComposeHarness {
     }
 }
 
+pub fn openmetrics_gauge(body: &str, metric_name: &str) -> Result<i64> {
+    let prefix = format!("{metric_name} ");
+    body.lines()
+        .find_map(|line| line.strip_prefix(&prefix))
+        .ok_or_else(|| anyhow!("OpenMetrics response is missing {metric_name}"))?
+        .parse::<i64>()
+        .with_context(|| format!("OpenMetrics gauge {metric_name} is not an integer"))
+}
+
 #[allow(dead_code)]
 impl Drop for ComposeServiceRestoreGuard {
     fn drop(&mut self) {
@@ -1278,5 +1314,15 @@ mod tests {
 
         assert!(detail.contains("timed out waiting for test token endpoint"));
         assert!(detail.contains("token endpoint remains unavailable"));
+    }
+
+    #[test]
+    fn openmetrics_gauge_requires_an_integer_sample() {
+        assert_eq!(
+            openmetrics_gauge("runtime_limit 2\n", "runtime_limit").unwrap(),
+            2
+        );
+        assert!(openmetrics_gauge("other_metric 1\n", "runtime_limit").is_err());
+        assert!(openmetrics_gauge("runtime_limit unknown\n", "runtime_limit").is_err());
     }
 }

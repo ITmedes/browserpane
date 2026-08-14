@@ -81,6 +81,13 @@ pub struct RuntimeProfile {
     pub supports_session_extensions: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RuntimeCapacitySnapshot {
+    pub active_assignments: usize,
+    pub starting_assignments: usize,
+    pub assignment_limit: usize,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RuntimeManagerError {
     RuntimeBusy {
@@ -273,6 +280,17 @@ impl SessionRuntimeManager {
 
     pub fn profile(&self) -> &RuntimeProfile {
         &self.profile
+    }
+
+    pub async fn capacity_snapshot(&self) -> RuntimeCapacitySnapshot {
+        match &self.backend {
+            RuntimeBackend::StaticSingle(manager) => {
+                manager
+                    .capacity_snapshot(self.profile.max_runtime_sessions)
+                    .await
+            }
+            RuntimeBackend::Docker(manager) => manager.capacity_snapshot().await,
+        }
     }
 
     pub(crate) fn runtime_broker_client(&self) -> Option<Arc<dyn RuntimeBrokerClient>> {

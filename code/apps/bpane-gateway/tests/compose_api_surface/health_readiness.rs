@@ -5,11 +5,22 @@ use anyhow::{bail, Context, Result};
 use reqwest::header::HeaderMap;
 use reqwest::StatusCode;
 
-use super::support::{poll_until, ComposeHarness};
+use super::support::{openmetrics_gauge, poll_until, ComposeHarness};
 
 pub async fn run(harness: &ComposeHarness) -> Result<()> {
     assert_probe_status(harness, "/healthz", StatusCode::OK, "live").await?;
     assert_probe_status(harness, "/readyz", StatusCode::OK, "ready").await?;
+
+    let sensitive_unknown_path = format!("/missing/{}", uuid::Uuid::now_v7());
+    let unknown = harness
+        .get_text_outcome_without_bearer(&sensitive_unknown_path)
+        .await?;
+    if unknown.status != StatusCode::NOT_FOUND {
+        bail!(
+            "unexpected unknown-route response status: {}",
+            unknown.status
+        );
+    }
 
     let _restore = harness.compose_service_restore_guard(&["postgres"]);
     run_compose_command(harness, &["stop", "postgres"])?;
@@ -44,6 +55,52 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
         },
     )
     .await?;
+    assert_metrics_surface(harness, &sensitive_unknown_path).await?;
+    Ok(())
+}
+
+async fn assert_metrics_surface(harness: &ComposeHarness, sensitive_value: &str) -> Result<()> {
+    let outcome = harness.get_text_outcome_without_bearer("/metrics").await?;
+    if outcome.status != StatusCode::OK {
+        bail!("unexpected /metrics response status: {}", outcome.status);
+    }
+    if outcome.content_type.as_deref()
+        != Some("application/openmetrics-text; version=1.0.0; charset=utf-8")
+    {
+        bail!(
+            "unexpected /metrics content type: {:?}",
+            outcome.content_type
+        );
+    }
+    for expected in [
+        "browserpane_gateway_http_requests_total",
+        "browserpane_gateway_http_request_duration_seconds",
+        "route=\"/healthz\",status_class=\"2xx\"",
+        "route=\"/readyz\",status_class=\"2xx\"",
+        "route=\"/readyz\",status_class=\"5xx\"",
+        "route=\"unmatched\",status_class=\"4xx\"",
+        "browserpane_gateway_runtime_active_assignments",
+        "browserpane_gateway_runtime_starting_assignments",
+        "browserpane_gateway_runtime_assignment_limit",
+        "# EOF\n",
+    ] {
+        if !outcome.body.contains(expected) {
+            bail!("/metrics response is missing {expected:?}");
+        }
+    }
+    if outcome.body.contains(sensitive_value)
+        || outcome.body.contains(harness.bearer_token())
+        || outcome.body.contains("route=\"/metrics\"")
+    {
+        bail!("/metrics response contains a sensitive or self-referential label");
+    }
+    if openmetrics_gauge(
+        &outcome.body,
+        "browserpane_gateway_runtime_assignment_limit",
+    )? <= 0
+    {
+        bail!("runtime assignment limit must be positive");
+    }
     Ok(())
 }
 

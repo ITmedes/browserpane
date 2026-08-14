@@ -2,8 +2,8 @@
 
 Governance issue: [#173](https://github.com/ITmedes/browserpane/issues/173)
 
-Last verified: 2026-08-13 on
-`feature/BPANE-00214-broker-only-topology`
+Last verified: 2026-08-14 on
+`feature/BPANE-00178-platform-metrics-foundation`
 
 ## Maturity Definitions
 
@@ -51,7 +51,7 @@ capability.
 | Admin-new resource console | Prototype | dashboard and major resource catalogs/details | #153-#163, #124 |
 | Admin-new default promotion | Implemented | Root route selects `/admin-new/`; promotion contract and smoke evidence merged through PRs #210 and #211 | Separate compatibility-admin removal decision |
 | Gateway health/readiness/drain | Implemented | Public liveness/readiness probes, configured dependency checks, SIGINT/SIGTERM readiness withdrawal, bounded HTTP/WebTransport drain, unit and compose failure-path evidence on #150 branch | #66, #74, #178 production packaging/HA/telemetry |
-| Platform telemetry and SLOs | Planned | Subsystem-local/client diagnostics only | #178 |
+| Platform telemetry and SLOs | Partial prototype | Gateway OpenMetrics HTTP RED and aggregate runtime-capacity metrics with bounded-label/redaction unit and Compose coverage | #178 tracing, subsystem metrics, SLOs, alerts, synthetics, and load envelopes |
 | Compose deployment | Prototype | Direct local compatibility plus gateway-isolated production-like broker topology, dependency readiness, static/live boundary checks, and restart parity | #66, #166, #178 |
 | Kubernetes/Fargate/cloud adapters | Planned | Architecture options, no production support claim | #66 deployment adapters; #214 shared typed launch contract |
 | HA and disaster recovery | Planned | No supported HA/DR contract | #73, #74 |

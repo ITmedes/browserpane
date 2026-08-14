@@ -1,8 +1,8 @@
 use crate::credentials::CredentialProvider;
 use crate::runtime_manager::{
     BrokerRuntimeConfig, DockerRuntimeConfig, PersistedRuntimeAssignment, ResolvedSessionRuntime,
-    RuntimeAssignmentStatus, RuntimeManagerConfig, RuntimeManagerError, RuntimeProfile,
-    RuntimeSessionAccessInfo, SessionRuntimeManager,
+    RuntimeAssignmentStatus, RuntimeCapacitySnapshot, RuntimeManagerConfig, RuntimeManagerError,
+    RuntimeProfile, RuntimeSessionAccessInfo, SessionRuntimeManager,
 };
 use crate::session_control::SessionStore;
 use crate::workspaces::WorkspaceFileStore;
@@ -20,6 +20,7 @@ pub type SessionManagerProfile = RuntimeProfile;
 pub type SessionRuntime = ResolvedSessionRuntime;
 pub type SessionRuntimeAccess = RuntimeSessionAccessInfo;
 pub type SessionRuntimeAssignmentStatus = RuntimeAssignmentStatus;
+pub type SessionRuntimeCapacity = RuntimeCapacitySnapshot;
 pub type PersistedSessionRuntimeAssignment = PersistedRuntimeAssignment;
 
 /// Internal gateway boundary for session runtime lifecycle.
@@ -41,6 +42,10 @@ impl SessionManager {
 
     pub fn profile(&self) -> &SessionManagerProfile {
         self.inner.profile()
+    }
+
+    pub async fn capacity_snapshot(&self) -> SessionRuntimeCapacity {
+        self.inner.capacity_snapshot().await
     }
 
     pub(crate) fn runtime_broker_client(&self) -> Option<Arc<dyn RuntimeBrokerClient>> {
@@ -202,6 +207,18 @@ mod tests {
                 .as_deref(),
             Some("http://host:9223")
         );
+
+        assert_eq!(
+            manager.capacity_snapshot().await,
+            SessionRuntimeCapacity {
+                active_assignments: 1,
+                starting_assignments: 0,
+                assignment_limit: 1,
+            }
+        );
+
+        manager.release(session_id).await;
+        assert_eq!(manager.capacity_snapshot().await.active_assignments, 0);
     }
 
     #[test]
