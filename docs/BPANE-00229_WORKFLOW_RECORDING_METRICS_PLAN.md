@@ -4,11 +4,11 @@
 
 - Issue: [#229](https://github.com/ITmedes/browserpane/issues/229)
 - Parent: [#178](https://github.com/ITmedes/browserpane/issues/178)
-- State: In Progress
+- State: Qualified; ready for review
 - Lane: Production
 - Target gate: Production Baseline
 - Depends on: #150, #178 metrics checkpoint, #225, #227
-- Last verified commit/date: implementation through `b51c19ce`, 2026-08-14
+- Last verified commit/date: implementation through `0a417dc0`, 2026-08-14
 
 ## Business Outcome
 
@@ -30,13 +30,14 @@ collecting owner ids, workflow ids, target URLs, artifact refs, or payload data.
 
 - `GatewayMetrics` owns an isolated `prometheus-client` registry and exports
   bounded HTTP RED plus runtime-capacity metrics at `GET /metrics`.
-- `WorkflowObservability` already records produced-file, event-delivery, and
-  retention counters for the authenticated workflow operations snapshot.
-- `RecordingObservability` already records finalization, playback, byte, and
-  retention counters for the authenticated recording operations snapshot.
-- Those observability counters currently use private atomics, so they cannot be
-  registered with the OpenMetrics registry without duplicate accounting or an
-  unsafe scrape-time delta bridge.
+- `WorkflowObservability` records produced-file, event-delivery, and retention
+  counters for both the authenticated workflow operations snapshot and the
+  OpenMetrics registry through shared standard counter instances.
+- `RecordingObservability` records finalization, playback, byte, and retention
+  counters for both the authenticated recording operations snapshot and the
+  OpenMetrics registry through shared standard counter instances.
+- The gateway exports 25 label-free workflow and recording counter families;
+  no scrape-time delta bridge or duplicate accounting path is present.
 
 ## Scope
 
@@ -144,7 +145,31 @@ Status: complete in `b51c19ce`.
 
 Commit: `test(telemetry): qualify subsystem OpenMetrics`.
 
-Status: in progress.
+Status: complete in `0a417dc0`.
+
+## Qualification Evidence
+
+- Gateway metrics unit tests: 4 passed.
+- Gateway suite: 472 passed, 1 ignored; strict all-target/all-feature Clippy and
+  formatting checks passed.
+- Canonical fast validation: 44 stages passed, including the Rust workspace,
+  coverage ratchets, 620 admin-new tests, package builds, OpenAPI, security, and
+  repository-document contracts.
+- Default Compose API suite: 17 cases passed, including the complete metric
+  catalog, workflow counter deltas, and sensitive-value absence.
+- Recording browser smoke finalized a 1,425,036-byte artifact and generated a
+  1,430,928-byte playback export. Finalization, manifest, export, and byte
+  counters advanced by the expected real-operation deltas, and identifier and
+  bearer scans passed.
+- The rebuilt single-node fixture exposed all 25 metric families and passed its
+  full qualification: two isolated workflow runtimes survived a control-plane
+  restart, produced files remained available, worker secrets stayed protected,
+  and recording/playback produced 270,372-byte and 276,250-byte artifacts.
+- Runtime tracing smoke passed caller-context propagation, malformed-context,
+  collector-outage, recovery, and redaction checks across gateway and broker.
+- A gateway restart reset operation counters to zero as documented. Immediate
+  background retention passes then incremented their pass counters to one;
+  persisted workflow and recording resources remained available.
 
 ## Test Strategy
 
