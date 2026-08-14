@@ -3,6 +3,7 @@ use serde_json::Value;
 
 use super::*;
 use crate::lifecycle::GatewayLifecycle;
+use crate::metrics::GatewayMetrics;
 use crate::readiness::GatewayReadiness;
 
 #[tokio::test]
@@ -34,7 +35,8 @@ async fn health_and_readiness_are_public_and_drain_rejects_new_work() {
         Duration::from_secs(1),
     ));
     let (_, _, state) = test_router_with_state();
-    let app = build_gateway_api_router(state, lifecycle.clone(), readiness);
+    let metrics = Arc::new(GatewayMetrics::default());
+    let app = build_gateway_api_router(state, lifecycle.clone(), readiness, metrics);
 
     let health = app
         .clone()
@@ -66,6 +68,7 @@ async fn health_and_readiness_are_public_and_drain_rejects_new_work() {
         .unwrap();
     assert_eq!(draining_ready.status(), StatusCode::SERVICE_UNAVAILABLE);
     let rejected = app
+        .clone()
         .oneshot(
             Request::get("/api/v1/sessions")
                 .body(Body::empty())
@@ -74,6 +77,41 @@ async fn health_and_readiness_are_public_and_drain_rejects_new_work() {
         .await
         .unwrap();
     assert_eq!(rejected.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+    let unknown_path = "/not-a-real-route/sensitive-resource-id";
+    let unknown = app
+        .clone()
+        .oneshot(Request::get(unknown_path).body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(unknown.status(), StatusCode::NOT_FOUND);
+
+    let metrics_response = app
+        .oneshot(Request::get("/metrics").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(metrics_response.status(), StatusCode::OK);
+    assert_eq!(
+        metrics_response
+            .headers()
+            .get("content-type")
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        "application/openmetrics-text; version=1.0.0; charset=utf-8"
+    );
+    let metrics_body = to_bytes(metrics_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let metrics_text = String::from_utf8(metrics_body.to_vec()).unwrap();
+    assert!(metrics_text.contains("route=\"/healthz\",status_class=\"2xx\""));
+    assert!(metrics_text.contains("route=\"/readyz\",status_class=\"2xx\""));
+    assert!(metrics_text.contains("route=\"/readyz\",status_class=\"5xx\""));
+    assert!(metrics_text.contains("route=\"/api/v1/sessions\",status_class=\"5xx\""));
+    assert!(metrics_text.contains("route=\"unmatched\",status_class=\"4xx\""));
+    assert!(metrics_text.contains("browserpane_gateway_runtime_assignment_limit 1"));
+    assert!(metrics_text.ends_with("# EOF\n"));
+    assert!(!metrics_text.contains(unknown_path));
 }
 
 #[tokio::test]
@@ -107,7 +145,12 @@ async fn readiness_failure_is_sanitized() {
         Duration::from_secs(1),
     ));
     let (_, _, state) = test_router_with_state();
-    let app = build_gateway_api_router(state, lifecycle, readiness);
+    let app = build_gateway_api_router(
+        state,
+        lifecycle,
+        readiness,
+        Arc::new(GatewayMetrics::default()),
+    );
 
     let response = app
         .oneshot(Request::get("/readyz").body(Body::empty()).unwrap())
