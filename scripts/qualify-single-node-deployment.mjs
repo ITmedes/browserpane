@@ -193,6 +193,34 @@ async function main() {
 
     assertGatewayDockerDenied();
     assertSensitiveMarkersAbsent([recordingWorker]);
+    await new Promise((resolve) => setTimeout(resolve, 3_500));
+    await api(`/api/v1/sessions/${recordingSession.id}/connections/disconnect-all`, accessToken, {
+      method: 'POST',
+    });
+    const completedRecording = await poll('recording artifact finalization', async () => {
+      const catalog = await api(
+        `/api/v1/sessions/${recordingSession.id}/recordings`,
+        accessToken,
+      );
+      return catalog.recordings?.find((entry) => entry.id === recording.id) ?? null;
+    }, (entry) => entry?.state === 'ready' || entry?.state === 'failed');
+    assert(completedRecording.state === 'ready',
+      `recording finished in ${completedRecording.state}: ${completedRecording.error ?? 'no error'}`);
+    assert(completedRecording.artifact_available === true,
+      'recording completed without an available artifact');
+    assert(completedRecording.bytes > 1_024,
+      `recording artifact is unexpectedly small: ${completedRecording.bytes ?? 0} bytes`);
+    const recordingArtifact = await download(completedRecording.content_path, accessToken);
+    assert(recordingArtifact.length === completedRecording.bytes,
+      'recording content length does not match its retained metadata');
+    const playbackExport = await downloadWithMetadata(
+      `/api/v1/sessions/${recordingSession.id}/recording-playback/export`,
+      accessToken,
+    );
+    assert(playbackExport.contentType === 'application/zip',
+      `recording playback export has unexpected type ${playbackExport.contentType}`);
+    assert(playbackExport.bytes.length > recordingArtifact.length,
+      'recording playback export is not larger than its included media segment');
 
     console.log(JSON.stringify({
       workflowId: workflow.id,
@@ -210,6 +238,9 @@ async function main() {
       gatewayDockerDenied: true,
       sensitiveMarkerScan: true,
       protectedWorkerSecrets: true,
+      recordingId: completedRecording.id,
+      recordingBytes: recordingArtifact.length,
+      playbackExportBytes: playbackExport.bytes.length,
     }, null, 2));
   } finally {
     if (accessToken) {
@@ -266,6 +297,17 @@ async function download(resourcePath, accessToken) {
   });
   assert(response.ok, `download ${resourcePath} failed with HTTP ${response.status}`);
   return Buffer.from(await response.arrayBuffer());
+}
+
+async function downloadWithMetadata(resourcePath, accessToken) {
+  const response = await fetch(`${API_ORIGIN}${resourcePath}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  assert(response.ok, `download ${resourcePath} failed with HTTP ${response.status}`);
+  return {
+    bytes: Buffer.from(await response.arrayBuffer()),
+    contentType: response.headers.get('content-type') ?? '',
+  };
 }
 
 async function removeSession(accessToken, sessionId) {
