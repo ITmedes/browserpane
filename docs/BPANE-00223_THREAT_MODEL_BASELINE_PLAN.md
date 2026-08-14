@@ -4,7 +4,7 @@ Issue: [#223 Establish an evidence-linked threat model and hardening baseline](h
 
 Parent: [#72 Enterprise security hardening baseline and threat model](https://github.com/ITmedes/browserpane/issues/72)
 
-Status: in progress
+Status: review-ready
 
 ## Business Case
 
@@ -247,6 +247,50 @@ material.
    and confirm they are absent.
 10. Run `git diff --check` and verify only intentional source/document changes
     are committed.
+
+## Validation Evidence
+
+Validated locally on 2026-08-14 against the production-like broker topology.
+
+- `node scripts/validate.mjs --profile fast`: all 43 canonical stages passed,
+  including repository policy, dependency safety, Rust formatting, Clippy,
+  workspace tests and coverage, both admin applications, shared auth,
+  integration packages, OpenAPI compatibility, and the new production-security
+  baseline.
+- Focused contract checks passed for the production-security baseline,
+  repository documents, repository baseline, validation-stage catalog, admin
+  security headers, runtime-broker Compose boundaries, and every added negative
+  fixture.
+- Focused negative-path suites passed for missing bearer credentials,
+  cross-owner and cross-session isolation, credential purpose separation,
+  callback destination policy, browser-context archives, recording artifacts,
+  runtime-broker authentication/replay/policy, and shared admin authentication.
+- `./scripts/start-runtime-broker-browser-overlay.sh` built immutable browser,
+  workflow, and recording images and started a healthy broker-backed stack.
+- `node scripts/validate-runtime-broker-browser-overlay.mjs`,
+  `./scripts/smoke-runtime-broker-isolation.sh`, and
+  `./scripts/smoke-runtime-broker-storage.sh` passed, including gateway Docker
+  denial, broker-authenticated browser operations, context import/clone/export,
+  session-file materialization, digest verification, and cleanup.
+- The Compose identity/access-review, session-owner isolation, and
+  automation-access boundary tests passed against the running gateway.
+- The admin-new session smoke passed session detail/subarea rendering, session
+  switching, live observability, MCP delegation controls, preview launch, and
+  stopped-session restart.
+- The MCP endpoint smoke passed with two independently routed sessions, distinct
+  browser navigation markers, concurrent managed clients, and isolated owner
+  release. An initial run encountered two pre-existing orphan test containers
+  for terminal sessions; after local container cleanup and gateway
+  reconciliation, the clean rerun passed and removed its runtimes normally.
+- The workflow smoke passed pinned git-source execution, worker launch, events,
+  logs, structured output, produced-file upload, and recording finalization.
+- The recording smoke passed nonempty WebM capture, browser-local recording,
+  control-plane finalization, playback manifest, ZIP export, CLI download, and
+  admin-library download with zero finalization or export failures.
+- A value-based log scan covered 13 BrowserPane/Compose containers and
+  13,338,979 log bytes. It found none of the broker service secrets, bearer
+  header values, serialized access/client secrets, MCP navigation marker, or
+  local demo password.
 
 ## Out Of Scope
 
