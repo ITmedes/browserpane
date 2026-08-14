@@ -3,12 +3,13 @@
 ## Metadata
 
 - Issue: [#227](https://github.com/ITmedes/browserpane/issues/227)
-- State: In Progress
+- State: Review
 - Owner: BrowserPane maintainers
 - Lane: Production
 - Target gate: Production Baseline
 - Depends on: #150, #178 metrics checkpoint, #214, #225/PR #226
-- Last verified commit/date: `7c53b44c`, 2026-08-14
+- Last verified commit/date: implementation commits through `ee776b66` plus the
+  Slice 4 fixture/qualification changes in this changeset, 2026-08-14
 
 ## Business Outcome
 
@@ -25,7 +26,7 @@ typed broker request, broker validation, and Docker create/start/status work.
 The failing stage and duration are visible, while owner/session identifiers,
 URLs, credentials, browser content, artifact refs, and raw errors are absent.
 
-## Current Evidence
+## Initial Evidence
 
 - Gateway and broker already use `tracing` plus `tracing-subscriber`, but only
   install local formatted logging subscribers.
@@ -33,8 +34,8 @@ URLs, credentials, browser content, artifact refs, and raw errors are absent.
 - `bpane-runtime-client` is the shared authenticated gateway-to-broker HTTP
   boundary; broker APIs already carry typed idempotency request IDs and bounded
   audit events.
-- No OpenTelemetry SDK/exporter, W3C propagation middleware, OTLP fixture, or
-  shared trace exists today.
+- Before this slice, no OpenTelemetry SDK/exporter, W3C propagation middleware,
+  OTLP fixture, or shared trace existed.
 - The single-node profile supplies the broker-only topology and live browser
   runtime qualification needed for a representative cross-service smoke.
 
@@ -70,6 +71,9 @@ URLs, credentials, browser content, artifact refs, and raw errors are absent.
 - W3C Trace Context is the wire contract; OpenTelemetry SDKs own parsing and
   serialization. BrowserPane will not manually parse `traceparent` or
   `tracestate`.
+- `tracestate` remains standard vendor correlation metadata and must not carry
+  credentials, tenant/resource identifiers, personal data, or browser data.
+  Baggage propagation is not enabled.
 - OTLP is the only exporter in this checkpoint. The collector remains the
   vendor-neutral routing/redaction/storage boundary.
 - The binaries assign stable `service.name` values. Operators own endpoint,
@@ -146,6 +150,8 @@ Primary references:
 
 Commit: `feat(telemetry): add shared OpenTelemetry foundation`.
 
+Status: complete in `c8936515`.
+
 ### Slice 2: Gateway and runtime-client propagation
 
 1. Initialize gateway telemetry through the shared crate.
@@ -155,6 +161,8 @@ Commit: `feat(telemetry): add shared OpenTelemetry foundation`.
    header cases.
 
 Commit: `feat(gateway): propagate runtime trace context`.
+
+Status: complete in `398089a9`.
 
 ### Slice 3: Broker and Docker lifecycle spans
 
@@ -166,6 +174,8 @@ Commit: `feat(gateway): propagate runtime trace context`.
 
 Commit: `feat(runtime): trace broker browser lifecycle`.
 
+Status: complete in `ee776b66`.
+
 ### Slice 4: Collector fixture, smoke, and documentation
 
 1. Add a digest-pinned private OpenTelemetry Collector fixture/export capture.
@@ -174,6 +184,8 @@ Commit: `feat(runtime): trace broker browser lifecycle`.
 3. Update the telemetry/operator/security/validation/maturity/roadmap documents.
 
 Commit: `test(telemetry): qualify cross-service runtime traces`.
+
+Status: complete in this Slice 4 changeset; PR evidence pending.
 
 ## Test Strategy
 
@@ -256,5 +268,20 @@ Commit: `test(telemetry): qualify cross-service runtime traces`.
 
 ## Evidence Record
 
-Pending implementation commits, PR, live trace capture summary, test output,
-reviewed residual risks, and Production Baseline gate decision.
+- Plan: `a36f94dc`.
+- Shared telemetry foundation: `c8936515`.
+- Gateway and runtime-client propagation: `398089a9`.
+- Broker and Docker lifecycle spans: `ee776b66`.
+- Shared crate, runtime-client, broker, gateway-focused, strict Clippy, fixture
+  contract, OTLP parser, and Docker image build checks passed locally.
+- Live single-node smoke continued the supplied caller trace across
+  `bpane-gateway` and `bpane-runtime-broker`, observed 24 lifecycle spans on the
+  first trace and 22 after collector recovery, tolerated malformed context and
+  collector outage, and found none of 21 sensitive markers in exported OTLP
+  evidence.
+- The local collector is fixture-only. The supported single-node profile stays
+  four services and requires an operator-owned collector when tracing is
+  enabled.
+- PR, hosted checks, merge evidence, and #227 closure remain pending. Parent
+  #178 remains open for broader traces, metrics, SLOs, alerts, runbooks, and
+  capacity/load evidence.

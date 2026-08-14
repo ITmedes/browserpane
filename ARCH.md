@@ -62,6 +62,7 @@ The system has seven primary runtime roles plus persistent control-plane stores:
 | Video encode | FFmpeg x11grab -> libx264 | H.264 Baseline for WebCodecs compat; process isolation from host |
 | Gateway | Rust + wtransport | QUIC/WebTransport server with reliable streams + datagrams |
 | Metrics | prometheus-client + OpenMetrics | Explicit gateway-owned registry with bounded aggregate labels |
+| Tracing | OpenTelemetry + W3C Trace Context + OTLP gRPC | Opt-in gateway-to-runtime-broker lifecycle correlation through a vendor-neutral collector boundary |
 | Browser client | TypeScript + fzstd | WebGL 2 compositing (Canvas 2D fallback), WebCodecs H.264 decode, WebTransport API |
 | Wire protocol | Custom binary, no serde | Manual `[u8]` encode/decode for minimal overhead and zero alloc on hot path |
 | Tile compression | QOI or Zstd (configurable) | QOI: fast decode, good for UI; Zstd: better ratio for complex content |
@@ -319,6 +320,12 @@ service.
 - **Metrics facade** (`metrics.rs`): gateway-owned OpenMetrics registry with
   bounded HTTP RED labels and scrape-time runtime-capacity gauges; resource ids,
   raw paths, URLs, credentials, browser content, and egress data are excluded
+- **Runtime trace path** (`bpane-telemetry` plus `bpane-runtime-client`):
+  optional W3C `traceparent`/`tracestate` continuation from bounded gateway HTTP
+  spans through authenticated runtime-broker calls into fixed broker
+  authentication, execution, policy, and Docker lifecycle spans. Export uses
+  OTLP gRPC and is disabled by default. BrowserPane does not provide a trace
+  storage backend, and baggage plus resource identifiers are excluded.
 - **Session hub** (`session_hub.rs`): one host agent, N browser clients
   - Broadcast: host -> all clients (tokio broadcast channel, capacity 1024)
   - Merge: all clients -> host (mpsc channel)

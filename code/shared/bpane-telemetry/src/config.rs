@@ -23,9 +23,20 @@ impl fmt::Debug for TraceExporter {
     }
 }
 
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub(crate) struct TelemetryConfig {
     pub(crate) exporter: TraceExporter,
+    pub(crate) sampler: TraceSampler,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum TraceSampler {
+    AlwaysOn,
+    AlwaysOff,
+    ParentBasedAlwaysOn,
+    ParentBasedAlwaysOff,
+    TraceIdRatio(f64),
+    ParentBasedTraceIdRatio(f64),
 }
 
 impl fmt::Debug for TelemetryConfig {
@@ -33,6 +44,7 @@ impl fmt::Debug for TelemetryConfig {
         formatter
             .debug_struct("TelemetryConfig")
             .field("exporter", &self.exporter)
+            .field("sampler", &self.sampler)
             .finish()
     }
 }
@@ -66,10 +78,11 @@ impl TelemetryConfig {
         if parse_disabled(lookup("OTEL_SDK_DISABLED"))? {
             return Ok(Self {
                 exporter: TraceExporter::None,
+                sampler: TraceSampler::ParentBasedAlwaysOn,
             });
         }
         validate_batch_settings(&mut lookup)?;
-        validate_sampler(&mut lookup)?;
+        let sampler = parse_sampler(&mut lookup)?;
         let exporter = match normalized(lookup("OTEL_TRACES_EXPORTER")).as_deref() {
             None | Some("none") => TraceExporter::None,
             Some("otlp") => {
@@ -79,7 +92,7 @@ impl TelemetryConfig {
             }
             Some(_) => return Err(TelemetryConfigError::UnsupportedTraceExporter),
         };
-        Ok(Self { exporter })
+        Ok(Self { exporter, sampler })
     }
 }
 
@@ -133,17 +146,20 @@ fn validate_batch_settings(
     Ok(())
 }
 
-fn validate_sampler(
+fn parse_sampler(
     lookup: &mut impl FnMut(&str) -> Option<String>,
-) -> Result<(), TelemetryConfigError> {
+) -> Result<TraceSampler, TelemetryConfigError> {
     let sampler = normalized(lookup("OTEL_TRACES_SAMPLER"));
     let argument = trimmed(lookup("OTEL_TRACES_SAMPLER_ARG"));
     match sampler.as_deref() {
-        None
-        | Some("always_on" | "always_off" | "parentbased_always_on" | "parentbased_always_off")
-            if argument.is_none() =>
-        {
-            Ok(())
+        None if argument.is_none() => Ok(TraceSampler::ParentBasedAlwaysOn),
+        Some("always_on") if argument.is_none() => Ok(TraceSampler::AlwaysOn),
+        Some("always_off") if argument.is_none() => Ok(TraceSampler::AlwaysOff),
+        Some("parentbased_always_on") if argument.is_none() => {
+            Ok(TraceSampler::ParentBasedAlwaysOn)
+        }
+        Some("parentbased_always_off") if argument.is_none() => {
+            Ok(TraceSampler::ParentBasedAlwaysOff)
         }
         Some("traceidratio" | "parentbased_traceidratio") => {
             let ratio = argument
@@ -152,7 +168,11 @@ fn validate_sampler(
                 .parse::<f64>()
                 .map_err(|_| TelemetryConfigError::InvalidSampler)?;
             if ratio.is_finite() && (0.0..=1.0).contains(&ratio) {
-                Ok(())
+                if sampler.as_deref() == Some("traceidratio") {
+                    Ok(TraceSampler::TraceIdRatio(ratio))
+                } else {
+                    Ok(TraceSampler::ParentBasedTraceIdRatio(ratio))
+                }
             } else {
                 Err(TelemetryConfigError::InvalidSampler)
             }
@@ -220,6 +240,10 @@ mod tests {
     fn disables_export_by_default_and_by_standard_sdk_switch() {
         assert_eq!(config(&[]).unwrap().exporter, TraceExporter::None);
         assert_eq!(
+            config(&[]).unwrap().sampler,
+            TraceSampler::ParentBasedAlwaysOn
+        );
+        assert_eq!(
             config(&[
                 ("OTEL_SDK_DISABLED", "true"),
                 ("OTEL_TRACES_EXPORTER", "otlp")
@@ -244,6 +268,7 @@ mod tests {
         ])
         .unwrap();
         assert!(matches!(parsed.exporter, TraceExporter::OtlpGrpc { .. }));
+        assert_eq!(parsed.sampler, TraceSampler::ParentBasedTraceIdRatio(0.25));
     }
 
     #[test]

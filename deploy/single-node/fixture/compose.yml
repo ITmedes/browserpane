@@ -1,5 +1,23 @@
 # Local-only dependencies and login metadata for qualifying the production profile.
 services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib@sha256:e0f565815b2b8e78eb9fdbb80f6190c921ab323aaa8ccceab3255c6d4225f4af
+    command:
+      - --config=/etc/otelcol-contrib/config.yaml
+    volumes:
+      - ./fixture/otel-collector.yaml:/etc/otelcol-contrib/config.yaml:ro
+      - ./generated/telemetry:/var/lib/otel
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=8m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - broker-api
+
   postgres:
     image: postgres:16-alpine
     environment:
@@ -55,10 +73,21 @@ services:
         condition: service_started
 
   gateway:
+    environment:
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_TRACES_SAMPLER: always_on
+      OTEL_BSP_MAX_QUEUE_SIZE: "2048"
+      OTEL_BSP_MAX_EXPORT_BATCH_SIZE: "256"
+      OTEL_BSP_SCHEDULE_DELAY: "200"
+      OTEL_BSP_EXPORT_TIMEOUT: "2000"
     ports: !override
       - "14433:4433/tcp"
       - "14433:4433/udp"
     depends_on:
+      otel-collector:
+        condition: service_started
       keycloak:
         condition: service_started
       postgres:
@@ -69,7 +98,18 @@ services:
         condition: service_started
 
   runtime-broker:
+    environment:
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_TRACES_SAMPLER: always_on
+      OTEL_BSP_MAX_QUEUE_SIZE: "2048"
+      OTEL_BSP_MAX_EXPORT_BATCH_SIZE: "256"
+      OTEL_BSP_SCHEDULE_DELAY: "200"
+      OTEL_BSP_EXPORT_TIMEOUT: "2000"
     depends_on:
+      otel-collector:
+        condition: service_started
       docker-proxy:
         condition: service_healthy
       keycloak:

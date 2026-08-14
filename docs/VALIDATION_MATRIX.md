@@ -600,6 +600,28 @@ Platform telemetry changes must additionally prove:
   backends,
 - scraping has no readiness, session, or runtime lifecycle side effects.
 
+For OpenTelemetry runtime-tracing changes, additionally prove:
+
+- valid W3C caller-context continuation plus absent/malformed fallback,
+- gateway client and broker server/auth/policy/runtime parentage in one trace,
+- fixed span names and allowlisted low-cardinality attributes only,
+- no credentials, resource identifiers, labels, URLs, baggage, browser content,
+  source/thread metadata, log events, or raw errors in exported evidence,
+- no public response reflection of `traceparent` or `tracestate`,
+- redacted startup failure for invalid explicit configuration,
+- bounded, non-blocking behavior during collector outage and export recovery,
+- collector isolation from public/owner networks in the qualification fixture.
+
+Run:
+
+```bash
+cargo test -p bpane-telemetry
+node --test scripts/runtime-tracing/*.test.mjs
+node scripts/validate-runtime-tracing-fixture.mjs
+./scripts/start-single-node-fixture.sh
+node scripts/smoke-runtime-tracing.mjs
+```
+
 The default Compose health/readiness case exercises the real `/metrics` surface,
 including degraded readiness and unmatched-path redaction. The docker-pool
 capacity case verifies aggregate gauges while two, one, and zero runtimes are

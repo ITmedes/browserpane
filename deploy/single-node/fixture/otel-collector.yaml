@@ -1,0 +1,38 @@
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 128
+  batch:
+    timeout: 200ms
+    send_batch_size: 256
+    send_batch_max_size: 512
+
+exporters:
+  file:
+    path: /var/lib/otel/traces.jsonl
+    format: json
+    append: true
+    flush_interval: 100ms
+
+service:
+  extensions:
+    - health_check
+  pipelines:
+    traces:
+      receivers:
+        - otlp
+      processors:
+        - memory_limiter
+        - batch
+      exporters:
+        - file

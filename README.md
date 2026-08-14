@@ -145,9 +145,14 @@ Current support and scope:
   compatibility policy remain planned under
   [issue #175](https://github.com/ITmedes/browserpane/issues/175).
 - Platform telemetry: the gateway exposes aggregate OpenMetrics request and
-  runtime-capacity signals at `/metrics`. Cross-process tracing, complete SLOs,
-  alerts, and capacity envelopes remain planned under
-  [issue #178](https://github.com/ITmedes/browserpane/issues/178).
+  runtime-capacity signals at `/metrics`. An opt-in OpenTelemetry checkpoint
+  also propagates W3C Trace Context across gateway-to-runtime-broker browser
+  lifecycle operations and exports bounded spans through OTLP gRPC. Broader
+  worker/store/event tracing, complete SLOs, alerts, and capacity envelopes
+  remain planned under
+  [issue #178](https://github.com/ITmedes/browserpane/issues/178); configuration
+  and the supported evidence boundary are documented in
+  [Platform Telemetry](docs/PLATFORM_TELEMETRY.md).
 - Security baseline: the current trust boundaries, implemented controls,
   deployment obligations, and residual risks are linked in the
   [threat model](docs/THREAT_MODEL.md) and

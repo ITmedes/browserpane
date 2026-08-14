@@ -15,16 +15,16 @@ use opentelemetry::Context;
 use opentelemetry_http::{HeaderExtractor, HeaderInjector};
 use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::propagation::TraceContextPropagator;
-use opentelemetry_sdk::trace::SdkTracerProvider;
+use opentelemetry_sdk::trace::{Sampler, SdkTracerProvider};
 use opentelemetry_sdk::Resource;
 use thiserror::Error;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::EnvFilter;
+use tracing_subscriber::{EnvFilter, Layer};
 
 pub use config::TelemetryConfigError;
-use config::{TelemetryConfig, TraceExporter};
+use config::{TelemetryConfig, TraceExporter, TraceSampler};
 
 #[derive(Debug, Clone, Copy, Eq, Error, PartialEq)]
 pub enum TelemetryInitError {
@@ -99,6 +99,7 @@ pub fn init(
                 .map_err(|_| TelemetryInitError::ExporterConfiguration)?;
             let provider = SdkTracerProvider::builder()
                 .with_batch_exporter(exporter)
+                .with_sampler(sdk_sampler(config.sampler))
                 .with_resource(
                     Resource::builder_empty()
                         .with_service_name(service_name)
@@ -113,12 +114,36 @@ pub fn init(
             tracing_subscriber::registry()
                 .with(filter)
                 .with(tracing_subscriber::fmt::layer())
-                .with(tracing_opentelemetry::layer().with_tracer(tracer))
+                .with(
+                    tracing_opentelemetry::layer()
+                        .with_tracer(tracer)
+                        .with_location(false)
+                        .with_threads(false)
+                        .with_level(false)
+                        .with_target(false)
+                        .with_tracked_inactivity(false)
+                        .with_filter(tracing_subscriber::filter::filter_fn(|metadata| {
+                            metadata.is_span()
+                        })),
+                )
                 .try_init()
                 .map_err(|_| TelemetryInitError::SubscriberInstallation)?;
             Ok(TelemetryGuard {
                 provider: Some(provider),
             })
+        }
+    }
+}
+
+fn sdk_sampler(sampler: TraceSampler) -> Sampler {
+    match sampler {
+        TraceSampler::AlwaysOn => Sampler::AlwaysOn,
+        TraceSampler::AlwaysOff => Sampler::AlwaysOff,
+        TraceSampler::ParentBasedAlwaysOn => Sampler::ParentBased(Box::new(Sampler::AlwaysOn)),
+        TraceSampler::ParentBasedAlwaysOff => Sampler::ParentBased(Box::new(Sampler::AlwaysOff)),
+        TraceSampler::TraceIdRatio(ratio) => Sampler::TraceIdRatioBased(ratio),
+        TraceSampler::ParentBasedTraceIdRatio(ratio) => {
+            Sampler::ParentBased(Box::new(Sampler::TraceIdRatioBased(ratio)))
         }
     }
 }
