@@ -1,6 +1,13 @@
 import { GatewayTokenManager } from "./gateway-token-manager.js";
 import { WorkflowControlClient } from "./workflow-control-client.js";
 import { WorkflowWorkerService } from "./workflow-worker-service.js";
+import { WorkerSecretStore } from "./worker-secret-store.js";
+
+const WORKFLOW_SECRET_KEYS = [
+  "BPANE_SESSION_AUTOMATION_ACCESS_TOKEN",
+  "BPANE_WORKFLOW_BEARER_TOKEN",
+  "BPANE_GATEWAY_OIDC_CLIENT_SECRET",
+] as const;
 
 function requiredEnv(name: string): string {
   const value = (process.env[name] ?? "").trim();
@@ -11,13 +18,14 @@ function requiredEnv(name: string): string {
 }
 
 async function main(): Promise<void> {
+  const secrets = await new WorkerSecretStore(WORKFLOW_SECRET_KEYS).load();
   const requestTimeoutMs = positiveIntegerEnv("BPANE_WORKER_REQUEST_TIMEOUT_MS", 30_000);
   const tokenManager = new GatewayTokenManager({
-    staticAutomationAccessToken: process.env.BPANE_SESSION_AUTOMATION_ACCESS_TOKEN ?? "",
-    staticBearerToken: process.env.BPANE_WORKFLOW_BEARER_TOKEN ?? "",
+    staticAutomationAccessToken: secrets.BPANE_SESSION_AUTOMATION_ACCESS_TOKEN ?? "",
+    staticBearerToken: secrets.BPANE_WORKFLOW_BEARER_TOKEN ?? "",
     tokenUrl: process.env.BPANE_GATEWAY_OIDC_TOKEN_URL ?? "",
     clientId: process.env.BPANE_GATEWAY_OIDC_CLIENT_ID ?? "",
-    clientSecret: process.env.BPANE_GATEWAY_OIDC_CLIENT_SECRET ?? "",
+    clientSecret: secrets.BPANE_GATEWAY_OIDC_CLIENT_SECRET ?? "",
     scopes: process.env.BPANE_GATEWAY_OIDC_SCOPES ?? "",
     requestTimeoutMs,
   });

@@ -284,11 +284,10 @@ pub(super) fn owned_name(prefix: &str, resource_id: uuid::Uuid) -> String {
     format!("{}-{}", prefix.trim_end_matches('-'), resource_id.simple())
 }
 
-fn common_oidc_environment_keys() -> [&'static str; 4] {
+fn common_oidc_environment_keys() -> [&'static str; 3] {
     [
         "BPANE_GATEWAY_OIDC_TOKEN_URL",
         "BPANE_GATEWAY_OIDC_CLIENT_ID",
-        "BPANE_GATEWAY_OIDC_CLIENT_SECRET",
         "BPANE_GATEWAY_OIDC_SCOPES",
     ]
 }
@@ -300,8 +299,7 @@ fn workflow_environment_keys() -> BTreeSet<String> {
         "BPANE_WORKFLOW_WORK_ROOT",
         "BPANE_WORKER_REQUEST_TIMEOUT_MS",
         "BPANE_WORKER_MAX_OUTPUT_BYTES",
-        "BPANE_SESSION_AUTOMATION_ACCESS_TOKEN",
-        "BPANE_WORKFLOW_BEARER_TOKEN",
+        "BPANE_WORKER_SECRETS_FILE",
     ]
     .into_iter()
     .chain(common_oidc_environment_keys())
@@ -317,11 +315,8 @@ fn recording_environment_keys() -> BTreeSet<String> {
         "BPANE_GATEWAY_API_URL",
         "BPANE_RECORDING_PAGE_URL",
         "BPANE_RECORDING_OUTPUT_ROOT",
-        "BPANE_RECORDING_CONNECT_TICKET",
         "BPANE_RECORDING_CONNECT_TRANSPORT_PATH",
-        "BPANE_SESSION_AUTOMATION_ACCESS_TOKEN",
-        "BPANE_RECORDING_WORKER_ACCESS_TOKEN",
-        "BPANE_RECORDING_BEARER_TOKEN",
+        "BPANE_WORKER_SECRETS_FILE",
         "BPANE_RECORDING_CONNECT_TIMEOUT_MS",
         "BPANE_RECORDING_POLL_INTERVAL_MS",
         "BPANE_WORKER_REQUEST_TIMEOUT_MS",
