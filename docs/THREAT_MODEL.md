@@ -3,8 +3,8 @@
 Status: Production-baseline input; not a certification or production-readiness
 claim.
 
-Last reviewed: 2026-08-14 against the gateway OpenMetrics checkpoint and the
-authenticated runtime-broker topology merged through PRs #220-#222.
+Last reviewed: 2026-08-14 against the gateway OpenMetrics checkpoint, the
+authenticated runtime-broker topology, and the qualified single-node package.
 
 Owner: [#223](https://github.com/ITmedes/browserpane/issues/223), under the
 broader security roadmap in [#72](https://github.com/ITmedes/browserpane/issues/72).
@@ -42,14 +42,15 @@ validates typed browser, worker, and storage operations before using the private
 Docker proxy. This profile is production-like broker validation, not complete
 production packaging.
 
-### production deployment
+### hardened single-node baseline
 
-A production deployment is not yet shipped as a supported BrowserPane package.
-Issue #66 owns named Compose, Kubernetes, and managed-runtime profiles, ingress,
-secret injection, network policy, persistent stores, upgrades, and operator
-runbooks. A production deployment must satisfy
-`docs/PRODUCTION_SECURITY_BASELINE.md` and the release gates before it is
-presented as supported.
+`deploy/single-node/compose.yml` packages the broker topology for one dedicated
+Linux Docker host. It requires immutable images, protected secret files,
+external OIDC/Postgres/Vault, trusted ingress, and operator-owned host, backup,
+monitoring, and network controls. Repository qualification proves the packaged
+boundary and core browser/workflow/recording behavior, not target-specific
+production acceptance, HA, managed-cloud support, scale, or compliance. Issue
+#66 and the focused production owners retain those remaining gates.
 
 Assumptions common to all profiles:
 
@@ -107,7 +108,7 @@ Assumptions common to all profiles:
 | Gateway to Vault | Credential-binding lookup and secret value | Secret-provider boundary and opaque binding metadata | Local Compose passes a dev root token by argument; production-safe identity/secret injection remains #66/#70 |
 | Gateway to runtime broker | Typed operations and dedicated service credential | OIDC client credentials from read-only file; audience/client checks; internal broker API/auth networks; replay ledger | Private TLS/mTLS or equivalent service-mesh protection is required for non-local deployments |
 | Runtime broker to Docker proxy | Validated browser/worker/storage operation translated to Docker API | Typed contract, immutable configured images, allowlisted inputs, internal network, digest-pinned proxy, API-family deny checks | Broker compromise still grants the proxy’s allowed container/volume authority |
-| Broker to browser/worker runtime | Image, command, mounts, environment, resources, labels | Policy validation; no privileged/host namespaces/devices; no added capabilities; `no-new-privileges`; Docker default seccomp in broker mode; resource caps | Browser/worker writable roots and Docker-host co-location are residual deployment risks |
+| Broker to browser/worker runtime | Image, command, mounts, environment, resources, labels | Policy validation; no privileged/host namespaces/devices; no added capabilities; `no-new-privileges`; Docker default seccomp in broker mode; resource caps; dynamic worker credentials delivered over bounded one-shot stdin rather than inspectable env/command/files | Browser/worker writable roots and Docker-host co-location are residual deployment risks |
 | Browser runtime to internet | Website requests through direct or configured egress | Project/profile scoping, proxy auth bindings, sanitized diagnostics/usage, explicit TLS-intercept mode | Proxy/SWG owns URL/content logs; network enforcement and data policy remain #66/#76/#79/#80 |
 | Workflow source to gateway/worker | Git URL/ref, immutable commit, source archive, entrypoint | Scheme/path/helper validation, trusted local-root exception, symlink containment, immutable publish ref | Dependency execution inside a worker remains untrusted code and needs runtime isolation/supply-chain controls |
 | Files/contexts to stores/runtimes | Uploads, workspace refs, session bindings, context archives | Opaque refs, relative mount paths, archive count/size/type/path limits, offloaded parsing, project policy | Remote object-store adapters, malware/DLP, residency, encryption remain #21/#76/#80 |
@@ -126,7 +127,7 @@ Assumptions common to all profiles:
 | T-05 | Compromised broker abuses Docker | Internal-only broker/proxy networks, service auth, policy, immutable images, constrained proxy API, no host-published ports | Allowed container/volume APIs remain powerful; separate host/orchestrator policy required by #66/#72 |
 | T-06 | Runtime container escape or host-device abuse | Broker launches are unprivileged, no host namespaces/devices/cap additions, `no-new-privileges`, default seccomp, bounded resources | Browser/worker writable roots and kernel/browser sandbox assurance need deployment validation: #66/#72 |
 | T-07 | Malicious website, workflow, extension, upload, or context archive | Runtime isolation, approved extension metadata, source validation/pinning, archive and file path limits | Malware/DLP and complete supply-chain governance: #75/#80 |
-| T-08 | Secret leakage through APIs, process configuration, logs, telemetry, or debug output | Opaque credential bindings, redacted debug types, bounded telemetry, file-backed broker/worker secrets | Local Vault root token/process args are dev-only; production credential lifecycle: #66/#70 |
+| T-08 | Secret leakage through APIs, process configuration, logs, telemetry, or debug output | Opaque credential bindings, redacted debug types, bounded telemetry, protected deployment files, and one-shot stdin delivery for broker-launched worker credentials | Local Vault root token/process args are dev-only; production rotation/workload identity lifecycle: #66/#70 |
 | T-09 | SSRF or unsafe outbound destination | Callback URL/DNS/IP/redirect/proxy policy is implemented; browser egress can be profile-bound | Browser browsing is intentionally outbound; centralized policy/DLP: #79/#80 |
 | T-10 | Path traversal, symlink/hardlink escape, or arbitrary artifact finalization | Context import limits/type rejection, source preview containment, recording staging boundary, relative session file paths | General artifact API/storage adapters: #21 |
 | T-11 | Mutable or compromised build/runtime dependency | Proxy image digest and broker runtime-image immutability are enforced in the broker overlay; dependency scans run in CI | SBOM, signing, provenance, release and IP governance: #75/#180 |
@@ -184,7 +185,7 @@ Changes must preserve these invariants:
    credentials are not interchangeable.
 2. Raw bearer credentials, secret values, requested URLs, browser content,
    decrypted traffic, and CA private material do not enter logs or metrics.
-3. The production-like broker profile gives the gateway no Docker socket,
+3. The broker and single-node profiles give the gateway no Docker socket,
    endpoint, proxy dependency, or Docker-control network membership.
 4. Runtime broker and Docker proxy do not publish host ports, and only the proxy
    mounts the Docker socket.
@@ -201,6 +202,8 @@ Changes must preserve these invariants:
     session or mutate lifecycle state.
 11. Local-development exceptions remain explicitly named and cannot be cited as
     production controls.
+12. Broker-launched dynamic worker credentials remain absent from Docker
+    environment, command, inspectable worker files, and general logs.
 
 The executable baseline is `node scripts/check-production-security-baseline.mjs`.
 
@@ -208,7 +211,7 @@ The executable baseline is `node scripts/check-production-security-baseline.mjs`
 
 | Risk | Current position | Owner |
 | --- | --- | --- |
-| No supported production deployment package or network policy | Local and production-like validation only | #66 |
+| Bounded single-node package lacks target network-policy and production acceptance evidence | Repository qualification only | #66 |
 | Incomplete MCP public transport auth/origin control | Trusted local/private exposure only | #69/#72 |
 | Organization/project mappings not fully enforced as grants | Owner boundary works; enterprise role model incomplete | #176/#177 |
 | Gateway/Vault production service identity and secret rotation incomplete | Dev token works; production credential lifecycle unresolved | #66/#70 |

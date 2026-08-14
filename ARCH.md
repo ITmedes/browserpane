@@ -69,7 +69,7 @@ The system has seven primary runtime roles plus persistent control-plane stores:
 | MCP bridge | Node.js + @playwright/mcp | Streamable HTTP + SSE bridge for browser automation with live supervision |
 | Session store | PostgreSQL 16 | Durable owner-scoped `/api/v1/sessions`, workflows, recordings, and reusable runtime inputs |
 | Secret store | HashiCorp Vault KV v2 | Externalized workflow credential payloads |
-| Deployment | Docker Compose, 9 long-lived services + on-demand workers | Application bridge plus private Docker-control network |
+| Deployment | Docker Compose | Local development uses 9 long-lived services; the independent single-node profile uses 4 long-lived services plus broker-launched workloads |
 
 ---
 
@@ -106,6 +106,16 @@ binding state remain gateway-owned. The gateway has no Docker endpoint, proxy
 dependency, socket mount, or Docker-control network membership in this
 topology. Base Compose remains the explicit local direct `docker_pool`
 compatibility path with a fail-closed broker.
+
+The independent `deploy/single-node/compose.yml` profile applies that broker
+boundary to a bounded single-host deployment. It runs only `web`, `gateway`,
+`runtime-broker`, and `docker-proxy` as long-lived services and requires
+external OIDC, Postgres, Vault, trusted ingress/certificates, and immutable
+registry images. The gateway consumes deployment secrets from protected files;
+the broker delivers dynamic workflow/recording worker credentials through
+bounded one-shot stdin so they are absent from Docker environment, command,
+and filesystem inspection. Browser, workflow, recording, and storage-helper
+containers remain broker-launched workloads.
 
 ```
               Browser / E2E Test
@@ -152,6 +162,10 @@ bpane-gateway -- DOCKER_HOST --> docker-proxy -- read-only socket --> Docker dae
 production-like broker topology:
 bpane-gateway -- typed OIDC operations --> runtime-broker --> docker-proxy --> Docker daemon
 bpane-gateway -X- docker-control; private proxy network; no published proxy port
+
+bounded single-node deployment:
+trusted ingress --> web / WebTransport gateway --> runtime-broker --> docker-proxy
+external OIDC / Postgres / Vault; four long-lived BrowserPane services
 ```
 
 **Ports exposed to host machine:**
@@ -180,9 +194,12 @@ The canonical profiles have different security meanings:
   gateway Docker isolation, private broker/proxy reachability, immutable
   runtime images, constrained broker process posture, and live browser/worker/
   storage behavior. It is not a supported production package.
-- A production deployment is not currently shipped. Issue #66 owns target
-  ingress, network policy, secret injection, persistence, sandbox qualification,
-  upgrades, and operator runbooks.
+- `deploy/single-node/compose.yml` is the hardened, bounded deployment baseline
+  for one Linux Docker host. It packages secret files, immutable image inputs,
+  external dependencies, structured preflight, broker-only runtime authority,
+  and an operator runbook. It is not HA, managed-cloud, complete SLO/capacity,
+  compliance, or universal production-readiness evidence. Issue #66 and the
+  focused production owners retain those target-specific gates.
 
 The current assets, actors, trust boundaries, controls, and residual risks are
 maintained in `docs/THREAT_MODEL.md`. Required application, deployment,
@@ -653,8 +670,9 @@ The default dev stack no longer uses a shared token file.
 - `docker_pool` enables multiple runtime-backed sessions, and legacy global routes like `/api/session/status` are intentionally not available there
 - `broker_pool` has the same session-runtime compatibility contract while
   isolating browser, worker, and storage operations behind the typed broker; it
-  is the production-like Docker-host topology and gives the gateway no Docker
-  endpoint or Docker-control network access
+  is the production-like Docker-host topology used by the bounded single-node
+  profile and gives the gateway no Docker endpoint or Docker-control network
+  access
 - `mcp-bridge` has an optional session-control bootstrap (`BPANE_SESSION_ID` /
   `BPANE_SESSION_BOOTSTRAP_MODE`), compatibility delegated-session assignment
   through its bridge-local `/control-session` API, and per-connection session
