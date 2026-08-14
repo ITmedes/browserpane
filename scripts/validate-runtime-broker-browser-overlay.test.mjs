@@ -22,6 +22,12 @@ function validConfig() {
         networks: { "bpane-internal": null, "runtime-broker-api": null },
       },
       "runtime-broker": {
+        ports: [],
+        read_only: true,
+        cap_drop: ["ALL"],
+        security_opt: ["no-new-privileges:true"],
+        tmpfs: ["/tmp:size=16m,mode=1777"],
+        healthcheck: { test: ["CMD", "curl", "http://localhost:8940/readyz"] },
         environment: {
           BPANE_RUNTIME_BROKER_EXECUTOR: "docker-browser",
           BPANE_RUNTIME_BROKER_DOCKER_API_URL: "http://docker-proxy:2375",
@@ -74,7 +80,7 @@ test("rejects mutable images, direct sockets, and writable configuration", () =>
   );
   mutationFails(
     (config) => config.services["runtime-broker"].volumes.push({ source: "/var/run/docker.sock" }),
-    "only through the proxy",
+    "must not mount the Docker socket",
   );
   mutationFails(
     (config) => {
@@ -82,6 +88,25 @@ test("rejects mutable images, direct sockets, and writable configuration", () =>
     },
     "must be mounted read-only",
   );
+});
+
+test("rejects weakened broker process confinement", () => {
+  const cases = [
+    [(broker) => (broker.ports = [{ published: 8940 }]), "must not publish"],
+    [(broker) => (broker.read_only = false), "must be read-only"],
+    [(broker) => (broker.cap_drop = []), "drop all"],
+    [(broker) => (broker.security_opt = []), "no-new-privileges"],
+    [(broker) => (broker.tmpfs = []), "bounded writable /tmp"],
+    [(broker) => (broker.privileged = true), "must not run as privileged"],
+    [(broker) => (broker.ipc = "host"), "host PID or IPC"],
+    [(broker) => (broker.devices = ["/dev/kvm"]), "must not mount host devices"],
+  ];
+  for (const [mutate, expected] of cases) {
+    mutationFails(
+      (config) => mutate(config.services["runtime-broker"]),
+      expected,
+    );
+  }
 });
 
 test("rejects mutable worker images and unsafe worker inputs", () => {
