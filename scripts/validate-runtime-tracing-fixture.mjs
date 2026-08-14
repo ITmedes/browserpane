@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -17,7 +19,8 @@ const rootDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)),
 const environment = new SingleNodeRepositoryFixture().createEnvironment();
 
 try {
-  new SingleNodePreflight(rootDirectory).run(environment);
+  const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "bpane-runtime-tracing-render-"));
+  new SingleNodePreflight(rootDirectory, outputDirectory).run(environment);
   const compose = spawnSync(
     "docker",
     [

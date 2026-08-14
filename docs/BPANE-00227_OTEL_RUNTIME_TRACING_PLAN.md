@@ -274,6 +274,15 @@ Status: complete in this Slice 4 changeset; PR evidence pending.
 - Broker and Docker lifecycle spans: `ee776b66`.
 - Shared crate, runtime-client, broker, gateway-focused, strict Clippy, fixture
   contract, OTLP parser, and Docker image build checks passed locally.
+- The canonical fast profile passed all 44 stages. Repository preflight output
+  is isolated from the live generated deployment directory, with a regression
+  test and before/after hash evidence preventing static validation from
+  changing a running fixture's worker policy.
+- The full single-node qualification passed after that isolation fix: two
+  independent workflow runtimes, produced-file retention and runtime recovery
+  across control-plane restart, gateway Docker denial, protected worker
+  secrets, a 272,322-byte recording artifact, and a 278,200-byte playback
+  export were verified.
 - Live single-node smoke continued the supplied caller trace across
   `bpane-gateway` and `bpane-runtime-broker`, observed 24 lifecycle spans on the
   first trace and 22 after collector recovery, tolerated malformed context and

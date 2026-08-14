@@ -136,6 +136,11 @@ node --test deploy/single-node/render-config.test.mjs
 node --test scripts/single-node/single-node-workflow-fixture.test.mjs
 ```
 
+The repository fixture renders synthetic configuration into an isolated
+temporary directory. Static validation must not overwrite
+`deploy/single-node/generated`, because that directory can be mounted by a
+running qualification deployment.
+
 Run the live qualification against the current pushed branch and commit:
 
 ```bash
