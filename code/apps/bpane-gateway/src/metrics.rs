@@ -95,9 +95,14 @@ impl Default for GatewayMetrics {
 }
 
 impl GatewayMetrics {
-    fn begin_http_request(&self) -> Instant {
+    fn begin_http_request(&self) -> (Instant, InFlightGuard) {
         self.http_requests_in_flight.inc();
-        Instant::now()
+        (
+            Instant::now(),
+            InFlightGuard {
+                gauge: self.http_requests_in_flight.clone(),
+            },
+        )
     }
 
     fn finish_http_request(
@@ -107,7 +112,6 @@ impl GatewayMetrics {
         status: StatusCode,
         started_at: Instant,
     ) {
-        self.http_requests_in_flight.dec();
         let labels = HttpRequestLabels {
             method: bounded_method(method),
             route,
@@ -131,6 +135,16 @@ impl GatewayMetrics {
         let mut output = String::new();
         encode(&mut output, &self.registry)?;
         Ok(output)
+    }
+}
+
+struct InFlightGuard {
+    gauge: Gauge,
+}
+
+impl Drop for InFlightGuard {
+    fn drop(&mut self) {
+        self.gauge.dec();
     }
 }
 
@@ -162,7 +176,7 @@ pub(crate) async fn instrument_http_request(
         || UNMATCHED_ROUTE.to_string(),
         |path| path.as_str().to_string(),
     );
-    let started_at = metrics.begin_http_request();
+    let (started_at, _in_flight) = metrics.begin_http_request();
     let response = next.run(request).await;
     metrics.finish_http_request(&method, route, response.status(), started_at);
     response
@@ -171,10 +185,13 @@ pub(crate) async fn instrument_http_request(
 async fn get_metrics(State(state): State<MetricsEndpointState>) -> Response {
     match state.metrics.encode(&state.session_manager).await {
         Ok(output) => (
-            [(
-                header::CONTENT_TYPE,
-                HeaderValue::from_static(OPENMETRICS_CONTENT_TYPE),
-            )],
+            [
+                (
+                    header::CONTENT_TYPE,
+                    HeaderValue::from_static(OPENMETRICS_CONTENT_TYPE),
+                ),
+                (header::CACHE_CONTROL, HeaderValue::from_static("no-store")),
+            ],
             output,
         )
             .into_response(),
@@ -249,7 +266,8 @@ mod tests {
             .checked_sub(Duration::from_millis(10))
             .unwrap();
 
-        metrics.begin_http_request();
+        let (_, in_flight) = metrics.begin_http_request();
+        drop(in_flight);
         metrics.finish_http_request(
             &Method::GET,
             "/api/v1/sessions/{session_id}".to_string(),
