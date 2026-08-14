@@ -2,7 +2,7 @@
 
 Issue: [#178 Add platform telemetry, SLOs, and capacity evidence](https://github.com/ITmedes/browserpane/issues/178)
 
-Status: in progress; metrics-foundation checkpoint
+Status: implemented and validated; metrics-foundation checkpoint complete
 
 ## Business Case
 
@@ -146,6 +146,35 @@ production listener isolation and packaging.
 7. Run the gateway compose API and Docker-pool suites to confirm instrumentation
    did not change API or lifecycle behavior.
 8. Run the repository documentation checks.
+
+## Validation Evidence
+
+Completed on 2026-08-14:
+
+- `cargo test -p bpane-gateway`: 454 passed; one environment-gated test ignored.
+- `cargo test -p bpane-gateway metrics::tests`: focused registry, encoding,
+  bounded-label, and sensitive-value tests passed.
+- `cargo test -p bpane-gateway --test compose_api_surface
+  compose_gateway_health_and_readiness_surface -- --ignored --test-threads=1`:
+  passed against the canonical compose stack, including healthy and degraded
+  readiness metrics plus fixed unmatched-route redaction.
+- `cargo test -p bpane-gateway --test compose_api_surface_docker_pool
+  compose_docker_pool_session_capacity_api_surface -- --ignored
+  --test-threads=1`: passed with two launched browser runtimes and verified the
+  aggregate assignment sequence `2 -> 1 -> 0`, the configured limit, and absence
+  of live session ids.
+- `curl --fail-with-body --dump-header - http://localhost:8932/metrics`: returned
+  HTTP 200, the OpenMetrics content type, `Cache-Control: no-store`, aggregate
+  runtime gauges, bounded route labels, and `# EOF`.
+- `cargo clippy -p bpane-gateway --all-targets -- -D warnings`: passed.
+- `cargo fmt --all -- --check`: passed.
+- `cargo llvm-cov -p bpane-gateway --tests --summary-only`: 454 passed and one
+  environment-gated test was ignored; gateway test coverage reported 57.09%
+  lines. The new `metrics.rs` boundary reported 94.71% line and 100% function
+  coverage.
+- `node scripts/check-repository-documents.mjs`: passed for 74 Markdown files,
+  10 YAML files, and 3 workflows.
+- `git diff --check`: passed.
 
 ## Follow-Up Checkpoints On #178
 
