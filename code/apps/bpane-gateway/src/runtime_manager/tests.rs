@@ -74,6 +74,42 @@ fn docker_profile(max_runtime_sessions: usize) -> RuntimeProfile {
     }
 }
 
+#[tokio::test]
+async fn docker_capacity_snapshot_distinguishes_starting_and_ready_assignments() {
+    let manager = DockerRuntimeManager::new(docker_config(), docker_profile(2)).unwrap();
+    let starting_session_id = Uuid::now_v7();
+    let ready_session_id = Uuid::now_v7();
+    let lease = |session_id| RuntimeLease {
+        session_id,
+        agent_socket_path: manager.socket_path_for_session(session_id),
+        container_name: Some(manager.container_name_for_session(session_id)),
+        browser_context_id: None,
+        discard_session_data_on_release: false,
+        idle_generation: 0,
+    };
+
+    manager.leases.lock().await.insert(
+        starting_session_id,
+        DockerLeaseState::Starting {
+            lease: lease(starting_session_id),
+            notify: Arc::new(tokio::sync::Notify::new()),
+        },
+    );
+    manager.leases.lock().await.insert(
+        ready_session_id,
+        DockerLeaseState::Ready(lease(ready_session_id)),
+    );
+
+    assert_eq!(
+        manager.capacity_snapshot().await,
+        RuntimeCapacitySnapshot {
+            active_assignments: 1,
+            starting_assignments: 1,
+            assignment_limit: 2,
+        }
+    );
+}
+
 #[derive(Default)]
 struct StatefulBrokerClient {
     exists: AtomicBool,
