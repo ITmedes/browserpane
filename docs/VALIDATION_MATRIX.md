@@ -88,6 +88,40 @@ selected control-plane status/log tails after a failure, redact credential and
 identity material before upload, and always remove BrowserPane containers and
 compose volumes.
 
+## Docker Runtime Topology Evidence
+
+The canonical Compose profile preserves the direct `docker_pool` compatibility
+path. Validate that path and its API allowlist with:
+
+```bash
+node scripts/validate-docker-runtime-boundary.mjs
+scripts/run-gateway-compose-e2e.sh --suite docker-pool
+```
+
+The production-like Docker-host path uses `broker_pool`. Start and validate the
+gateway-isolated topology with:
+
+```bash
+./scripts/start-runtime-broker-browser-overlay.sh
+node scripts/validate-runtime-broker-browser-overlay.mjs
+./scripts/smoke-runtime-broker-isolation.sh
+./scripts/smoke-runtime-broker-storage.sh
+cd code/web/bpane-client
+npm run smoke:runtime-broker-restart -- --headless
+```
+
+The isolation smoke must prove that the running gateway has no Docker endpoint,
+socket, proxy dependency, or Docker-control network membership; cannot resolve
+or connect to `docker-proxy`; and can still reach the runtime broker. The
+restart smoke must preserve the same browser container across a broker restart,
+avoid a duplicate runtime, retain lifecycle/automation access, and clean the
+container on stop.
+
+Before closing #214, also run the 17-case Compose API surface and the browser,
+MCP, admin-new session, session-file, workflow, recording, and multi-session
+journeys against the broker topology. Run the four-case docker-pool suite
+separately to preserve direct local compatibility evidence.
+
 ## Baseline Checks For Any Unified Admin Slice
 
 Run in `code/web/bpane-admin-unified`:

@@ -3,6 +3,37 @@
 This document consolidates the still-valid runtime lifecycle, local setup,
 certificate, MCP, and operator CLI requirements.
 
+## Docker Runtime Trust Topologies
+
+BrowserPane maintains two explicit Compose paths:
+
+- `deploy/compose.yml` defaults to direct `docker_pool` for local compatibility.
+  The gateway reaches the digest-pinned, API-allowlisted `docker-proxy`; this is
+  defense in depth and is not the production authorization boundary.
+- `deploy/compose.runtime-broker.yml`, started through
+  `scripts/start-runtime-broker-browser-overlay.sh`, is the production-like
+  Docker-host topology. The gateway has no Docker endpoint, socket mount, proxy
+  dependency, or Docker-control network membership. It sends typed,
+  audience-authenticated browser, worker, context, and session-data operations
+  to `bpane-runtime-broker`; only broker and proxy share Docker control.
+
+Required broker-topology evidence:
+
+- immutable browser, worker, and helper images plus fixed broker-owned policy,
+- static validation of service identities, private networks, read-only policy
+  inputs, and absence of gateway Docker paths,
+- live denial of proxy DNS/TCP and socket access from the gateway,
+- browser/session, MCP, context/file, workflow, recording, and cleanup parity,
+- gateway and broker restart/reconciliation without duplicate runtimes,
+- bounded timeout, replay, idempotency, backpressure, denial, and audit tests.
+
+Validation:
+
+- `node scripts/validate-runtime-broker-browser-overlay.mjs`
+- `scripts/smoke-runtime-broker-isolation.sh`
+- `scripts/smoke-runtime-broker-storage.sh`
+- `cd code/web/bpane-client && npm run smoke:runtime-broker-restart -- --headless`
+
 ## Local Workflow, MCP, Certificate, And Setup
 
 Goal: local development must be deterministic enough that an operator can start
@@ -34,8 +65,8 @@ Required behavior:
 
 Local troubleshooting runbook topics to preserve in README/setup docs:
 
-- host Docker activation, internal proxy health, boundary validation, and
-  recovery commands,
+- host Docker activation, direct-proxy and broker health, topology-specific
+  boundary validation, and recovery commands,
 - sudo-safe environment passing for local compose runs,
 - compose buildx/Bake warning behavior,
 - HTTP API port usage versus WebTransport/TLS endpoints,

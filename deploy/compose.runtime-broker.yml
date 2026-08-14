@@ -33,12 +33,26 @@ services:
 
   gateway:
     environment:
+      DOCKER_HOST: null
       BPANE_GATEWAY_RUNTIME_BROKER_URL: http://runtime-broker:8940
       BPANE_GATEWAY_RUNTIME_BROKER_TOKEN_URL: http://keycloak:8080/realms/browserpane-dev/protocol/openid-connect/token
       BPANE_GATEWAY_RUNTIME_BROKER_CLIENT_ID: bpane-runtime-broker-gateway
       BPANE_GATEWAY_RUNTIME_BROKER_CLIENT_SECRET_FILE: /run/secrets/runtime-broker-client-secret
     volumes:
       - ./runtime-broker/gateway-client-secret:/run/secrets/runtime-broker-client-secret:ro
-    depends_on:
+    depends_on: !override
+      host:
+        condition: service_started
+      keycloak:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+      vault:
+        condition: service_started
+      recording-worker-image:
+        condition: service_completed_successfully
       runtime-broker:
         condition: service_healthy
+    networks: !override
+      - bpane-internal
+      - runtime-broker-api

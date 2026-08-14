@@ -334,7 +334,7 @@ The gateway supports four runtime backends:
 - `static_single`: one shared host worker
 - `docker_single`: one start-on-demand runtime container with idle shutdown
 - `docker_pool`: multiple start-on-demand runtime containers with explicit `max_active_runtimes` and `max_starting_runtimes`
-- `broker_pool`: opt-in parity path that preserves the Docker pool state
+- `broker_pool`: production-like Docker-host path that preserves the Docker pool state
   machine while routing browser, workflow-worker, recording-worker, session
   data, and browser-context storage operations through the authenticated
   runtime broker
@@ -358,8 +358,8 @@ live API denials with:
 node scripts/validate-docker-runtime-boundary.mjs
 ```
 
-This proxy is defense-in-depth for the local and production-like Compose path,
-not a complete production authorization boundary. The required container and
+This proxy is defense-in-depth for the local direct compatibility path, not a
+complete production authorization boundary. The required container and
 volume APIs can still expose unrelated daemon resources, and a generic proxy
 does not validate image, mount, network, capability, or privileged-mode fields
 inside create requests. Production deployments must put runtime launch behind
@@ -378,8 +378,8 @@ node scripts/validate-runtime-broker-foundation.mjs
 node scripts/smoke-runtime-broker-foundation.mjs
 ```
 
-To exercise the broker-owned browser and worker adapters without changing the
-default topology, start the dedicated overlay:
+To exercise the production-like broker-owned Docker-host topology without
+changing the direct local default, start the dedicated overlay:
 
 ```bash
 ./scripts/start-runtime-broker-browser-overlay.sh
@@ -391,13 +391,17 @@ worker policy inputs plus the host image as its isolated storage-helper image,
 and selects `broker_pool` in the gateway. In this mode the gateway sends typed
 storage intents for session-data initialization, approved file destinations,
 and browser-context lifecycle; it retains workspace artifact reads and binding
-state in the control plane. The transitional overlay still leaves the gateway
-on Docker control until the final topology-removal checkpoint is validated.
+state in the control plane. The gateway has no Docker endpoint variable, socket
+mount, proxy dependency, or `docker-control` network membership in this
+topology. Only the broker and proxy share Docker control.
 Validate the overlay topology with:
 
 ```bash
 node scripts/validate-runtime-broker-browser-overlay.mjs
+./scripts/smoke-runtime-broker-isolation.sh
 ./scripts/smoke-runtime-broker-storage.sh
+cd code/web/bpane-client
+npm run smoke:runtime-broker-restart -- --headless
 ```
 
 The storage smoke requires the running overlay and exercises authenticated
@@ -407,10 +411,10 @@ verification, and helper/staging/owned-volume cleanup.
 
 Broker `/readyz` checks the selected adapter dependency without creating an
 audited runtime operation. Browser and worker lifecycle requests remain typed
-and audited. Do not treat either the foundation or this transitional overlay
-as the final production authorization boundary until gateway Docker-proxy
-access is removed and the broker-only topology passes the complete parity
-matrix.
+and audited. The broker overlay is the current production-like Docker-host
+authorization boundary; this does not make the complete BrowserPane deployment
+production-ready without the remaining observability, packaging, HA/DR,
+capacity, and release-governance gates documented under `docs/`.
 
 Compose also forwards a shared host-worker env profile automatically. If your
 compose project name is not the default `deploy`, override these defaults too:
@@ -1087,6 +1091,9 @@ Current runtime notes:
 - the default local compose runtime backend is `docker_pool`; the `legacy_single_runtime` compatibility mode remains available through `static_single` and `docker_single` checks
 - the optional `docker_single` backend can now start and stop one runtime container for the active session
 - the optional `docker_pool` backend can start multiple runtime containers in parallel, but only up to its configured runtime caps
+- the `broker_pool` overlay provides the same session-runtime behavior while
+  removing all gateway Docker-control reachability and routing typed browser,
+  worker, context, and session-data operations through `bpane-runtime-broker`
 - Docker-backed runtime assignment metadata is now persisted and reconciled on gateway startup so pool-mode workers can survive a gateway restart cleanly
 - `mcp-bridge` keeps `/control-session` as a compatibility control target and
   supports recommended per-connection session routing through

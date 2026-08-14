@@ -3,7 +3,7 @@
 Governance issue: [#173](https://github.com/ITmedes/browserpane/issues/173)
 
 Last verified: 2026-08-13 on
-`feature/BPANE-00165-worker-runtime-hardening`
+`feature/BPANE-00214-broker-only-topology`
 
 ## Maturity Definitions
 
@@ -24,7 +24,7 @@ capability.
 
 | Capability | Current maturity | Evidence | Primary remaining owner |
 | --- | --- | --- | --- |
-| Linux/Chromium browser runtime | Prototype | `bpane-host`, Docker runtime manager, internal proxy contract/denial checks, compose and session smokes | #66, #214 production broker, #168 |
+| Linux/Chromium browser runtime | Prototype | `bpane-host`, typed broker contract/policy, gateway-isolated Docker-host topology, restart/storage/compose/session smokes | #66 deployment packaging, #168 |
 | Tile-first remote rendering and ROI H.264 | Prototype | `bpane-protocol`, host capture, TypeScript compositors, media tests | #175, #168, #169 |
 | BrowserPane remote protocol | Prototype | Rust frame types and TypeScript client interoperate | #175 specification/conformance |
 | Shared live sessions and reconnect | Prototype | gateway session hub, client session tests, multisession/reconnect smokes | #169, #178 |
@@ -52,7 +52,7 @@ capability.
 | Admin-new default promotion | Implemented | Root route selects `/admin-new/`; promotion contract and smoke evidence merged through PRs #210 and #211 | Separate compatibility-admin removal decision |
 | Gateway health/readiness/drain | Implemented | Public liveness/readiness probes, configured dependency checks, SIGINT/SIGTERM readiness withdrawal, bounded HTTP/WebTransport drain, unit and compose failure-path evidence on #150 branch | #66, #74, #178 production packaging/HA/telemetry |
 | Platform telemetry and SLOs | Planned | Subsystem-local/client diagnostics only | #178 |
-| Compose deployment | Prototype | Supported local development baseline with dependency-aware gateway health check and internal Docker proxy contract/denial checks | #66, #166, #214 production broker, #178 |
+| Compose deployment | Prototype | Direct local compatibility plus gateway-isolated production-like broker topology, dependency readiness, static/live boundary checks, and restart parity | #66, #166, #178 |
 | Kubernetes/Fargate/cloud adapters | Planned | Architecture options, no production support claim | #66 deployment adapters; #214 shared typed launch contract |
 | HA and disaster recovery | Planned | No supported HA/DR contract | #73, #74 |
 | Supply-chain/release governance | Planned | Local tests and Dependabot exist; no enforced CI/SBOM/signing | #151, #75 |
