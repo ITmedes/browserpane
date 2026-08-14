@@ -1,0 +1,282 @@
+# BrowserPane hardened single-node deployment profile.
+# This manifest intentionally does not extend deploy/compose.yml.
+services:
+  web:
+    image: ${BPANE_WEB_IMAGE:?set BPANE_WEB_IMAGE to an immutable digest}
+    environment:
+      BPANE_OIDC_BROWSER_CLIENT_ID: ${BPANE_OIDC_BROWSER_CLIENT_ID:?set BPANE_OIDC_BROWSER_CLIENT_ID}
+      BPANE_OIDC_BROWSER_SCOPE: ${BPANE_OIDC_BROWSER_SCOPE:-openid}
+      BPANE_OIDC_PROVIDER_HINT: ${BPANE_OIDC_PROVIDER_HINT:-oidc}
+      BPANE_OIDC_PUBLIC_ISSUER: ${BPANE_OIDC_PUBLIC_ISSUER:?set BPANE_OIDC_PUBLIC_ISSUER}
+    ports:
+      - "${BPANE_WEB_BIND_ADDRESS:-127.0.0.1}:${BPANE_WEB_PORT:-8080}:8080/tcp"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /run/browserpane:size=1m,mode=0750,uid=101,gid=101
+      - /var/cache/nginx:size=16m,mode=0750,uid=101,gid=101
+      - /var/run:size=1m,mode=0750,uid=101,gid=101
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      gateway:
+        condition: service_healthy
+    networks:
+      - runtime
+
+  gateway:
+    image: ${BPANE_GATEWAY_IMAGE:?set BPANE_GATEWAY_IMAGE to an immutable digest}
+    command:
+      - /usr/local/bin/bpane-gateway
+      - --runtime-backend
+      - broker_pool
+      - --agent-socket
+      - /run/bpane/agent.sock
+      - --port
+      - "4433"
+      - --api-port
+      - "8932"
+      - --max-viewers
+      - ${BPANE_MAX_VIEWERS:-10}
+      - --max-active-runtimes
+      - ${BPANE_MAX_ACTIVE_RUNTIMES:-4}
+      - --max-starting-runtimes
+      - ${BPANE_MAX_STARTING_RUNTIMES:-1}
+      - --docker-runtime-image
+      - ${BPANE_BROWSER_IMAGE:?set BPANE_BROWSER_IMAGE to an immutable digest}
+      - --docker-runtime-network
+      - ${BPANE_DEPLOYMENT_NAME:?set BPANE_DEPLOYMENT_NAME}-runtime
+      - --docker-runtime-socket-volume
+      - ${BPANE_DEPLOYMENT_NAME:?set BPANE_DEPLOYMENT_NAME}-runtime-sockets
+      - --docker-runtime-session-data-volume-prefix
+      - ${BPANE_DEPLOYMENT_NAME:?set BPANE_DEPLOYMENT_NAME}-session-data
+      - --docker-runtime-container-name-prefix
+      - ${BPANE_DEPLOYMENT_NAME:?set BPANE_DEPLOYMENT_NAME}-runtime
+      - --docker-runtime-env-file
+      - /runtime-config/browser.env
+      - --runtime-broker-url
+      - http://runtime-broker:8940
+      - --runtime-broker-token-url
+      - ${BPANE_OIDC_TOKEN_URL:?set BPANE_OIDC_TOKEN_URL}
+      - --runtime-broker-client-id
+      - ${BPANE_OIDC_BROKER_GATEWAY_CLIENT_ID:?set BPANE_OIDC_BROKER_GATEWAY_CLIENT_ID}
+      - --runtime-broker-client-secret-file
+      - /run/secrets/broker-gateway-client-secret
+      - --oidc-issuer
+      - ${BPANE_OIDC_PUBLIC_ISSUER:?set BPANE_OIDC_PUBLIC_ISSUER}
+      - --oidc-audience
+      - ${BPANE_OIDC_GATEWAY_AUDIENCE:?set BPANE_OIDC_GATEWAY_AUDIENCE}
+      - --oidc-jwks-url
+      - ${BPANE_OIDC_INTERNAL_JWKS_URL:?set BPANE_OIDC_INTERNAL_JWKS_URL}
+      - --database-url-file
+      - /run/secrets/database-url
+      - --credential-vault-addr
+      - ${BPANE_VAULT_ADDR:?set BPANE_VAULT_ADDR}
+      - --credential-vault-token-file
+      - /run/secrets/vault-token
+      - --credential-vault-mount-path
+      - ${BPANE_VAULT_MOUNT_PATH:-secret}
+      - --credential-vault-prefix
+      - ${BPANE_VAULT_PREFIX:-browserpane/credential-bindings}
+      - --public-gateway-url
+      - ${BPANE_PUBLIC_GATEWAY_URL:?set BPANE_PUBLIC_GATEWAY_URL}
+      - --cert
+      - /run/tls/cert.pem
+      - --key
+      - /run/tls/cert.key
+      - --recording-artifact-local-root
+      - /var/lib/browserpane/recording-artifacts
+      - --file-workspace-local-root
+      - /var/lib/browserpane/file-workspaces
+      - --recording-worker-bin
+      - /bin/false
+      - --recording-worker-chrome
+      - /usr/bin/chromium
+      - --recording-worker-api-url
+      - http://gateway:8932
+      - --recording-worker-page-url
+      - http://web:8080/recording-worker.html
+      - --recording-worker-output-root
+      - /var/lib/browserpane/recording-staging
+      - --recording-worker-connect-timeout-secs
+      - "120"
+      - --workflow-worker-image
+      - ${BPANE_WORKFLOW_WORKER_IMAGE:?set BPANE_WORKFLOW_WORKER_IMAGE to an immutable digest}
+      - --workflow-worker-max-active
+      - ${BPANE_WORKFLOW_MAX_ACTIVE:-4}
+      - --workflow-worker-api-url
+      - http://gateway:8932
+    ports:
+      - "${BPANE_WEBTRANSPORT_PORT:-4433}:4433/tcp"
+      - "${BPANE_WEBTRANSPORT_PORT:-4433}:4433/udp"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8932/readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 15s
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+    cap_drop:
+      - ALL
+    group_add:
+      - "1001"
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - ${BPANE_DATABASE_URL_FILE:?set BPANE_DATABASE_URL_FILE}:/run/secrets/database-url:ro
+      - ${BPANE_VAULT_TOKEN_FILE:?set BPANE_VAULT_TOKEN_FILE}:/run/secrets/vault-token:ro
+      - ${BPANE_BROKER_GATEWAY_CLIENT_SECRET_FILE:?set BPANE_BROKER_GATEWAY_CLIENT_SECRET_FILE}:/run/secrets/broker-gateway-client-secret:ro
+      - ${BPANE_TLS_CERT_FILE:?set BPANE_TLS_CERT_FILE}:/run/tls/cert.pem:ro
+      - ${BPANE_TLS_KEY_FILE:?set BPANE_TLS_KEY_FILE}:/run/tls/cert.key:ro
+      - ./generated/browser.env:/runtime-config/browser.env:ro
+      - runtime-sockets:/run/bpane
+      - recording-staging:/var/lib/browserpane/recording-staging
+      - recording-artifacts:/var/lib/browserpane/recording-artifacts
+      - file-workspaces:/var/lib/browserpane/file-workspaces
+    depends_on:
+      runtime-broker:
+        condition: service_healthy
+    networks:
+      - runtime
+      - broker-api
+
+  runtime-broker:
+    image: ${BPANE_RUNTIME_BROKER_IMAGE:?set BPANE_RUNTIME_BROKER_IMAGE to an immutable digest}
+    environment:
+      BPANE_RUNTIME_BROKER_LISTEN: 0.0.0.0:8940
+      BPANE_RUNTIME_BROKER_OIDC_ISSUER: ${BPANE_OIDC_PUBLIC_ISSUER:?set BPANE_OIDC_PUBLIC_ISSUER}
+      BPANE_RUNTIME_BROKER_OIDC_AUDIENCE: ${BPANE_OIDC_BROKER_AUDIENCE:?set BPANE_OIDC_BROKER_AUDIENCE}
+      BPANE_RUNTIME_BROKER_OIDC_JWKS_URL: ${BPANE_OIDC_INTERNAL_JWKS_URL:?set BPANE_OIDC_INTERNAL_JWKS_URL}
+      BPANE_RUNTIME_BROKER_ALLOWED_CLIENT_ID: ${BPANE_OIDC_BROKER_GATEWAY_CLIENT_ID:?set BPANE_OIDC_BROKER_GATEWAY_CLIENT_ID}
+      BPANE_RUNTIME_BROKER_EXECUTOR: docker-browser
+      BPANE_RUNTIME_BROKER_DOCKER_API_URL: http://docker-proxy:2375
+      BPANE_RUNTIME_BROKER_BROWSER_IMAGE: ${BPANE_BROWSER_IMAGE:?set BPANE_BROWSER_IMAGE to an immutable digest}
+      BPANE_RUNTIME_BROKER_BROWSER_NETWORK: ${BPANE_DEPLOYMENT_NAME:?set BPANE_DEPLOYMENT_NAME}-runtime
+      BPANE_RUNTIME_BROKER_BROWSER_SOCKET_VOLUME: ${BPANE_DEPLOYMENT_NAME:?set BPANE_DEPLOYMENT_NAME}-runtime-sockets
+      BPANE_RUNTIME_BROKER_SESSION_DATA_VOLUME_PREFIX: ${BPANE_DEPLOYMENT_NAME:?set BPANE_DEPLOYMENT_NAME}-session-data
+      BPANE_RUNTIME_BROKER_CONTEXT_VOLUME_PREFIX: ${BPANE_DEPLOYMENT_NAME:?set BPANE_DEPLOYMENT_NAME}-browser-context
+      BPANE_RUNTIME_BROKER_CONTAINER_PREFIX: ${BPANE_DEPLOYMENT_NAME:?set BPANE_DEPLOYMENT_NAME}-runtime
+      BPANE_RUNTIME_BROKER_EXTENSION_REGISTRY_FILE: /runtime-config/extensions.json
+      BPANE_RUNTIME_BROKER_BROWSER_ENVIRONMENT_FILE: /runtime-config/browser.env
+      BPANE_RUNTIME_BROKER_WORKER_CONFIG_FILE: /runtime-config/workers.json
+      BPANE_RUNTIME_BROKER_WORKFLOW_IMAGE: ${BPANE_WORKFLOW_WORKER_IMAGE:?set BPANE_WORKFLOW_WORKER_IMAGE to an immutable digest}
+      BPANE_RUNTIME_BROKER_RECORDING_IMAGE: ${BPANE_RECORDING_WORKER_IMAGE:?set BPANE_RECORDING_WORKER_IMAGE to an immutable digest}
+      BPANE_RUNTIME_BROKER_STORAGE_HELPER_IMAGE: ${BPANE_STORAGE_HELPER_IMAGE:?set BPANE_STORAGE_HELPER_IMAGE to an immutable digest}
+      BPANE_RUNTIME_BROKER_STORAGE_HELPER_CONTAINER_PREFIX: ${BPANE_DEPLOYMENT_NAME:?set BPANE_DEPLOYMENT_NAME}-storage-helper
+      BPANE_RUNTIME_BROKER_WORKER_OIDC_CLIENT_SECRET_FILE: /run/secrets/worker-oidc-client-secret
+      BPANE_RUNTIME_BROKER_MAX_CONCURRENT: ${BPANE_BROKER_MAX_CONCURRENT:-16}
+      BPANE_RUNTIME_BROKER_OPERATION_TIMEOUT_SECS: "30"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8940/readyz"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - ./extensions.json:/runtime-config/extensions.json:ro
+      - ./generated/browser.env:/runtime-config/browser.env:ro
+      - ./generated/workers.json:/runtime-config/workers.json:ro
+      - ${BPANE_WORKER_OIDC_CLIENT_SECRET_FILE:?set BPANE_WORKER_OIDC_CLIENT_SECRET_FILE}:/run/secrets/worker-oidc-client-secret:ro
+    depends_on:
+      docker-proxy:
+        condition: service_healthy
+    networks:
+      - broker-api
+      - broker-auth
+      - docker-control
+
+  docker-proxy:
+    image: ${BPANE_DOCKER_PROXY_IMAGE:?set BPANE_DOCKER_PROXY_IMAGE to an immutable digest}
+    environment:
+      ALLOW_PAUSE: "0"
+      ALLOW_RESTARTS: "0"
+      ALLOW_START: "1"
+      ALLOW_STOP: "1"
+      ALLOW_UNPAUSE: "0"
+      AUTH: "0"
+      BUILD: "0"
+      COMMIT: "0"
+      CONFIGS: "0"
+      CONTAINERS: "1"
+      DISTRIBUTION: "0"
+      EVENTS: "0"
+      EXEC: "0"
+      GRPC: "0"
+      IMAGES: "0"
+      INFO: "1"
+      NETWORKS: "0"
+      NODES: "0"
+      PLUGINS: "0"
+      POST: "1"
+      SECRETS: "0"
+      SERVICES: "0"
+      SESSION: "0"
+      SWARM: "0"
+      SYSTEM: "0"
+      TASKS: "0"
+      VERSION: "1"
+      VOLUMES: "1"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:2375/_ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 3s
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /run:size=1m,mode=0750
+      - /tmp:size=4m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - docker-control
+
+volumes:
+  runtime-sockets:
+    name: ${BPANE_DEPLOYMENT_NAME:?set BPANE_DEPLOYMENT_NAME}-runtime-sockets
+  recording-staging:
+    name: ${BPANE_DEPLOYMENT_NAME:?set BPANE_DEPLOYMENT_NAME}-recording-staging
+  recording-artifacts:
+    name: ${BPANE_DEPLOYMENT_NAME:?set BPANE_DEPLOYMENT_NAME}-recording-artifacts
+  file-workspaces:
+    name: ${BPANE_DEPLOYMENT_NAME:?set BPANE_DEPLOYMENT_NAME}-file-workspaces
+
+networks:
+  runtime:
+    name: ${BPANE_DEPLOYMENT_NAME:?set BPANE_DEPLOYMENT_NAME}-runtime
+    driver: bridge
+  broker-api:
+    name: ${BPANE_DEPLOYMENT_NAME:?set BPANE_DEPLOYMENT_NAME}-broker-api
+    driver: bridge
+    internal: true
+  broker-auth:
+    name: ${BPANE_DEPLOYMENT_NAME:?set BPANE_DEPLOYMENT_NAME}-broker-auth
+    driver: bridge
+  docker-control:
+    name: ${BPANE_DEPLOYMENT_NAME:?set BPANE_DEPLOYMENT_NAME}-docker-control
+    driver: bridge
+    internal: true

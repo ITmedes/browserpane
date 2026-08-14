@@ -1,0 +1,11 @@
+{
+  "mode": "oidc",
+  "providerHint": "keycloak",
+  "issuer": "${BPANE_OIDC_PUBLIC_ISSUER}",
+  "clientId": "${BPANE_OIDC_BROWSER_CLIENT_ID}",
+  "scope": "${BPANE_OIDC_BROWSER_SCOPE}",
+  "exampleUser": {
+    "username": "demo",
+    "password": "demo-demo"
+  }
+}

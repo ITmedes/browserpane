@@ -49,6 +49,13 @@ pub struct GatewayConfig {
     #[arg(long = "mcp-bridge-control-token")]
     pub mcp_bridge_control_token: Option<String>,
 
+    /// File containing the bearer token used for MCP bridge control.
+    #[arg(
+        long = "mcp-bridge-control-token-file",
+        conflicts_with = "mcp_bridge_control_token"
+    )]
+    pub mcp_bridge_control_token_file: Option<PathBuf>,
+
     /// Timeout for gateway-to-MCP-bridge control calls.
     #[arg(long = "mcp-bridge-control-timeout-secs", default_value_t = 5)]
     pub mcp_bridge_control_timeout_secs: u64,

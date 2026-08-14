@@ -4,6 +4,11 @@ use tokio::net::UnixListener;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
+
+const IPC_SOCKET_MODE: u32 = 0o770;
+
 /// IPC server that listens on a Unix domain socket for gateway connections.
 /// Frames are length-prefixed binary as per the protocol spec.
 pub struct IpcServer {
@@ -15,6 +20,7 @@ impl IpcServer {
         // Remove stale socket file if it exists
         let _ = std::fs::remove_file(path);
         let listener = UnixListener::bind(path)?;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(IPC_SOCKET_MODE))?;
         info!("IPC listening on {path}");
         Ok(Self { listener })
     }
@@ -257,5 +263,15 @@ mod tests {
             .unwrap();
         assert_eq!(frame.channel, ChannelId::Control);
         assert_eq!(&frame.payload[..], &[0x10, 0x20, 0x30]);
+    }
+
+    #[tokio::test]
+    async fn ipc_socket_is_group_writable() {
+        let dir = tempfile::tempdir().unwrap();
+        let socket_path = dir.path().join("permissions.sock");
+        let _server = IpcServer::bind(socket_path.to_str().unwrap()).unwrap();
+
+        let mode = std::fs::metadata(socket_path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, IPC_SOCKET_MODE);
     }
 }

@@ -15,6 +15,7 @@ pub(super) struct MaterializedWorkerLaunch {
     pub(super) container_name: String,
     pub(super) policy_spec: ContainerLaunchSpec,
     pub(super) container: ContainerCreateBody,
+    pub(super) secrets: Vec<u8>,
 }
 
 impl MaterializedWorkerLaunch {
@@ -22,7 +23,7 @@ impl MaterializedWorkerLaunch {
         config: &WorkflowWorkerDockerConfig,
         request: &WorkflowWorkerLaunchRequest,
     ) -> Result<Self, &'static str> {
-        let environment = workflow_environment(config, request)?;
+        let (environment, secrets) = workflow_environment(config, request)?;
         build(
             RuntimeOperationKind::WorkflowWorker,
             request.workflow_run_id,
@@ -33,6 +34,7 @@ impl MaterializedWorkerLaunch {
             &config.seccomp_profile,
             &config.resources,
             environment,
+            secrets,
             Vec::new(),
         )
     }
@@ -41,7 +43,7 @@ impl MaterializedWorkerLaunch {
         config: &RecordingWorkerDockerConfig,
         request: &RecordingWorkerLaunchRequest,
     ) -> Result<Self, &'static str> {
-        let environment = recording_environment(config, request)?;
+        let (environment, secrets) = recording_environment(config, request)?;
         build(
             RuntimeOperationKind::RecordingWorker,
             request.recording_id,
@@ -52,6 +54,7 @@ impl MaterializedWorkerLaunch {
             &config.seccomp_profile,
             &config.resources,
             environment,
+            secrets,
             vec![mount(&config.artifact_volume, &config.output_root)],
         )
     }
@@ -68,6 +71,7 @@ fn build(
     seccomp_profile: &str,
     resources: &bpane_runtime_contract::ResourceLimits,
     environment: Vec<String>,
+    secrets: BTreeMap<String, String>,
     mounts: Vec<Mount>,
 ) -> Result<MaterializedWorkerLaunch, &'static str> {
     if environment.iter().any(|entry| {
@@ -79,6 +83,7 @@ fn build(
         return Err("worker environment is invalid");
     }
     let container_name = owned_name(prefix, resource_id);
+    let secrets = serde_json::to_vec(&secrets).map_err(|_| "worker secrets are invalid")?;
     let labels = BTreeMap::from([
         (
             "browserpane.runtime.operation".to_string(),
@@ -112,12 +117,16 @@ fn build(
         cmd: Some(command.to_vec()),
         labels: Some(labels.into_iter().collect::<HashMap<_, _>>()),
         host_config: Some(host_config(network, resources, mounts)),
+        attach_stdin: Some(true),
+        open_stdin: Some(true),
+        stdin_once: Some(true),
         ..Default::default()
     };
     Ok(MaterializedWorkerLaunch {
         container_name,
         policy_spec,
         container,
+        secrets,
     })
 }
 
@@ -156,7 +165,8 @@ fn host_config(
 fn workflow_environment(
     config: &WorkflowWorkerDockerConfig,
     request: &WorkflowWorkerLaunchRequest,
-) -> Result<Vec<String>, &'static str> {
+) -> Result<(Vec<String>, BTreeMap<String, String>), &'static str> {
+    let mut secrets = BTreeMap::new();
     let mut environment = vec![
         pair(
             "BPANE_WORKFLOW_RUN_ID",
@@ -172,25 +182,32 @@ fn workflow_environment(
             "BPANE_WORKER_MAX_OUTPUT_BYTES",
             &config.output_limit_bytes.to_string(),
         )?,
-        pair(
-            "BPANE_SESSION_AUTOMATION_ACCESS_TOKEN",
-            request
-                .credentials
-                .session_automation_access_token
-                .expose_secret(),
-        )?,
+        pair("BPANE_WORKER_SECRETS_STDIN", "true")?,
     ];
+    insert_secret(
+        &mut secrets,
+        "BPANE_SESSION_AUTOMATION_ACCESS_TOKEN",
+        request
+            .credentials
+            .session_automation_access_token
+            .expose_secret(),
+    )?;
     if let Some(token) = &request.credentials.gateway_bearer_token {
-        environment.push(pair("BPANE_WORKFLOW_BEARER_TOKEN", token.expose_secret())?);
+        insert_secret(
+            &mut secrets,
+            "BPANE_WORKFLOW_BEARER_TOKEN",
+            token.expose_secret(),
+        )?;
     }
-    add_oidc_environment(&mut environment, config.oidc.as_ref())?;
-    Ok(environment)
+    add_oidc_environment(&mut environment, &mut secrets, config.oidc.as_ref())?;
+    Ok((environment, secrets))
 }
 
 fn recording_environment(
     config: &RecordingWorkerDockerConfig,
     request: &RecordingWorkerLaunchRequest,
-) -> Result<Vec<String>, &'static str> {
+) -> Result<(Vec<String>, BTreeMap<String, String>), &'static str> {
+    let mut secrets = BTreeMap::new();
     let mut environment = vec![
         pair(
             "BPANE_RECORDING_SESSION_ID",
@@ -201,25 +218,8 @@ fn recording_environment(
         pair("BPANE_GATEWAY_API_URL", &config.gateway_api_url)?,
         pair("BPANE_RECORDING_PAGE_URL", &config.page_url)?,
         pair("BPANE_RECORDING_OUTPUT_ROOT", &config.output_root)?,
-        pair(
-            "BPANE_RECORDING_CONNECT_TICKET",
-            request.credentials.connect_ticket.expose_secret(),
-        )?,
+        pair("BPANE_WORKER_SECRETS_STDIN", "true")?,
         pair("BPANE_RECORDING_CONNECT_TRANSPORT_PATH", "/session")?,
-        pair(
-            "BPANE_SESSION_AUTOMATION_ACCESS_TOKEN",
-            request
-                .credentials
-                .session_automation_access_token
-                .expose_secret(),
-        )?,
-        pair(
-            "BPANE_RECORDING_WORKER_ACCESS_TOKEN",
-            request
-                .credentials
-                .recording_worker_access_token
-                .expose_secret(),
-        )?,
         pair(
             "BPANE_RECORDING_CONNECT_TIMEOUT_MS",
             &config.connect_timeout_ms.to_string(),
@@ -241,18 +241,44 @@ fn recording_environment(
             &config.connect_gateway_url,
         )?,
     ];
+    insert_secret(
+        &mut secrets,
+        "BPANE_RECORDING_CONNECT_TICKET",
+        request.credentials.connect_ticket.expose_secret(),
+    )?;
+    insert_secret(
+        &mut secrets,
+        "BPANE_SESSION_AUTOMATION_ACCESS_TOKEN",
+        request
+            .credentials
+            .session_automation_access_token
+            .expose_secret(),
+    )?;
+    insert_secret(
+        &mut secrets,
+        "BPANE_RECORDING_WORKER_ACCESS_TOKEN",
+        request
+            .credentials
+            .recording_worker_access_token
+            .expose_secret(),
+    )?;
     if let Some(cert_spki) = &config.cert_spki {
         environment.push(pair("BPANE_RECORDING_CERT_SPKI", cert_spki)?);
     }
     if let Some(token) = &request.credentials.gateway_bearer_token {
-        environment.push(pair("BPANE_RECORDING_BEARER_TOKEN", token.expose_secret())?);
+        insert_secret(
+            &mut secrets,
+            "BPANE_RECORDING_BEARER_TOKEN",
+            token.expose_secret(),
+        )?;
     }
-    add_oidc_environment(&mut environment, config.oidc.as_ref())?;
-    Ok(environment)
+    add_oidc_environment(&mut environment, &mut secrets, config.oidc.as_ref())?;
+    Ok((environment, secrets))
 }
 
 fn add_oidc_environment(
     environment: &mut Vec<String>,
+    secrets: &mut BTreeMap<String, String>,
     oidc: Option<&WorkerOidcConfig>,
 ) -> Result<(), &'static str> {
     let Some(oidc) = oidc else {
@@ -261,14 +287,32 @@ fn add_oidc_environment(
     environment.extend([
         pair("BPANE_GATEWAY_OIDC_TOKEN_URL", &oidc.token_url)?,
         pair("BPANE_GATEWAY_OIDC_CLIENT_ID", &oidc.client_id)?,
-        pair(
-            "BPANE_GATEWAY_OIDC_CLIENT_SECRET",
-            oidc.client_secret.expose_secret(),
-        )?,
     ]);
+    insert_secret(
+        secrets,
+        "BPANE_GATEWAY_OIDC_CLIENT_SECRET",
+        oidc.client_secret.expose_secret(),
+    )?;
     if !oidc.scopes.is_empty() {
         environment.push(pair("BPANE_GATEWAY_OIDC_SCOPES", &oidc.scopes)?);
     }
+    Ok(())
+}
+
+fn insert_secret(
+    secrets: &mut BTreeMap<String, String>,
+    key: &str,
+    value: &str,
+) -> Result<(), &'static str> {
+    if value.is_empty()
+        || value.len() > 16 * 1024
+        || value
+            .bytes()
+            .any(|byte| byte == 0 || byte == b'\n' || byte == b'\r')
+    {
+        return Err("worker secret value is invalid");
+    }
+    secrets.insert(key.to_string(), value.to_string());
     Ok(())
 }
 

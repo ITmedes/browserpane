@@ -5,12 +5,125 @@ use crate::session_control::SessionOwnerMode;
 use crate::session_manager::SessionManagerConfig;
 
 use super::builders::{
-    build_recording_worker_config, build_session_manager_config, default_owner_mode,
-    load_or_generate_shared_secret, session_file_retention_window, workflow_retention_window,
+    build_credential_provider, build_recording_worker_config, build_session_manager_config,
+    default_owner_mode, load_or_generate_shared_secret, resolve_database_url,
+    session_file_retention_window, workflow_retention_window,
 };
 
 fn test_config() -> Config {
     Config::parse_from(["bpane-gateway"])
+}
+
+fn write_owner_secret(path: &std::path::Path, value: &str) {
+    std::fs::write(path, value).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600)).unwrap();
+    }
+}
+
+#[test]
+fn database_url_can_be_loaded_from_owner_only_file() {
+    let directory = tempfile::tempdir().unwrap();
+    let secret_path = directory.path().join("database-url");
+    write_owner_secret(&secret_path, "postgres://gateway:secret@postgres/bpane\n");
+    let mut config = test_config();
+    config.storage.database_url_file = Some(secret_path);
+
+    let database_url = resolve_database_url(&config).unwrap();
+
+    assert_eq!(
+        database_url.as_deref(),
+        Some("postgres://gateway:secret@postgres/bpane")
+    );
+}
+
+#[test]
+fn database_url_rejects_inline_and_file_configuration() {
+    let mut config = test_config();
+    config.storage.database_url = Some("postgres://inline".to_string());
+    config.storage.database_url_file = Some("database-url".into());
+
+    let error = resolve_database_url(&config).unwrap_err();
+
+    assert_eq!(
+        error.to_string(),
+        "--database-url conflicts with --database-url-file"
+    );
+}
+
+#[test]
+fn credential_provider_can_load_vault_token_from_owner_only_file() {
+    let directory = tempfile::tempdir().unwrap();
+    let secret_path = directory.path().join("vault-token");
+    write_owner_secret(&secret_path, "vault-token\n");
+    let mut config = test_config();
+    config.storage.credential_vault_addr = Some("http://vault:8200".to_string());
+    config.storage.credential_vault_token_file = Some(secret_path);
+
+    assert!(build_credential_provider(&config).unwrap().is_some());
+}
+
+#[test]
+fn credential_provider_rejects_inline_and_file_tokens() {
+    let mut config = test_config();
+    config.storage.credential_vault_addr = Some("http://vault:8200".to_string());
+    config.storage.credential_vault_token = Some("inline".to_string());
+    config.storage.credential_vault_token_file = Some("vault-token".into());
+
+    let error = match build_credential_provider(&config) {
+        Ok(_) => panic!("expected conflicting credential token sources to fail"),
+        Err(error) => error,
+    };
+
+    assert_eq!(
+        error.to_string(),
+        "--credential-vault-token conflicts with --credential-vault-token-file"
+    );
+}
+
+#[test]
+fn mcp_bridge_control_can_load_token_from_owner_only_file() {
+    let directory = tempfile::tempdir().unwrap();
+    let secret_path = directory.path().join("mcp-token");
+    write_owner_secret(&secret_path, "mcp-control-token\n");
+    let mut config = test_config();
+    config.gateway.mcp_bridge_control_url = Some("http://mcp-bridge:8931".to_string());
+    config.gateway.mcp_bridge_control_token_file = Some(secret_path);
+
+    let control = super::mcp_bridge_control_config(&config).unwrap().unwrap();
+
+    assert_eq!(control.bearer_token.as_deref(), Some("mcp-control-token"));
+}
+
+#[test]
+fn mcp_bridge_control_rejects_inline_and_file_tokens() {
+    let mut config = test_config();
+    config.gateway.mcp_bridge_control_url = Some("http://mcp-bridge:8931".to_string());
+    config.gateway.mcp_bridge_control_token = Some("inline".to_string());
+    config.gateway.mcp_bridge_control_token_file = Some("mcp-token".into());
+
+    let error = super::mcp_bridge_control_config(&config).unwrap_err();
+
+    assert_eq!(
+        error.to_string(),
+        "--mcp-bridge-control-token conflicts with --mcp-bridge-control-token-file"
+    );
+}
+
+#[test]
+fn cli_rejects_ambiguous_database_secret_sources() {
+    let error = Config::try_parse_from([
+        "bpane-gateway",
+        "--database-url",
+        "postgres://inline",
+        "--database-url-file",
+        "database-url",
+    ])
+    .unwrap_err();
+
+    assert_eq!(error.kind(), clap::error::ErrorKind::ArgumentConflict);
 }
 
 #[test]

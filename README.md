@@ -151,9 +151,12 @@ Current support and scope:
 - Security baseline: the current trust boundaries, implemented controls,
   deployment obligations, and residual risks are linked in the
   [threat model](docs/THREAT_MODEL.md) and
-  [production security baseline](docs/PRODUCTION_SECURITY_BASELINE.md). The
-  broker topology is production-like validation evidence, not a supported
-  production deployment; packaging remains [issue #66](https://github.com/ITmedes/browserpane/issues/66).
+  [production security baseline](docs/PRODUCTION_SECURITY_BASELINE.md).
+  BrowserPane now includes an independent, broker-only
+  [single-node deployment baseline](docs/SINGLE_NODE_DEPLOYMENT.md) for a
+  controlled Linux Docker host. It is bounded packaging evidence, not an HA,
+  managed-cloud, compliance, or universal production-readiness claim; broader
+  deployment work remains [issue #66](https://github.com/ITmedes/browserpane/issues/66).
 
 ## How The System Is Shaped
 
@@ -504,6 +507,28 @@ If a manually launched local Chromium reports `Opening handshake failed` when jo
   --ignore-certificate-errors-spki-list="$(cat dev/certs/cert-fingerprint.txt)" \
   http://localhost:8080/admin-new/
 ```
+
+### Hardened Single-Node Baseline
+
+`deploy/single-node/compose.yml` is the independent deployment profile for one
+dedicated Linux Docker host. It requires immutable image digests, protected
+secret files, external OIDC/Postgres/Vault, trusted HTTPS and WebTransport
+ingress, and operator-owned backup, monitoring, firewall, and host controls.
+It does not inherit the local demo services or source mounts.
+
+Validate and start it with the same operator-owned environment file:
+
+```bash
+node scripts/check-single-node-deployment.mjs \
+  --env-file /etc/browserpane/browserpane.env
+docker compose --project-name browserpane \
+  --env-file /etc/browserpane/browserpane.env \
+  -f deploy/single-node/compose.yml up -d
+```
+
+See [docs/SINGLE_NODE_DEPLOYMENT.md](docs/SINGLE_NODE_DEPLOYMENT.md) for the
+support boundary, configuration, ingress, diagnostics, backup/restore,
+upgrade/rollback, and qualification procedure.
 
 ### Remote / Self-Hosted Testing
 
@@ -1675,6 +1700,7 @@ Planning and evidence sources:
 - [docs/OPEN_ISSUES_CONTEXT.md](docs/OPEN_ISSUES_CONTEXT.md): canonical issue ownership map
 - [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md): assets, actors, boundaries, controls, and residual risks
 - [docs/PRODUCTION_SECURITY_BASELINE.md](docs/PRODUCTION_SECURITY_BASELINE.md): future deployment responsibility and security gate
+- [docs/SINGLE_NODE_DEPLOYMENT.md](docs/SINGLE_NODE_DEPLOYMENT.md): bounded single-host deployment and operator runbook
 
 It should explain:
 

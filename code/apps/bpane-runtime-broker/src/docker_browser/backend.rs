@@ -4,10 +4,12 @@ use async_trait::async_trait;
 use bollard::errors::Error as BollardError;
 use bollard::models::{ContainerCreateBody, ContainerStateStatusEnum};
 use bollard::query_parameters::{
-    CreateContainerOptionsBuilder, RemoveContainerOptionsBuilder, StopContainerOptionsBuilder,
+    AttachContainerOptionsBuilder, CreateContainerOptionsBuilder, RemoveContainerOptionsBuilder,
+    StopContainerOptionsBuilder,
 };
 use bollard::{Docker, API_DEFAULT_VERSION};
 use reqwest::Url;
+use tokio::io::AsyncWriteExt;
 
 use crate::{ExecutionError, ExecutionErrorCode};
 
@@ -29,6 +31,9 @@ pub(crate) trait DockerContainerApi: Send + Sync {
     async fn create(&self, name: &str, body: ContainerCreateBody)
         -> Result<(), DockerBackendError>;
     async fn start(&self, name: &str) -> Result<(), DockerBackendError>;
+    async fn send_stdin(&self, _name: &str, _contents: Vec<u8>) -> Result<(), DockerBackendError> {
+        Err(DockerBackendError::Failed)
+    }
     async fn inspect(&self, name: &str) -> Result<DockerContainerState, DockerBackendError>;
     async fn stop(&self, name: &str) -> Result<(), DockerBackendError>;
     async fn remove(&self, name: &str) -> Result<(), DockerBackendError>;
@@ -87,6 +92,36 @@ impl DockerContainerApi for BollardDockerContainerApi {
             .start_container(name, None)
             .await
             .map_err(map_bollard_error)
+    }
+
+    async fn send_stdin(
+        &self,
+        name: &str,
+        mut contents: Vec<u8>,
+    ) -> Result<(), DockerBackendError> {
+        if contents.is_empty() || contents.len() > 64 * 1024 || contents.contains(&b'\n') {
+            return Err(DockerBackendError::Failed);
+        }
+        contents.push(b'\n');
+        let options = AttachContainerOptionsBuilder::default()
+            .stdin(true)
+            .stream(true)
+            .build();
+        let mut attachment = self
+            .docker
+            .attach_container(name, Some(options))
+            .await
+            .map_err(map_bollard_error)?;
+        attachment
+            .input
+            .write_all(&contents)
+            .await
+            .map_err(|_| DockerBackendError::Failed)?;
+        attachment
+            .input
+            .shutdown()
+            .await
+            .map_err(|_| DockerBackendError::Failed)
     }
 
     async fn inspect(&self, name: &str) -> Result<DockerContainerState, DockerBackendError> {

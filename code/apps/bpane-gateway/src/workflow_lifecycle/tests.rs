@@ -56,7 +56,7 @@ fn worker_config_rejects_unbounded_runtime_settings() {
     let mut config = test_config(PathBuf::from("/bin/sh"));
     config.output_limit_bytes = 0;
     assert!(matches!(
-        validate_config(&config, &auth),
+        validate_config(&config, auth.is_oidc(), false),
         Err(WorkflowLifecycleError::InvalidConfiguration(message))
             if message.contains("output limit")
     ));
@@ -64,9 +64,22 @@ fn worker_config_rejects_unbounded_runtime_settings() {
     config.output_limit_bytes = 4096;
     config.request_timeout = Duration::ZERO;
     assert!(matches!(
-        validate_config(&config, &auth),
+        validate_config(&config, auth.is_oidc(), false),
         Err(WorkflowLifecycleError::InvalidConfiguration(message))
             if message.contains("request timeout")
+    ));
+}
+
+#[test]
+fn broker_managed_worker_does_not_require_direct_oidc_credentials() {
+    let mut config = test_config(PathBuf::from("/bin/false"));
+    config.bearer_token = None;
+
+    assert!(validate_config(&config, true, true).is_ok());
+    assert!(matches!(
+        validate_config(&config, true, false),
+        Err(WorkflowLifecycleError::InvalidConfiguration(message))
+            if message.contains("auth is not configured")
     ));
 }
 

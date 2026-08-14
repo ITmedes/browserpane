@@ -16,6 +16,7 @@ test('catalog exposes stable, unique fast and compose profiles', () => {
   assert.ok(fast.some((stage) => stage.id === 'dependency-safety'));
   assert.ok(fast.some((stage) => stage.id === 'repository-documents'));
   assert.ok(fast.some((stage) => stage.id === 'production-security-baseline'));
+  assert.ok(fast.some((stage) => stage.id === 'single-node-preflight'));
   assert.ok(fast.some((stage) => stage.id === 'rust-coverage'));
   assert.ok(fast.some((stage) => stage.id === 'admin-auth-test'));
   assert.ok(fast.some((stage) => stage.id === 'admin-auth-test-coverage'));
@@ -44,6 +45,7 @@ test('promotion surface runner remains part of validation tooling tests', () => 
   assert.ok(tooling);
   assert.ok(tooling.args.includes('scripts/validation/admin-promotion-contract.test.mjs'));
   assert.ok(tooling.args.includes('scripts/validation/admin-promotion-runner.test.mjs'));
+  assert.ok(tooling.args.includes('scripts/single-node/single-node-deployment.test.mjs'));
 });
 
 test('catalog selects requested stages in caller order and rejects out-of-profile ids', () => {

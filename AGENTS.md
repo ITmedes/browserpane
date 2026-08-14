@@ -212,6 +212,16 @@ Current product shape:
     dependency in this topology. Base Compose remains the explicit local direct
     `docker_pool` compatibility path.
   - The gateway mounts the repo at `/workspace:ro` so local git-backed workflow sources can be resolved and materialized during development smokes.
+- `deploy/single-node/compose.yml`
+  - Independent hardened baseline for one Linux Docker host: `web`, `gateway`,
+    `runtime-broker`, and `docker-proxy` are the only long-lived BrowserPane
+    services; browser and worker containers are broker-launched.
+  - Requires immutable images, protected secret files, external OIDC/Postgres/
+    Vault, and operator-owned ingress, storage, monitoring, and host controls.
+    Dynamic worker credentials use bounded one-shot stdin and must not appear in
+    Docker environment, command, or filesystem inspection.
+  - Validate with `node scripts/check-single-node-deployment.mjs`; the complete
+    operator and qualification procedure is in `docs/SINGLE_NODE_DEPLOYMENT.md`.
 - `deploy/examples/egress-observer`
   - Local egress observation fixtures. `compose.yml` runs a metadata-only Squid forward proxy at `bpane-egress-observer:3128` and an auth-enforcing Squid proxy at `bpane-egress-auth-observer:3130` for proxy-auth validation. `compose.tls.yml` runs a mitmproxy TLS-intercept proxy at `bpane-egress-tls-observer:3129` using local CA material prepared by `prepare-mitmproxy-ca.sh`. `egress-usage-reporter.mjs` is the local sanitized usage-ingestion example: it joins Squid logs with docker runtime labels and calls `/api/v1/sessions/{id}/egress-usage` with byte counters and safe observer metadata only.
 

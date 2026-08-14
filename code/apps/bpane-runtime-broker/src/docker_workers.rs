@@ -83,6 +83,14 @@ impl WorkerRuntimeDockerAdapter {
             let _ = self.backend.remove(&launch.container_name).await;
             return Err(map_backend_error(error));
         }
+        if let Err(error) = self
+            .backend
+            .send_stdin(&launch.container_name, launch.secrets)
+            .await
+        {
+            let _ = self.backend.remove(&launch.container_name).await;
+            return Err(map_backend_error(error));
+        }
         Ok(RuntimeOperationResult::Accepted)
     }
 
