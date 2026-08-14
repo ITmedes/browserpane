@@ -2,7 +2,7 @@
 
 Governance issue: [#173](https://github.com/ITmedes/browserpane/issues/173)
 
-Last reviewed: 2026-08-13
+Last reviewed: 2026-08-14
 
 ## Scale
 
@@ -22,7 +22,7 @@ Last reviewed: 2026-08-13
 | R-006 | Public OpenAPI can drift from code or break clients silently. | Low | High | #179 | Review-ready on `feature/BPANE-00179`: 131-operation inventory, pinned lint, executable examples, Axum route coverage, semantic diff, policy, CI stages, and full fast/Compose validation. Close after merge and required-check confirmation. | Foundation |
 | R-007 | Protocol version is not enforced and compatibility is undocumented. | Medium | Critical | #175 | Version negotiation, shared vectors, fuzzing, compatibility matrix. | Production |
 | R-008 | In-memory and Postgres behavior can diverge. | Medium | High | #152 | Shared store contract suite and compose verification. | Foundation |
-| R-010 | Platform failures and saturation are not observable through standard telemetry/SLOs. | High | High | #178 | OTel/metrics contract, alerts, runbooks, load evidence. | Phase 1 / Production |
+| R-010 | Platform failures and saturation are not yet observable end to end through standard telemetry/SLOs. | High | High | #178 | Gateway OpenMetrics RED/runtime-capacity foundation is implemented on the active #178 checkpoint; cross-process OTel, broader subsystem metrics, alerts, runbooks, and load evidence remain. | Phase 1 / Production |
 | R-011 | Organization/project mappings are descriptive rather than a complete enforced authorization model. | High | Critical | #176 | Role/grant matrix, enforcement, migration, denial/audit tests. | Phase N |
 | R-012 | Deprovisioned identities or emergency access lack deterministic lifecycle controls. | Medium | Critical | #177 | Lifecycle API/SCIM path, stale review, break-glass controls. | Phase N |
 | R-013 | Compose prototype is described beyond its supported deployment/capacity envelope. | High | High | #66 / #150 / #178 | #150 adds dependency readiness and bounded gateway drain; named deployment profiles, load evidence, telemetry, and explicit supported limits remain. | Phase 0 / Production |

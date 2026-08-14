@@ -4,9 +4,9 @@ Status: Canonical execution roadmap
 
 Governance issue: [#173](https://github.com/ITmedes/browserpane/issues/173)
 
-Last implementation audit: 2026-08-13 on
-`feature/BPANE-00167-docker-runtime-boundary` through the complete proxy-boundary
-and compose/browser regression checkpoint.
+Last implementation audit: 2026-08-14 on
+`feature/BPANE-00178-platform-metrics-foundation` through the bounded gateway
+OpenMetrics and runtime-capacity checkpoint.
 
 ## How To Use This Document
 
@@ -49,7 +49,7 @@ or capacity decision.
 | Foundation | Trusted build, auth, contracts, storage, and lifecycle baseline. | Complete through #179 | Foundation Gate |
 | Pilot Value | One bounded reference workflow with accepted evidence and runbook. | #174 | Phase 0 Gate |
 | Operator Product | Complete and promote `/admin-new/` as the default operator console. | Default promoted through #163; #124 is the next focused catalog gap | Phase 1 Gate |
-| Production | Harden deployment, security, recovery, supply chain, and telemetry. | #167 merged; #214 broker topology in completion, then #178 / #72 / #66 | Production Baseline |
+| Production | Harden deployment, security, recovery, supply chain, and telemetry. | #167 and #214 merged; #178 metrics foundation in progress, then #72 / #66 | Production Baseline |
 | Enterprise | Organization controls, policy, residency, HA, and governed integrations. | #176 / #70 / #79 | Phase N Gate |
 | Innovation | Teach Mode and controlled repair after stable execution contracts. | #171 | Phase N capability gate |
 
@@ -92,8 +92,9 @@ closed after its validation contract merged through PR #210 and the unified
 admin became the default web-root route through PR #211. #149 merged through
 PR #212, and #165 worker-runtime hardening merged through PR #213. #167 merged
 through PR #215. #214 broker contracts, policy, browser/worker/storage adapters,
-and gateway routing merged incrementally through PR #220; the final isolated
-gateway topology is the current completion slice.
+and gateway routing merged incrementally through PRs #220 and #221. #178 is now
+active with a first bounded gateway OpenMetrics/runtime-capacity checkpoint; it
+does not complete tracing, SLO, alert, or load-evidence scope.
 
 ## Foundation Gate Sequence
 

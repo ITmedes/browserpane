@@ -61,6 +61,7 @@ The system has seven primary runtime roles plus persistent control-plane stores:
 | Screen capture | X11 SHM + XDamage + XComposite | Incremental damage, shared-memory pixel access, no full-frame polling |
 | Video encode | FFmpeg x11grab -> libx264 | H.264 Baseline for WebCodecs compat; process isolation from host |
 | Gateway | Rust + wtransport | QUIC/WebTransport server with reliable streams + datagrams |
+| Metrics | prometheus-client + OpenMetrics | Explicit gateway-owned registry with bounded aggregate labels |
 | Browser client | TypeScript + fzstd | WebGL 2 compositing (Canvas 2D fallback), WebCodecs H.264 decode, WebTransport API |
 | Wire protocol | Custom binary, no serde | Manual `[u8]` encode/decode for minimal overhead and zero alloc on hot path |
 | Tile compression | QOI or Zstd (configurable) | QOI: fast decode, good for UI; Zstd: better ratio for complex content |
@@ -268,6 +269,9 @@ service.
   checks for the configured session store, runtime manager, credential
   provider, and recording/workspace artifact stores; logs only readiness
   transitions
+- **Metrics facade** (`metrics.rs`): gateway-owned OpenMetrics registry with
+  bounded HTTP RED labels and scrape-time runtime-capacity gauges; resource ids,
+  raw paths, URLs, credentials, browser content, and egress data are excluded
 - **Session hub** (`session_hub.rs`): one host agent, N browser clients
   - Broadcast: host -> all clients (tokio broadcast channel, capacity 1024)
   - Merge: all clients -> host (mpsc channel)
@@ -326,6 +330,7 @@ service.
 - **HTTP API** (`api.rs`, :8932):
   - `GET /healthz` — unauthenticated process liveness without resource data
   - `GET /readyz` — unauthenticated lifecycle and sanitized dependency readiness; returns 503 while starting, draining, or degraded
+  - `GET /metrics` — unauthenticated aggregate OpenMetrics request/runtime-capacity surface intended for a trusted collector network; it is outside the owner-scoped v1 contract
   - canonical frozen v1 contract: `openapi/bpane-control-v1.yaml`
   - `GET /api/v1/identity/me` — normalized current bearer principal, classified as user, service principal, or legacy dev token
   - `GET /api/v1/identity/access-review` — sanitized owner-scoped access review with service-principal registry metadata, identity-to-project mappings, safe group/claim mapping evaluation, unmapped-principal signals, project usage, resource counts, and automation delegations
