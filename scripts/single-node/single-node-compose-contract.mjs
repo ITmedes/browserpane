@@ -54,6 +54,11 @@ export class SingleNodeComposeContract {
     const command = gateway.command ?? [];
     this.expect(this.argumentValue(command, "--runtime-backend") === "broker_pool",
       "gateway must use broker_pool");
+    this.expect(
+      this.argumentValue(command, "--docker-runtime-container-name-prefix") ===
+        broker.environment?.BPANE_RUNTIME_BROKER_CONTAINER_PREFIX,
+      "gateway and runtime-broker container prefixes must match",
+    );
     for (const flag of [
       "--database-url-file",
       "--credential-vault-token-file",

@@ -69,6 +69,10 @@ test("compose contract rejects topology, listener, secret, and fixture regressio
     [(input) => { input.composeConfig.services.gateway.command.push("--database-url", "secret"); },
       /inline configuration is forbidden/u],
     [(input) => {
+      input.composeConfig.services["runtime-broker"]
+        .environment.BPANE_RUNTIME_BROKER_CONTAINER_PREFIX = "mismatched-runtime";
+    }, /container prefixes must match/u],
+    [(input) => {
       input.composeConfig.services.gateway.volumes.find(
         (mount) => mount.target === "/var/lib/browserpane/recording-artifacts",
       ).read_only = true;
