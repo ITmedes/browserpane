@@ -20,6 +20,12 @@ enum BackendCall {
         body: Box<ContainerCreateBody>,
     },
     Start(String),
+    Upload {
+        name: String,
+        directory: String,
+        file_name: String,
+        contents: Vec<u8>,
+    },
     Inspect,
     Stop,
     Remove,
@@ -96,6 +102,22 @@ impl DockerContainerApi for FakeDockerBackend {
             .unwrap()
             .push(BackendCall::Start(name.to_string()));
         self.failure("start").map_or(Ok(()), Err)
+    }
+
+    async fn upload_file(
+        &self,
+        name: &str,
+        directory: &str,
+        file_name: &str,
+        contents: Vec<u8>,
+    ) -> Result<(), DockerBackendError> {
+        self.calls.lock().unwrap().push(BackendCall::Upload {
+            name: name.to_string(),
+            directory: directory.to_string(),
+            file_name: file_name.to_string(),
+            contents,
+        });
+        self.failure("upload").map_or(Ok(()), Err)
     }
 
     async fn inspect(&self, name: &str) -> Result<DockerContainerState, DockerBackendError> {
@@ -259,6 +281,13 @@ fn environment(body: &ContainerCreateBody) -> BTreeMap<String, String> {
         .collect()
 }
 
+fn uploaded_secrets(call: &BackendCall) -> BTreeMap<String, String> {
+    let BackendCall::Upload { contents, .. } = call else {
+        panic!("backend call must upload worker secrets");
+    };
+    serde_json::from_slice(contents).unwrap()
+}
+
 #[tokio::test]
 async fn workflow_launch_materializes_only_fixed_policy_fields() {
     let backend = Arc::new(FakeDockerBackend::default());
@@ -284,7 +313,7 @@ async fn workflow_launch_materializes_only_fixed_policy_fields() {
 
     assert_eq!(result, RuntimeOperationResult::Accepted);
     let calls = backend.calls.lock().unwrap();
-    assert_eq!(calls.len(), 3);
+    assert_eq!(calls.len(), 4);
     assert!(matches!(&calls[0], BackendCall::Remove));
     let BackendCall::Create { name, body } = &calls[1] else {
         panic!("second backend call must create the worker");
@@ -304,6 +333,10 @@ async fn workflow_launch_materializes_only_fixed_policy_fields() {
     assert!(host.mounts.is_none());
     assert!(host.devices.is_none());
     assert!(host.cap_add.is_none());
+    assert_eq!(
+        host.tmpfs.as_ref().unwrap().get(WORKER_SECRETS_DIRECTORY),
+        Some(&"rw,noexec,nosuid,nodev,size=64k,mode=0700".to_string())
+    );
     assert_eq!(host.memory, Some(limits().memory_bytes as i64));
     assert_eq!(host.pids_limit, Some(i64::from(limits().pids)));
     assert_eq!(
@@ -317,21 +350,43 @@ async fn workflow_launch_materializes_only_fixed_policy_fields() {
     let env = environment(body);
     assert_eq!(env.get("BPANE_WORKFLOW_RUN_ID"), Some(&run_id.to_string()));
     assert_eq!(
-        env.get("BPANE_SESSION_AUTOMATION_ACCESS_TOKEN")
-            .map(String::as_str),
-        Some("automation-secret")
+        env.get("BPANE_WORKER_SECRETS_FILE").map(String::as_str),
+        Some("/run/browserpane-secrets/worker.json")
     );
-    assert_eq!(
-        env.get("BPANE_WORKFLOW_BEARER_TOKEN").map(String::as_str),
-        Some("gateway-secret")
-    );
-    assert_eq!(
-        env.get("BPANE_GATEWAY_OIDC_CLIENT_SECRET")
-            .map(String::as_str),
-        Some("oidc-secret")
-    );
+    assert!(!env.contains_key("BPANE_SESSION_AUTOMATION_ACCESS_TOKEN"));
+    assert!(!env.contains_key("BPANE_WORKFLOW_BEARER_TOKEN"));
+    assert!(!env.contains_key("BPANE_GATEWAY_OIDC_CLIENT_SECRET"));
     assert!(!env.contains_key("BPANE_GATEWAY_OIDC_SCOPES"));
     assert!(matches!(&calls[2], BackendCall::Start(value) if value == name));
+    let BackendCall::Upload {
+        name: upload_name,
+        directory,
+        file_name,
+        ..
+    } = &calls[3]
+    else {
+        panic!("fourth backend call must upload worker secrets");
+    };
+    assert_eq!(upload_name, name);
+    assert_eq!(directory, WORKER_SECRETS_DIRECTORY);
+    assert_eq!(file_name, WORKER_SECRETS_FILE_NAME);
+    assert_eq!(
+        uploaded_secrets(&calls[3]),
+        BTreeMap::from([
+            (
+                "BPANE_GATEWAY_OIDC_CLIENT_SECRET".to_string(),
+                "oidc-secret".to_string(),
+            ),
+            (
+                "BPANE_SESSION_AUTOMATION_ACCESS_TOKEN".to_string(),
+                "automation-secret".to_string(),
+            ),
+            (
+                "BPANE_WORKFLOW_BEARER_TOKEN".to_string(),
+                "gateway-secret".to_string(),
+            ),
+        ])
+    );
 }
 
 #[tokio::test]
@@ -379,25 +434,69 @@ async fn recording_launch_allows_only_the_fixed_artifact_volume() {
         env.get("BPANE_RECORDING_ID"),
         Some(&recording_id.to_string())
     );
-    assert_eq!(
-        env.get("BPANE_RECORDING_CONNECT_TICKET")
-            .map(String::as_str),
-        Some("connect-secret")
-    );
-    assert_eq!(
-        env.get("BPANE_RECORDING_WORKER_ACCESS_TOKEN")
-            .map(String::as_str),
-        Some("worker-secret")
-    );
-    assert_eq!(
-        env.get("BPANE_RECORDING_BEARER_TOKEN").map(String::as_str),
-        Some("gateway-secret")
-    );
+    assert!(!env.contains_key("BPANE_RECORDING_CONNECT_TICKET"));
+    assert!(!env.contains_key("BPANE_SESSION_AUTOMATION_ACCESS_TOKEN"));
+    assert!(!env.contains_key("BPANE_RECORDING_WORKER_ACCESS_TOKEN"));
+    assert!(!env.contains_key("BPANE_RECORDING_BEARER_TOKEN"));
+    assert!(!env.contains_key("BPANE_GATEWAY_OIDC_CLIENT_SECRET"));
     assert_eq!(
         env.get("BPANE_RECORDING_CONNECT_GATEWAY_URL")
             .map(String::as_str),
         Some("https://gateway:4433")
     );
+    assert_eq!(
+        uploaded_secrets(&calls[3]),
+        BTreeMap::from([
+            (
+                "BPANE_GATEWAY_OIDC_CLIENT_SECRET".to_string(),
+                "oidc-secret".to_string(),
+            ),
+            (
+                "BPANE_RECORDING_BEARER_TOKEN".to_string(),
+                "gateway-secret".to_string(),
+            ),
+            (
+                "BPANE_RECORDING_CONNECT_TICKET".to_string(),
+                "connect-secret".to_string(),
+            ),
+            (
+                "BPANE_RECORDING_WORKER_ACCESS_TOKEN".to_string(),
+                "worker-secret".to_string(),
+            ),
+            (
+                "BPANE_SESSION_AUTOMATION_ACCESS_TOKEN".to_string(),
+                "automation-secret".to_string(),
+            ),
+        ])
+    );
+}
+
+#[tokio::test]
+async fn upload_failure_removes_the_started_worker_and_returns_a_sanitized_error() {
+    let backend = Arc::new(FakeDockerBackend::default());
+    backend.fail_next("upload", DockerBackendError::Failed);
+    let adapter = WorkerRuntimeDockerAdapter::with_backend(config(), backend.clone()).unwrap();
+    let error = adapter
+        .execute(&operation(RuntimeOperation::LaunchWorkflow(
+            WorkflowWorkerLaunchRequest {
+                workflow_run_id: Uuid::now_v7(),
+                session_id: Uuid::now_v7(),
+                automation_task_id: Uuid::now_v7(),
+                credentials: WorkflowWorkerCredentials {
+                    session_automation_access_token: secret("do-not-leak"),
+                    gateway_bearer_token: None,
+                },
+            },
+        )))
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.code, ExecutionErrorCode::AdapterFailed);
+    assert!(!format!("{error:?}").contains("do-not-leak"));
+    assert!(matches!(
+        backend.calls.lock().unwrap().last(),
+        Some(BackendCall::Remove)
+    ));
 }
 
 #[tokio::test]
