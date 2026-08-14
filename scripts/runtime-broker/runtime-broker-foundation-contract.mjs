@@ -1,3 +1,5 @@
+import { RuntimeBrokerServiceSecurityContract } from "./runtime-broker-service-security-contract.mjs";
+
 const REQUIRED_BROKER_NETWORKS = ["runtime-broker-api", "runtime-broker-auth"];
 
 export class RuntimeBrokerFoundationContract {
@@ -11,6 +13,7 @@ export class RuntimeBrokerFoundationContract {
     this.expect(broker, "compose service runtime-broker is missing");
     this.expect(gateway, "compose service gateway is missing");
     this.expect(keycloak, "compose service keycloak is missing");
+    new RuntimeBrokerServiceSecurityContract().validate(broker);
     for (const network of REQUIRED_BROKER_NETWORKS) {
       this.expect(networks[network]?.internal === true, `${network} must be internal`);
     }
@@ -31,31 +34,8 @@ export class RuntimeBrokerFoundationContract {
       "runtime-broker-auth must contain only keycloak and runtime-broker",
     );
     this.expect(
-      !(broker.ports?.length > 0),
-      "runtime-broker must not publish host ports",
-    );
-    this.expect(broker.read_only === true, "runtime-broker root filesystem must be read-only");
-    this.expect(
-      (broker.cap_drop ?? []).includes("ALL"),
-      "runtime-broker must drop all Linux capabilities",
-    );
-    this.expect(
-      (broker.security_opt ?? []).includes("no-new-privileges:true"),
-      "runtime-broker must enable no-new-privileges",
-    );
-    this.expect(
-      !(broker.volumes ?? []).some((volume) =>
-        String(volume.source ?? "").includes("docker.sock"),
-      ),
-      "runtime-broker foundation must not mount the Docker socket",
-    );
-    this.expect(
       !Object.keys(broker.networks ?? {}).includes("docker-control"),
       "runtime-broker foundation must not join docker-control",
-    );
-    this.expect(
-      broker.healthcheck?.test?.join(" ").includes("/readyz"),
-      "runtime-broker healthcheck must use /readyz",
     );
     const command = Array.isArray(broker.command)
       ? broker.command.join(" ")
