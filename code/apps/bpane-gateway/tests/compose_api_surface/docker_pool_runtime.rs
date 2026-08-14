@@ -4,7 +4,7 @@ use anyhow::{anyhow, Result};
 use reqwest::StatusCode;
 use serde_json::{json, Value};
 
-use crate::support::{json_id, label_map, poll_until, ComposeHarness};
+use crate::support::{json_id, label_map, openmetrics_gauge, poll_until, ComposeHarness};
 
 #[path = "docker_pool_runtime/restart_recovery.rs"]
 mod restart_recovery;
@@ -47,6 +47,7 @@ pub async fn run_session_capacity(harness: &ComposeHarness) -> Result<()> {
             ));
         }
     }
+    assert_runtime_metrics(harness, 2, 0, 2, &[&first_id, &second_id]).await?;
 
     let third_attempt = harness
         .post_json_outcome(
@@ -81,6 +82,7 @@ pub async fn run_session_capacity(harness: &ComposeHarness) -> Result<()> {
             "docker_pool session stop did not yield stopped state: {stopped}"
         ));
     }
+    assert_runtime_metrics(harness, 1, 0, 2, &[&first_id, &second_id]).await?;
 
     let replacement = create_session(harness, "docker-pool-capacity-replacement").await?;
     let replacement_id = json_id(&replacement, "id")?;
@@ -95,6 +97,53 @@ pub async fn run_session_capacity(harness: &ComposeHarness) -> Result<()> {
 
     let _ = harness.stop_session_eventually(&second_id).await?;
     let _ = harness.stop_session_eventually(&replacement_id).await?;
+    assert_runtime_metrics(harness, 0, 0, 2, &[&first_id, &second_id, &replacement_id]).await?;
+    Ok(())
+}
+
+async fn assert_runtime_metrics(
+    harness: &ComposeHarness,
+    expected_active: i64,
+    expected_starting: i64,
+    expected_limit: i64,
+    sensitive_values: &[&str],
+) -> Result<()> {
+    let outcome = harness.get_text_outcome_without_bearer("/metrics").await?;
+    if outcome.status != StatusCode::OK {
+        return Err(anyhow!(
+            "runtime metrics returned unexpected status {}",
+            outcome.status
+        ));
+    }
+    for (name, expected) in [
+        (
+            "browserpane_gateway_runtime_active_assignments",
+            expected_active,
+        ),
+        (
+            "browserpane_gateway_runtime_starting_assignments",
+            expected_starting,
+        ),
+        (
+            "browserpane_gateway_runtime_assignment_limit",
+            expected_limit,
+        ),
+    ] {
+        let actual = openmetrics_gauge(&outcome.body, name)?;
+        if actual != expected {
+            return Err(anyhow!(
+                "runtime metric {name} expected {expected}, got {actual}"
+            ));
+        }
+    }
+    if sensitive_values
+        .iter()
+        .any(|value| outcome.body.contains(*value))
+    {
+        return Err(anyhow!(
+            "runtime metrics contain a session resource identifier"
+        ));
+    }
     Ok(())
 }
 
