@@ -1,0 +1,52 @@
+# BrowserPane production web frontend.
+FROM node:22-alpine AS build-client
+WORKDIR /app
+COPY code/web/bpane-client/package.json code/web/bpane-client/package-lock.json ./
+RUN npm ci
+COPY code/web/bpane-client/ ./
+RUN npm run build
+
+FROM node:22-alpine AS build-admin
+WORKDIR /bpane-admin-auth
+COPY code/web/bpane-admin-auth/package.json ./
+COPY code/web/bpane-admin-auth/src ./src
+WORKDIR /admin
+ENV BPANE_ADMIN_BASE_PATH=/admin
+COPY code/web/bpane-admin/package.json code/web/bpane-admin/package-lock.json code/web/bpane-admin/.npmrc ./
+RUN npm ci
+COPY code/web/bpane-admin/ ./
+RUN npm run build
+
+FROM node:22-alpine AS build-admin-unified
+WORKDIR /bpane-admin-auth
+COPY code/web/bpane-admin-auth/package.json ./
+COPY code/web/bpane-admin-auth/src ./src
+WORKDIR /admin-unified
+ENV BPANE_ADMIN_BASE_PATH=/admin-new
+COPY code/web/bpane-admin-unified/package.json code/web/bpane-admin-unified/package-lock.json code/web/bpane-admin-unified/.npmrc ./
+RUN npm ci
+COPY code/web/bpane-admin-unified/ ./
+RUN npm run build
+
+FROM nginx:alpine
+RUN rm /etc/nginx/conf.d/default.conf \
+    && apk add --no-cache gettext
+COPY deploy/single-node/nginx.conf /etc/nginx/conf.d/browserpane.conf
+COPY deploy/nginx-admin-security-headers.conf /etc/nginx/snippets/admin-security-headers.conf
+COPY deploy/single-node/web-auth-config.sh /usr/local/bin/web-auth-config
+COPY deploy/single-node/web-entrypoint.sh /usr/local/bin/web-entrypoint
+COPY deploy/single-node/auth-config.template.json /usr/share/nginx/html/auth-config.template.json
+COPY deploy/single-node/recording-worker.html /usr/share/nginx/html/recording-worker.html
+COPY openapi/bpane-control-v1.yaml /usr/share/nginx/html/openapi/bpane-control-v1.yaml
+COPY openapi/bpane-control-v1.operations.json /usr/share/nginx/html/openapi/bpane-control-v1.operations.json
+COPY openapi/bpane-control-v1.classifications.json /usr/share/nginx/html/openapi/bpane-control-v1.classifications.json
+COPY openapi/bpane-control-v1.examples.json /usr/share/nginx/html/openapi/bpane-control-v1.examples.json
+COPY openapi/bpane-control-v1.compatibility.json /usr/share/nginx/html/openapi/bpane-control-v1.compatibility.json
+COPY --from=build-client /app/dist/ /usr/share/nginx/html/dist/
+COPY --from=build-admin /admin/build/ /usr/share/nginx/html/admin/
+COPY --from=build-admin-unified /admin-unified/build/ /usr/share/nginx/html/admin-new/
+RUN chmod +x /usr/local/bin/web-auth-config /usr/local/bin/web-entrypoint
+
+USER nginx
+EXPOSE 8080
+ENTRYPOINT ["/usr/local/bin/web-entrypoint"]

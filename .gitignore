@@ -11,6 +11,7 @@ code/tests/e2e
 *.pem
 *.key
 dev/egress-mitmproxy/
+deploy/single-node/generated/
 !dev/gen-cert.sh
 
 .codex

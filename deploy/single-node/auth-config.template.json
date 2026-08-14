@@ -1,0 +1,7 @@
+{
+  "mode": "oidc",
+  "providerHint": "${BPANE_OIDC_PROVIDER_HINT}",
+  "issuer": "${BPANE_OIDC_PUBLIC_ISSUER}",
+  "clientId": "${BPANE_OIDC_BROWSER_CLIENT_ID}",
+  "scope": "${BPANE_OIDC_BROWSER_SCOPE}"
+}
