@@ -3,7 +3,7 @@
 Governance issue: [#173](https://github.com/ITmedes/browserpane/issues/173)
 
 Last verified: 2026-08-14 on
-`feature/BPANE-00178-platform-metrics-foundation`
+`feature/BPANE-00223-threat-model-baseline`
 
 ## Maturity Definitions
 
@@ -44,18 +44,19 @@ capability.
 | Recording lifecycle and playback | Prototype | recorder worker, worker-only exact-path finalization merged through PR #212, measured-byte accounting, finite worker requests, single-flight finalize polling, segmented artifacts, admin/CLI downloads, and off-thread playback export | #21 artifact/provider lifecycle |
 | Generalized artifact/evidence model | Partial prototype | recordings, workspace files, workflow produced files remain separate resources | #21, #70, #28 |
 | Workflow event delivery | Prototype | signed delivery, retry/backoff, diagnostics, DNS/IP/redirect policy, pinned delivery, finite worker requests, compose E2E | #28 retained event/audit lifecycle |
-| OIDC login and current-principal identity | Prototype | Keycloak compose, JWT validation, identity/access-review APIs | #146, #157 |
+| OIDC login and current-principal identity | Prototype | Shared `oauth4webapi` browser core, Keycloak compose, gateway JWT validation, identity/access-review APIs, auth and browser-header negative tests | #176/#177 enterprise authorization and lifecycle; #66 production IdP profile |
 | Service-principal registry | Implemented metadata; grants not fully enforced | registry CRUD and disabled-delegation guard | #176, #70 |
 | Organization/project RBAC | Planned | Current mappings are descriptive and owner-scoped | #176 |
 | Provisioning/deprovisioning and break-glass | Planned | Explicitly outside current identity baseline | #177 |
-| Admin-new resource console | Prototype | dashboard and major resource catalogs/details | #153-#163, #124 |
+| Admin-new resource console | Prototype | Standard root route with dashboard and major resource catalogs/details; promotion evidence merged through PRs #210-#211 | #124 session-template catalog and separate compatibility-admin removal decision |
 | Admin-new default promotion | Implemented | Root route selects `/admin-new/`; promotion contract and smoke evidence merged through PRs #210 and #211 | Separate compatibility-admin removal decision |
 | Gateway health/readiness/drain | Implemented | Public liveness/readiness probes, configured dependency checks, SIGINT/SIGTERM readiness withdrawal, bounded HTTP/WebTransport drain, unit and compose failure-path evidence on #150 branch | #66, #74, #178 production packaging/HA/telemetry |
-| Platform telemetry and SLOs | Partial prototype | Gateway OpenMetrics HTTP RED and aggregate runtime-capacity metrics with bounded-label/redaction unit and Compose coverage | #178 tracing, subsystem metrics, SLOs, alerts, synthetics, and load envelopes |
+| Platform telemetry and SLOs | Partial prototype | Gateway OpenMetrics HTTP RED and aggregate runtime-capacity metrics with bounded-label/redaction unit and Compose coverage merged through PR #222 | #178 tracing, subsystem metrics, SLOs, alerts, synthetics, and load envelopes |
+| Threat model and production hardening baseline | Partial prototype | Evidence-linked trust-boundary model, responsibility checklist, composed static security contract, negative fixtures, admin-header contract, and broker process-confinement evidence on #223 | #66 supported deployment profiles; #72 residual hardening; #73-#80 production and enterprise controls |
 | Compose deployment | Prototype | Direct local compatibility plus gateway-isolated production-like broker topology, dependency readiness, static/live boundary checks, and restart parity | #66, #166, #178 |
 | Kubernetes/Fargate/cloud adapters | Planned | Architecture options, no production support claim | #66 deployment adapters; #214 shared typed launch contract |
 | HA and disaster recovery | Planned | No supported HA/DR contract | #73, #74 |
-| Supply-chain/release governance | Planned | Local tests and Dependabot exist; no enforced CI/SBOM/signing | #151, #75 |
+| Supply-chain/release governance | Partial prototype | Required CI, dependency policy, pinned actions/toolchains, and deterministic GHCR Rust builder exist; SBOM, signing, provenance, vulnerability intake, and release policy do not | #75 |
 | Open-source governance | Gap with explicit issue | AGPL root conflicts with Cargo MIT metadata; contributor policy absent | #180 |
 | Phase 0 reference workflow | Planned | Management proposition exists; delivery owner newly defined | #174 |
 
