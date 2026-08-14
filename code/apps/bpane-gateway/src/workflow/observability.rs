@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use prometheus_client::metrics::counter::Counter;
+use prometheus_client::registry::Registry;
 use serde::Serialize;
 use tokio::sync::Mutex;
 
@@ -40,6 +41,69 @@ pub struct WorkflowObservabilitySnapshot {
 }
 
 impl WorkflowObservability {
+    pub fn register_metrics(&self, registry: &mut Registry) {
+        registry.register(
+            "browserpane_gateway_workflow_produced_file_uploads",
+            "Successfully stored workflow produced files",
+            self.produced_file_uploads_total.clone(),
+        );
+        registry.register(
+            "browserpane_gateway_workflow_produced_file_upload_failures",
+            "Failed workflow produced-file storage operations",
+            self.produced_file_upload_failures_total.clone(),
+        );
+        registry.register(
+            "browserpane_gateway_workflow_event_delivery_attempts",
+            "Workflow event delivery attempts",
+            self.event_delivery_attempts_total.clone(),
+        );
+        registry.register(
+            "browserpane_gateway_workflow_event_delivery_successes",
+            "Successful workflow event deliveries",
+            self.event_delivery_successes_total.clone(),
+        );
+        registry.register(
+            "browserpane_gateway_workflow_event_delivery_retries",
+            "Scheduled workflow event delivery retries",
+            self.event_delivery_retries_total.clone(),
+        );
+        registry.register(
+            "browserpane_gateway_workflow_event_delivery_failures",
+            "Terminal workflow event delivery failures",
+            self.event_delivery_failures_total.clone(),
+        );
+        registry.register(
+            "browserpane_gateway_workflow_retention_passes",
+            "Completed workflow retention passes",
+            self.retention_passes_total.clone(),
+        );
+        registry.register(
+            "browserpane_gateway_workflow_retention_log_candidates",
+            "Workflow log entries selected as retention candidates",
+            self.log_retention_candidates_total.clone(),
+        );
+        registry.register(
+            "browserpane_gateway_workflow_retention_output_candidates",
+            "Workflow outputs selected as retention candidates",
+            self.output_retention_candidates_total.clone(),
+        );
+        registry.register(
+            "browserpane_gateway_workflow_retention_deleted_logs",
+            "Workflow log entries deleted by retention",
+            self.retention_deleted_logs_total.clone(),
+        );
+        registry.register(
+            "browserpane_gateway_workflow_retention_cleared_outputs",
+            "Workflow outputs cleared by retention",
+            self.retention_cleared_outputs_total.clone(),
+        );
+        registry.register(
+            "browserpane_gateway_workflow_retention_failures",
+            "Workflow retention operation failures",
+            self.retention_failures_total.clone(),
+        );
+    }
+
     pub fn record_produced_file_upload(&self) {
         self.produced_file_uploads_total.inc();
     }

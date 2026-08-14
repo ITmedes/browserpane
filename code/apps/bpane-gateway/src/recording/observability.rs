@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use prometheus_client::metrics::counter::Counter;
+use prometheus_client::registry::Registry;
 use serde::Serialize;
 use tokio::sync::Mutex;
 
@@ -42,6 +43,74 @@ pub struct RecordingObservabilitySnapshot {
 }
 
 impl RecordingObservability {
+    pub fn register_metrics(&self, registry: &mut Registry) {
+        registry.register(
+            "browserpane_gateway_recording_artifact_finalize_requests",
+            "Recording artifact finalization requests",
+            self.artifact_finalize_requests_total.clone(),
+        );
+        registry.register(
+            "browserpane_gateway_recording_artifact_finalize_successes",
+            "Successful recording artifact finalizations",
+            self.artifact_finalize_successes_total.clone(),
+        );
+        registry.register(
+            "browserpane_gateway_recording_artifact_finalize_failures",
+            "Failed recording artifact finalizations",
+            self.artifact_finalize_failures_total.clone(),
+        );
+        registry.register(
+            "browserpane_gateway_recording_failures",
+            "Recording lifecycle failures",
+            self.recording_failures_total.clone(),
+        );
+        registry.register(
+            "browserpane_gateway_recording_playback_manifest_requests",
+            "Recording playback manifest requests",
+            self.playback_manifest_requests_total.clone(),
+        );
+        registry.register(
+            "browserpane_gateway_recording_playback_export_requests",
+            "Recording playback export requests",
+            self.playback_export_requests_total.clone(),
+        );
+        registry.register(
+            "browserpane_gateway_recording_playback_export_successes",
+            "Successful recording playback exports",
+            self.playback_export_successes_total.clone(),
+        );
+        registry.register(
+            "browserpane_gateway_recording_playback_export_failures",
+            "Failed recording playback exports",
+            self.playback_export_failures_total.clone(),
+        );
+        registry.register(
+            "browserpane_gateway_recording_playback_export_bytes",
+            "Bytes produced by successful recording playback exports",
+            self.playback_export_bytes_total.clone(),
+        );
+        registry.register(
+            "browserpane_gateway_recording_retention_passes",
+            "Completed recording retention passes",
+            self.retention_passes_total.clone(),
+        );
+        registry.register(
+            "browserpane_gateway_recording_retention_candidates",
+            "Recording artifacts selected as retention candidates",
+            self.retention_candidates_total.clone(),
+        );
+        registry.register(
+            "browserpane_gateway_recording_retention_deleted_artifacts",
+            "Recording artifacts deleted by retention",
+            self.retention_deleted_artifacts_total.clone(),
+        );
+        registry.register(
+            "browserpane_gateway_recording_retention_failures",
+            "Recording retention operation failures",
+            self.retention_failures_total.clone(),
+        );
+    }
+
     pub fn record_artifact_finalize_request(&self) {
         self.artifact_finalize_requests_total.inc();
     }
