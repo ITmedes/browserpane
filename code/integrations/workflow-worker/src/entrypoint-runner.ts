@@ -1,10 +1,9 @@
 import { createHmac } from "node:crypto";
-import { lookup } from "node:dns/promises";
 import { promises as fs } from "node:fs";
-import net from "node:net";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { chromium, type Browser, type BrowserContext, type Page } from "playwright-core";
+import type { Browser, BrowserContext, Page } from "playwright-core";
+import { connectWorkflowBrowser } from "./cdp-connection.js";
 import type {
   GatewayWorkflowRunProducedFileResource,
   WorkflowResolvedCredentialBinding,
@@ -75,14 +74,11 @@ async function main(): Promise<void> {
   }
   const rawContext = await fs.readFile(contextPath, "utf8");
   const context = JSON.parse(rawContext) as WorkflowRunnerContext;
-  const browser = await chromium.connectOverCDP(
-    await normalizeCdpEndpointUrl(context.endpointUrl),
-    {
-      headers: {
-        [context.authHeader]: context.authToken,
-      },
-    },
-  );
+  const browser = await connectWorkflowBrowser({
+    endpointUrl: context.endpointUrl,
+    authHeader: context.authHeader,
+    authToken: context.authToken,
+  });
   try {
     const page = await createExecutionPage(browser);
     const module = (await import(pathToFileURL(context.entrypointPath).href)) as WorkflowEntrypointModule;
@@ -125,16 +121,6 @@ async function main(): Promise<void> {
   } finally {
     await browser.close().catch(() => {});
   }
-}
-
-async function normalizeCdpEndpointUrl(endpointUrl: string): Promise<string> {
-  const url = new URL(endpointUrl);
-  if (url.hostname === "localhost" || net.isIP(url.hostname)) {
-    return url.toString();
-  }
-  const resolved = await lookup(url.hostname);
-  url.hostname = resolved.address;
-  return url.toString();
 }
 
 async function createExecutionPage(browser: Browser): Promise<Page> {
