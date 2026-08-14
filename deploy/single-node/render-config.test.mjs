@@ -26,6 +26,10 @@ test('renders deterministic non-secret browser and worker policy', () => {
   assert.equal(workers.workflow.network, 'bpane-production-runtime');
   assert.equal(workers.recording.artifact_volume, 'bpane-production-recording-staging');
   assert.equal(workers.recording.connect_gateway_url, 'https://browser.example:4433');
+  if (process.platform !== 'win32') {
+    assert.equal(fs.statSync(path.join(directory, 'browser.env')).mode & 0o777, 0o644);
+    assert.equal(fs.statSync(path.join(directory, 'workers.json')).mode & 0o777, 0o644);
+  }
 });
 
 test('fails closed when required deployment input is missing', () => {

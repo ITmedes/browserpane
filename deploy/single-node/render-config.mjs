@@ -99,12 +99,16 @@ export class SingleNodeConfigRenderer {
     };
 
     fs.mkdirSync(outputDirectory, { recursive: true, mode: 0o750 });
-    fs.writeFileSync(path.join(outputDirectory, 'browser.env'), browserEnvironment, { mode: 0o640 });
+    const browserEnvironmentFile = path.join(outputDirectory, 'browser.env');
+    const workerPolicyFile = path.join(outputDirectory, 'workers.json');
+    fs.writeFileSync(browserEnvironmentFile, browserEnvironment, { mode: 0o644 });
     fs.writeFileSync(
-      path.join(outputDirectory, 'workers.json'),
+      workerPolicyFile,
       `${JSON.stringify(workers, null, 2)}\n`,
-      { mode: 0o640 },
+      { mode: 0o644 },
     );
+    fs.chmodSync(browserEnvironmentFile, 0o644);
+    fs.chmodSync(workerPolicyFile, 0o644);
   }
 
   required(environment, name) {

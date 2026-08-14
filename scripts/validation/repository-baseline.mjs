@@ -22,6 +22,7 @@ const DEFAULT_REQUIRED_PATHS = [
   'scripts/check-coverage-baseline.mjs',
   'scripts/check-dependency-safety.mjs',
   'scripts/check-production-security-baseline.mjs',
+  'scripts/check-single-node-deployment.mjs',
   'scripts/check-repository-documents.mjs',
   'scripts/collect-compose-diagnostics.mjs',
   'scripts/ci/cleanup-compose.sh',
