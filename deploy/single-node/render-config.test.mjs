@@ -9,6 +9,7 @@ import { SingleNodeConfigRenderer } from './render-config.mjs';
 const VALID_ENVIRONMENT = {
   BPANE_DEPLOYMENT_NAME: 'bpane-production',
   BPANE_PUBLIC_GATEWAY_URL: 'https://browser.example:4433',
+  BPANE_RECORDING_CONNECT_GATEWAY_URL: 'https://gateway:4433',
   BPANE_OIDC_TOKEN_URL: 'https://identity.example/oauth/token',
   BPANE_OIDC_WORKER_CLIENT_ID: 'bpane-worker',
   BPANE_BROWSER_START_URL: 'https://intranet.example/',
@@ -25,7 +26,7 @@ test('renders deterministic non-secret browser and worker policy', () => {
   assert.doesNotMatch(browserEnvironment, /secret|password|token=/iu);
   assert.equal(workers.workflow.network, 'bpane-production-runtime');
   assert.equal(workers.recording.artifact_volume, 'bpane-production-recording-staging');
-  assert.equal(workers.recording.connect_gateway_url, 'https://browser.example:4433');
+  assert.equal(workers.recording.connect_gateway_url, 'https://gateway:4433');
   if (process.platform !== 'win32') {
     assert.equal(fs.statSync(path.join(directory, 'browser.env')).mode & 0o777, 0o644);
     assert.equal(fs.statSync(path.join(directory, 'workers.json')).mode & 0o777, 0o644);

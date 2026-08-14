@@ -127,6 +127,8 @@ services:
       - /tmp:size=512m,mode=1777
     cap_drop:
       - ALL
+    group_add:
+      - "1001"
     security_opt:
       - no-new-privileges:true
     volumes:
@@ -241,6 +243,7 @@ services:
     read_only: true
     tmpfs:
       - /run:size=1m,mode=0750
+      - /tmp:size=4m,mode=1777
     cap_drop:
       - ALL
     security_opt:

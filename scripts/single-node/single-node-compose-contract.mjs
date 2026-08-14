@@ -34,6 +34,8 @@ export class SingleNodeComposeContract {
     this.same(Object.keys(web.networks ?? {}), ["runtime"], "web networks are invalid");
     this.same(Object.keys(gateway.networks ?? {}), ["broker-api", "runtime"],
       "gateway networks are invalid");
+    this.same(gateway.group_add ?? [], ["1001"],
+      "gateway must join only the browser runtime socket group");
     this.same(Object.keys(broker.networks ?? {}), ["broker-api", "broker-auth", "docker-control"],
       "runtime-broker networks are invalid");
     this.same(Object.keys(proxy.networks ?? {}), ["docker-control"],

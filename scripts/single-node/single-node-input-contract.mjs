@@ -49,6 +49,7 @@ export class SingleNodeInputContract {
     ]) {
       this.secureUrl(environment, name);
     }
+    this.httpsUrl(environment, "BPANE_RECORDING_CONNECT_GATEWAY_URL");
     this.httpUrl(environment, "BPANE_BROWSER_START_URL");
     this.loopback(environment.BPANE_WEB_BIND_ADDRESS ?? "127.0.0.1");
     for (const name of ["BPANE_WEB_PORT", "BPANE_WEBTRANSPORT_PORT"]) {
@@ -93,6 +94,11 @@ export class SingleNodeInputContract {
   httpUrl(environment, name) {
     const parsed = this.url(environment, name);
     this.expect(["https:", "http:"].includes(parsed.protocol), `${name} must use http or https`);
+  }
+
+  httpsUrl(environment, name) {
+    const parsed = this.url(environment, name);
+    this.expect(parsed.protocol === "https:", `${name} must use https`);
   }
 
   url(environment, name) {

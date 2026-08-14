@@ -98,6 +98,7 @@ export class SingleNodeRepositoryFixture {
       BPANE_STORAGE_HELPER_IMAGE: digest("e"),
       BPANE_WEB_BIND_ADDRESS: "127.0.0.1",
       BPANE_PUBLIC_GATEWAY_URL: "https://browser.example:4433",
+      BPANE_RECORDING_CONNECT_GATEWAY_URL: "https://gateway:4433",
       BPANE_BROWSER_START_URL: "https://example.org/",
       BPANE_OIDC_PUBLIC_ISSUER: "https://identity.example/realms/bpane",
       BPANE_OIDC_INTERNAL_JWKS_URL: "https://identity.example/jwks",
