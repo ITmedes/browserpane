@@ -13,7 +13,12 @@ export class SingleNodeConfigRenderer {
       throw new Error('BPANE_DEPLOYMENT_NAME must match [a-z0-9][a-z0-9-]{0,47}');
     }
 
-    const publicGatewayUrl = this.url(environment, 'BPANE_PUBLIC_GATEWAY_URL', ['https:']);
+    this.url(environment, 'BPANE_PUBLIC_GATEWAY_URL', ['https:']);
+    const recordingGatewayUrl = this.url(
+      environment,
+      'BPANE_RECORDING_CONNECT_GATEWAY_URL',
+      ['https:'],
+    );
     const oidcTokenUrl = this.url(environment, 'BPANE_OIDC_TOKEN_URL', ['https:', 'http:']);
     const workerClientId = this.required(environment, 'BPANE_OIDC_WORKER_CLIENT_ID');
     const browserStartUrl = this.url(environment, 'BPANE_BROWSER_START_URL', ['https:', 'http:']);
@@ -75,7 +80,7 @@ export class SingleNodeConfigRenderer {
         chrome_executable: '/usr/bin/chromium',
         gateway_api_url: 'http://gateway:8932',
         page_url: 'http://web:8080/recording-worker.html',
-        connect_gateway_url: publicGatewayUrl.href.replace(/\/$/u, ''),
+        connect_gateway_url: recordingGatewayUrl.href.replace(/\/$/u, ''),
         output_root: '/var/lib/browserpane/recording-staging',
         cert_spki: null,
         cert_spki_file: null,

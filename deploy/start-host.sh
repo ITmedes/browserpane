@@ -548,4 +548,5 @@ fi
 # Start the BrowserPane host agent
 BPANE_SOCKET_PATH="${BPANE_SOCKET_PATH:-/run/bpane/agent.sock}"
 mkdir -p "$(dirname "$BPANE_SOCKET_PATH")"
+chmod 0770 "$(dirname "$BPANE_SOCKET_PATH")"
 exec /usr/local/bin/bpane-host --socket "$BPANE_SOCKET_PATH" --fps "${BPANE_FPS:-30}"

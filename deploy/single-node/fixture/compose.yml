@@ -1,0 +1,80 @@
+# Local-only dependencies and login metadata for qualifying the production profile.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: browserpane
+      POSTGRES_USER: browserpane
+      POSTGRES_PASSWORD: single-node-fixture
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U browserpane -d browserpane"]
+      interval: 5s
+      timeout: 5s
+      retries: 18
+    volumes:
+      - fixture-postgres:/var/lib/postgresql/data
+    networks:
+      - runtime
+
+  vault:
+    image: hashicorp/vault:1.19
+    command:
+      - server
+      - -dev
+      - -dev-root-token-id=single-node-fixture-vault-token
+      - -dev-listen-address=0.0.0.0:8200
+    cap_add:
+      - IPC_LOCK
+    networks:
+      - runtime
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.1.2
+    command:
+      - start-dev
+      - --import-realm
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: fixture-admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: fixture-admin
+      KC_HOSTNAME: http://localhost:18091
+    ports:
+      - "127.0.0.1:18091:8080/tcp"
+    volumes:
+      - ./generated/keycloak-realm.json:/opt/keycloak/data/import/browserpane-dev-realm.json:ro
+    networks:
+      - runtime
+      - broker-auth
+
+  web:
+    ports: !override
+      - "127.0.0.1:18080:8080/tcp"
+    volumes:
+      - ./fixture/auth-config.template.json:/usr/share/nginx/html/auth-config.template.json:ro
+    depends_on:
+      keycloak:
+        condition: service_started
+
+  gateway:
+    ports: !override
+      - "14433:4433/tcp"
+      - "14433:4433/udp"
+    depends_on:
+      keycloak:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+      runtime-broker:
+        condition: service_healthy
+      vault:
+        condition: service_started
+
+  runtime-broker:
+    depends_on:
+      docker-proxy:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+
+volumes:
+  fixture-postgres:
+    name: bpane-single-node-fixture-postgres
