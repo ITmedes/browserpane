@@ -38,6 +38,24 @@ pub async fn run_session_capacity(harness: &ComposeHarness) -> Result<()> {
     let second_id = json_id(&second, "id")?;
 
     for session_id in [&first_id, &second_id] {
+        let automation_access = harness
+            .post_json(
+                &format!("/api/v1/sessions/{session_id}/automation-access"),
+                json!({}),
+            )
+            .await?;
+        if automation_access["automation"]["endpoint_url"]
+            .as_str()
+            .unwrap_or_default()
+            .is_empty()
+        {
+            return Err(anyhow!(
+                "docker_pool session did not expose automation access for {session_id}: {automation_access}"
+            ));
+        }
+    }
+
+    for session_id in [&first_id, &second_id] {
         let status = harness
             .get_json(&format!("/api/v1/sessions/{session_id}/status"))
             .await?;
