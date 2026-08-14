@@ -33,6 +33,7 @@ test("input contract rejects unsafe deployment values", () => {
     [{ BPANE_PUBLIC_GATEWAY_URL: "http://browser.example" }, /must use https/u],
     [{ BPANE_PUBLIC_GATEWAY_URL: "https://localhost:4433" }, /must not use a local host/u],
     [{ BPANE_WEB_BIND_ADDRESS: "0.0.0.0" }, /must be loopback/u],
+    [{ BPANE_DEPLOYMENT_NAME: "a".repeat(23) }, /too long for runtime DNS labels/u],
     [{ BPANE_MAX_ACTIVE_RUNTIMES: "2", BPANE_MAX_STARTING_RUNTIMES: "3" },
       /must not exceed active/u],
     [{ BPANE_DATABASE_URL: "postgres://inline" }, /inline secret input is forbidden/u],
@@ -62,6 +63,8 @@ test("compose contract rejects topology, listener, secret, and fixture regressio
   const cases = [
     [(input) => { input.composeConfig.services.gateway.image = "gateway:latest"; }, /image must be immutable/u],
     [(input) => { input.composeConfig.services.web.ports[0].host_ip = "0.0.0.0"; }, /bind loopback/u],
+    [(input) => { input.composeConfig.services.web.healthcheck.test[3] = "http://localhost:8080/healthz"; },
+      /healthcheck must use IPv4 loopback/u],
     [(input) => { input.composeConfig.services["runtime-broker"].ports = [{ target: 8940 }]; },
       /must not publish host ports/u],
     [(input) => { input.composeConfig.services.gateway.networks["docker-control"] = null; },

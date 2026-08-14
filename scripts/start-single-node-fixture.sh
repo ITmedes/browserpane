@@ -54,7 +54,7 @@ chmod 644 "${SECRETS_DIR}/worker-oidc-client-secret"
 "${ROOT_DIR}/deploy/gen-dev-cert.sh" "${GENERATED_DIR}/certs"
 
 cat > "${ENV_FILE}" <<EOF
-BPANE_DEPLOYMENT_NAME=bpane-single-node-fixture
+BPANE_DEPLOYMENT_NAME=bpane-sn-fixture
 BPANE_WEB_IMAGE=$(immutable_image_id bpane-single-node-web:fixture)
 BPANE_GATEWAY_IMAGE=$(immutable_image_id bpane-single-node-gateway:fixture)
 BPANE_RUNTIME_BROKER_IMAGE=$(immutable_image_id bpane-single-node-broker:fixture)

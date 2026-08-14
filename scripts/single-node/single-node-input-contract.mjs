@@ -32,8 +32,10 @@ const REQUIRED_TEXT = [
 export class SingleNodeInputContract {
   validate(environment) {
     for (const name of REQUIRED_TEXT) this.required(environment, name);
-    if (!/^[a-z0-9][a-z0-9-]{0,47}$/u.test(environment.BPANE_DEPLOYMENT_NAME)) {
-      throw new Error("BPANE_DEPLOYMENT_NAME is invalid");
+    if (!/^[a-z0-9][a-z0-9-]{0,21}$/u.test(environment.BPANE_DEPLOYMENT_NAME)) {
+      throw new Error(
+        "BPANE_DEPLOYMENT_NAME is invalid or too long for runtime DNS labels",
+      );
     }
     for (const name of IMAGE_INPUTS) this.immutableImage(environment, name);
     this.expect(
