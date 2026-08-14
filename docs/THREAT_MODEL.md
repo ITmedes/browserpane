@@ -138,6 +138,44 @@ Assumptions common to all profiles:
 | T-17 | Data loss, incomplete cleanup, or unrecoverable state | Retention workers, persisted assignments, restart reconciliation, lifecycle readiness | Backup/restore and HA drills: #73/#74 |
 | T-18 | Protocol downgrade, parser ambiguity, or unsupported client behavior | Shared Rust/TypeScript protocol implementation and frame tests exist | Version negotiation, vectors, fuzzing and compatibility matrix: #175 |
 
+## Negative-Test Evidence
+
+This inventory names the rejection evidence expected to remain green. The
+commands intentionally select behavior rather than implementation line numbers.
+
+| Boundary | Required rejection | Current evidence | Focused command |
+| --- | --- | --- | --- |
+| Owner API authentication | Missing bearer cannot use versioned session or identity resources | `rejects_v1_session_routes_without_bearer_auth`; Compose `compose_identity_access_review_api_surface` | `cargo test -p bpane-gateway rejects_v1_session_routes_without_bearer_auth` |
+| Owner isolation | A foreign principal cannot list, read, mutate, delegate, or delete another owner's session | `scopes_session_resources_to_the_authenticated_owner`; Compose `compose_session_ownership_boundaries_api_surface` | `cargo test -p bpane-gateway scopes_session_resources_to_the_authenticated_owner` |
+| Session automation | A session token cannot address another session or call owner-only delete; file content is session-bound | `compose_automation_access_boundaries_api_surface`; `lists_downloads_and_scopes_runtime_session_files` | `cargo test -p bpane-gateway lists_downloads_and_scopes_runtime_session_files` |
+| Credential domains | Connect, automation, admin-event, recording-worker, and other token purposes reject substitution, tampering, and expiry | `all_credentials_reject_cross_purpose_replay`; token-codec and per-manager expiry tests | `cargo test -p bpane-gateway all_credentials_reject_cross_purpose_replay` |
+| Admin browser auth | Old/future/reused login transactions, wrong state/provider/key, failed refresh, missing tokens, and malformed event auth fail closed | `code/web/bpane-admin-auth/src/*.test.ts`; admin-new authenticated API and shell tests | `npm test --prefix code/web/bpane-admin-auth` |
+| Admin browser defenses | Missing CSP, frame, MIME, referrer, or permissions policy fails the static contract | `scripts/security/admin-security-header-contract.test.mjs`; `scripts/ci/admin-security-headers-contract.test.mjs` | `node --test scripts/security/admin-security-header-contract.test.mjs scripts/ci/admin-security-headers-contract.test.mjs` |
+| Broker authentication | Missing/expired token, wrong audience/client/key, malformed claims, and symmetric algorithms are rejected | `health_routes_are_public_but_operations_require_authentication`; `maps_expired_wrong_audience_client_and_key_failures`; auth unit tests | `cargo test -p bpane-runtime-broker maps_expired_wrong_audience_client_and_key_failures` |
+| Broker replay/idempotency | A reused request id with changed body/key or principal is denied while exact retries are stable | `exact_retry_is_cached_and_conflicting_reuse_is_denied`; ledger conflict/capacity tests | `cargo test -p bpane-runtime-broker exact_retry_is_cached_and_conflicting_reuse_is_denied` |
+| Callback delivery | Unsafe URL forms, non-public/mixed DNS answers, redirects, implicit proxies, and unapproved local targets are denied | `workflow_event_delivery::destination_policy::tests` and delivery client tests | `cargo test -p bpane-gateway workflow_event_delivery` |
+| Browser-context archives | Oversized archives, expansion/entry/path limits, traversal, links, devices, and FIFOs are rejected | `api::browser_context_archive::tests`; authenticated import capacity test | `cargo test -p bpane-gateway browser_context_archive` |
+| Recording finalization | Outside, mismatched, missing, directory, symlink, parent-symlink, and non-regular staging sources are rejected | `recording::artifact_store::tests`; worker/session/recording binding API tests | `cargo test -p bpane-gateway recording::artifact_store` |
+| Runtime policy | Mutable images, arbitrary environment, escaping mounts/socket paths, unsafe endpoints/networks, host privileges, weakened broker confinement, and direct gateway Docker access are rejected | runtime-broker browser/worker/storage tests and structured negative Compose fixtures | `cargo test -p bpane-runtime-broker` plus `node --test scripts/validate-runtime-broker-*.test.mjs` |
+
+The owner and automation Compose cases are the end-to-end proof for the first
+three rows and require the supported local stack:
+
+```bash
+cargo test -p bpane-gateway --test compose_api_surface \
+  compose_identity_access_review_api_surface -- --ignored --test-threads=1
+cargo test -p bpane-gateway --test compose_api_surface \
+  compose_session_ownership_boundaries_api_surface -- --ignored --test-threads=1
+cargo test -p bpane-gateway --test compose_api_surface \
+  compose_automation_access_boundaries_api_surface -- --ignored --test-threads=1
+```
+
+Audit result for #223: no missing negative test was found inside the bounded
+credential, authorization, callback, archive, artifact, or broker-policy
+acceptance scope. Public MCP transport inbound authentication and exact-origin
+policy remain a real residual gap owned by #69/#72; they are not reclassified
+as implemented evidence by this table.
+
 ## Security Invariants
 
 Changes must preserve these invariants:
