@@ -8,6 +8,7 @@ mod credentials;
 mod extensions;
 mod idle_stop;
 mod lifecycle;
+mod metrics;
 mod readiness;
 mod recording;
 mod recording_lifecycle;

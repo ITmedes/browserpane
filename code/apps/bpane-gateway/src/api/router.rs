@@ -51,12 +51,20 @@ pub(crate) fn build_gateway_api_router(
     state: Arc<ApiState>,
     lifecycle: Arc<GatewayLifecycle>,
     readiness: Arc<GatewayReadiness>,
+    metrics: Arc<crate::metrics::GatewayMetrics>,
 ) -> Router {
+    let session_manager = state.session_manager.clone();
     let protected = build_api_router(state).route_layer(middleware::from_fn_with_state(
         lifecycle.clone(),
         reject_during_drain,
     ));
-    health::health_routes(lifecycle, readiness).merge(protected)
+    let instrumented = health::health_routes(lifecycle, readiness)
+        .merge(protected)
+        .layer(middleware::from_fn_with_state(
+            metrics.clone(),
+            crate::metrics::instrument_http_request,
+        ));
+    crate::metrics::metrics_routes(metrics, session_manager).merge(instrumented)
 }
 
 async fn reject_during_drain(
