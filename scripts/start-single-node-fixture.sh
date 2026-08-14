@@ -110,7 +110,7 @@ docker compose \
   --env-file "${ENV_FILE}" \
   -f "${ROOT_DIR}/deploy/single-node/compose.yml" \
   -f "${ROOT_DIR}/deploy/single-node/fixture/compose.yml" \
-  up -d
+  up -d --remove-orphans
 
 echo "Single-node fixture started at http://localhost:18080/admin-new/"
 echo "Environment: ${ENV_FILE}"
