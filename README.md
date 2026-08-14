@@ -144,6 +144,10 @@ Current support and scope:
   its public specification, version negotiation, conformance, fuzzing, and
   compatibility policy remain planned under
   [issue #175](https://github.com/ITmedes/browserpane/issues/175).
+- Platform telemetry: the gateway exposes aggregate OpenMetrics request and
+  runtime-capacity signals at `/metrics`. Cross-process tracing, complete SLOs,
+  alerts, and capacity envelopes remain planned under
+  [issue #178](https://github.com/ITmedes/browserpane/issues/178).
 
 ## How The System Is Shaped
 
@@ -282,12 +286,13 @@ The compose stack starts:
   worker image used by `recording.mode=always`; the selected direct or broker
   worker-control path launches short-lived recorder containers
 
-The gateway exposes unauthenticated, resource-free operational probes on its
-HTTP port:
+The gateway exposes unauthenticated, resource-free operational probes and an
+aggregate OpenMetrics scrape endpoint on its HTTP port:
 
 ```bash
 curl -fsS http://localhost:8932/healthz
 curl -fsS http://localhost:8932/readyz
+curl -fsS http://localhost:8932/metrics
 ```
 
 `/healthz` reports process liveness. `/readyz` admits traffic only while the
@@ -300,6 +305,13 @@ work up to a bounded timeout. The local defaults can be overridden with
 `BPANE_GATEWAY_READINESS_CHECK_TIMEOUT_SECS`,
 `BPANE_GATEWAY_SHUTDOWN_READINESS_GRACE_SECS`, and
 `BPANE_GATEWAY_SHUTDOWN_DRAIN_TIMEOUT_SECS`.
+
+`/metrics` reports bounded HTTP RED signals and aggregate runtime active,
+starting, and limit gauges. It never uses resource ids or raw request paths as
+labels. Keep this unauthenticated collector endpoint on a trusted private
+network in production. See
+[Platform Telemetry](docs/PLATFORM_TELEMETRY.md) for the metric contract,
+Prometheus example, and validation commands.
 
 Workflow-worker and recording-worker containers run as short-lived jobs; do
 not run them as long-lived services. In direct mode the gateway launches them;

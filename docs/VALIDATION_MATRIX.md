@@ -1,6 +1,6 @@
 # Consolidated Validation Matrix
 
-Revalidated against current package scripts: 2026-08-13
+Revalidated against current package scripts: 2026-08-14
 
 This matrix defines the available validation surfaces for product slices. Use
 `PRODUCT_PHASES_AND_RELEASE_GATES.md` to decide which evidence is required for
@@ -530,6 +530,22 @@ For route/API contract changes, check:
 
 Only update those docs when behavior, topology, setup, API, or validation flow
 actually changes.
+
+Platform telemetry changes must additionally prove:
+
+- valid OpenMetrics content type and `# EOF` framing,
+- bounded method, matched-route, and status-class labels,
+- no owner, project, session, workflow, recording, artifact, raw-path, URL,
+  credential, browser-content, or egress values in labels,
+- in-flight gauge release on normal completion and cancellation,
+- aggregate active/starting/limit runtime transitions for static and pooled
+  backends,
+- scraping has no readiness, session, or runtime lifecycle side effects.
+
+The default Compose health/readiness case exercises the real `/metrics` surface,
+including degraded readiness and unmatched-path redaction. The docker-pool
+capacity case verifies aggregate gauges while two, one, and zero runtimes are
+active and checks that live session ids are absent.
 
 ## Runtime, CLI, Identity, And Resource Lifecycle Checks
 

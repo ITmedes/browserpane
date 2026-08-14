@@ -176,7 +176,12 @@ pub async fn run_api_server(
         mcp_bridge_control: config.mcp_bridge_control,
     });
 
-    let app = build_gateway_api_router(state, lifecycle.clone(), readiness);
+    let app = build_gateway_api_router(
+        state,
+        lifecycle.clone(),
+        readiness,
+        Arc::new(crate::metrics::GatewayMetrics::default()),
+    );
 
     let listener = tokio::net::TcpListener::bind(bind_addr).await?;
     info!("HTTP API listening on {bind_addr}");

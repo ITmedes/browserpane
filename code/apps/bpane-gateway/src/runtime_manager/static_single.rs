@@ -55,6 +55,17 @@ impl StaticSingleRuntimeManager {
         Ok(())
     }
 
+    pub(super) async fn capacity_snapshot(
+        &self,
+        assignment_limit: usize,
+    ) -> RuntimeCapacitySnapshot {
+        RuntimeCapacitySnapshot {
+            active_assignments: usize::from(self.active.lock().await.is_some()),
+            starting_assignments: 0,
+            assignment_limit,
+        }
+    }
+
     pub(super) async fn describe_assignment_status(
         &self,
         session_id: Uuid,

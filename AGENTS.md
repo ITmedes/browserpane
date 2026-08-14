@@ -82,6 +82,10 @@ Current product shape:
   - WebTransport gateway and shared-session coordinator.
   - `lifecycle.rs`: shared starting/running/draining state, signal handling, and bounded listener/task drain coordination.
   - `readiness.rs`: concurrent, timeout-bounded readiness checks for the configured session store, runtime manager, credential provider, and artifact stores.
+  - `metrics.rs`: gateway-owned OpenMetrics registry, bounded HTTP RED labels,
+    and aggregate runtime-capacity gauges exposed at `/metrics`. Never add
+    resource ids, raw paths, URLs, credentials, browser content, or egress data
+    as metric labels.
   - `transport.rs`: browser connection loop, per-client policy, relay behavior.
   - `session_hub.rs`: fan-out, late-join bootstrap, viewer cap, telemetry.
   - `session_control.rs`: versioned session-control store and Postgres integration, including projects with admission quotas and template/egress/extension/context/file-workspace policy bindings, service principals, session templates, browser contexts, workflows, credential bindings, file workspaces, and approved extension metadata.
