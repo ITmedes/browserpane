@@ -58,6 +58,8 @@ services:
       - ${BPANE_DEPLOYMENT_NAME:?set BPANE_DEPLOYMENT_NAME}-runtime-sockets
       - --docker-runtime-session-data-volume-prefix
       - ${BPANE_DEPLOYMENT_NAME:?set BPANE_DEPLOYMENT_NAME}-session-data
+      - --docker-runtime-container-name-prefix
+      - ${BPANE_DEPLOYMENT_NAME:?set BPANE_DEPLOYMENT_NAME}-runtime
       - --docker-runtime-env-file
       - /runtime-config/browser.env
       - --runtime-broker-url
