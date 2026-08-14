@@ -11,7 +11,7 @@ services:
     ports:
       - "${BPANE_WEB_BIND_ADDRESS:-127.0.0.1}:${BPANE_WEB_PORT:-8080}:8080/tcp"
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
       interval: 10s
       timeout: 3s
       retries: 12

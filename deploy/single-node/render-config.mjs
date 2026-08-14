@@ -4,13 +4,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const DEPLOYMENT_NAME_PATTERN = /^[a-z0-9][a-z0-9-]{0,47}$/u;
+// Runtime names append "-runtime-" plus a compact UUID and must remain valid DNS labels.
+const DEPLOYMENT_NAME_PATTERN = /^[a-z0-9][a-z0-9-]{0,21}$/u;
 
 export class SingleNodeConfigRenderer {
   render(environment, outputDirectory) {
     const deploymentName = this.required(environment, 'BPANE_DEPLOYMENT_NAME');
     if (!DEPLOYMENT_NAME_PATTERN.test(deploymentName)) {
-      throw new Error('BPANE_DEPLOYMENT_NAME must match [a-z0-9][a-z0-9-]{0,47}');
+      throw new Error(
+        'BPANE_DEPLOYMENT_NAME must match [a-z0-9][a-z0-9-]{0,21} so runtime names remain valid DNS labels',
+      );
     }
 
     this.url(environment, 'BPANE_PUBLIC_GATEWAY_URL', ['https:']);

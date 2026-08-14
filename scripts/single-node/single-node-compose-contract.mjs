@@ -48,6 +48,8 @@ export class SingleNodeComposeContract {
       "docker-control membership is invalid");
 
     this.webPort(web);
+    this.same(web.healthcheck?.test ?? [], ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"],
+      "web healthcheck must use IPv4 loopback");
     this.gatewayPorts(gateway);
     this.expect(!(broker.ports?.length > 0), "runtime-broker must not publish ports");
     this.expect(!(proxy.ports?.length > 0), "docker-proxy must not publish ports");

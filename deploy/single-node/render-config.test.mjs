@@ -43,6 +43,16 @@ test('fails closed when required deployment input is missing', () => {
   );
 });
 
+test('rejects deployment names that would create invalid runtime DNS labels', () => {
+  assert.throws(
+    () => new SingleNodeConfigRenderer().render(
+      { ...VALID_ENVIRONMENT, BPANE_DEPLOYMENT_NAME: 'a'.repeat(23) },
+      '/unused',
+    ),
+    /valid DNS labels/u,
+  );
+});
+
 test('rejects unsafe public gateway and credential-bearing URLs', () => {
   assert.throws(
     () => new SingleNodeConfigRenderer().render(
