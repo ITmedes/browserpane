@@ -45,6 +45,7 @@ node scripts/validate.mjs --profile fast
 node scripts/validate.mjs --profile compose
 node scripts/validate.mjs --profile full
 node scripts/check-repository-documents.mjs
+node scripts/check-production-security-baseline.mjs
 ```
 
 - `fast` is the clean, non-compose validation floor.
@@ -60,9 +61,10 @@ local stack and leaves it running for inspection. Smokes that temporarily
 change gateway admission limits restore the normal compose configuration before
 returning.
 
-Verified catalog on 2026-08-13:
+Verified catalog on 2026-08-14:
 
-- the fast profile contains 42 stages, including Rust, browser-client,
+- the fast profile contains 43 stages, including the composed production
+  security baseline plus Rust, browser-client,
   recording-worker, workflow-worker, and admin-new coverage ratchets,
 - the compose profile contains 33 bounded stages, including 24 admin promotion
   stages plus API, CLI, MCP, recording, session-file, and workflow evidence,
@@ -121,6 +123,33 @@ Before closing #214, also run the 17-case Compose API surface and the browser,
 MCP, admin-new session, session-file, workflow, recording, and multi-session
 journeys against the broker topology. Run the four-case docker-pool suite
 separately to preserve direct local compatibility evidence.
+
+## Production Security Baseline
+
+Issue #223 composes the existing application, admin-header, Docker-proxy, and
+runtime-broker controls into one discoverable fast-profile stage:
+
+```bash
+node scripts/check-production-security-baseline.mjs
+node --test scripts/security/*.test.mjs
+node --test scripts/validate-runtime-broker-foundation.test.mjs
+node --test scripts/validate-runtime-broker-browser-overlay.test.mjs
+```
+
+The `production-security-baseline` stage parses the real base Compose and
+runtime-broker overlay through `docker compose ... config --format json`. It
+must prove that the repository distinguishes local development,
+production-like broker validation, and unsupported production packaging; the
+gateway has no Docker authority in the broker profile; the broker and proxy
+have no published ports; broker process confinement and secret/config mounts
+remain constrained; and admin browser security headers retain their contract.
+
+Every new static invariant needs a failing fixture. Static success is not live
+deployment evidence: security-sensitive runtime changes must also run
+`scripts/smoke-runtime-broker-isolation.sh` plus the affected owner API,
+admin-new, MCP, workflow, recording, and storage journeys. The negative evidence
+inventory and residual owners live in `THREAT_MODEL.md`; required deployment
+controls live in `PRODUCTION_SECURITY_BASELINE.md`.
 
 ## Baseline Checks For Any Unified Admin Slice
 

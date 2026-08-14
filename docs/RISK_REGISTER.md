@@ -14,29 +14,30 @@ Last reviewed: 2026-08-14
 
 | ID | Risk | Likelihood | Impact | Owner | Mitigation / exit evidence | Gate |
 | --- | --- | --- | --- | --- | --- | --- |
-| R-001 | Changes can merge without required automated status checks. | High | Critical | #151 | Enforced CI, branch checks, controlled failure fixtures. | Foundation |
 | R-002 | Open critical/high dependency advisories affect build or runtime dependencies. | High | Critical | #151 / #75 | Upgrade, reachability review, bounded exception with owner/expiry, recurring scan. | Foundation |
-| R-003 | Different token purposes share signing material and credentials appear in URL/query paths. | High | Critical | #145 | Purpose-separated credentials, constant-time/library verification, redaction tests. | Foundation |
-| R-004 | Shared admin authentication/browser security is insufficient for promotion. | High | Critical | #146 / #72 | CSP/origin/auth lifecycle/CSRF/frame policies and negative tests. | Foundation |
+| R-004 | Application auth/header controls exist, but a deployment could still expose admin, MCP, metrics, or internal surfaces without the required TLS, origin, ingress, and network policy. | Medium | Critical | #223 / #72 / #66 | Executable application/header baseline plus target-specific ingress, exact-origin, private-network, and MCP transport controls. | Production |
 | R-005 | Webhook delivery can reach unsafe destinations or redirect targets. | Low | Critical | #147 | Mitigated and merged through PR #191: URL/DNS/IP validation, pinned delivery, no redirects/proxies, exact-origin exceptions, negative and compose tests. | Foundation |
-| R-006 | Public OpenAPI can drift from code or break clients silently. | Low | High | #179 | Review-ready on `feature/BPANE-00179`: 131-operation inventory, pinned lint, executable examples, Axum route coverage, semantic diff, policy, CI stages, and full fast/Compose validation. Close after merge and required-check confirmation. | Foundation |
 | R-007 | Protocol version is not enforced and compatibility is undocumented. | Medium | Critical | #175 | Version negotiation, shared vectors, fuzzing, compatibility matrix. | Production |
-| R-008 | In-memory and Postgres behavior can diverge. | Medium | High | #152 | Shared store contract suite and compose verification. | Foundation |
-| R-010 | Platform failures and saturation are not yet observable end to end through standard telemetry/SLOs. | High | High | #178 | Gateway OpenMetrics RED/runtime-capacity foundation is implemented on the active #178 checkpoint; cross-process OTel, broader subsystem metrics, alerts, runbooks, and load evidence remain. | Phase 1 / Production |
+| R-010 | Platform failures and saturation are not yet observable end to end through standard telemetry/SLOs. | High | High | #178 | Gateway OpenMetrics RED/runtime-capacity foundation merged through PR #222; cross-process OTel, broader subsystem metrics, alerts, runbooks, and load evidence remain. | Phase 1 / Production |
 | R-011 | Organization/project mappings are descriptive rather than a complete enforced authorization model. | High | Critical | #176 | Role/grant matrix, enforcement, migration, denial/audit tests. | Phase N |
 | R-012 | Deprovisioned identities or emergency access lack deterministic lifecycle controls. | Medium | Critical | #177 | Lifecycle API/SCIM path, stale review, break-glass controls. | Phase N |
-| R-013 | Compose prototype is described beyond its supported deployment/capacity envelope. | High | High | #66 / #150 / #178 | #150 adds dependency readiness and bounded gateway drain; named deployment profiles, load evidence, telemetry, and explicit supported limits remain. | Phase 0 / Production |
+| R-013 | Local or production-like Compose evidence is described beyond its supported deployment/capacity envelope. | High | High | #66 / #178 / #223 | Profiles are explicitly classified; readiness, bounded drain, broker isolation, metrics, and the security gate exist. Supported packaging, target sandbox evidence, load envelopes, and operator runbooks remain. | Phase 0 / Production |
 | R-014 | AGPL root license conflicts with package metadata and contributor/IP policy is undefined. | High | Critical | #180 | Reviewed license decision, aligned metadata, contribution/security policy. | Phase 0 / Production |
 | R-015 | Investor/product claims drift ahead of implementation maturity. | Medium | High | #173 and investment claim register | Claim maturity/evidence links and publication review. | Every external release |
 | R-016 | A Phase 0 Pilot expands into an undefined enterprise platform commitment. | High | High | #174 | Qualification, explicit non-goals, bounded agreement, Stop/Operate/Phase 1 gate. | Phase 0 |
 | R-017 | Large overlapping planning documents produce conflicting priorities. | High | High | #173 | Canonical roadmap; historical docs marked supporting; only bounded Ready plans are executable. | Governance |
-| R-018 | Workflow/recording workers lack the same unit-test floor as core packages. | Low | High | #165 / #151 | Review-ready on `feature/BPANE-00165-worker-runtime-hardening`: 8 recording-worker and 11 workflow-worker tests, enforced package checks, finite request deadlines, bounded process output, single-flight polling evidence, and compose worker journeys. Close after merge and required-check confirmation. | Foundation / Phase 1 |
+| R-020 | Security controls and deployment obligations can drift across code, manifests, tests, and prose, causing an unsafe topology to appear accepted. | Medium | Critical | #223 / #72 | Canonical threat model, responsibility baseline, composed fast-profile contract, negative evidence table, and required review on boundary changes. | Production |
 
 ## Closed Risks
 
 | ID | Risk | Closure evidence |
 | --- | --- | --- |
+| R-001 | Changes could merge without required automated status checks. | Closed by #151: strict required GitHub checks, pinned validation workflows, dependency/document/coverage contracts, and controlled failure evidence. |
+| R-003 | Different token purposes shared signing material and credentials appeared in URL/query paths. | Closed by #145: purpose-separated credentials, wrong-purpose/expiry tests, constant-time/library verification, and log/URL redaction. |
+| R-006 | Public OpenAPI could drift from code or break clients silently. | Closed by #179 through PR #194: pinned lint, 131-operation inventory, executable examples, Axum route recognition, semantic compatibility policy, and CI enforcement. |
+| R-008 | In-memory and Postgres behavior could diverge. | Closed by #152 through PR #193: one shared store contract runs against both implementations and in Compose validation. |
 | R-009 | Recording finalization could cross an unsafe filesystem/artifact boundary. | Closed by #149 through merged PR #212: purpose-scoped worker capability, exact regular-file staging contract, measured-byte accounting, negative API/store coverage, and real worker/admin/CLI compose evidence. |
+| R-018 | Workflow/recording workers lacked the same unit-test floor as core packages. | Closed by #165 through PR #213: package test floors, finite request deadlines, bounded output, single-flight finalization polling, and compose worker journeys. |
 | R-019 | A compromised gateway could use permitted Docker container/volume APIs with unsafe request fields. | Closed by #167 and #214: the production-like broker topology removes gateway Docker reachability and routes typed browser, worker, context, and session-data operations through broker-owned policy. Static/live isolation, denial, storage, restart, compose API, admin, MCP, workflow, and recording evidence passed. The direct proxy topology remains explicitly local compatibility only. |
 
 ## Review Rules
