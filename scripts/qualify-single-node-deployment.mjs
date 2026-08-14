@@ -26,7 +26,7 @@ async function main() {
   assertFixtureReady();
   const source = resolveWorkflowSource();
   let accessToken = await issueServiceToken();
-  let sessionId = '';
+  const sessionIds = [];
 
   try {
     const workspace = await api('/api/v1/file-workspaces', accessToken, {
@@ -91,8 +91,9 @@ async function main() {
         labels: { suite: 'single-node-qualification' },
       },
     });
-    sessionId = createdRun.session_id;
+    const sessionId = createdRun.session_id;
     assert(sessionId, 'workflow run did not create a session');
+    sessionIds.push(sessionId);
 
     const succeededRun = await poll('workflow success', async () => {
       return await api(`/api/v1/workflow-runs/${createdRun.id}`, accessToken);
@@ -108,7 +109,35 @@ async function main() {
     const beforeRestart = await download(producedFile.content_path, accessToken);
     assert(beforeRestart.toString('utf8').includes('body=ready'),
       'produced file does not contain workflow evidence');
-    await waitForRuntimeCount(sessionId, 1);
+
+    const secondRun = await api('/api/v1/workflow-runs', accessToken, {
+      method: 'POST',
+      body: {
+        workflow_id: workflow.id,
+        version: 'v1',
+        input: {
+          target_url: 'http://web:8080/healthz',
+          output_workspace_id: workspace.id,
+        },
+        labels: { suite: 'single-node-qualification', ordinal: 'secondary' },
+      },
+    });
+    const secondSessionId = secondRun.session_id;
+    assert(secondSessionId && secondSessionId !== sessionId,
+      'second workflow run did not create an independent session');
+    sessionIds.push(secondSessionId);
+    const secondSucceededRun = await poll('second workflow success', async () => {
+      return await api(`/api/v1/workflow-runs/${secondRun.id}`, accessToken);
+    }, (run) => run.state === 'succeeded' || isTerminalFailure(run.state));
+    assert(secondSucceededRun.state === 'succeeded',
+      `second workflow run finished in ${secondSucceededRun.state}: ${secondSucceededRun.error ?? 'no error'}`);
+    assert(secondSucceededRun.output?.body === 'ready',
+      'second workflow did not reach the internal web health endpoint');
+
+    const [runtimeBeforeRestart] = await waitForRuntimeCount(sessionId, 1);
+    const [secondRuntimeBeforeRestart] = await waitForRuntimeCount(secondSessionId, 1);
+    assert(runtimeBeforeRestart !== secondRuntimeBeforeRestart,
+      'independent workflow sessions shared one runtime container');
 
     restartControlPlane();
     await waitForHttp(`${API_ORIGIN}/healthz`);
@@ -117,7 +146,12 @@ async function main() {
     assert(retainedRun.state === 'succeeded', 'workflow run was not retained across restart');
     const afterRestart = await download(producedFile.content_path, accessToken);
     assert(beforeRestart.equals(afterRestart), 'produced file changed across restart');
-    await waitForRuntimeCount(sessionId, 1);
+    const [runtimeAfterRestart] = await waitForRuntimeCount(sessionId, 1);
+    const [secondRuntimeAfterRestart] = await waitForRuntimeCount(secondSessionId, 1);
+    assert(runtimeAfterRestart === runtimeBeforeRestart,
+      'primary session runtime changed across control-plane restart');
+    assert(secondRuntimeAfterRestart === secondRuntimeBeforeRestart,
+      'secondary session runtime changed across control-plane restart');
 
     assertGatewayDockerDenied();
     assertSensitiveMarkersAbsent();
@@ -128,15 +162,20 @@ async function main() {
       sourceCommit: source.commit,
       runId: createdRun.id,
       sessionId,
+      secondRunId: secondRun.id,
+      secondSessionId,
       producedFileId: producedFile.file_id,
       producedFileBytes: afterRestart.length,
       retainedAcrossRestart: true,
-      runtimeCountAfterRestart: 1,
+      distinctRuntimeContainers: true,
+      runtimeCountAfterRestart: sessionIds.length,
       gatewayDockerDenied: true,
       sensitiveMarkerScan: true,
     }, null, 2));
   } finally {
-    if (accessToken && sessionId) await removeSession(accessToken, sessionId);
+    if (accessToken) {
+      for (const sessionId of sessionIds) await removeSession(accessToken, sessionId);
+    }
   }
 }
 
@@ -240,7 +279,7 @@ async function waitForHttp(url) {
 }
 
 async function waitForRuntimeCount(sessionId, expected) {
-  await poll(`runtime count ${expected} for ${sessionId}`, () => {
+  return await poll(`runtime count ${expected} for ${sessionId}`, () => {
     const result = spawnSync('docker', [
       'ps',
       '--filter',
@@ -249,8 +288,8 @@ async function waitForRuntimeCount(sessionId, expected) {
       '{{.Names}}',
     ], { encoding: 'utf8' });
     assert(result.status === 0, 'docker runtime inspection failed');
-    return result.stdout.trim() ? result.stdout.trim().split('\n').length : 0;
-  }, (count) => count === expected);
+    return result.stdout.trim() ? result.stdout.trim().split('\n') : [];
+  }, (containers) => containers.length === expected);
 }
 
 function assertGatewayDockerDenied() {
