@@ -94,16 +94,17 @@ version API families required by the current runtime implementation. This is a
 Compose defense-in-depth boundary: container-create and volume access remain
 too broad to constitute resource-level production authorization.
 
-An opt-in `deploy/compose.runtime-broker.yml` overlay inserts the authenticated
+The opt-in production-like `deploy/compose.runtime-broker.yml` topology inserts the authenticated
 runtime broker for browser, workflow-worker, and recording-worker lifecycle
 operations and its isolated storage-helper adapter. In that mode the broker
 reaches the same Docker proxy over a broker-only control network and derives
 Docker-sensitive fields from typed BrowserPane intent plus trusted startup
 configuration. `broker_pool` routes session-data and browser-context storage
 through the same authenticated boundary, while workspace artifact reads and
-binding state remain gateway-owned. The gateway retains proxy access only as a
-transitional topology until the final removal checkpoint; base Compose remains
-on `docker_pool` with a fail-closed broker.
+binding state remain gateway-owned. The gateway has no Docker endpoint, proxy
+dependency, socket mount, or Docker-control network membership in this
+topology. Base Compose remains the explicit local direct `docker_pool`
+compatibility path with a fail-closed broker.
 
 ```
               Browser / E2E Test
@@ -144,8 +145,12 @@ on `docker_pool` with a fail-closed broker.
       └───────────────┘
        /run/bpane/agent.sock
 
+direct compatibility:
 bpane-gateway -- DOCKER_HOST --> docker-proxy -- read-only socket --> Docker daemon
-                 private docker-control network; no published proxy port
+
+production-like broker topology:
+bpane-gateway -- typed OIDC operations --> runtime-broker --> docker-proxy --> Docker daemon
+bpane-gateway -X- docker-control; private proxy network; no published proxy port
 ```
 
 **Ports exposed to host machine:**
@@ -289,7 +294,7 @@ service.
     - `static_single`: one shared host socket, with idle release semantics in the gateway
     - `docker_single`: opt-in Docker-backed worker startup/shutdown for the active session, with idle timeout and one active runtime at a time
     - `docker_pool`: Docker-backed worker pool with explicit `max_active_runtimes` and `max_starting_runtimes`; this is the default local compose backend
-    - `broker_pool`: opt-in parity backend that reuses Docker pool admission,
+    - `broker_pool`: production-like Docker-host backend that reuses Docker pool admission,
       persistence, and context semantics but sends browser, worker, and typed
       storage operations through `bpane-runtime-client`
   - session resources, runtime capacity, and compatibility routing now derive from this runtime profile
@@ -298,8 +303,13 @@ service.
     immutable browser and worker images, extension and environment snapshots,
     worker policy, container policy, and Docker adapters, including
     request-scoped bounded input staging and network-disabled storage helpers
-    running as the unprivileged `bpane` user; base Compose remains unchanged
-  - the proxy blocks unrelated API families and is checked by `scripts/validate-docker-runtime-boundary.mjs`, but a purpose-specific launch broker or orchestrator adapter remains required to validate permitted resource names, images, mounts, networks, privileges, and limits in a production trust boundary
+    running as the unprivileged `bpane` user; the gateway is isolated from
+    Docker control and base Compose remains the direct compatibility path
+  - the direct compatibility proxy blocks unrelated API families and is checked
+    by `scripts/validate-docker-runtime-boundary.mjs`; the broker topology adds
+    request-body policy for owned images, names, networks, mounts, privileges,
+    resources, and lifecycle targets, while non-Docker deployments still need
+    policy-equivalent orchestrator adapters
   - Docker runtime assignment metadata is now persisted in Postgres and reconciled on gateway startup, so an existing pool-mode worker can be rebound after a gateway restart without launching a duplicate runtime
   - Docker-backed workers now receive `BPANE_SESSION_ID` plus explicit profile/upload/download paths under a session-specific data root, so reconnecting a stopped session reuses cookies/cache/downloads and Chromium session-restore state without exposing one shared browser data root
   - this is profile-backed restoration, not true container/process suspension: exact live in-memory browser state only survives while the worker is still running
@@ -605,8 +615,8 @@ The default dev stack no longer uses a shared token file.
 - `docker_pool` enables multiple runtime-backed sessions, and legacy global routes like `/api/session/status` are intentionally not available there
 - `broker_pool` has the same session-runtime compatibility contract while
   isolating browser, worker, and storage operations behind the typed broker; it
-  remains an explicit migration overlay until gateway Docker-control access is
-  removed and the broker-only topology is validated
+  is the production-like Docker-host topology and gives the gateway no Docker
+  endpoint or Docker-control network access
 - `mcp-bridge` has an optional session-control bootstrap (`BPANE_SESSION_ID` /
   `BPANE_SESSION_BOOTSTRAP_MODE`), compatibility delegated-session assignment
   through its bridge-local `/control-session` API, and per-connection session

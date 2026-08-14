@@ -2,7 +2,7 @@
 
 Issue: [#214 Implement a policy-validating runtime launch broker](https://github.com/ITmedes/browserpane/issues/214)
 
-Status: active; checkpoints 1 through 5 complete; checkpoint 6 is next
+Status: active; checkpoints 1 through 5 complete; checkpoint 6 is in progress
 
 ## Business Case
 
@@ -821,9 +821,9 @@ Slice 3 evidence:
   the broker overlay. The dedicated broker storage smoke uses a 4 MB
   incompressible archive and verifies every storage action plus helper,
   staging, session, and context volume cleanup.
-- README, ARCH, and AGENTS now describe broker-owned storage call sites. The
-  gateway intentionally retains its Docker-control network only until
-  checkpoint 6 proves and switches the broker-only topology.
+- README, ARCH, and AGENTS described broker-owned storage call sites. At the
+  checkpoint 5 boundary, the gateway intentionally retained Docker control
+  until checkpoint 6 could prove and switch the broker-only topology.
 
 ### 6. Production-Like Topology Switch
 
@@ -837,6 +837,78 @@ Slice 3 evidence:
 
 Manual checkpoint: execute the complete post-implementation smoke sequence and
 inspect safe broker audit metadata before closing #214.
+
+Checkpoint 6 implementation slice:
+
+- Treat `deploy/compose.runtime-broker.yml` as the production-like Docker-host
+  topology while retaining base `deploy/compose.yml` as the explicit local
+  direct/proxy compatibility topology.
+- Override the base gateway service so broker mode has no `DOCKER_HOST`, no
+  `docker-control` network membership, and no startup dependency on
+  `docker-proxy`. Preserve only the private broker API path and the application
+  networks required by gateway features.
+- Tighten the overlay contract so only `runtime-broker` and `docker-proxy` join
+  `docker-control`, no other service gains proxy reachability, and the gateway
+  cannot carry a Docker socket mount or generic Docker endpoint configuration.
+- Add a live isolation smoke that inspects the effective container
+  configuration and proves proxy DNS, proxy TCP access, and the Docker daemon
+  are unavailable from the gateway while broker readiness remains available.
+- Exercise browser lifecycle, reusable-context/session-file storage, workflow,
+  recording, restart/reconciliation, and denial paths on the isolated overlay.
+  Record the exact test evidence before marking the issue complete.
+
+Checkpoint 6 example use case:
+
+An attacker obtains code execution inside `bpane-gateway` and attempts to call
+the Docker API directly. In the production-like broker topology the gateway has
+neither a socket, a Docker endpoint variable, nor network reachability to the
+proxy. Valid typed operations still reach `runtime-broker`, where BrowserPane
+policy validates them before the broker uses the isolated Docker-control path.
+
+Checkpoint 6 focused smoke sequence:
+
+1. Render and validate the merged compose model; assert gateway Docker inputs
+   are absent and `docker-control` contains only broker and proxy.
+2. Start the isolated broker topology and prove the running gateway cannot
+   resolve or connect to `docker-proxy`, has no Docker socket, and can reach
+   broker readiness.
+3. Run broker auth/policy denial tests and verify no helper, worker, browser, or
+   staging residue remains.
+4. Run browser lifecycle/reconnect, MCP, context/session-file, workflow,
+   recording, admin-new, CLI, and complete compose API regressions.
+5. Restart gateway and broker independently and verify persisted assignment,
+   queued workflow, recording, and runtime reconciliation behavior.
+
+Checkpoint 6 implementation evidence:
+
+- `deploy/compose.runtime-broker.yml` removes gateway `DOCKER_HOST`, Docker
+  proxy dependency, socket access, and `docker-control` membership while
+  preserving the private broker API network.
+- The static topology validator asserts that `docker-control` contains exactly
+  `docker-proxy` and `runtime-broker` and that no alternate gateway Docker
+  endpoint is configured.
+- `scripts/smoke-runtime-broker-isolation.sh` proves the effective running
+  gateway cannot resolve or connect to the proxy and can still reach broker
+  readiness.
+- `smoke:runtime-broker-restart` preserves the same live browser container
+  across a broker restart, creates no duplicate, retains lifecycle and
+  automation access, and cleans the container after stop.
+- The isolated topology passed all 17 Compose API cases, session files,
+  admin-new sessions, workflow workspace/runtime-hold/restart safety,
+  recording, multi-session/MCP, and 4 MB broker-storage journeys. The direct
+  compatibility topology separately passed all four docker-pool cases.
+- Gateway restart reconciliation passed with one-worker workflow backpressure:
+  the active stale run failed, the queued follower completed, and the
+  awaiting-input run survived and resumed.
+- All 42 canonical fast validation stages passed, including dependency policy,
+  repository/docs checks, Rust format/Clippy/workspace tests/coverage, both
+  admin applications, browser-client tests/coverage/build, MCP bridge,
+  recording/workflow workers, OpenAPI, and egress observer checks. Hosted
+  required checks remain the PR gate.
+- Live broker audit output was inspected after the parity journeys. It contains
+  request/resource ids, operation kind, outcome, and a hashed idempotency-key
+  fingerprint, with no credentials, payload content, paths, or raw Docker
+  diagnostics. A final live gateway-isolation smoke passed after validation.
 
 ## Validation Strategy
 

@@ -19,7 +19,7 @@ function validConfig() {
         },
         volumes: [{ target: "/run/secrets/runtime-broker-client-secret", read_only: true }],
         depends_on: { "runtime-broker": { condition: "service_healthy" } },
-        networks: { "docker-control": null, "runtime-broker-api": null },
+        networks: { "bpane-internal": null, "runtime-broker-api": null },
       },
       "runtime-broker": {
         environment: {
@@ -143,6 +143,39 @@ test("rejects bypassed broker routing and missing startup dependencies", () => {
       delete config.services.gateway.depends_on["runtime-broker"];
     },
     "wait for a healthy runtime-broker",
+  );
+  mutationFails(
+    (config) => {
+      config.services.gateway.environment.DOCKER_HOST = "tcp://docker-proxy:2375";
+    },
+    "must not configure DOCKER_HOST",
+  );
+  mutationFails(
+    (config) => {
+      config.services.gateway.environment.CONTAINER_API =
+        "http://docker-proxy:2375";
+    },
+    "must not configure another Docker endpoint",
+  );
+  mutationFails(
+    (config) => {
+      config.services.gateway.networks["docker-control"] = null;
+    },
+    "docker-control must contain only",
+  );
+  mutationFails(
+    (config) => {
+      config.services.gateway.depends_on["docker-proxy"] = {
+        condition: "service_healthy",
+      };
+    },
+    "must not depend on docker-proxy",
+  );
+  mutationFails(
+    (config) => {
+      config.services.gateway.volumes.push({ source: "/var/run/docker.sock" });
+    },
+    "must not mount the Docker socket",
   );
   mutationFails(
     (config) => {

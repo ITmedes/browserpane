@@ -1,7 +1,8 @@
 # Open GitHub Issues Context
 
 Created: 2026-07-10
-Revalidated: 2026-08-13 for the #167 runtime boundary and #214 broker follow-up
+Revalidated: 2026-08-13 for the merged #167 boundary and #214 broker-only
+topology completion slice
 
 This document maps the current `docs/` workspace to the live open GitHub
 issues for `ITmedes/browserpane`. It is the bridge between the consolidated
@@ -44,7 +45,7 @@ Source check:
 | Focused cross-product gaps | `#174` through `#180` | Use these for Phase 0 delivery, protocol conformance, authorization, identity lifecycle, platform telemetry, API compatibility, and open-source governance. |
 | Focused validation performance | `#184` | Preserve the #151 validation baseline while reducing hosted compose feedback time through isolated execution lanes. |
 | Focused Docker build acceleration | `#185` | Preserve #184 lane coverage while adding deterministic, supply-chain-safe Docker build reuse for trusted hosted runs. |
-| Focused runtime authorization boundary | `#214` | Build the typed, policy-validating launch broker required beyond the #167 compose proxy boundary. |
+| Focused runtime authorization boundary | `#214` | Complete the typed, policy-validating broker and gateway-isolated Docker-host topology beyond the #167 direct compatibility boundary. |
 | Product/platform backlog | `#20`, `#21`, `#28`, `#30`, `#31`, `#47`, `#66`, `#69`, `#70`, `#71`, `#72`, `#73`, `#74`, `#75`, `#76`, `#79`, `#80` | Keep as roadmap and enterprise/product context. Prefer the matching focused issue from `#145`-`#170` when an implementation slice is covered there. |
 | Closed admin redesign lineage | `#142` | Historical design record for admin-new. It is not open; route remaining admin implementation slices through the focused admin issues in `#153`-`#163`. |
 
@@ -83,7 +84,7 @@ Source check:
 | `#180` Open-source license/contribution/IP governance | `PRODUCT_PHASES_AND_RELEASE_GATES.md`, `RISK_REGISTER.md`, ADR 0004 | Production governance | Canonical owner for resolving license metadata and contribution/security/IP policy. |
 | `#184` Reduce representative compose validation wall time | `BPANE-00184_COMPOSE_VALIDATION_PERFORMANCE_PLAN.md`, `VALIDATION_MATRIX.md` | Foundation maintenance | Canonical owner for hosted compose sharding and timing evidence without reducing the #151 scenario baseline. |
 | `#185` Persist deterministic Docker build cache | `BPANE-00185_CI_RUST_BUILDER_PLAN.md`, `BPANE-00184_COMPOSE_VALIDATION_PERFORMANCE_PLAN.md`, `VALIDATION_MATRIX.md` | Foundation maintenance | Follow-up owner for a deterministic GHCR Rust builder after #184; it must preserve coverage and cache trust boundaries. |
-| `#214` Policy-validating runtime launch broker | `BPANE-00167_DOCKER_RUNTIME_BOUNDARY_PLAN.md`, `DELIVERY_ROADMAP.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md`, `RUNTIME_OPERATOR_REQUIREMENTS.md` | Production lane, follow-up to item 23 | Canonical owner for replacing generic Docker API semantics with authenticated typed launch/lifecycle operations and request-body policy enforcement. |
+| `#214` Policy-validating runtime launch broker | `BPANE-00214_RUNTIME_LAUNCH_BROKER_PLAN.md`, `BPANE-00167_DOCKER_RUNTIME_BOUNDARY_PLAN.md`, `DELIVERY_ROADMAP.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md`, `RUNTIME_OPERATOR_REQUIREMENTS.md`, `VALIDATION_MATRIX.md` | Production lane, completion of item 23 | Canonical owner for authenticated typed launch/lifecycle/storage operations, request-body policy enforcement, and the gateway-isolated production-like Docker-host topology. |
 
 ## Focused Work-Order Issue Matrix
 
@@ -115,7 +116,7 @@ dedicated open issue ownership.
 | 20. Admin and session catalog scalability | `#164` Improve admin and session catalog scalability | `IMPLEMENTATION_WORK_ORDER.md`, `SECURITY_RUNTIME_ROADMAP.md`, `REVIEW_FINDINGS_COVERAGE_AUDIT.md` |
 | 21. Worker and archive runtime hygiene | `#165` Harden worker logs, polling, and archive runtime behavior | Review-ready on `feature/BPANE-00165-worker-runtime-hardening`; `BPANE-00165_WORKER_RUNTIME_HARDENING_PLAN.md`, `IMPLEMENTATION_WORK_ORDER.md`, `SECURITY_RUNTIME_ROADMAP.md`, `REVIEW_FINDINGS_RECONCILIATION.md` |
 | 22. Documentation accuracy and production references | `#166` Update documentation accuracy and production references | `IMPLEMENTATION_WORK_ORDER.md`, `SECURITY_RUNTIME_ROADMAP.md`, `REVIEW_FINDINGS_COVERAGE_AUDIT.md` |
-| 23. Docker runtime launch boundary | `#167` Define Docker runtime launch boundary for production hardening; production authorization follow-up `#214` | `BPANE-00167_DOCKER_RUNTIME_BOUNDARY_PLAN.md`, `IMPLEMENTATION_WORK_ORDER.md`, `SECURITY_RUNTIME_ROADMAP.md`, `RUNTIME_OPERATOR_REQUIREMENTS.md` |
+| 23. Docker runtime launch boundary | `#167` direct compatibility boundary; `#214` typed broker and isolated topology | `BPANE-00167_DOCKER_RUNTIME_BOUNDARY_PLAN.md`, `BPANE-00214_RUNTIME_LAUNCH_BROKER_PLAN.md`, `IMPLEMENTATION_WORK_ORDER.md`, `SECURITY_RUNTIME_ROADMAP.md`, `RUNTIME_OPERATOR_REQUIREMENTS.md` |
 | 24. Host and client render hot-path work | `#168` Profile and optimize host and client render hot paths | `IMPLEMENTATION_WORK_ORDER.md`, `SECURITY_RUNTIME_ROADMAP.md`, `REVIEW_FINDINGS_COVERAGE_AUDIT.md` |
 | 25. Gateway fan-out and transport optimization | `#169` Profile and optimize gateway fan-out and transport behavior | `IMPLEMENTATION_WORK_ORDER.md`, `SECURITY_RUNTIME_ROADMAP.md`, `REVIEW_FINDINGS_RECONCILIATION.md` |
 | 26. Structural refactors | `#170` Split session-control structural refactors by domain | `IMPLEMENTATION_WORK_ORDER.md`, `SECURITY_RUNTIME_ROADMAP.md`, `REVIEW_FINDINGS_RECONCILIATION.md` |
@@ -211,7 +212,8 @@ shown as `closed #142`.
 | `BPANE-00179_CONTROL_API_CONFORMANCE_PLAN.md` | `#179`, review-ready Foundation control-contract conformance and compatibility slice |
 | `BPANE-00184_COMPOSE_VALIDATION_PERFORMANCE_PLAN.md` | `#184`, implemented Foundation validation-performance slice; measured build-cache follow-up `#185` |
 | `BPANE-00185_CI_RUST_BUILDER_PLAN.md` | `#185`, active deterministic GHCR builder and compose-consumption slice |
-| `BPANE-00167_DOCKER_RUNTIME_BOUNDARY_PLAN.md` | `#167`, review-ready proxy boundary; `#214`, qualified typed launch-broker follow-up |
+| `BPANE-00167_DOCKER_RUNTIME_BOUNDARY_PLAN.md` | `#167`, merged direct compatibility proxy boundary; predecessor to `#214` |
+| `BPANE-00214_RUNTIME_LAUNCH_BROKER_PLAN.md` | `#214`, typed broker, operation adapters, gateway routing, and broker-only topology completion |
 | `BPANE-00171_WORKFLOW_TEACH_MODE_PLAN.md` | `#171`, with dependencies on `#20`, `#21`, `#47`, `#71`, and `#172` |
 | `BPANE-00172_BPM_WORKFLOW_ENDPOINT_INTEGRATION_PLAN.md` | `#172`, with dependencies on `#28`, `#47`, `#66`, `#69`-`#72`, `#74`, `#76`, `#79`, `#80`, `#147`, `#150`, `#161`, `#162`, `#164`, `#174`, `#176`, `#179`, and `#171` |
 | `BPANE-00173_DELIVERY_GOVERNANCE_PLAN.md` | `#173` |
@@ -229,9 +231,9 @@ shown as `closed #142`.
 | `PROJECT_GOVERNANCE_REQUIREMENTS.md` | `#70`, `#79`, `#80`, `#161`, `#172`, closed `#142` |
 | `RESOURCE_LIFECYCLE_REQUIREMENTS.md` | `#21`, `#66`, `#76`, `#80`, `#124`, `#148`, `#159`, `#160`, closed `#142` |
 | `OPERATOR_CLI_AND_LOCAL_DIAGNOSTICS.md` | `#162`, canonical CLI support boundary and local troubleshooting sequence |
-| `RUNTIME_OPERATOR_REQUIREMENTS.md` | `#66`, `#69`, `#72`, `#74`, `#150`, `#162`, `#167`, `#172` |
+| `RUNTIME_OPERATOR_REQUIREMENTS.md` | `#66`, `#69`, `#72`, `#74`, `#150`, `#162`, `#167`, `#172`, `#214` |
 | `SECURITY_RUNTIME_ROADMAP.md` | `#28`, `#66`, `#72`, `#74`, `#75`, `#145`-`#150`, `#164`-`#170` |
-| `VALIDATION_MATRIX.md` | all implementation issues selected from this matrix, especially `#151`, `#152`, focused admin-new issues `#153`-`#163`, and Phase N issues `#171`-`#172` |
+| `VALIDATION_MATRIX.md` | all implementation issues selected from this matrix, especially `#151`, `#152`, focused admin-new issues `#153`-`#163`, Phase N issues `#171`-`#172`, and runtime boundary `#214` |
 | `REVIEW_FINDINGS_RECONCILIATION.md` | `#72`, `#145`-`#150`, `#165`, `#169`, `#170`, plus security/runtime portions of `#28`, `#66`, `#74`, `#75` |
 | `REVIEW_FINDINGS_COVERAGE_AUDIT.md` | `#72`, `#75`, `#151`, `#164`, `#166`, `#168`, and deferred product/platform backlog issues |
 | `SOURCE_PLAN_INVENTORY.md` | `#6`, closed `#142` |

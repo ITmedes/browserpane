@@ -687,7 +687,7 @@ Validation:
 
 ### 23. Docker Runtime Launch Boundary
 
-Tier: P1 production hardening, review-ready under #167.
+Tier: P1 production hardening, implemented through #167 and #214.
 
 Why here:
 
@@ -695,7 +695,7 @@ Why here:
 - The generic proxy selected by #167 reduces API exposure but cannot validate
   allowed container/volume request bodies or enforce resource ownership.
 
-Current #167 scope:
+Implemented #167 direct compatibility scope:
 
 - remove the direct gateway socket mount,
 - add a digest-pinned internal Docker API proxy with explicit API allowlists,
@@ -703,18 +703,27 @@ Current #167 scope:
 - add structured manifest and live API denial checks,
 - update production topology docs without claiming full authorization.
 
-Production follow-up:
+Implemented #214 production-like Docker-host scope:
 
-- #214 owns a policy-validating launch broker and shared typed adapter contract.
-- The broker must validate owned images, names, networks, mounts, privileges,
-  resource limits, and lifecycle operations before Docker-host production
-  promotion.
+- add an audience-authenticated, policy-validating launch broker and shared
+  typed adapter contract,
+- route browser, workflow, recording, browser-context, and session-data
+  operations through broker-owned adapters,
+- validate or derive owned images, names, networks, mounts, privileges,
+  resource limits, and lifecycle operations,
+- remove the gateway's Docker endpoint, proxy dependency, socket, and
+  Docker-control network membership in the production-like topology,
+- retain base `docker_pool` as an explicit local direct compatibility path.
 
 Validation:
 
 - local compose runtime-launch smoke,
 - denied Docker API operations through the proxy,
-- production docs no longer present raw socket as a safe default.
+- static and live broker-isolation checks,
+- browser, worker, storage, restart, MCP, workflow, recording, and compose API
+  parity on the isolated topology,
+- production docs no longer present raw socket or the direct proxy as a
+  production authorization boundary.
 
 ### 24. Host And Client Render Hot-Path Work
 

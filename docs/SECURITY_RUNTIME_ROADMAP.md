@@ -1,6 +1,6 @@
 # Security And Runtime Cleanup Roadmap
 
-Revalidated: 2026-08-04
+Revalidated: 2026-08-13
 
 This document preserves the still-valid cleanup findings that gate production
 readiness and `/admin-new` promotion. It is standalone and does not require the
@@ -341,32 +341,39 @@ Risk:
 - raw Docker socket exposure in a gateway container amplifies a gateway
   compromise into host control.
 
-Implemented compose boundary:
+Implemented direct compatibility boundary:
 
 1. The gateway has no raw Docker socket mount.
 2. A digest-pinned proxy owns the read-only socket mount on a private network
-   shared only with the gateway.
+   shared only with the gateway in direct `docker_pool` mode.
 3. The proxy permits only current container, volume, daemon-info, ping, and
    version API families; unrelated API families are denied.
 4. `scripts/validate-docker-runtime-boundary.mjs` checks the structured Compose
    contract and live API denials.
 
-Remaining production boundary:
+Implemented production-like Docker-host boundary:
 
-- The proxy is defense-in-depth, not resource-level authorization. Required
-  container and volume families remain broad, and allowed create payloads are
-  not validated.
-- A purpose-specific launch broker or non-Docker orchestrator adapter must
-  validate owned images, names, networks, mounts, privileges, resource limits,
-  and lifecycle operations before production promotion. The typed broker is
-  owned by #214.
+1. `broker_pool` routes browser, workflow, recording, browser-context, and
+   session-data operations through the authenticated typed runtime broker.
+2. Broker policy derives or validates images, names, networks, mounts,
+   environment, commands, privileges, resources, ownership, and lifecycle.
+3. The gateway has no Docker endpoint, socket, proxy dependency, or
+   Docker-control network membership; only broker and proxy share that network.
+4. Static and live isolation, storage parity, gateway restart, broker restart,
+   multi-session/MCP, workflow, recording, and denial evidence cover the local
+   production-like topology.
+
+Remaining production work is deployment packaging, standard telemetry/SLOs,
+capacity evidence, HA/DR, and release governance. Non-Docker deployments still
+need policy-equivalent orchestrator adapters implementing the typed contract.
 
 Validation:
 
 - compose smoke for local runtime launch,
 - negative validation for denied Docker API operations,
-- docs proving production guidance no longer presents raw socket as safe
-  default.
+- broker isolation and restart smokes,
+- docs distinguishing the production-like broker path from direct local
+  compatibility without claiming complete product production readiness.
 
 ## Performance And Maintainability Backlog From Review
 
