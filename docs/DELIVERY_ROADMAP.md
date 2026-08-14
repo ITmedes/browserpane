@@ -5,8 +5,9 @@ Status: Canonical execution roadmap
 Governance issue: [#173](https://github.com/ITmedes/browserpane/issues/173)
 
 Last implementation audit: 2026-08-14 on
-`feature/BPANE-00223-threat-model-baseline` through the evidence-linked threat
-model, production-hardening checklist, and executable security baseline.
+`feature/BPANE-00225-single-node-compose-baseline`. The evidence-linked threat
+model and executable security baseline merged through PR #224; #225 is the
+current bounded single-node deployment slice under #66.
 
 ## How To Use This Document
 
@@ -49,7 +50,7 @@ or capacity decision.
 | Foundation | Trusted build, auth, contracts, storage, and lifecycle baseline. | Complete through #179 | Foundation Gate |
 | Pilot Value | One bounded reference workflow with accepted evidence and runbook. | #174 | Phase 0 Gate |
 | Operator Product | Complete and promote `/admin-new/` as the default operator console. | Default promoted through #163; #124 is the next focused catalog gap | Phase 1 Gate |
-| Production | Harden deployment, security, recovery, supply chain, and telemetry. | #167/#214 runtime boundary and #178 metrics checkpoint merged; #223 threat-model baseline in progress, then #66 | Production Baseline |
+| Production | Harden deployment, security, recovery, supply chain, and telemetry. | #167/#214 runtime boundary, #178 metrics checkpoint, and #223 threat-model baseline merged; #225 single-node deployment profile is Ready | Production Baseline |
 | Enterprise | Organization controls, policy, residency, HA, and governed integrations. | #176 / #70 / #79 | Phase N Gate |
 | Innovation | Teach Mode and controlled repair after stable execution contracts. | #171 | Phase N capability gate |
 
@@ -75,6 +76,13 @@ or capacity decision.
 | 2 | #158 | Done | #179 governed contract evidence | API, coverage, and docs companion routes merged through PR #200. |
 | 3 | #159 | Done | #153 shared catalog patterns | Extensions, credential bindings, and workflow event-subscription catalogs merged through PR #201. |
 
+### Current Production Slice
+
+| Order | Issue | State | Dependency | Outcome |
+| --- | --- | --- | --- | --- |
+| 1 | #223 | Done | #214 runtime boundary and #178 metrics checkpoint | Threat model, responsibility baseline, executable security contract, and negative-evidence inventory merged through PR #224. |
+| 2 | #225 | Ready | #223 evidence baseline | Independent, broker-only single-node Compose profile with secret-file configuration, preflight, live fixture, and bounded operator runbook. |
+
 #151, #184, and #185 established and accelerated the required validation
 baseline. #145 is merged through
 `docs/BPANE-00145_TOKEN_DOMAIN_SEPARATION_PLAN.md`; #146 is merged through PR
@@ -95,10 +103,11 @@ through PR #215. #214 broker contracts, policy, browser/worker/storage adapters,
 and gateway routing merged incrementally through PRs #220 and #221. The first
 bounded #178 gateway OpenMetrics/runtime-capacity checkpoint merged through PR
 #222; #178 remains open for tracing, broader subsystem metrics, SLOs, alerts,
-runbooks, and load evidence. #223 is the current focused #72 checkpoint: it
-links the implemented controls and negative evidence into one threat model and
-an executable deployment-security baseline without claiming that local Compose
-is production-ready.
+runbooks, and load evidence. #223 merged through PR #224 and now links the
+implemented controls and negative evidence into one threat model and executable
+deployment-security baseline. #225 is the current focused #66 checkpoint: it
+applies that baseline to an independent single-node Compose package without
+absorbing Kubernetes, Fargate, HA, or compliance scope.
 
 ## Foundation Gate Sequence
 
@@ -169,10 +178,11 @@ bounded Pilot:
   implemented Docker-host runtime trust baseline,
 - #178 platform telemetry foundation is implemented; SLOs, alerts, traces, and
   capacity evidence remain,
-- #223 evidence-linked threat model and hardening baseline is the current
-  focused checkpoint under #72,
+- #223 evidence-linked threat model and hardening baseline merged through PR
+  #224,
 - #72 remains the broader enterprise security-hardening owner after #223,
-- #66 deployment packaging and validated runtime targets,
+- #225 is the current bounded single-node Compose package under #66,
+- #66 retains Kubernetes/Fargate packaging and cross-target deployment work,
 - #73 backup/restore and disaster recovery,
 - #74 high availability and zero-downtime operations,
 - #75 SBOM, signing, provenance, and release governance,
