@@ -5,7 +5,7 @@ certificate, MCP, and operator CLI requirements.
 
 ## Docker Runtime Trust Topologies
 
-BrowserPane maintains two explicit Compose paths:
+BrowserPane maintains three explicit Compose paths:
 
 - `deploy/compose.yml` defaults to direct `docker_pool` for local compatibility.
   The gateway reaches the digest-pinned, API-allowlisted `docker-proxy`; this is
@@ -16,6 +16,11 @@ BrowserPane maintains two explicit Compose paths:
   dependency, or Docker-control network membership. It sends typed,
   audience-authenticated browser, worker, context, and session-data operations
   to `bpane-runtime-broker`; only broker and proxy share Docker control.
+- `deploy/single-node/compose.yml` is an independent hardened baseline for one
+  Linux Docker host. It retains the broker-only runtime boundary, reduces the
+  long-lived BrowserPane services to four, requires immutable images and
+  protected files, and consumes external OIDC, Postgres, Vault, and trusted
+  ingress. It is bounded single-host packaging, not HA or managed-cloud support.
 
 Required broker-topology evidence:
 
@@ -33,6 +38,11 @@ Validation:
 - `scripts/smoke-runtime-broker-isolation.sh`
 - `scripts/smoke-runtime-broker-storage.sh`
 - `cd code/web/bpane-client && npm run smoke:runtime-broker-restart -- --headless`
+- `node scripts/check-single-node-deployment.mjs --repository-fixture`
+- `./scripts/start-single-node-fixture.sh && node scripts/qualify-single-node-deployment.mjs`
+
+The single-node configuration, lifecycle, backup/restore, upgrade, diagnostics,
+and unsupported boundaries are maintained in `SINGLE_NODE_DEPLOYMENT.md`.
 
 ## Local Workflow, MCP, Certificate, And Setup
 

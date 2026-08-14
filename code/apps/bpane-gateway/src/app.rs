@@ -19,9 +19,9 @@ use crate::workspaces::WorkspaceFileStore;
 mod builders;
 
 use builders::{
-    build_credential_provider, default_owner_mode, start_browser_context_retention,
-    start_session_file_retention, AuthServices, RecordingServices, RuntimeServices,
-    WorkflowServices,
+    build_credential_provider, default_owner_mode, resolve_optional_secret,
+    start_browser_context_retention, start_session_file_retention, AuthServices, RecordingServices,
+    RuntimeServices, SecretFilePermissions, WorkflowServices,
 };
 
 pub(crate) struct GatewayApp {
@@ -154,7 +154,7 @@ impl GatewayApp {
             public_gateway_url: config.gateway.public_gateway_url.clone(),
             default_owner_mode: default_owner_mode(&config),
             browser_context_import,
-            mcp_bridge_control: mcp_bridge_control_config(&config),
+            mcp_bridge_control: mcp_bridge_control_config(&config)?,
         };
 
         Ok(Self {
@@ -341,23 +341,26 @@ async fn wait_for_shutdown_signal() -> anyhow::Result<&'static str> {
     Ok("SIGINT")
 }
 
-fn mcp_bridge_control_config(config: &Config) -> Option<McpBridgeControlConfig> {
-    let control_url = config.gateway.mcp_bridge_control_url.as_ref()?.trim();
+fn mcp_bridge_control_config(config: &Config) -> anyhow::Result<Option<McpBridgeControlConfig>> {
+    let Some(control_url) = config.gateway.mcp_bridge_control_url.as_deref() else {
+        return Ok(None);
+    };
+    let control_url = control_url.trim();
     if control_url.is_empty() {
-        return None;
+        return Ok(None);
     }
-    let bearer_token = config
-        .gateway
-        .mcp_bridge_control_token
-        .as_ref()
-        .map(|value| value.trim())
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned);
-    Some(McpBridgeControlConfig {
+    let bearer_token = resolve_optional_secret(
+        config.gateway.mcp_bridge_control_token.as_deref(),
+        config.gateway.mcp_bridge_control_token_file.as_deref(),
+        "--mcp-bridge-control-token",
+        "--mcp-bridge-control-token-file",
+        SecretFilePermissions::OwnerOnly,
+    )?;
+    Ok(Some(McpBridgeControlConfig {
         control_url: control_url.to_string(),
         bearer_token,
         timeout: Duration::from_secs(config.gateway.mcp_bridge_control_timeout_secs),
-    })
+    }))
 }
 
 #[cfg(test)]

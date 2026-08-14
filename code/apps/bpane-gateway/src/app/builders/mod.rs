@@ -25,6 +25,7 @@ mod auth;
 mod browser_contexts;
 mod recording;
 mod runtime;
+mod secret_file;
 mod session_files;
 mod workflow;
 
@@ -34,7 +35,10 @@ pub(in crate::app) use self::browser_contexts::start_browser_context_retention;
 #[cfg(test)]
 pub(in crate::app) use self::recording::build_recording_worker_config;
 #[cfg(test)]
-pub(in crate::app) use self::runtime::build_session_manager_config;
+pub(in crate::app) use self::runtime::{build_session_manager_config, resolve_database_url};
+pub(in crate::app) use self::secret_file::{
+    load_secret_file, resolve_optional_secret, SecretFilePermissions,
+};
 #[cfg(test)]
 pub(in crate::app) use self::session_files::session_file_retention_window;
 pub(in crate::app) use self::session_files::start_session_file_retention;
@@ -76,10 +80,14 @@ pub(super) struct WorkflowServices {
 pub(super) fn build_credential_provider(
     config: &Config,
 ) -> anyhow::Result<Option<Arc<CredentialProvider>>> {
-    match (
-        config.storage.credential_vault_addr.clone(),
-        config.storage.credential_vault_token.clone(),
-    ) {
+    let token = resolve_optional_secret(
+        config.storage.credential_vault_token.as_deref(),
+        config.storage.credential_vault_token_file.as_deref(),
+        "--credential-vault-token",
+        "--credential-vault-token-file",
+        SecretFilePermissions::OwnerOnly,
+    )?;
+    match (config.storage.credential_vault_addr.clone(), token) {
         (Some(addr), Some(token)) => Ok(Some(Arc::new(CredentialProvider::new(Arc::new(
             VaultKvV2CredentialProvider::new(
                 addr,
@@ -89,7 +97,7 @@ pub(super) fn build_credential_provider(
             )?,
         ))))),
         (None, None) => Ok(None),
-        _ => bail!("--credential-vault-addr and --credential-vault-token must be set together"),
+        _ => bail!("--credential-vault-addr and a credential Vault token must be set together"),
     }
 }
 

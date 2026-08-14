@@ -13,7 +13,10 @@ use crate::session_manager::{
 };
 use crate::session_registry::SessionRegistry;
 
-use super::{required_string, RuntimeServices};
+use super::{
+    load_secret_file, required_string, resolve_optional_secret, RuntimeServices,
+    SecretFilePermissions,
+};
 
 impl RuntimeServices {
     pub(in crate::app) async fn build(config: &Config) -> anyhow::Result<Self> {
@@ -100,9 +103,12 @@ fn build_broker_runtime_config(config: &Config) -> anyhow::Result<SessionManager
         .ok_or_else(|| {
             anyhow!("--runtime-broker-client-secret-file is required for broker_pool")
         })?;
-    let secret = std::fs::read_to_string(secret_path)
-        .map_err(|_| anyhow!("failed to read --runtime-broker-client-secret-file"))?;
-    let secret = bpane_runtime_contract::SecretValue::new(secret.trim().to_string())
+    let secret = load_secret_file(
+        secret_path,
+        "--runtime-broker-client-secret-file",
+        SecretFilePermissions::Compatibility,
+    )?;
+    let secret = bpane_runtime_contract::SecretValue::new(secret)
         .map_err(|_| anyhow!("--runtime-broker-client-secret-file is invalid"))?;
     Ok(SessionManagerBrokerConfig {
         docker: build_docker_runtime_config(
@@ -172,15 +178,29 @@ async fn build_session_store(
     config: &Config,
     session_manager: &SessionManager,
 ) -> anyhow::Result<SessionStore> {
-    if let Some(database_url) = &config.storage.database_url {
+    let database_url = resolve_database_url(config)?;
+    if let Some(database_url) = database_url {
         info!("using postgres-backed session control store");
-        SessionStore::from_database_url_with_config(database_url, session_manager.profile().clone())
-            .await
-            .map_err(Into::into)
+        SessionStore::from_database_url_with_config(
+            &database_url,
+            session_manager.profile().clone(),
+        )
+        .await
+        .map_err(Into::into)
     } else {
         warn!("no --database-url configured; /api/v1 sessions will use an in-memory store");
         Ok(SessionStore::in_memory_with_config(
             session_manager.profile().clone(),
         ))
     }
+}
+
+pub(in crate::app) fn resolve_database_url(config: &Config) -> anyhow::Result<Option<String>> {
+    resolve_optional_secret(
+        config.storage.database_url.as_deref(),
+        config.storage.database_url_file.as_deref(),
+        "--database-url",
+        "--database-url-file",
+        SecretFilePermissions::OwnerOnly,
+    )
 }
