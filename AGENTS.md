@@ -246,6 +246,7 @@ Current product shape:
 - Full local validation: `node scripts/validate.mjs --profile full`
 - Dependency safety scan: `node scripts/check-dependency-safety.mjs`
 - Repository document/workflow policy: `node scripts/check-repository-documents.mjs`
+- Production security baseline: `node scripts/check-production-security-baseline.mjs`
 - Redacted compose diagnostics: `node scripts/collect-compose-diagnostics.mjs`
 - CI compose cleanup: `scripts/ci/cleanup-compose.sh`
 - Dependency policy tests: `node --test scripts/dependency-safety/*.test.mjs`
@@ -337,6 +338,11 @@ Run these where applicable:
   topology, API routes, commands, support matrix, or validation flow, check
   whether `README.md` needs a matching update in the same slice. If no README
   change is needed, mention that explicitly in the PR or handoff notes.
+- When a change adds or alters a public/internal endpoint, credential type,
+  runtime or storage adapter, callback, deployment profile, or sensitive data
+  class, update `docs/THREAT_MODEL.md` and
+  `docs/PRODUCTION_SECURITY_BASELINE.md` or record why their contracts are
+  unchanged.
 - Before starting a planned implementation slice, create or update a dedicated
   plan file under `docs/` whose filename matches `*_PLAN.md`. Each plan must
   include the targeted issue, an example use case, and a post-implementation

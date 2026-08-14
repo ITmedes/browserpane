@@ -1,3 +1,5 @@
+import { RuntimeBrokerServiceSecurityContract } from "./runtime-broker-service-security-contract.mjs";
+
 const BROKER_NETWORKS = ["docker-control", "runtime-broker-api", "runtime-broker-auth"];
 
 export class RuntimeBrokerBrowserOverlayContract {
@@ -9,6 +11,7 @@ export class RuntimeBrokerBrowserOverlayContract {
     this.expect(broker, "compose service runtime-broker is missing");
     this.expect(gateway, "compose service gateway is missing");
     this.expect(proxy, "compose service docker-proxy is missing");
+    new RuntimeBrokerServiceSecurityContract().validate(broker);
 
     this.sameValues(
       Object.keys(broker.networks ?? {}),
@@ -19,12 +22,6 @@ export class RuntimeBrokerBrowserOverlayContract {
       this.networkMembers(services, "docker-control"),
       ["docker-proxy", "runtime-broker"],
       "docker-control must contain only the proxy and runtime-broker",
-    );
-    this.expect(
-      !(broker.volumes ?? []).some((volume) =>
-        String(volume.source ?? "").includes("docker.sock"),
-      ),
-      "runtime-broker must reach Docker only through the proxy",
     );
     this.expect(
       broker.environment?.BPANE_RUNTIME_BROKER_EXECUTOR === "docker-browser",

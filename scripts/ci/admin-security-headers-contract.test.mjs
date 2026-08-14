@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
+import { AdminSecurityHeaderContract } from '../security/admin-security-header-contract.mjs';
+
 const NGINX_CONFIG = new URL('../../deploy/nginx.conf', import.meta.url);
 const HEADER_CONFIG = new URL('../../deploy/nginx-admin-security-headers.conf', import.meta.url);
 const DOCKERFILE = new URL('../../deploy/Dockerfile.web', import.meta.url);
@@ -28,13 +30,7 @@ test('web root selects admin-new while preserving explicit compatibility and fix
 test('admin security policy contains the required browser defenses', async () => {
   const headers = await readFile(HEADER_CONFIG, 'utf8');
 
-  assert.match(headers, /Content-Security-Policy/);
-  assert.match(headers, /frame-ancestors 'none'/);
-  assert.match(headers, /object-src 'none'/);
-  assert.match(headers, /X-Content-Type-Options "nosniff" always/);
-  assert.match(headers, /X-Frame-Options "DENY" always/);
-  assert.match(headers, /Referrer-Policy "no-referrer" always/);
-  assert.match(headers, /Permissions-Policy/);
+  assert.doesNotThrow(() => new AdminSecurityHeaderContract().validate(headers));
 });
 
 test('both static apps use the shared hash-based CSP', async () => {

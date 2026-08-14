@@ -167,6 +167,36 @@ The local MCP bridge runs the package-installed `@playwright/mcp` executable
 from its own dependencies rather than downloading `@playwright/mcp@latest` at
 first client connect.
 
+### Security Boundaries
+
+The canonical profiles have different security meanings:
+
+- `deploy/compose.yml` is local development. Its demo identity, Vault dev root
+  token, published dependency ports, local certificates, direct Docker
+  compatibility path, and unconfined direct-runtime seccomp are deliberate
+  development exceptions.
+- `deploy/compose.yml` plus `deploy/compose.runtime-broker.yml` is
+  production-like broker validation. It proves typed runtime authorization,
+  gateway Docker isolation, private broker/proxy reachability, immutable
+  runtime images, constrained broker process posture, and live browser/worker/
+  storage behavior. It is not a supported production package.
+- A production deployment is not currently shipped. Issue #66 owns target
+  ingress, network policy, secret injection, persistence, sandbox qualification,
+  upgrades, and operator runbooks.
+
+The current assets, actors, trust boundaries, controls, and residual risks are
+maintained in `docs/THREAT_MODEL.md`. Required application, deployment,
+infrastructure, and operator controls are in
+`docs/PRODUCTION_SECURITY_BASELINE.md`. Their composed static contract is:
+
+```bash
+node scripts/check-production-security-baseline.mjs
+```
+
+The contract is necessary evidence, not a substitute for live broker isolation,
+affected end-to-end journeys, load/capacity qualification, or external security
+review.
+
 **Host container internals:** Xorg with dummy video driver (3840x2160 virtual
 framebuffer, runtime resizable via xrandr), OpenBox WM (locked down, no
 keybinds), Chromium from xtradeb PPA (software rendering via SwiftShader,
@@ -387,7 +417,10 @@ service.
   - `GET /api/session/status` — client counts, resolution, telemetry
   - `POST /api/session/mcp-owner` — claim session, lock resolution
   - `DELETE /api/session/mcp-owner` — release ownership
-  - all current endpoints require `Authorization: Bearer <token>`
+  - owner and worker/internal resource endpoints require their documented
+    bearer credential; `/healthz`, `/readyz`, and `/metrics` are intentionally
+    unauthenticated resource-free operational endpoints and require deployment
+    network policy
   - the `/api/session/*` routes are compatibility-only and are intentionally outside the frozen v1 contract
 - **Relay** (`relay.rs`): bidirectional Unix socket <-> async bridge, 64 KB read
   buffer, zero-copy frame slicing with `Bytes`

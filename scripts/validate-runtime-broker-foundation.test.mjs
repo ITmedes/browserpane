@@ -26,6 +26,7 @@ function validConfig() {
         read_only: true,
         cap_drop: ["ALL"],
         security_opt: ["no-new-privileges:true"],
+        tmpfs: ["/tmp:size=16m,mode=1777"],
         healthcheck: { test: ["CMD", "curl", "http://localhost:8940/readyz"] },
       },
     },
@@ -59,6 +60,10 @@ test("rejects public ports, docker access, and weakened confinement", () => {
     [(broker) => (broker.read_only = false), "must be read-only"],
     [(broker) => (broker.cap_drop = []), "drop all"],
     [(broker) => (broker.security_opt = []), "no-new-privileges"],
+    [(broker) => (broker.tmpfs = []), "bounded writable /tmp"],
+    [(broker) => (broker.privileged = true), "must not run as privileged"],
+    [(broker) => (broker.pid = "host"), "host PID or IPC"],
+    [(broker) => (broker.devices = ["/dev/kvm"]), "must not mount host devices"],
   ];
   for (const [mutate, expected] of cases) {
     mutationFails((config) => mutate(config.services["runtime-broker"]), expected);

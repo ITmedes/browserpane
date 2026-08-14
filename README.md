@@ -148,6 +148,12 @@ Current support and scope:
   runtime-capacity signals at `/metrics`. Cross-process tracing, complete SLOs,
   alerts, and capacity envelopes remain planned under
   [issue #178](https://github.com/ITmedes/browserpane/issues/178).
+- Security baseline: the current trust boundaries, implemented controls,
+  deployment obligations, and residual risks are linked in the
+  [threat model](docs/THREAT_MODEL.md) and
+  [production security baseline](docs/PRODUCTION_SECURITY_BASELINE.md). The
+  broker topology is production-like validation evidence, not a supported
+  production deployment; packaging remains [issue #66](https://github.com/ITmedes/browserpane/issues/66).
 
 ## How The System Is Shaped
 
@@ -312,6 +318,17 @@ labels. Keep this unauthenticated collector endpoint on a trusted private
 network in production. See
 [Platform Telemetry](docs/PLATFORM_TELEMETRY.md) for the metric contract,
 Prometheus example, and validation commands.
+
+The repository-wide security contract validates the current admin-header,
+Docker-proxy, and runtime-broker invariants against the composed manifests:
+
+```bash
+node scripts/check-production-security-baseline.mjs
+```
+
+This static contract is part of the fast validation profile. It does not
+replace live broker isolation, affected API/admin/workflow/recording smokes, or
+target-specific production qualification.
 
 Workflow-worker and recording-worker containers run as short-lived jobs; do
 not run them as long-lived services. In direct mode the gateway launches them;
@@ -1409,6 +1426,7 @@ node scripts/validate.mjs --help
 node scripts/validate.mjs --profile fast
 node scripts/validate.mjs --profile compose
 node scripts/validate.mjs --profile full
+node scripts/check-production-security-baseline.mjs
 ```
 
 `fast` runs the dependency and repository baselines, Rust checks and coverage,
@@ -1655,6 +1673,8 @@ Planning and evidence sources:
 - [docs/PRODUCT_PHASES_AND_RELEASE_GATES.md](docs/PRODUCT_PHASES_AND_RELEASE_GATES.md): promotion evidence
 - [docs/RISK_REGISTER.md](docs/RISK_REGISTER.md): active product/delivery risks
 - [docs/OPEN_ISSUES_CONTEXT.md](docs/OPEN_ISSUES_CONTEXT.md): canonical issue ownership map
+- [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md): assets, actors, boundaries, controls, and residual risks
+- [docs/PRODUCTION_SECURITY_BASELINE.md](docs/PRODUCTION_SECURITY_BASELINE.md): future deployment responsibility and security gate
 
 It should explain:
 

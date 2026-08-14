@@ -46,6 +46,7 @@ Source check:
 | Focused validation performance | `#184` | Preserve the #151 validation baseline while reducing hosted compose feedback time through isolated execution lanes. |
 | Focused Docker build acceleration | `#185` | Preserve #184 lane coverage while adding deterministic, supply-chain-safe Docker build reuse for trusted hosted runs. |
 | Focused runtime authorization boundary | `#214` | Complete the typed, policy-validating broker and gateway-isolated Docker-host topology beyond the #167 direct compatibility boundary. |
+| Focused threat-model baseline | `#223` | Compose current application, admin, callback, archive, artifact, telemetry, and runtime-broker controls into one evidence-linked threat model and deployment-security gate under #72. |
 | Product/platform backlog | `#20`, `#21`, `#28`, `#30`, `#31`, `#47`, `#66`, `#69`, `#70`, `#71`, `#72`, `#73`, `#74`, `#75`, `#76`, `#79`, `#80` | Keep as roadmap and enterprise/product context. Prefer the matching focused issue from `#145`-`#170` when an implementation slice is covered there. |
 | Closed admin redesign lineage | `#142` | Historical design record for admin-new. It is not open; route remaining admin implementation slices through the focused admin issues in `#153`-`#163`. |
 
@@ -64,7 +65,7 @@ Source check:
 | `#69` Session-scoped automation connection APIs | `DOMAIN_REQUIREMENTS.md`, `ADMIN_NEW_API_COVERAGE.md`, `RUNTIME_OPERATOR_REQUIREMENTS.md` | Items 12, 18, 27 | Session automation route visibility is admin parity; productized external contract is later. |
 | `#70` API key, audit log, and retention policy controls | `IDENTITY_ACCESS_REQUIREMENTS.md`, `PROJECT_GOVERNANCE_REQUIREMENTS.md`, `IMPLEMENTATION_WORK_ORDER.md` | Items 13, 17, 27 | Identity route can surface current access review now; API keys/audit are enterprise backlog. |
 | `#71` Signed human handoff, challenge detection, and private fallback | `IMPLEMENTATION_WORK_ORDER.md`, `DOMAIN_REQUIREMENTS.md` | Item 27 | Deferred product capability. Needs dedicated requirements if promoted. |
-| `#72` Enterprise security hardening baseline and threat model | `SECURITY_RUNTIME_ROADMAP.md`, `REVIEW_FINDINGS_RECONCILIATION.md`, `IMPLEMENTATION_WORK_ORDER.md` | Items 1, 2, 3, 4, 6, 22, 23 | Active security cleanup plus later threat-model documentation. |
+| `#72` Enterprise security hardening baseline and threat model | `THREAT_MODEL.md`, `PRODUCTION_SECURITY_BASELINE.md`, `SECURITY_RUNTIME_ROADMAP.md`, `REVIEW_FINDINGS_RECONCILIATION.md`, `IMPLEMENTATION_WORK_ORDER.md` | Items 1, 2, 3, 4, 6, 22, 23 | Broad security-hardening owner. The current bounded threat-model and evidence baseline is #223; supported deployment packaging remains #66. |
 | `#73` Backup, restore, and disaster recovery runbooks | `SECURITY_RUNTIME_ROADMAP.md`, `IMPLEMENTATION_WORK_ORDER.md`, `RUNTIME_OPERATOR_REQUIREMENTS.md` | Items 22, 27 | Deferred production runbook work. |
 | `#74` High availability and zero-downtime operations | `SECURITY_RUNTIME_ROADMAP.md`, `IMPLEMENTATION_WORK_ORDER.md` | Items 6, 20, 23, 27 | Graceful shutdown/readiness are near-term; full HA is later. |
 | `#75` Supply chain security and release governance | `REVIEW_FINDINGS_COVERAGE_AUDIT.md`, `IMPLEMENTATION_WORK_ORDER.md`, `VALIDATION_MATRIX.md` | Items 7, 22, 27 | Current critical/high dependency remediation and the CI/validation ratchet are near-term through `#151`; broader release governance is later. |
@@ -79,12 +80,13 @@ Source check:
 | `#175` Remote protocol specification and conformance | `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md`, ADR 0003 | Production lane | Canonical owner for wire spec, version negotiation, golden vectors, fuzzing, and gateway/client compatibility. |
 | `#176` Organization/project-role/service-principal grant enforcement | `IDENTITY_ACCESS_REQUIREMENTS.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md` | Enterprise lane | Canonical owner for enforceable authorization and migration from owner-scoped deployments. |
 | `#177` Provisioning/deprovisioning and break-glass lifecycle | `IDENTITY_ACCESS_REQUIREMENTS.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md` | Enterprise lane | Canonical owner for remaining identity lifecycle scope from closed #52. |
-| `#178` Platform telemetry, SLOs, and capacity evidence | `BPANE-00178_PLATFORM_TELEMETRY_PLAN.md`, `PLATFORM_TELEMETRY.md`, `DELIVERY_ROADMAP.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md` | Production lane | Active first checkpoint adds bounded gateway OpenMetrics and runtime-capacity evidence; the issue remains canonical for traces, broader metrics, SLOs, alerts, runbooks, and tested envelopes. |
+| `#178` Platform telemetry, SLOs, and capacity evidence | `BPANE-00178_PLATFORM_TELEMETRY_PLAN.md`, `PLATFORM_TELEMETRY.md`, `DELIVERY_ROADMAP.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md` | Production lane | The bounded gateway OpenMetrics/runtime-capacity checkpoint merged through PR #222; the issue remains canonical for traces, broader metrics, SLOs, alerts, runbooks, and tested envelopes. |
 | `#179` Control API conformance and compatibility | `ADMIN_NEW_API_COVERAGE.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md` | Foundation/Production lane | Canonical owner for OpenAPI lint, route/schema conformance, examples, and breaking-change policy. |
 | `#180` Open-source license/contribution/IP governance | `PRODUCT_PHASES_AND_RELEASE_GATES.md`, `RISK_REGISTER.md`, ADR 0004 | Production governance | Canonical owner for resolving license metadata and contribution/security/IP policy. |
 | `#184` Reduce representative compose validation wall time | `BPANE-00184_COMPOSE_VALIDATION_PERFORMANCE_PLAN.md`, `VALIDATION_MATRIX.md` | Foundation maintenance | Canonical owner for hosted compose sharding and timing evidence without reducing the #151 scenario baseline. |
 | `#185` Persist deterministic Docker build cache | `BPANE-00185_CI_RUST_BUILDER_PLAN.md`, `BPANE-00184_COMPOSE_VALIDATION_PERFORMANCE_PLAN.md`, `VALIDATION_MATRIX.md` | Foundation maintenance | Follow-up owner for a deterministic GHCR Rust builder after #184; it must preserve coverage and cache trust boundaries. |
 | `#214` Policy-validating runtime launch broker | `BPANE-00214_RUNTIME_LAUNCH_BROKER_PLAN.md`, `BPANE-00167_DOCKER_RUNTIME_BOUNDARY_PLAN.md`, `DELIVERY_ROADMAP.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md`, `RUNTIME_OPERATOR_REQUIREMENTS.md`, `VALIDATION_MATRIX.md` | Production lane, completion of item 23 | Canonical owner for authenticated typed launch/lifecycle/storage operations, request-body policy enforcement, and the gateway-isolated production-like Docker-host topology. |
+| `#223` Evidence-linked threat model and hardening baseline | `BPANE-00223_THREAT_MODEL_BASELINE_PLAN.md`, `THREAT_MODEL.md`, `PRODUCTION_SECURITY_BASELINE.md`, `SECURITY_RUNTIME_ROADMAP.md`, `DELIVERY_ROADMAP.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md`, `VALIDATION_MATRIX.md` | Production lane, focused child of #72 | Current checkpoint: name the supported profiles and trust boundaries, link controls to executable evidence, enforce the composed security contract, and keep residual production obligations visible. |
 
 ## Focused Work-Order Issue Matrix
 
@@ -112,9 +114,9 @@ dedicated open issue ownership.
 | 16. Browser context clone/import/export UI parity | `#160` Add browser context clone, import, and export admin-new parity | Merged through PR #203; `BPANE-00160_ADMIN_NEW_BROWSER_CONTEXT_LIFECYCLE_PLAN.md`, `IMPLEMENTATION_WORK_ORDER.md`, `RESOURCE_LIFECYCLE_REQUIREMENTS.md`, `ADMIN_NEW_MANUAL_CHECKPOINTS.md` |
 | 17. Project governance evidence and cross-resource policy UX | `#161` Add project governance evidence and cross-resource policy UX | Merged through PR #204; `BPANE-00161_PROJECT_GOVERNANCE_EVIDENCE_PLAN.md`, `IMPLEMENTATION_WORK_ORDER.md`, `PROJECT_GOVERNANCE_REQUIREMENTS.md`, `ADMIN_NEW_REQUIREMENTS.md` |
 | 18. Operator CLI resource parity and local setup docs | `#162` Add operator CLI resource parity and local setup diagnostics docs | Merged through PR #209; `BPANE-00162_OPERATOR_CLI_PARITY_PLAN.md`, `IMPLEMENTATION_WORK_ORDER.md`, `RUNTIME_OPERATOR_REQUIREMENTS.md`, `VALIDATION_MATRIX.md` |
-| 19. Admin-new promotion gate | `#163` Define admin-new promotion gate and fallback plan | Active; validation foundation merged through PR #210 and routing continues on `feature/BPANE-00163-admin-new-promotion-routing`; `BPANE-00163_ADMIN_NEW_PROMOTION_PLAN.md`, `IMPLEMENTATION_WORK_ORDER.md`, `ADMIN_NEW_STATUS.md`, `ADMIN_NEW_MANUAL_CHECKPOINTS.md` |
+| 19. Admin-new promotion gate | `#163` Define admin-new promotion gate and fallback plan | Closed after the validation contract merged through PR #210 and default root routing through PR #211; `BPANE-00163_ADMIN_NEW_PROMOTION_PLAN.md`, `IMPLEMENTATION_WORK_ORDER.md`, `ADMIN_NEW_STATUS.md`, `ADMIN_NEW_MANUAL_CHECKPOINTS.md` |
 | 20. Admin and session catalog scalability | `#164` Improve admin and session catalog scalability | `IMPLEMENTATION_WORK_ORDER.md`, `SECURITY_RUNTIME_ROADMAP.md`, `REVIEW_FINDINGS_COVERAGE_AUDIT.md` |
-| 21. Worker and archive runtime hygiene | `#165` Harden worker logs, polling, and archive runtime behavior | Review-ready on `feature/BPANE-00165-worker-runtime-hardening`; `BPANE-00165_WORKER_RUNTIME_HARDENING_PLAN.md`, `IMPLEMENTATION_WORK_ORDER.md`, `SECURITY_RUNTIME_ROADMAP.md`, `REVIEW_FINDINGS_RECONCILIATION.md` |
+| 21. Worker and archive runtime hygiene | `#165` Harden worker logs, polling, and archive runtime behavior | Closed through merged PR #213; `BPANE-00165_WORKER_RUNTIME_HARDENING_PLAN.md`, `IMPLEMENTATION_WORK_ORDER.md`, `SECURITY_RUNTIME_ROADMAP.md`, `REVIEW_FINDINGS_RECONCILIATION.md` |
 | 22. Documentation accuracy and production references | `#166` Update documentation accuracy and production references | `IMPLEMENTATION_WORK_ORDER.md`, `SECURITY_RUNTIME_ROADMAP.md`, `REVIEW_FINDINGS_COVERAGE_AUDIT.md` |
 | 23. Docker runtime launch boundary | `#167` direct compatibility boundary; `#214` typed broker and isolated topology | `BPANE-00167_DOCKER_RUNTIME_BOUNDARY_PLAN.md`, `BPANE-00214_RUNTIME_LAUNCH_BROKER_PLAN.md`, `IMPLEMENTATION_WORK_ORDER.md`, `SECURITY_RUNTIME_ROADMAP.md`, `RUNTIME_OPERATOR_REQUIREMENTS.md` |
 | 24. Host and client render hot-path work | `#168` Profile and optimize host and client render hot paths | `IMPLEMENTATION_WORK_ORDER.md`, `SECURITY_RUNTIME_ROADMAP.md`, `REVIEW_FINDINGS_COVERAGE_AUDIT.md` |
@@ -128,6 +130,7 @@ dedicated open issue ownership.
 | Organization/project authorization | `#176` Enforce organization, project-role, and service-principal grants | `IDENTITY_ACCESS_REQUIREMENTS.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md` |
 | Identity lifecycle | `#177` Add identity provisioning, deprovisioning, and break-glass lifecycle | `IDENTITY_ACCESS_REQUIREMENTS.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md` |
 | Platform telemetry and SLOs | `#178` Add platform telemetry, SLOs, and capacity evidence | `BPANE-00178_PLATFORM_TELEMETRY_PLAN.md`, `PLATFORM_TELEMETRY.md`, `CAPABILITY_MATURITY_MATRIX.md`, `PRODUCT_PHASES_AND_RELEASE_GATES.md`, `RISK_REGISTER.md` |
+| Threat model and production hardening baseline | `#223` Establish an evidence-linked threat model and hardening baseline | `BPANE-00223_THREAT_MODEL_BASELINE_PLAN.md`, `THREAT_MODEL.md`, `PRODUCTION_SECURITY_BASELINE.md`, `SECURITY_RUNTIME_ROADMAP.md`, `VALIDATION_MATRIX.md` |
 | API conformance | `#179` Enforce control API conformance and compatibility governance | `ADMIN_NEW_API_COVERAGE.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md` |
 | Open-source governance | `#180` Resolve open-source licensing, contribution, and IP governance | `PRODUCT_PHASES_AND_RELEASE_GATES.md`, `RISK_REGISTER.md`, `adr/0004-open-source-license-governance.md` |
 
@@ -176,7 +179,7 @@ The cross-reference pass also updated the issue bodies in both directions:
 | `#69` | Relevant. Automation API productization remains broader than current MCP/workflow implementation. | Updated on GitHub 2026-07-10 with `/admin-new/` session-detail and API-companion alignment. | Session automation should surface in session detail and API companion routes. |
 | `#70` | Relevant. Identity/access-review exists; API keys, immutable audit, and retention controls remain backlog. | Updated on GitHub 2026-07-10 with `/admin-new/identity` alignment. | Admin-new identity/access route is the near-term UI owner; API-key/audit/retention screens are later. |
 | `#71` | Relevant but deferred product capability. | Updated on GitHub 2026-07-10 with `/admin-new/` session/workflow handoff alignment. | Admin-new handoff controls would belong in session/workflow detail. |
-| `#72` | Relevant. Several high-priority security cleanup slices map here. | Updated on GitHub 2026-07-31 with the `#172` endpoint-threat boundary in addition to admin-new promotion-blocker alignment. | Admin-new security hardening is promotion-blocking; general endpoint ingress/callback/identity/data threat modeling remains here. |
+| `#72` | Relevant as the broad enterprise-security owner. Several completed and remaining hardening slices map here. | Updated on GitHub 2026-08-14 to reference focused child #223 for the current threat-model and hardening-baseline checkpoint. | #223 owns the bounded evidence baseline; #72 remains open for residual ingress, MCP, identity, runtime, data, and deployment hardening. |
 | `#73` | Relevant but deferred production runbook work. | Updated on GitHub 2026-07-10 with `/admin-new/` restore-validation alignment. | Restore validation should include route availability and admin-new smoke checks. |
 | `#74` | Relevant. Graceful shutdown/readiness is nearer term; full HA is later. | Updated on GitHub 2026-07-31 with the `#172` endpoint-availability boundary in addition to `/admin-new/` event-stream continuity and readiness alignment. | Admin-new should be part of event-stream continuity and route availability validation; `#172` consumes but does not own general HA. |
 | `#75` | Relevant. The 2026-07-31 audit found patched critical/high dependency alerts, including runtime dependencies. Remediation and the minimal validation ratchet are nearer term; broader release governance is later. | Updated on GitHub 2026-07-31 to route the current dependency baseline and enforced Rust/Node lockfile scanning through `#151`. | Admin-new build/unit/smoke coverage and dependency safety must be included in the validation ratchet. |
@@ -194,6 +197,8 @@ The cross-reference pass also updated the issue bodies in both directions:
 | `#178` | Relevant production observability gap. | Created on GitHub 2026-07-31 to separate platform telemetry/SLOs from per-session inspection and readiness. | Admin-new observability consumes the common telemetry contract; it does not define a separate model. |
 | `#179` | Merged public API governance baseline. | 131-operation inventory, pinned lint, executable examples, Axum route recognition, semantic compatibility, policy, and CI enforcement merged through PR #194. | #158 consumes the canonical generated evidence in admin-new without creating a second API truth. |
 | `#180` | Relevant open-source trust/governance gap. | Created on GitHub 2026-07-31 after detecting AGPL root versus MIT Cargo metadata and absent contributor policies. | No dedicated admin route; documentation and release artifacts must be consistent. |
+| `#214` | Implemented production-like runtime authorization boundary. | Typed browser/worker/storage operations and the gateway-isolated broker topology merged through PRs #220-#221. | Supplies runtime-boundary evidence to #223/#72/#66; it is not a supported production package by itself. |
+| `#223` | Relevant and focused Production checkpoint. | Created on GitHub 2026-08-14 from #72 after the runtime-broker and gateway metrics foundations merged. | Owns the current threat model, responsibility baseline, composed static contract, negative-evidence audit, and security-doc synchronization. |
 
 ## Docs-To-Issue Context
 
@@ -214,6 +219,7 @@ shown as `closed #142`.
 | `BPANE-00185_CI_RUST_BUILDER_PLAN.md` | `#185`, active deterministic GHCR builder and compose-consumption slice |
 | `BPANE-00167_DOCKER_RUNTIME_BOUNDARY_PLAN.md` | `#167`, merged direct compatibility proxy boundary; predecessor to `#214` |
 | `BPANE-00214_RUNTIME_LAUNCH_BROKER_PLAN.md` | `#214`, typed broker, operation adapters, gateway routing, and broker-only topology completion |
+| `BPANE-00223_THREAT_MODEL_BASELINE_PLAN.md` | `#223`, focused evidence-linked threat model and hardening-baseline checkpoint under `#72` |
 | `BPANE-00171_WORKFLOW_TEACH_MODE_PLAN.md` | `#171`, with dependencies on `#20`, `#21`, `#47`, `#71`, and `#172` |
 | `BPANE-00172_BPM_WORKFLOW_ENDPOINT_INTEGRATION_PLAN.md` | `#172`, with dependencies on `#28`, `#47`, `#66`, `#69`-`#72`, `#74`, `#76`, `#79`, `#80`, `#147`, `#150`, `#161`, `#162`, `#164`, `#174`, `#176`, `#179`, and `#171` |
 | `BPANE-00173_DELIVERY_GOVERNANCE_PLAN.md` | `#173` |
@@ -221,7 +227,9 @@ shown as `closed #142`.
 | `DELIVERY_ROADMAP.md` | all open issues organized into Foundation, Pilot Value, Operator Product, Production, Enterprise, and Innovation lanes |
 | `CAPABILITY_MATURITY_MATRIX.md` | all product capability owners, especially `#163`, `#171`-`#180` |
 | `PRODUCT_PHASES_AND_RELEASE_GATES.md` | `#151`, `#145`-`#150`, `#152`, `#174`, `#153`-`#163`, and Production/Phase N owners |
-| `RISK_REGISTER.md` | active risk owners, especially `#145`-`#152`, `#165`, and `#175`-`#180` |
+| `RISK_REGISTER.md` | active and closed risk evidence, especially `#66`, `#72`, `#75`, `#175`-`#180`, and focused checkpoint `#223` |
+| `THREAT_MODEL.md` | `#223` current evidence baseline, `#72` broader hardening, and residual owners `#28`, `#66`, `#69`, `#70`, `#73`-`#80`, `#175`-`#178` |
+| `PRODUCTION_SECURITY_BASELINE.md` | `#223` application/deployment responsibility baseline, with production packaging owned by `#66` and broader hardening by `#72` |
 | `PLAN_TEMPLATE.md` | every focused issue entering Ready or In Progress |
 | `adr/` | `#173`, `#174`, `#175`, and `#180` plus related product-boundary issues |
 | `DOMAIN_REQUIREMENTS.md` | `#20`, `#21`, `#28`, `#31`, `#47`, `#69`, `#124`, `#154`-`#157`, `#159`, `#161`, `#171`, `#172`, closed `#142` |
@@ -233,7 +241,7 @@ shown as `closed #142`.
 | `OPERATOR_CLI_AND_LOCAL_DIAGNOSTICS.md` | `#162`, canonical CLI support boundary and local troubleshooting sequence |
 | `RUNTIME_OPERATOR_REQUIREMENTS.md` | `#66`, `#69`, `#72`, `#74`, `#150`, `#162`, `#167`, `#172`, `#214` |
 | `SECURITY_RUNTIME_ROADMAP.md` | `#28`, `#66`, `#72`, `#74`, `#75`, `#145`-`#150`, `#164`-`#170` |
-| `VALIDATION_MATRIX.md` | all implementation issues selected from this matrix, especially `#151`, `#152`, focused admin-new issues `#153`-`#163`, Phase N issues `#171`-`#172`, and runtime boundary `#214` |
+| `VALIDATION_MATRIX.md` | all implementation issues selected from this matrix, especially `#151`, `#152`, focused admin-new issues `#153`-`#163`, Phase N issues `#171`-`#172`, runtime boundary `#214`, and security baseline `#223` |
 | `REVIEW_FINDINGS_RECONCILIATION.md` | `#72`, `#145`-`#150`, `#165`, `#169`, `#170`, plus security/runtime portions of `#28`, `#66`, `#74`, `#75` |
 | `REVIEW_FINDINGS_COVERAGE_AUDIT.md` | `#72`, `#75`, `#151`, `#164`, `#166`, `#168`, and deferred product/platform backlog issues |
 | `SOURCE_PLAN_INVENTORY.md` | `#6`, closed `#142` |
