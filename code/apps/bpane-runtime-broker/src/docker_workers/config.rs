@@ -299,7 +299,7 @@ fn workflow_environment_keys() -> BTreeSet<String> {
         "BPANE_WORKFLOW_WORK_ROOT",
         "BPANE_WORKER_REQUEST_TIMEOUT_MS",
         "BPANE_WORKER_MAX_OUTPUT_BYTES",
-        "BPANE_WORKER_SECRETS_FILE",
+        "BPANE_WORKER_SECRETS_STDIN",
     ]
     .into_iter()
     .chain(common_oidc_environment_keys())
@@ -316,7 +316,7 @@ fn recording_environment_keys() -> BTreeSet<String> {
         "BPANE_RECORDING_PAGE_URL",
         "BPANE_RECORDING_OUTPUT_ROOT",
         "BPANE_RECORDING_CONNECT_TRANSPORT_PATH",
-        "BPANE_WORKER_SECRETS_FILE",
+        "BPANE_WORKER_SECRETS_STDIN",
         "BPANE_RECORDING_CONNECT_TIMEOUT_MS",
         "BPANE_RECORDING_POLL_INTERVAL_MS",
         "BPANE_WORKER_REQUEST_TIMEOUT_MS",

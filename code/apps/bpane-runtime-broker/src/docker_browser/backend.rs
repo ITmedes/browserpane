@@ -4,12 +4,12 @@ use async_trait::async_trait;
 use bollard::errors::Error as BollardError;
 use bollard::models::{ContainerCreateBody, ContainerStateStatusEnum};
 use bollard::query_parameters::{
-    CreateContainerOptionsBuilder, RemoveContainerOptionsBuilder, StopContainerOptionsBuilder,
-    UploadToContainerOptionsBuilder,
+    AttachContainerOptionsBuilder, CreateContainerOptionsBuilder, RemoveContainerOptionsBuilder,
+    StopContainerOptionsBuilder,
 };
 use bollard::{Docker, API_DEFAULT_VERSION};
-use bytes::Bytes;
 use reqwest::Url;
+use tokio::io::AsyncWriteExt;
 
 use crate::{ExecutionError, ExecutionErrorCode};
 
@@ -31,13 +31,7 @@ pub(crate) trait DockerContainerApi: Send + Sync {
     async fn create(&self, name: &str, body: ContainerCreateBody)
         -> Result<(), DockerBackendError>;
     async fn start(&self, name: &str) -> Result<(), DockerBackendError>;
-    async fn upload_file(
-        &self,
-        _name: &str,
-        _directory: &str,
-        _file_name: &str,
-        _contents: Vec<u8>,
-    ) -> Result<(), DockerBackendError> {
+    async fn send_stdin(&self, _name: &str, _contents: Vec<u8>) -> Result<(), DockerBackendError> {
         Err(DockerBackendError::Failed)
     }
     async fn inspect(&self, name: &str) -> Result<DockerContainerState, DockerBackendError>;
@@ -100,25 +94,34 @@ impl DockerContainerApi for BollardDockerContainerApi {
             .map_err(map_bollard_error)
     }
 
-    async fn upload_file(
+    async fn send_stdin(
         &self,
         name: &str,
-        directory: &str,
-        file_name: &str,
-        contents: Vec<u8>,
+        mut contents: Vec<u8>,
     ) -> Result<(), DockerBackendError> {
-        let options = UploadToContainerOptionsBuilder::default()
-            .path(directory)
+        if contents.is_empty() || contents.len() > 64 * 1024 || contents.contains(&b'\n') {
+            return Err(DockerBackendError::Failed);
+        }
+        contents.push(b'\n');
+        let options = AttachContainerOptionsBuilder::default()
+            .stdin(true)
+            .stream(true)
             .build();
-        let archive = file_archive_chunks(file_name, contents)?;
-        self.docker
-            .upload_to_container(
-                name,
-                Some(options),
-                bollard::body_stream(futures_util::stream::iter(archive)),
-            )
+        let mut attachment = self
+            .docker
+            .attach_container(name, Some(options))
             .await
-            .map_err(map_bollard_error)
+            .map_err(map_bollard_error)?;
+        attachment
+            .input
+            .write_all(&contents)
+            .await
+            .map_err(|_| DockerBackendError::Failed)?;
+        attachment
+            .input
+            .shutdown()
+            .await
+            .map_err(|_| DockerBackendError::Failed)
     }
 
     async fn inspect(&self, name: &str) -> Result<DockerContainerState, DockerBackendError> {
@@ -166,40 +169,6 @@ impl DockerContainerApi for BollardDockerContainerApi {
     }
 }
 
-fn file_archive_chunks(
-    file_name: &str,
-    contents: Vec<u8>,
-) -> Result<Vec<Bytes>, DockerBackendError> {
-    if file_name.is_empty()
-        || file_name.len() > 128
-        || matches!(file_name, "." | "..")
-        || !file_name
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
-        || contents.is_empty()
-        || contents.len() > 64 * 1024
-    {
-        return Err(DockerBackendError::Failed);
-    }
-    let contents_len = u64::try_from(contents.len()).map_err(|_| DockerBackendError::Failed)?;
-    let mut header = tar::Header::new_gnu();
-    header
-        .set_path(file_name)
-        .map_err(|_| DockerBackendError::Failed)?;
-    header.set_entry_type(tar::EntryType::Regular);
-    header.set_mode(0o400);
-    header.set_uid(0);
-    header.set_gid(0);
-    header.set_size(contents_len);
-    header.set_cksum();
-    let padding = (512 - contents.len() % 512) % 512;
-    Ok(vec![
-        Bytes::copy_from_slice(header.as_bytes()),
-        Bytes::from(contents),
-        Bytes::from(vec![0_u8; padding + 1024]),
-    ])
-}
-
 fn map_bollard_error(error: BollardError) -> DockerBackendError {
     if matches!(
         error,
@@ -211,50 +180,5 @@ fn map_bollard_error(error: BollardError) -> DockerBackendError {
         DockerBackendError::NotFound
     } else {
         DockerBackendError::Failed
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::io::Read;
-
-    use super::*;
-
-    #[test]
-    fn file_archive_uses_a_private_regular_file() {
-        let expected = br#"{"token":"secret"}"#.to_vec();
-        let archive = file_archive_chunks("worker.json", expected.clone())
-            .unwrap()
-            .into_iter()
-            .flatten()
-            .collect::<Vec<_>>();
-        let mut archive = tar::Archive::new(archive.as_slice());
-        let mut entries = archive.entries().unwrap();
-        let mut entry = entries.next().unwrap().unwrap();
-        assert_eq!(
-            entry.path().unwrap().as_ref(),
-            std::path::Path::new("worker.json")
-        );
-        assert_eq!(entry.header().mode().unwrap(), 0o400);
-        let mut actual = Vec::new();
-        entry.read_to_end(&mut actual).unwrap();
-        assert_eq!(actual, expected);
-        assert!(entries.next().is_none());
-    }
-
-    #[test]
-    fn file_archive_rejects_paths_and_unbounded_content() {
-        assert_eq!(
-            file_archive_chunks("../worker.json", vec![1]).unwrap_err(),
-            DockerBackendError::Failed
-        );
-        assert_eq!(
-            file_archive_chunks("..", vec![1]).unwrap_err(),
-            DockerBackendError::Failed
-        );
-        assert_eq!(
-            file_archive_chunks("worker.json", vec![0; 64 * 1024 + 1]).unwrap_err(),
-            DockerBackendError::Failed
-        );
     }
 }
