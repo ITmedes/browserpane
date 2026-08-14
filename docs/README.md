@@ -34,7 +34,7 @@ Current branch context:
 - `/admin/` remains directly addressable only as a compatibility fallback
   pending a separate removal decision.
 - The evidence-linked threat model and production-hardening baseline merged
-  through PR `#224`. The current implementation slice is issue `#225`, the
+  through PR `#224`. Issue `#225` is locally implemented and qualified as the
   bounded single-node Compose deployment profile under broader issue `#66`.
 - Issue `#142` is closed as the historical redesign foundation. Follow-up
   implementation PRs use focused issues such as `#124` rather than reopening
@@ -106,6 +106,8 @@ specifications and still require a bounded slice plan before coding.
   for an independent broker-only single-node Compose profile, deployment
   secret files, structured preflight, live fixture, and bounded operator
   runbook under issue #225/#66.
+- `SINGLE_NODE_DEPLOYMENT.md`: operator runbook and exact support boundary for
+  the independent single-host package.
 - `BPANE-00171_WORKFLOW_TEACH_MODE_PLAN.md`: Phase N Teach Mode contract,
   semantic demonstration capture, candidate generation, replay, immutable
   publication, controlled repair, and smoke sequence.
@@ -157,10 +159,12 @@ specifications and still require a bounded slice plan before coding.
   consolidated docs, work-order items, and issue hygiene gaps.
 - `SECURITY_RUNTIME_ROADMAP.md`: security, runtime, scale, and production
   hardening roadmap extracted from the review cleanup plan.
-- `THREAT_MODEL.md`: evidence-linked security model for the current local and
-  production-like broker profiles.
+- `THREAT_MODEL.md`: evidence-linked security model for local,
+  broker-validation, and bounded single-node profiles.
 - `PRODUCTION_SECURITY_BASELINE.md`: required application, deployment,
-  infrastructure, and operator controls for future supported profiles.
+  infrastructure, and operator controls for accepting a target profile.
+- `SINGLE_NODE_DEPLOYMENT.md`: bounded single-host deployment configuration,
+  operation, recovery, qualification, and unsupported scope.
 - `VALIDATION_MATRIX.md`: focused validation and smoke expectations for the
   current state and upcoming slices.
 

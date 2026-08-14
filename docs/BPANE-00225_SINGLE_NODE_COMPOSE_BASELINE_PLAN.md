@@ -4,7 +4,7 @@ Issue: [#225 Package a hardened single-node Compose deployment profile](https://
 
 Parent: [#66 Support three deployment options: Compose, Kubernetes, and AWS Fargate](https://github.com/ITmedes/browserpane/issues/66)
 
-Status: ready
+Status: implementation complete and locally qualified; ready for review
 
 ## Business Case
 
@@ -346,6 +346,35 @@ Commit target: `docs(deploy): document single-node operating profile`.
   operator responsibilities.
 - No claim exceeds the evidence; Kubernetes, Fargate, HA, DR, shared storage,
   public MCP, and compliance remain open.
+
+## Implementation Evidence
+
+All five implementation slices are complete on
+`feature/BPANE-00225-single-node-compose-baseline`:
+
+- `deploy/single-node/compose.yml` is independent of local Compose and runs the
+  four-service, broker-only control topology against external OIDC, Postgres,
+  Vault, ingress, and registry inputs.
+- `deploy/single-node/.env.example`, the non-secret policy renderer, structured
+  preflight, and negative fixtures reject mutable images, development defaults,
+  unsafe listeners, missing limits, invalid secret files, and Docker-boundary
+  regressions.
+- The production web image serves admin-new, the compatibility fallback, auth
+  configuration, owner API/event proxying, and API companion artifacts without
+  development fixtures or local certificate helpers.
+- Gateway deployment credentials use protected files. Broker-launched workflow
+  and recording credentials are delivered through bounded one-shot stdin and
+  do not appear in Docker environment, command, or filesystem inspection.
+- The live fixture proved two distinct browser runtimes, workflow execution, a
+  retained produced file across gateway restart, broker-only Docker authority,
+  secret redaction, a 272,626-byte recording artifact, and a 278,504-byte
+  playback export.
+- `docs/SINGLE_NODE_DEPLOYMENT.md` documents configuration, startup, ingress,
+  diagnostics, backup/restore, upgrade/rollback, decommissioning, qualification,
+  operator responsibilities, and unsupported boundaries.
+
+This is repository qualification evidence, not target infrastructure, load,
+HA, DR, compliance, or formal production acceptance evidence.
 
 ## Out of Scope
 

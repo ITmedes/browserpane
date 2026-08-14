@@ -3,7 +3,7 @@
 Governance issue: [#173](https://github.com/ITmedes/browserpane/issues/173)
 
 Last verified: 2026-08-14 on
-`feature/BPANE-00223-threat-model-baseline`
+`feature/BPANE-00225-single-node-compose-baseline`
 
 ## Maturity Definitions
 
@@ -52,8 +52,8 @@ capability.
 | Admin-new default promotion | Implemented | Root route selects `/admin-new/`; promotion contract and smoke evidence merged through PRs #210 and #211 | Separate compatibility-admin removal decision |
 | Gateway health/readiness/drain | Implemented | Public liveness/readiness probes, configured dependency checks, SIGINT/SIGTERM readiness withdrawal, bounded HTTP/WebTransport drain, unit and compose failure-path evidence on #150 branch | #66, #74, #178 production packaging/HA/telemetry |
 | Platform telemetry and SLOs | Partial prototype | Gateway OpenMetrics HTTP RED and aggregate runtime-capacity metrics with bounded-label/redaction unit and Compose coverage merged through PR #222 | #178 tracing, subsystem metrics, SLOs, alerts, synthetics, and load envelopes |
-| Threat model and production hardening baseline | Partial prototype | Evidence-linked trust-boundary model, responsibility checklist, composed static security contract, negative fixtures, admin-header contract, and broker process-confinement evidence on #223 | #66 supported deployment profiles; #72 residual hardening; #73-#80 production and enterprise controls |
-| Compose deployment | Prototype | Direct local compatibility plus gateway-isolated production-like broker topology, dependency readiness, static/live boundary checks, and restart parity | #66, #166, #178 |
+| Threat model and production hardening baseline | Partial prototype | Evidence-linked trust-boundary model, responsibility checklist, composed static security contract, negative fixtures, admin-header contract, broker process confinement, and single-node preflight/secret-boundary evidence | #66 target acceptance; #72 residual hardening; #73-#80 production and enterprise controls |
+| Compose deployment | Prototype | Direct local compatibility, gateway-isolated broker validation, and an independent four-service single-node package with immutable-image/secret-file preflight, live workflow/recording/restart evidence, and an operator runbook | #66 target infrastructure and managed adapters; #178 load/SLO evidence; #73/#74 restore and HA |
 | Kubernetes/Fargate/cloud adapters | Planned | Architecture options, no production support claim | #66 deployment adapters; #214 shared typed launch contract |
 | HA and disaster recovery | Planned | No supported HA/DR contract | #73, #74 |
 | Supply-chain/release governance | Partial prototype | Required CI, dependency policy, pinned actions/toolchains, and deterministic GHCR Rust builder exist; SBOM, signing, provenance, vulnerability intake, and release policy do not | #75 |

@@ -1,8 +1,9 @@
 # BrowserPane Production Security Baseline
 
-Status: Required controls for future supported deployment profiles. The current
-repository provides local development and production-like broker validation,
-not a complete production deployment package.
+Status: Required controls for deployment acceptance. The repository provides
+local development, production-like broker validation, and a hardened but
+bounded single-node package. The latter is not complete production, HA,
+managed-cloud, compliance, or target-acceptance evidence.
 
 Threat model: `docs/THREAT_MODEL.md`
 
@@ -85,7 +86,10 @@ and broader security roadmap [#72](https://github.com/ITmedes/browserpane/issues
 - [ ] Keep proxy credentials, CA private material and decrypted traffic in the
   egress enforcement system, not BrowserPane control resources or telemetry.
 - [ ] Define secret rotation, access review, audit and retention. Treat local
-  file-backed broker secrets as fixtures, not distribution artifacts.
+  repository fixture secrets as test data. For the single-node package, keep
+  operator-owned secret files outside the repository, restrict their modes,
+  rotate them through an approved procedure, and prefer workload identity where
+  the target supports it.
 
 ### Data, artifacts and retention
 
@@ -151,6 +155,11 @@ as production defaults:
 
 The production-like broker validation overlay removes gateway Docker reachability
 and validates broker policy. It does not remove every local exception above.
+The independent `deploy/single-node/compose.yml` profile removes the listed
+demo identity, dev Vault, source-mount, local-certificate-helper, and public
+dependency defaults. Its remaining external controls and acceptance work are
+documented in `docs/SINGLE_NODE_DEPLOYMENT.md` and must be supplied and tested
+by the operator.
 
 ## Deployment Gate Checklist
 
@@ -179,6 +188,8 @@ and validates broker policy. It does not remove every local exception above.
 ### Validation and operations
 
 - [ ] `node scripts/check-production-security-baseline.mjs` passes.
+- [ ] `node scripts/check-single-node-deployment.mjs --env-file <path>` passes
+  against the exact deployment configuration.
 - [ ] Canonical fast and affected Compose validation profiles pass on the release
   commit.
 - [ ] Failure injection distinguishes identity, database, secret, runtime,

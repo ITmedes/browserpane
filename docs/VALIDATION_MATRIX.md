@@ -20,7 +20,7 @@ The current coverage ratchet records:
 - admin-new's 620 tests pass with 90.43% lines, 92.28% statements, 93.86%
   functions, and 76.76% branches across `src/lib`,
 - MCP bridge has focused unit tests,
-- recording-worker has 8 package tests and workflow-worker has 11 package
+- recording-worker has 13 package tests and workflow-worker has 19 package
   tests covering finite request deadlines, parent cancellation, OIDC refresh
   coalescing, bounded output, UTF-8 truncation, and single-flight recording
   finalization polling; both packages run tests before builds in the canonical
@@ -63,7 +63,7 @@ returning.
 
 Verified catalog on 2026-08-14:
 
-- the fast profile contains 43 stages, including the composed production
+- the fast profile contains 44 stages, including the composed production
   security baseline plus Rust, browser-client,
   recording-worker, workflow-worker, and admin-new coverage ratchets,
 - the compose profile contains 33 bounded stages, including 24 admin promotion
@@ -124,6 +124,34 @@ MCP, admin-new session, session-file, workflow, recording, and multi-session
 journeys against the broker topology. Run the four-case docker-pool suite
 separately to preserve direct local compatibility evidence.
 
+## Single-Node Deployment Baseline
+
+Issue #225 adds an independent broker-only package rather than extending local
+Compose. Its static and test fixture checks are:
+
+```bash
+node scripts/check-single-node-deployment.mjs --repository-fixture
+node --test scripts/single-node/single-node-deployment.test.mjs
+node --test deploy/single-node/render-config.test.mjs
+node --test scripts/single-node/single-node-workflow-fixture.test.mjs
+```
+
+Run the live qualification against the current pushed branch and commit:
+
+```bash
+./scripts/start-single-node-fixture.sh
+node scripts/qualify-single-node-deployment.mjs
+./scripts/stop-single-node-fixture.sh
+```
+
+The live qualifier must prove dependency readiness, two distinct browser
+runtimes, pinned workflow execution, produced-file retention across gateway
+restart, no duplicate runtime, gateway Docker denial, secret-marker redaction,
+worker credentials absent from inspectable env/command/files, and a nonempty
+recording plus playback export. It is repository qualification evidence, not a
+target load, restore, HA, network-policy, or compliance test. The operating
+boundary and target obligations are in `SINGLE_NODE_DEPLOYMENT.md`.
+
 ## Production Security Baseline
 
 Issue #223 composes the existing application, admin-header, Docker-proxy, and
@@ -137,12 +165,13 @@ node --test scripts/validate-runtime-broker-browser-overlay.test.mjs
 ```
 
 The `production-security-baseline` stage parses the real base Compose and
-runtime-broker overlay through `docker compose ... config --format json`. It
-must prove that the repository distinguishes local development,
-production-like broker validation, and unsupported production packaging; the
-gateway has no Docker authority in the broker profile; the broker and proxy
-have no published ports; broker process confinement and secret/config mounts
-remain constrained; and admin browser security headers retain their contract.
+runtime-broker overlay through `docker compose ... config --format json`, and
+the fast profile separately runs the single-node structured preflight. Together
+they distinguish local development, broker validation, and bounded single-node
+packaging; prove that the gateway has no Docker authority in broker profiles;
+keep broker/proxy listeners and process posture constrained; enforce protected
+secret inputs and immutable images; and retain the admin browser-header
+contract.
 
 Every new static invariant needs a failing fixture. Static success is not live
 deployment evidence: security-sensitive runtime changes must also run
