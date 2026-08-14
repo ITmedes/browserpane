@@ -1,23 +1,22 @@
-use std::sync::atomic::{AtomicU64, Ordering};
-
 use chrono::{DateTime, Utc};
+use prometheus_client::metrics::counter::Counter;
 use serde::Serialize;
 use tokio::sync::Mutex;
 
 #[derive(Default)]
 pub struct WorkflowObservability {
-    produced_file_uploads_total: AtomicU64,
-    produced_file_upload_failures_total: AtomicU64,
-    event_delivery_attempts_total: AtomicU64,
-    event_delivery_successes_total: AtomicU64,
-    event_delivery_retries_total: AtomicU64,
-    event_delivery_failures_total: AtomicU64,
-    retention_passes_total: AtomicU64,
-    log_retention_candidates_total: AtomicU64,
-    output_retention_candidates_total: AtomicU64,
-    retention_deleted_logs_total: AtomicU64,
-    retention_cleared_outputs_total: AtomicU64,
-    retention_failures_total: AtomicU64,
+    produced_file_uploads_total: Counter,
+    produced_file_upload_failures_total: Counter,
+    event_delivery_attempts_total: Counter,
+    event_delivery_successes_total: Counter,
+    event_delivery_retries_total: Counter,
+    event_delivery_failures_total: Counter,
+    retention_passes_total: Counter,
+    log_retention_candidates_total: Counter,
+    output_retention_candidates_total: Counter,
+    retention_deleted_logs_total: Counter,
+    retention_cleared_outputs_total: Counter,
+    retention_failures_total: Counter,
     last_event_delivery_at: Mutex<Option<DateTime<Utc>>>,
     last_retention_pass_at: Mutex<Option<DateTime<Utc>>>,
 }
@@ -42,34 +41,28 @@ pub struct WorkflowObservabilitySnapshot {
 
 impl WorkflowObservability {
     pub fn record_produced_file_upload(&self) {
-        self.produced_file_uploads_total
-            .fetch_add(1, Ordering::Relaxed);
+        self.produced_file_uploads_total.inc();
     }
 
     pub fn record_produced_file_upload_failure(&self) {
-        self.produced_file_upload_failures_total
-            .fetch_add(1, Ordering::Relaxed);
+        self.produced_file_upload_failures_total.inc();
     }
 
     pub fn record_event_delivery_attempt(&self) {
-        self.event_delivery_attempts_total
-            .fetch_add(1, Ordering::Relaxed);
+        self.event_delivery_attempts_total.inc();
     }
 
     pub async fn record_event_delivery_success(&self, at: DateTime<Utc>) {
-        self.event_delivery_successes_total
-            .fetch_add(1, Ordering::Relaxed);
+        self.event_delivery_successes_total.inc();
         *self.last_event_delivery_at.lock().await = Some(at);
     }
 
     pub fn record_event_delivery_retry(&self) {
-        self.event_delivery_retries_total
-            .fetch_add(1, Ordering::Relaxed);
+        self.event_delivery_retries_total.inc();
     }
 
     pub fn record_event_delivery_failure(&self) {
-        self.event_delivery_failures_total
-            .fetch_add(1, Ordering::Relaxed);
+        self.event_delivery_failures_total.inc();
     }
 
     pub async fn record_retention_pass(
@@ -78,57 +71,40 @@ impl WorkflowObservability {
         log_candidate_count: usize,
         output_candidate_count: usize,
     ) {
-        self.retention_passes_total.fetch_add(1, Ordering::Relaxed);
+        self.retention_passes_total.inc();
         self.log_retention_candidates_total
-            .fetch_add(log_candidate_count as u64, Ordering::Relaxed);
+            .inc_by(log_candidate_count as u64);
         self.output_retention_candidates_total
-            .fetch_add(output_candidate_count as u64, Ordering::Relaxed);
+            .inc_by(output_candidate_count as u64);
         *self.last_retention_pass_at.lock().await = Some(at);
     }
 
     pub fn record_retention_deleted_logs(&self, deleted: usize) {
-        self.retention_deleted_logs_total
-            .fetch_add(deleted as u64, Ordering::Relaxed);
+        self.retention_deleted_logs_total.inc_by(deleted as u64);
     }
 
     pub fn record_retention_cleared_output(&self) {
-        self.retention_cleared_outputs_total
-            .fetch_add(1, Ordering::Relaxed);
+        self.retention_cleared_outputs_total.inc();
     }
 
     pub fn record_retention_failure(&self) {
-        self.retention_failures_total
-            .fetch_add(1, Ordering::Relaxed);
+        self.retention_failures_total.inc();
     }
 
     pub async fn snapshot(&self) -> WorkflowObservabilitySnapshot {
         WorkflowObservabilitySnapshot {
-            produced_file_uploads_total: self.produced_file_uploads_total.load(Ordering::Relaxed),
-            produced_file_upload_failures_total: self
-                .produced_file_upload_failures_total
-                .load(Ordering::Relaxed),
-            event_delivery_attempts_total: self
-                .event_delivery_attempts_total
-                .load(Ordering::Relaxed),
-            event_delivery_successes_total: self
-                .event_delivery_successes_total
-                .load(Ordering::Relaxed),
-            event_delivery_retries_total: self.event_delivery_retries_total.load(Ordering::Relaxed),
-            event_delivery_failures_total: self
-                .event_delivery_failures_total
-                .load(Ordering::Relaxed),
-            retention_passes_total: self.retention_passes_total.load(Ordering::Relaxed),
-            log_retention_candidates_total: self
-                .log_retention_candidates_total
-                .load(Ordering::Relaxed),
-            output_retention_candidates_total: self
-                .output_retention_candidates_total
-                .load(Ordering::Relaxed),
-            retention_deleted_logs_total: self.retention_deleted_logs_total.load(Ordering::Relaxed),
-            retention_cleared_outputs_total: self
-                .retention_cleared_outputs_total
-                .load(Ordering::Relaxed),
-            retention_failures_total: self.retention_failures_total.load(Ordering::Relaxed),
+            produced_file_uploads_total: self.produced_file_uploads_total.get(),
+            produced_file_upload_failures_total: self.produced_file_upload_failures_total.get(),
+            event_delivery_attempts_total: self.event_delivery_attempts_total.get(),
+            event_delivery_successes_total: self.event_delivery_successes_total.get(),
+            event_delivery_retries_total: self.event_delivery_retries_total.get(),
+            event_delivery_failures_total: self.event_delivery_failures_total.get(),
+            retention_passes_total: self.retention_passes_total.get(),
+            log_retention_candidates_total: self.log_retention_candidates_total.get(),
+            output_retention_candidates_total: self.output_retention_candidates_total.get(),
+            retention_deleted_logs_total: self.retention_deleted_logs_total.get(),
+            retention_cleared_outputs_total: self.retention_cleared_outputs_total.get(),
+            retention_failures_total: self.retention_failures_total.get(),
             last_event_delivery_at: *self.last_event_delivery_at.lock().await,
             last_retention_pass_at: *self.last_retention_pass_at.lock().await,
         }
