@@ -1,7 +1,7 @@
 # BrowserPane Consolidated Planning Workspace
 
 Created: 2026-07-07
-Revalidated: 2026-07-31
+Revalidated: 2026-08-14
 
 This folder is the standalone planning workspace for the active BrowserPane
 plan set. It consolidates the still-valid information from the old plan files
@@ -29,14 +29,15 @@ Legacy inputs that were consolidated:
 
 Current branch context:
 
-- `/admin/` remains the stable/default admin console.
-- `/admin-new/` is the route-backed unified admin app under active
-  development.
-- PR `#143` has been merged and is the current baseline for `/admin-new`,
-  workflow source hardening, and MCP control-auth hardening.
+- `/admin-new/` is the standard route-backed operator console and the default
+  web-root target after promotion through PR `#211`.
+- `/admin/` remains directly addressable only as a compatibility fallback
+  pending a separate removal decision.
+- The current implementation slice is issue `#223`, the evidence-linked threat
+  model and production-hardening baseline under the broader issue `#72`.
 - Issue `#142` is closed as the historical redesign foundation. Follow-up
-  implementation PRs should use focused open issues or create them before
-  coding.
+  implementation PRs use focused issues such as `#124` rather than reopening
+  that lineage.
 
 ## Canonical Operating Documents
 
@@ -50,6 +51,10 @@ Use these first:
   Production Baseline, and Phase N promotion criteria.
 - `RISK_REGISTER.md`: active technical, security, operational, legal, delivery,
   and claim risks.
+- `THREAT_MODEL.md`: current assets, actors, trust boundaries, implemented
+  controls, required deployment controls, and residual risks.
+- `PRODUCTION_SECURITY_BASELINE.md`: responsibility model and deployment gate
+  for future supported production profiles.
 - `PLAN_TEMPLATE.md`: required structure, Definition of Ready, and Definition
   of Done for future `docs/*_PLAN.md` files.
 - `OPEN_ISSUES_CONTEXT.md`: issue-to-document ownership map.
@@ -93,6 +98,9 @@ specifications and still require a bounded slice plan before coding.
 - `BPANE-00185_CI_RUST_BUILDER_PLAN.md`: deterministic GHCR Rust builder,
   trusted publication, digest-based compose consumption, cold fallback, and
   timing evidence for the measured #184 image-build bottleneck.
+- `BPANE-00223_THREAT_MODEL_BASELINE_PLAN.md`: focused production checkpoint
+  that composes the current threat model, hardening checklist, executable
+  security contract, and negative-path evidence under issue #223.
 - `BPANE-00171_WORKFLOW_TEACH_MODE_PLAN.md`: Phase N Teach Mode contract,
   semantic demonstration capture, candidate generation, replay, immutable
   publication, controlled repair, and smoke sequence.
@@ -144,6 +152,10 @@ specifications and still require a bounded slice plan before coding.
   consolidated docs, work-order items, and issue hygiene gaps.
 - `SECURITY_RUNTIME_ROADMAP.md`: security, runtime, scale, and production
   hardening roadmap extracted from the review cleanup plan.
+- `THREAT_MODEL.md`: evidence-linked security model for the current local and
+  production-like broker profiles.
+- `PRODUCTION_SECURITY_BASELINE.md`: required application, deployment,
+  infrastructure, and operator controls for future supported profiles.
 - `VALIDATION_MATRIX.md`: focused validation and smoke expectations for the
   current state and upcoming slices.
 
@@ -167,22 +179,21 @@ The unified admin app has meaningful route-backed coverage now:
 - identity and access review
 - API companion, full operation coverage, and integration docs
 
-The unified admin app is not ready to replace `/admin/` yet. The important
-remaining admin-new gaps are:
+The unified admin app is the standard operator route. Important remaining
+operator-product gaps are:
 
 - session template catalog management
-- project governance evidence and cross-resource policy UX
-- operator CLI resource parity
+- operation-counter catalog and deeper workflow publishing controls
 - command palette
-- explicit promotion/cutover gate
+- a separately governed compatibility-admin removal decision
 
-The cleanup/security plan also identifies hardening work that should happen
-before promotion is treated as production-ready:
+Admin promotion does not imply production readiness. The current production
+lane retains these explicit hardening and qualification gaps:
 
-- browser context import safety
-- recording artifact finalization hardening
-- production runtime launch boundaries
-- admin/session catalog scalability
+- supported deployment packaging and target-specific runtime sandbox evidence
+- complete authorization, identity lifecycle, secret rotation, and audit policy
+- backup/restore, HA, release governance, and tested capacity envelopes
+- MCP ingress hardening plus broader telemetry, SLO, and incident runbooks
 
 ## Second-Pass Audit Result
 

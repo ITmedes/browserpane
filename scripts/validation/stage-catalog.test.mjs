@@ -15,6 +15,7 @@ test('catalog exposes stable, unique fast and compose profiles', () => {
   assert.equal(full.length, fast.length + compose.length);
   assert.ok(fast.some((stage) => stage.id === 'dependency-safety'));
   assert.ok(fast.some((stage) => stage.id === 'repository-documents'));
+  assert.ok(fast.some((stage) => stage.id === 'production-security-baseline'));
   assert.ok(fast.some((stage) => stage.id === 'rust-coverage'));
   assert.ok(fast.some((stage) => stage.id === 'admin-auth-test'));
   assert.ok(fast.some((stage) => stage.id === 'admin-auth-test-coverage'));

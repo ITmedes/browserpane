@@ -5,8 +5,8 @@ Status: Canonical execution roadmap
 Governance issue: [#173](https://github.com/ITmedes/browserpane/issues/173)
 
 Last implementation audit: 2026-08-14 on
-`feature/BPANE-00178-platform-metrics-foundation` through the bounded gateway
-OpenMetrics and runtime-capacity checkpoint.
+`feature/BPANE-00223-threat-model-baseline` through the evidence-linked threat
+model, production-hardening checklist, and executable security baseline.
 
 ## How To Use This Document
 
@@ -49,7 +49,7 @@ or capacity decision.
 | Foundation | Trusted build, auth, contracts, storage, and lifecycle baseline. | Complete through #179 | Foundation Gate |
 | Pilot Value | One bounded reference workflow with accepted evidence and runbook. | #174 | Phase 0 Gate |
 | Operator Product | Complete and promote `/admin-new/` as the default operator console. | Default promoted through #163; #124 is the next focused catalog gap | Phase 1 Gate |
-| Production | Harden deployment, security, recovery, supply chain, and telemetry. | #167 and #214 merged; #178 metrics foundation in progress, then #72 / #66 | Production Baseline |
+| Production | Harden deployment, security, recovery, supply chain, and telemetry. | #167/#214 runtime boundary and #178 metrics checkpoint merged; #223 threat-model baseline in progress, then #66 | Production Baseline |
 | Enterprise | Organization controls, policy, residency, HA, and governed integrations. | #176 / #70 / #79 | Phase N Gate |
 | Innovation | Teach Mode and controlled repair after stable execution contracts. | #171 | Phase N capability gate |
 
@@ -92,9 +92,13 @@ closed after its validation contract merged through PR #210 and the unified
 admin became the default web-root route through PR #211. #149 merged through
 PR #212, and #165 worker-runtime hardening merged through PR #213. #167 merged
 through PR #215. #214 broker contracts, policy, browser/worker/storage adapters,
-and gateway routing merged incrementally through PRs #220 and #221. #178 is now
-active with a first bounded gateway OpenMetrics/runtime-capacity checkpoint; it
-does not complete tracing, SLO, alert, or load-evidence scope.
+and gateway routing merged incrementally through PRs #220 and #221. The first
+bounded #178 gateway OpenMetrics/runtime-capacity checkpoint merged through PR
+#222; #178 remains open for tracing, broader subsystem metrics, SLOs, alerts,
+runbooks, and load evidence. #223 is the current focused #72 checkpoint: it
+links the implemented controls and negative evidence into one threat model and
+an executable deployment-security baseline without claiming that local Compose
+is production-ready.
 
 ## Foundation Gate Sequence
 
@@ -163,8 +167,11 @@ bounded Pilot:
 
 - #167 Docker proxy boundary and #214 policy-validating runtime broker are the
   implemented Docker-host runtime trust baseline,
-- #72 threat model and enterprise hardening baseline,
-- #178 platform telemetry, SLOs, alerts, and capacity evidence,
+- #178 platform telemetry foundation is implemented; SLOs, alerts, traces, and
+  capacity evidence remain,
+- #223 evidence-linked threat model and hardening baseline is the current
+  focused checkpoint under #72,
+- #72 remains the broader enterprise security-hardening owner after #223,
 - #66 deployment packaging and validated runtime targets,
 - #73 backup/restore and disaster recovery,
 - #74 high availability and zero-downtime operations,
