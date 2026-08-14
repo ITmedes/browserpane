@@ -102,10 +102,12 @@ specifications and still require a bounded slice plan before coding.
 - `BPANE-00223_THREAT_MODEL_BASELINE_PLAN.md`: focused production checkpoint
   that composes the current threat model, hardening checklist, executable
   security contract, and negative-path evidence under issue #223.
-- `BPANE-00225_SINGLE_NODE_COMPOSE_BASELINE_PLAN.md`: current Production slice
+- `BPANE-00225_SINGLE_NODE_COMPOSE_BASELINE_PLAN.md`: implemented Production slice
   for an independent broker-only single-node Compose profile, deployment
   secret files, structured preflight, live fixture, and bounded operator
   runbook under issue #225/#66.
+- `BPANE-00227_OTEL_RUNTIME_TRACING_PLAN.md`: active Production checkpoint for
+  W3C/OpenTelemetry propagation across gateway and runtime broker under #178.
 - `SINGLE_NODE_DEPLOYMENT.md`: operator runbook and exact support boundary for
   the independent single-host package.
 - `BPANE-00171_WORKFLOW_TEACH_MODE_PLAN.md`: Phase N Teach Mode contract,

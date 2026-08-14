@@ -5,10 +5,9 @@ Status: Canonical execution roadmap
 Governance issue: [#173](https://github.com/ITmedes/browserpane/issues/173)
 
 Last implementation audit: 2026-08-14 on
-`feature/BPANE-00225-single-node-compose-baseline`. The evidence-linked threat
-model and executable security baseline merged through PR #224. #225 is
-implemented and locally qualified as the bounded single-node deployment slice
-under #66; its merge evidence is under review.
+`feature/BPANE-00227-otel-runtime-tracing`. The bounded single-node profile
+merged through PR #226. #227 is the current focused cross-service tracing
+checkpoint under #178.
 
 ## How To Use This Document
 
@@ -51,7 +50,7 @@ or capacity decision.
 | Foundation | Trusted build, auth, contracts, storage, and lifecycle baseline. | Complete through #179 | Foundation Gate |
 | Pilot Value | One bounded reference workflow with accepted evidence and runbook. | #174 | Phase 0 Gate |
 | Operator Product | Complete and promote `/admin-new/` as the default operator console. | Default promoted through #163; #124 is the next focused catalog gap | Phase 1 Gate |
-| Production | Harden deployment, security, recovery, supply chain, and telemetry. | #167/#214 runtime boundary, #178 metrics checkpoint, and #223 threat-model baseline merged; #225 single-node deployment profile is in Review | Production Baseline |
+| Production | Harden deployment, security, recovery, supply chain, and telemetry. | #225 single-node baseline merged; #227 is the active OpenTelemetry runtime-tracing checkpoint under #178 | Production Baseline |
 | Enterprise | Organization controls, policy, residency, HA, and governed integrations. | #176 / #70 / #79 | Phase N Gate |
 | Innovation | Teach Mode and controlled repair after stable execution contracts. | #171 | Phase N capability gate |
 
@@ -82,7 +81,8 @@ or capacity decision.
 | Order | Issue | State | Dependency | Outcome |
 | --- | --- | --- | --- | --- |
 | 1 | #223 | Done | #214 runtime boundary and #178 metrics checkpoint | Threat model, responsibility baseline, executable security contract, and negative-evidence inventory merged through PR #224. |
-| 2 | #225 | Review | #223 evidence baseline | Independent, broker-only single-node Compose profile with secret-file configuration, preflight, live workflow/recording/restart qualification, and bounded operator runbook. |
+| 2 | #225 | Done | #223 evidence baseline | Independent, broker-only single-node Compose profile merged through PR #226. |
+| 3 | #227 | In Progress | #178 metrics checkpoint, #214, #225 | W3C/OpenTelemetry trace propagation for gateway-to-broker browser runtime operations with private collector smoke and redaction evidence. |
 
 #151, #184, and #185 established and accelerated the required validation
 baseline. #145 is merged through
@@ -108,9 +108,10 @@ runbooks, and load evidence. #223 merged through PR #224 and now links the
 implemented controls and negative evidence into one threat model and executable
 deployment-security baseline. #225 applies that baseline to an independent
 single-node Compose package without absorbing Kubernetes, Fargate, HA, or
-compliance scope. Its implementation and local qualification are complete; the
-next Production selection follows merge review and a reassessment of #66,
-#178, and #180.
+compliance scope. It merged through PR #226. #227 is the next bounded #178
+checkpoint and adds standards-based gateway-to-broker runtime tracing without
+absorbing worker/store/event tracing, SLO, alert, or load scope. #180 remains a
+governance decision rather than an implicit engineering license change.
 
 ## Foundation Gate Sequence
 
@@ -184,7 +185,8 @@ bounded Pilot:
 - #223 evidence-linked threat model and hardening baseline merged through PR
   #224,
 - #72 remains the broader enterprise security-hardening owner after #223,
-- #225 is the review-ready bounded single-node Compose package under #66,
+- #225 is the merged bounded single-node Compose package under #66,
+- #227 is the active gateway-to-broker OpenTelemetry checkpoint under #178,
 - #66 retains Kubernetes/Fargate packaging and cross-target deployment work,
 - #73 backup/restore and disaster recovery,
 - #74 high availability and zero-downtime operations,
