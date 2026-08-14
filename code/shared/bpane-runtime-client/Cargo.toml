@@ -12,6 +12,7 @@ categories = ["web-programming::http-client", "authentication"]
 
 [dependencies]
 bpane-runtime-contract.workspace = true
+bpane-telemetry.workspace = true
 async-trait = "0.1"
 oauth2 = { version = "5", default-features = false, features = ["reqwest", "rustls-tls"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "multipart", "rustls-tls", "stream"] }
@@ -25,6 +26,8 @@ uuid = { version = "1", features = ["serde", "v7"] }
 
 [dev-dependencies]
 axum = "0.8"
+opentelemetry = { version = "0.32", default-features = false, features = ["trace"] }
+opentelemetry_sdk = { version = "0.32", default-features = false, features = ["trace"] }
 serde = { version = "1", features = ["derive"] }
 tower = { version = "0.5", features = ["util"] }
 uuid = { version = "1", features = ["v7"] }

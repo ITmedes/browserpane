@@ -10,7 +10,7 @@ mod config;
 
 use http::HeaderMap;
 use opentelemetry::global;
-use opentelemetry::trace::TracerProvider as _;
+use opentelemetry::trace::{TraceContextExt as _, TracerProvider as _};
 use opentelemetry::Context;
 use opentelemetry_http::{HeaderExtractor, HeaderInjector};
 use opentelemetry_otlp::WithExportConfig;
@@ -137,7 +137,12 @@ pub fn inject_context(context: &Context, headers: &mut HeaderMap) {
 
 /// Injects the current `tracing` span context into HTTP headers.
 pub fn inject_current_context(headers: &mut HeaderMap) {
-    inject_context(&tracing::Span::current().context(), headers);
+    let span_context = tracing::Span::current().context();
+    if span_context.span().span_context().is_valid() {
+        inject_context(&span_context, headers);
+    } else {
+        inject_context(&Context::current(), headers);
+    }
 }
 
 /// Sets the current tracing span's parent from standard HTTP trace headers.

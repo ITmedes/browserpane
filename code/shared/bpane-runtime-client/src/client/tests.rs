@@ -7,6 +7,8 @@ use bpane_runtime_contract::{
     BrokerApiVersion, BrowserRuntimeLaunchRequest, IdempotencyKey, RuntimeOperation,
     RuntimeOperationRequest, RuntimeOperationResult, SecretValue, RUNTIME_BROKER_V1_MEDIA_TYPE,
 };
+use opentelemetry::trace::{SpanContext, SpanId, TraceContextExt, TraceFlags, TraceId, TraceState};
+use opentelemetry::Context;
 use serde_json::json;
 use tokio::net::TcpListener;
 use uuid::Uuid;
@@ -70,12 +72,26 @@ fn versioned_response(response: impl IntoResponse) -> Response {
     response
 }
 
+fn remote_trace_context() -> Context {
+    opentelemetry::global::set_text_map_propagator(
+        opentelemetry_sdk::propagation::TraceContextPropagator::new(),
+    );
+    Context::new().with_remote_span_context(SpanContext::new(
+        TraceId::from_hex("4bf92f3577b34da6a3ce929d0e0e4736").unwrap(),
+        SpanId::from_hex("00f067aa0ba902b7").unwrap(),
+        TraceFlags::SAMPLED,
+        true,
+        TraceState::default(),
+    ))
+}
+
 #[tokio::test]
 async fn sends_typed_authenticated_request_and_correlates_response() {
     async fn handler(headers: HeaderMap, body: String) -> Response {
         assert_eq!(headers["authorization"], "Bearer service-token-never-log");
         assert_eq!(headers["content-type"], RUNTIME_BROKER_V1_MEDIA_TYPE);
         assert_eq!(headers["accept"], RUNTIME_BROKER_V1_MEDIA_TYPE);
+        assert!(!headers.contains_key("traceparent"));
         let request: RuntimeOperationRequest = serde_json::from_str(&body).unwrap();
         versioned_response(Json(RuntimeOperationResponse {
             api_version: BrokerApiVersion::V1,
@@ -93,6 +109,40 @@ async fn sends_typed_authenticated_request_and_correlates_response() {
 
     assert_eq!(response.request_id, request.request_id);
     assert_eq!(response.result, RuntimeOperationResult::Accepted);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn propagates_only_standard_trace_context_to_all_basic_broker_requests() {
+    async fn readiness(headers: HeaderMap) -> StatusCode {
+        assert_eq!(
+            headers["traceparent"],
+            "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+        );
+        assert!(!headers.contains_key("baggage"));
+        StatusCode::NO_CONTENT
+    }
+    async fn operation(headers: HeaderMap, body: String) -> Response {
+        assert_eq!(
+            headers["traceparent"],
+            "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+        );
+        assert_eq!(headers["authorization"], "Bearer service-token-never-log");
+        assert!(!headers.contains_key("baggage"));
+        let request: RuntimeOperationRequest = serde_json::from_str(&body).unwrap();
+        versioned_response(Json(RuntimeOperationResponse {
+            api_version: BrokerApiVersion::V1,
+            request_id: request.request_id,
+            result: RuntimeOperationResult::Accepted,
+        }))
+    }
+    let router = Router::new()
+        .route("/readyz", get(readiness))
+        .route("/v1/operations", post(operation));
+    let broker = client(spawn(router).await, Duration::from_secs(1));
+    let _guard = remote_trace_context().attach();
+
+    broker.check_readiness().await.unwrap();
+    broker.execute(&operation_request()).await.unwrap();
 }
 
 #[tokio::test]

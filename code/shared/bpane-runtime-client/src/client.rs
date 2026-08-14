@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use bpane_runtime_contract::{
     RuntimeOperationRequest, RuntimeOperationResponse, RUNTIME_BROKER_V1_MEDIA_TYPE,
 };
-use reqwest::{Client, StatusCode, Url};
+use reqwest::{Client, RequestBuilder, StatusCode, Url};
 
 use crate::{AccessTokenProvider, RuntimeBrokerClientError, RuntimeBrokerClientErrorCode};
 
@@ -141,14 +141,19 @@ impl HttpRuntimeBrokerClient {
         }
         Ok(bytes)
     }
+
+    fn with_trace_context(&self, request: RequestBuilder) -> RequestBuilder {
+        let mut headers = reqwest::header::HeaderMap::new();
+        bpane_telemetry::inject_current_context(&mut headers);
+        request.headers(headers)
+    }
 }
 
 #[async_trait]
 impl RuntimeBrokerClient for HttpRuntimeBrokerClient {
     async fn check_readiness(&self) -> Result<(), RuntimeBrokerClientError> {
         let response = self
-            .client
-            .get(self.readiness_url.clone())
+            .with_trace_context(self.client.get(self.readiness_url.clone()))
             .timeout(self.request_timeout)
             .send()
             .await
@@ -180,8 +185,7 @@ impl RuntimeBrokerClient for HttpRuntimeBrokerClient {
         }
         let token = self.token_provider.access_token().await?;
         let response = self
-            .client
-            .post(self.operation_url.clone())
+            .with_trace_context(self.client.post(self.operation_url.clone()))
             .header(reqwest::header::CONTENT_TYPE, RUNTIME_BROKER_V1_MEDIA_TYPE)
             .header(reqwest::header::ACCEPT, RUNTIME_BROKER_V1_MEDIA_TYPE)
             .bearer_auth(token.expose_secret())

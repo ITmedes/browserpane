@@ -13,6 +13,7 @@ use prometheus_client::metrics::family::Family;
 use prometheus_client::metrics::gauge::Gauge;
 use prometheus_client::metrics::histogram::Histogram;
 use prometheus_client::registry::Registry;
+use tracing::Instrument;
 
 use crate::session_manager::SessionManager;
 
@@ -176,8 +177,26 @@ pub(crate) async fn instrument_http_request(
         || UNMATCHED_ROUTE.to_string(),
         |path| path.as_str().to_string(),
     );
+    let span = tracing::info_span!(
+        "browserpane.http.server",
+        otel.kind = "server",
+        otel.status_code = tracing::field::Empty,
+        "http.request.method" = bounded_method(&method),
+        "http.route" = route.as_str(),
+        "http.response.status_code" = tracing::field::Empty,
+    );
+    bpane_telemetry::set_parent_from_headers(&span, request.headers());
     let (started_at, _in_flight) = metrics.begin_http_request();
-    let response = next.run(request).await;
+    let response = next.run(request).instrument(span.clone()).await;
+    span.record("http.response.status_code", response.status().as_u16());
+    span.record(
+        "otel.status_code",
+        if response.status().is_server_error() {
+            "ERROR"
+        } else {
+            "OK"
+        },
+    );
     metrics.finish_http_request(&method, route, response.status(), started_at);
     response
 }
@@ -233,6 +252,11 @@ fn bounded_gauge(value: usize) -> i64 {
 mod tests {
     use std::time::Duration;
 
+    use axum::body::Body;
+    use axum::http::Request;
+    use axum::middleware;
+    use tower::ServiceExt;
+
     use super::*;
     use crate::session_manager::SessionManagerConfig;
 
@@ -287,5 +311,39 @@ mod tests {
         assert!(output.contains("browserpane_gateway_runtime_assignment_limit 1"));
         assert!(output.ends_with("# EOF\n"));
         assert!(!output.contains(&secret_session_id.to_string()));
+    }
+
+    #[tokio::test]
+    async fn request_instrumentation_uses_route_templates_and_ignores_malformed_context() {
+        let metrics = Arc::new(GatewayMetrics::default());
+        let app = Router::new()
+            .route("/sessions/{session_id}", get(|| async { StatusCode::OK }))
+            .layer(middleware::from_fn_with_state(
+                metrics.clone(),
+                instrument_http_request,
+            ));
+        let secret_session_id = uuid::Uuid::now_v7().to_string();
+        let secret_query = "secret-query-marker";
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri(format!(
+                        "/sessions/{secret_session_id}?token={secret_query}"
+                    ))
+                    .header("traceparent", "malformed-sensitive-trace-marker")
+                    .header("baggage", "password=sensitive-baggage-marker")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let output = metrics.encode(&test_session_manager()).await.unwrap();
+        assert!(output.contains("route=\"/sessions/{session_id}\""));
+        assert!(!output.contains(&secret_session_id));
+        assert!(!output.contains(secret_query));
+        assert!(!output.contains("sensitive-trace-marker"));
+        assert!(!output.contains("sensitive-baggage-marker"));
     }
 }

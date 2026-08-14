@@ -51,8 +51,7 @@ impl HttpRuntimeBrokerClient {
         }
         let token = self.token_provider.access_token().await?;
         let response = self
-            .client
-            .post(self.storage_transfer_url.clone())
+            .with_trace_context(self.client.post(self.storage_transfer_url.clone()))
             .header(
                 ACCEPT,
                 format!(

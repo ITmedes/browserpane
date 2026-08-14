@@ -14,6 +14,8 @@ use bpane_runtime_contract::{
     RUNTIME_BROKER_PAYLOAD_SHA256_HEADER, RUNTIME_BROKER_REQUEST_ID_HEADER,
     RUNTIME_BROKER_STORAGE_PAYLOAD_MEDIA_TYPE, RUNTIME_BROKER_V1_MEDIA_TYPE,
 };
+use opentelemetry::trace::{SpanContext, SpanId, TraceContextExt, TraceFlags, TraceId, TraceState};
+use opentelemetry::Context;
 use sha2::{Digest, Sha256};
 use tokio::net::TcpListener;
 use uuid::Uuid;
@@ -84,6 +86,11 @@ async fn sends_authenticated_multipart_input_and_parses_json_result() {
         "/v1/storage-transfers",
         post(move |request: Request| async move {
             assert_eq!(request.headers()["authorization"], "Bearer service-token");
+            assert_eq!(
+                request.headers()["traceparent"],
+                "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+            );
+            assert!(!request.headers().contains_key("baggage"));
             assert!(request.headers()["content-type"]
                 .to_str()
                 .unwrap()
@@ -105,6 +112,17 @@ async fn sends_authenticated_multipart_input_and_parses_json_result() {
         }),
     );
     let base_url = spawn(router).await;
+    opentelemetry::global::set_text_map_propagator(
+        opentelemetry_sdk::propagation::TraceContextPropagator::new(),
+    );
+    let context = Context::new().with_remote_span_context(SpanContext::new(
+        TraceId::from_hex("4bf92f3577b34da6a3ce929d0e0e4736").unwrap(),
+        SpanId::from_hex("00f067aa0ba902b7").unwrap(),
+        TraceFlags::SAMPLED,
+        true,
+        TraceState::default(),
+    ));
+    let _guard = context.attach();
 
     let response = client(base_url, 1024)
         .execute_storage(&operation, Some(b"archive"))
