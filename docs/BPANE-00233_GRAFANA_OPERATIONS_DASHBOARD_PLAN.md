@@ -4,11 +4,11 @@
 
 - Issue: [#233](https://github.com/ITmedes/browserpane/issues/233)
 - Parent: [#178](https://github.com/ITmedes/browserpane/issues/178)
-- State: In Progress
+- State: Qualified; Ready for Review
 - Lane: Production
 - Target gate: Production Baseline
 - Depends on: #150, #178 metrics foundation, #227, #229, #231
-- Last verified commit/date: `main` at `7d6f99f2`, 2026-08-16
+- Last verified commit/date: `0aa2d04a`, 2026-08-16
 
 ## Business Outcome
 
@@ -35,10 +35,14 @@ payload, or artifact data.
   event-delivery, recording, playback, and retention metrics.
 - The observability example ships 15 Prometheus recording rules, 10 starter
   alerts, deterministic rule tests, and alert-specific runbooks.
-- Prometheus rule configuration and behavior are checked by the official
-  digest-pinned Prometheus 3.12.0 toolchain.
-- No Grafana dashboard, datasource provisioning, dashboard contract, or live
-  Grafana provisioning evidence is checked in.
+- A source-controlled Grafana OSS 13.0.2 stack provisions a private Prometheus
+  datasource and the 20-panel `BrowserPane Operations` dashboard without
+  checked-in credentials or public host ports.
+- Static contracts protect the datasource, provisioning, stable panel/query
+  inventory, layout, neutral no-activity semantics, and sensitive-data bounds.
+- The live validator checks Grafana health, datasource health, dashboard
+  provisioning, all 19 query panels, error-level logs, private exposure, and
+  cleanup against digest-pinned Prometheus and Grafana images.
 
 ## Scope
 
@@ -160,6 +164,10 @@ Commit: `test(observability): qualify Grafana dashboard provisioning`.
 
 Commit: `docs(observability): qualify the Grafana operations baseline`.
 
+All three implementation slices are complete. Visual qualification found and
+closed clipped guidance, narrow operator labels, and misleading colored
+no-activity states before final evidence was recorded.
+
 ## Test Strategy
 
 ### Unit and static contracts
@@ -235,6 +243,31 @@ Commit: `docs(observability): qualify the Grafana operations baseline`.
 - Documentation clearly labels the dashboard as an initial aggregate baseline.
 - Parent #178 remains open for broader telemetry, final SLOs/error budgets,
   Alertmanager routing, synthetics, and capacity/load evidence.
+
+## Qualification Evidence
+
+- Focused Grafana unit/static/live validation: 9 tests passed; 20 panels and
+  all 19 live queries passed against the pinned toolchain.
+- Full fast validation: all 44 stages passed, including 113 validation-tool
+  tests, Rust workspace tests and coverage, 620 admin-new tests at 92.28%
+  statement coverage, 674 browser-client tests at 92.88%, worker packages,
+  OpenAPI governance, dependency policy, and documentation/security checks.
+- Real visual inspection: the dashboard rendered all 20 panels against the
+  single-node gateway at 1600x1200 and collapsed to a single-column 768x1024
+  operator view without horizontal overflow or browser-console errors.
+- Real scrape interruption: `up{job="browserpane-gateway"}` transitioned from
+  `1` to `0` after stopping the gateway and returned to `1` after recovery.
+- Focused Compose readiness: one health/readiness case passed, including the
+  expected Postgres dependency interruption and recovery.
+- Single-node qualification passed with retained state across restart,
+  distinct runtime containers, Docker boundary denial, protected worker
+  secrets, a 39-byte produced file, a 281149-byte recording, and a
+  287027-byte playback export.
+- Runtime tracing smoke passed across collector outage/recovery with caller
+  context continuation, malformed-context tolerance, gateway/broker spans,
+  and no sensitive marker exposure.
+- Temporary observability containers, networks, credentials, and visual-test
+  exposure were removed after validation.
 
 ## Post-Implementation Smoke Sequence
 
