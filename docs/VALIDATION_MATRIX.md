@@ -1,6 +1,6 @@
 # Consolidated Validation Matrix
 
-Revalidated against current package scripts: 2026-08-14
+Revalidated against current package scripts: 2026-08-16
 
 This matrix defines the available validation surfaces for product slices. Use
 `PRODUCT_PHASES_AND_RELEASE_GATES.md` to decide which evidence is required for
@@ -46,6 +46,7 @@ node scripts/validate.mjs --profile compose
 node scripts/validate.mjs --profile full
 node scripts/check-repository-documents.mjs
 node scripts/check-production-security-baseline.mjs
+node scripts/observability/validate-prometheus-rules.mjs
 ```
 
 - `fast` is the clean, non-compose validation floor.
@@ -66,8 +67,9 @@ Verified catalog on 2026-08-14:
 - the fast profile contains 44 stages, including the composed production
   security baseline plus Rust, browser-client,
   recording-worker, workflow-worker, and admin-new coverage ratchets,
-- the compose profile contains 33 bounded stages, including 24 admin promotion
-  stages plus API, CLI, MCP, recording, session-file, and workflow evidence,
+- the compose profile contains 34 bounded stages, including 24 admin promotion
+  stages plus Prometheus rule, API, CLI, MCP, recording, session-file, and
+  workflow evidence,
 - the compose gateway stage passes 17 default API and four docker-pool cases,
 - representative admin-new, compatibility-admin, CLI, MCP, recording, and
   workflow admission journeys pass against the running stack,
@@ -610,6 +612,28 @@ Platform telemetry changes must additionally prove:
 - representative workflow upload/callback and recording finalize/playback
   smokes advance the expected counters and exported-byte total,
 - scraping has no readiness, session, or runtime lifecycle side effects.
+
+For Prometheus SLI/alert changes, additionally prove:
+
+- upstream `promtool` accepts the scrape configuration and every rule file,
+- deterministic rule tests cover healthy, firing, hold, recovery, no-traffic,
+  process-counter-reset, and target-absent behavior,
+- recording and alert expressions reference only shipped stable metrics,
+- every alert has bounded severity/subsystem metadata and a resolving runbook
+  heading,
+- rule labels/annotations contain no dynamic resource or sensitive values,
+- thresholds are documented as initial proposals rather than contractual SLOs.
+
+Run:
+
+```bash
+node --test scripts/observability/prometheus-rules-contract.test.mjs
+node scripts/validate.mjs --stage observability-prometheus-rules
+```
+
+The static contract is part of `validation-tool-tests`. The semantic stage is
+compose-class because it executes the digest-pinned upstream Prometheus image;
+the required Repository Metadata GitHub job invokes it explicitly.
 
 For OpenTelemetry runtime-tracing changes, additionally prove:
 

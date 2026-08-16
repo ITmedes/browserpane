@@ -182,11 +182,12 @@ This plan does not close the parent issue. Subsequent bounded checkpoints remain
 
 1. Extend the merged #227 gateway-to-runtime-broker trace checkpoint across
    workers, artifact stores, and callback delivery where justified.
-2. Complete the #229 workflow/recording metrics checkpoint, then add queue,
-   storage, transport, dependency, worker-process, and host signals through
-   further bounded slices.
-3. Initial SLO definitions, recording rules, dashboards, alerts, synthetic
-   checks, and operator runbooks.
+2. #229 completed the workflow/recording metrics checkpoint; queue, storage,
+   transport, dependency, worker-process, and host signals remain further
+   bounded slices.
+3. #231 owns the initial Prometheus recording-rule, starter-alert, and runbook
+   checkpoint. Calibrated SLO/error-budget definitions, dashboards, alert
+   routing, and synthetic checks remain later work.
 4. Reproducible load profiles and documented capacity envelopes tied to release
    evidence.
 
