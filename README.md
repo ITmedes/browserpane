@@ -150,10 +150,12 @@ Current support and scope:
   OpenTelemetry checkpoint also propagates W3C Trace Context across
   gateway-to-runtime-broker browser lifecycle operations and exports bounded
   spans through OTLP gRPC. A checked-in Prometheus starter pack adds validated
-  recording rules, conservative alerts, and operator runbooks for the shipped
-  metrics. These are initial operating proposals, not contractual SLOs.
+  recording rules, conservative alerts, operator runbooks, and a provisioned
+  aggregate Grafana operations dashboard for the shipped metrics. These are
+  initial operating proposals, not contractual SLOs.
   Broader worker/store tracing, queue/state and dependency metrics, calibrated
-  SLOs, dashboards, synthetics, and capacity envelopes remain planned under
+  SLOs/error budgets, alert routing, synthetics, and capacity envelopes remain
+  planned under
   [issue #178](https://github.com/ITmedes/browserpane/issues/178); configuration
   and the supported evidence boundary are documented in
   [Platform Telemetry](docs/PLATFORM_TELEMETRY.md).
@@ -332,7 +334,8 @@ signals, not durable audit or billing records. Metrics never use resource ids
 or raw request paths as labels. Keep this unauthenticated collector endpoint on
 a trusted private network in production. See
 [Platform Telemetry](docs/PLATFORM_TELEMETRY.md) for the metric contract,
-Prometheus recording/alert rules, operator runbook, and validation commands.
+Prometheus recording/alert rules, provisioned Grafana operations dashboard,
+operator runbook, and validation commands.
 
 The repository-wide security contract validates the current admin-header,
 Docker-proxy, and runtime-broker invariants against the composed manifests:

@@ -167,8 +167,10 @@ Current product shape:
   - Private Prometheus scrape example plus bounded gateway/runtime/workflow/
     recording SLI rules and conservative starter alerts. Rules are validated
     with digest-pinned upstream `promtool`; alert metadata links to
-    `docs/operations/PROMETHEUS_ALERT_RUNBOOK.md`. Thresholds are proposals,
-    not contractual SLOs.
+    `docs/operations/PROMETHEUS_ALERT_RUNBOOK.md`. A digest-pinned Grafana OSS
+    example provisions a private datasource and aggregate operations dashboard
+    without host ports or embedded credentials. Thresholds are proposals, not
+    contractual SLOs.
 - `code/web/bpane-client/js`
   - Real browser client implementation.
   - `bpane.ts`: public API and session orchestration.
@@ -290,6 +292,8 @@ Current product shape:
 - Runtime-tracing live smoke: `node scripts/smoke-runtime-tracing.mjs` after starting the single-node fixture
 - Prometheus rule policy tests: `node --test scripts/observability/prometheus-rules-contract.test.mjs`
 - Prometheus config/rule/unit validation: `node scripts/observability/validate-prometheus-rules.mjs`
+- Grafana dashboard policy tests: `node --test scripts/observability/grafana-*.test.mjs`
+- Grafana live provisioning/query validation: `node scripts/observability/validate-grafana-dashboard.mjs`
 - Host tests: `cargo test -p bpane-host`
 - Protocol tests: `cargo test -p bpane-protocol`
 

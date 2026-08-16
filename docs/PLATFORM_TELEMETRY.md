@@ -125,8 +125,40 @@ use minimum-volume or operation-increase gates, and counter resets are tested as
 normal gateway restart behavior. Proposed thresholds and hold times must be
 calibrated against a named deployment and workload before paging, contractual
 SLO, or external availability use. The example does not include Alertmanager
-routing, notification receivers, dashboards, durable storage, or a public
-listener.
+routing, notification receivers, durable storage, or a public listener.
+
+## Grafana Operations Dashboard
+
+The same example provisions `BrowserPane Operations` through Grafana's standard
+file-provisioning mechanism. Its 20 panels cover aggregate scrape health,
+gateway request rate/5xx/p95 latency, runtime assignment utilization and counts,
+workflow produced-file/event-delivery outcomes, recording finalization/worker/
+playback outcomes, and workflow/recording retention failures.
+
+The dashboard has no variables or resource drill-downs. Nineteen query panels
+reference only the approved recording rules or bounded aggregate health/runtime
+gauges. Ratio panels describe no activity as undefined rather than successful,
+and runtime utilization is explicitly assignment-slot usage rather than CPU,
+memory, queue depth, or a tested concurrency envelope.
+
+The optional `compose.grafana.yml` joins an explicitly selected external
+operator network and publishes no host ports. Anonymous access, sign-up, plugin
+discovery, and plugin auto-updates are disabled; the administrator password is
+required at runtime. Grafana authentication integration, TLS termination,
+RBAC, durable storage, retention, backup, and availability remain operator
+deployment responsibilities.
+
+Validate the static and live contracts with:
+
+```bash
+node --test scripts/observability/grafana-*.test.mjs
+node scripts/observability/validate-grafana-dashboard.mjs
+```
+
+The live validator uses a temporary internal network, an immutable synthetic
+scrape target, and digest-pinned Prometheus/Grafana images. It verifies
+provisioning, all panel queries through Grafana's authenticated datasource API,
+startup logs, host-port isolation, and cleanup.
 
 ## Runtime Tracing Checkpoint
 
@@ -225,7 +257,7 @@ collector outage and recovery, and absence of sensitive fixture markers.
 - Workflow queue/running gauges, operation latency, and storage, transport,
   dependency, worker-process, and host metrics beyond the current bounded
   workflow/recording counters.
-- Calibrated SLO/error-budget definitions, dashboards, alert routing,
+- Calibrated SLO/error-budget definitions and alert routing,
   synthetic checks, and workload-specific threshold evidence beyond the #231
-  starter rules and runbooks.
+  starter rules/runbooks and #233 starter dashboard.
 - Reproducible load profiles and documented capacity envelopes.

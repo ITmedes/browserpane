@@ -28,6 +28,7 @@ test('catalog exposes stable, unique fast and compose profiles', () => {
   assert.ok(fast.some((stage) => stage.id === 'openapi-compatibility'));
   assert.ok(compose.some((stage) => stage.id === 'compose-gateway-api'));
   assert.ok(compose.some((stage) => stage.id === 'observability-prometheus-rules'));
+  assert.ok(compose.some((stage) => stage.id === 'observability-grafana-dashboard'));
   assert.ok(compose.some((stage) => stage.id === 'compose-recording'));
   assert.ok(compose.some((stage) => stage.id === 'compose-session-files'));
   assert.ok(compose.some((stage) => stage.id === 'compose-workflow-cli'));
@@ -48,6 +49,9 @@ test('promotion surface runner remains part of validation tooling tests', () => 
   assert.ok(tooling.args.includes('scripts/validation/admin-promotion-runner.test.mjs'));
   assert.ok(tooling.args.includes('scripts/single-node/single-node-deployment.test.mjs'));
   assert.ok(tooling.args.includes('scripts/observability/prometheus-rules-contract.test.mjs'));
+  assert.ok(tooling.args.includes('scripts/observability/grafana-api-probe.test.mjs'));
+  assert.ok(tooling.args.includes('scripts/observability/grafana-dashboard-contract.test.mjs'));
+  assert.ok(tooling.args.includes('scripts/observability/grafana-validation-stack.test.mjs'));
 });
 
 test('catalog selects requested stages in caller order and rejects out-of-profile ids', () => {
