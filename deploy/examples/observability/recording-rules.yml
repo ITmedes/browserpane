@@ -1,0 +1,61 @@
+groups:
+  - name: browserpane-sli-recording
+    interval: 30s
+    rules:
+      - record: browserpane:gateway_http_requests:rate5m
+        expr: sum(rate(browserpane_gateway_http_requests_total[5m]))
+      - record: browserpane:gateway_http_5xx:ratio_rate5m
+        expr: |
+          sum(rate(browserpane_gateway_http_requests_total{status_class="5xx"}[5m]))
+          /
+          sum(rate(browserpane_gateway_http_requests_total[5m]))
+      - record: browserpane:gateway_http_request_duration_seconds:p95_rate5m
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (
+              rate(browserpane_gateway_http_request_duration_seconds_bucket[5m])
+            )
+          )
+      - record: browserpane:runtime_capacity_utilization:ratio
+        expr: |
+          (
+            browserpane_gateway_runtime_active_assignments
+            + browserpane_gateway_runtime_starting_assignments
+          )
+          /
+          clamp_min(browserpane_gateway_runtime_assignment_limit, 1)
+      - record: browserpane:workflow_produced_file_upload_failure:ratio_increase15m
+        expr: |
+          increase(browserpane_gateway_workflow_produced_file_upload_failures_total[15m])
+          /
+          (
+            increase(browserpane_gateway_workflow_produced_file_uploads_total[15m])
+            + increase(browserpane_gateway_workflow_produced_file_upload_failures_total[15m])
+          )
+      - record: browserpane:workflow_event_delivery_success:ratio_increase15m
+        expr: |
+          increase(browserpane_gateway_workflow_event_delivery_successes_total[15m])
+          /
+          increase(browserpane_gateway_workflow_event_delivery_attempts_total[15m])
+      - record: browserpane:recording_artifact_finalize_success:ratio_increase15m
+        expr: |
+          increase(browserpane_gateway_recording_artifact_finalize_successes_total[15m])
+          /
+          increase(browserpane_gateway_recording_artifact_finalize_requests_total[15m])
+      - record: browserpane:workflow_produced_file_upload_failures:increase15m
+        expr: increase(browserpane_gateway_workflow_produced_file_upload_failures_total[15m])
+      - record: browserpane:workflow_event_delivery_retries:increase15m
+        expr: increase(browserpane_gateway_workflow_event_delivery_retries_total[15m])
+      - record: browserpane:workflow_event_delivery_failures:increase15m
+        expr: increase(browserpane_gateway_workflow_event_delivery_failures_total[15m])
+      - record: browserpane:recording_artifact_finalize_failures:increase15m
+        expr: increase(browserpane_gateway_recording_artifact_finalize_failures_total[15m])
+      - record: browserpane:recording_failures:increase15m
+        expr: increase(browserpane_gateway_recording_failures_total[15m])
+      - record: browserpane:recording_playback_export_failures:increase15m
+        expr: increase(browserpane_gateway_recording_playback_export_failures_total[15m])
+      - record: browserpane:workflow_retention_failures:increase1h
+        expr: increase(browserpane_gateway_workflow_retention_failures_total[1h])
+      - record: browserpane:recording_retention_failures:increase1h
+        expr: increase(browserpane_gateway_recording_retention_failures_total[1h])

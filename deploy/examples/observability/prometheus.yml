@@ -1,6 +1,11 @@
 global:
   scrape_interval: 15s
   scrape_timeout: 5s
+  evaluation_interval: 30s
+
+rule_files:
+  - recording-rules.yml
+  - alert-rules.yml
 
 scrape_configs:
   - job_name: browserpane-gateway
