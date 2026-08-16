@@ -2,7 +2,7 @@
 
 Governance issue: [#173](https://github.com/ITmedes/browserpane/issues/173)
 
-Last reviewed: 2026-08-14
+Last reviewed: 2026-08-16
 
 ## Scale
 
@@ -18,7 +18,7 @@ Last reviewed: 2026-08-14
 | R-004 | Application auth/header controls exist, but a deployment could still expose admin, MCP, metrics, or internal surfaces without the required TLS, origin, ingress, and network policy. | Medium | Critical | #223 / #72 / #66 | Executable application/header baseline plus target-specific ingress, exact-origin, private-network, and MCP transport controls. | Production |
 | R-005 | Webhook delivery can reach unsafe destinations or redirect targets. | Low | Critical | #147 | Mitigated and merged through PR #191: URL/DNS/IP validation, pinned delivery, no redirects/proxies, exact-origin exceptions, negative and compose tests. | Foundation |
 | R-007 | Protocol version is not enforced and compatibility is undocumented. | Medium | Critical | #175 | Version negotiation, shared vectors, fuzzing, compatibility matrix. | Production |
-| R-010 | Platform failures and saturation are not yet observable end to end through standard telemetry/SLOs. | High | High | #178 | Gateway OpenMetrics RED/runtime capacity merged through PR #222 and bounded W3C/OTLP gateway-to-runtime-broker browser lifecycle traces through PR #228; #229 adds workflow/recording subsystem counters. Broader worker/store coverage, queue/state and latency signals, alerts, runbooks, and load evidence remain. | Phase 1 / Production |
+| R-010 | Platform failures and saturation are not yet observable end to end through standard telemetry/SLOs. | High | High | #178 | Gateway OpenMetrics RED/runtime capacity merged through PR #222, bounded W3C/OTLP gateway-to-broker traces through PR #228, and workflow/recording counters through PR #230. #231 adds tested initial recording rules, starter alerts, and runbooks. Broader worker/store coverage, queue/state and latency signals, calibrated SLOs, dashboards, synthetics, alert routing, and load evidence remain. | Phase 1 / Production |
 | R-011 | Organization/project mappings are descriptive rather than a complete enforced authorization model. | High | Critical | #176 | Role/grant matrix, enforcement, migration, denial/audit tests. | Phase N |
 | R-012 | Deprovisioned identities or emergency access lack deterministic lifecycle controls. | Medium | Critical | #177 | Lifecycle API/SCIM path, stale review, break-glass controls. | Phase N |
 | R-013 | Local, broker-validation, or bounded single-node evidence is described beyond its supported deployment/capacity envelope. | Medium | High | #66 / #178 / #225 | Profiles are explicitly classified; the single-node package adds immutable inputs, preflight, live qualification, and a runbook. Target sandbox/network acceptance, real restore drills, load envelopes, HA, and managed-runtime support remain. | Phase 0 / Production |

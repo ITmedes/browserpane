@@ -1,0 +1,296 @@
+rule_files:
+  - recording-rules.yml
+  - alert-rules.yml
+
+evaluation_interval: 1m
+
+group_eval_order:
+  - browserpane-sli-recording
+  - browserpane-starter-alerts
+
+tests:
+  - name: healthy low-volume service remains quiet
+    interval: 1m
+    input_series:
+      - series: 'up{job="browserpane-gateway",instance="gateway:8932"}'
+        values: '1+0x20'
+      - series: 'browserpane_gateway_http_requests_total{method="GET",route="/healthz",status_class="2xx"}'
+        values: '0+30x20'
+      - series: 'browserpane_gateway_http_requests_total{method="GET",route="/healthz",status_class="5xx"}'
+        values: '0+0x20'
+      - series: browserpane_gateway_runtime_active_assignments
+        values: '1+0x20'
+      - series: browserpane_gateway_runtime_starting_assignments
+        values: '0+0x20'
+      - series: browserpane_gateway_runtime_assignment_limit
+        values: '4+0x20'
+      - series: browserpane_gateway_workflow_produced_file_uploads_total
+        values: '0+0x20'
+      - series: browserpane_gateway_workflow_produced_file_upload_failures_total
+        values: '0+0x20'
+      - series: browserpane_gateway_workflow_event_delivery_attempts_total
+        values: '0+0x20'
+      - series: browserpane_gateway_workflow_event_delivery_successes_total
+        values: '0+0x20'
+      - series: browserpane_gateway_workflow_event_delivery_retries_total
+        values: '0+0x20'
+      - series: browserpane_gateway_workflow_event_delivery_failures_total
+        values: '0+0x20'
+      - series: browserpane_gateway_recording_artifact_finalize_requests_total
+        values: '0+0x20'
+      - series: browserpane_gateway_recording_artifact_finalize_successes_total
+        values: '0+0x20'
+      - series: browserpane_gateway_recording_artifact_finalize_failures_total
+        values: '0+0x20'
+      - series: browserpane_gateway_recording_failures_total
+        values: '0+0x20'
+      - series: browserpane_gateway_recording_playback_export_failures_total
+        values: '0+0x20'
+      - series: browserpane_gateway_workflow_retention_failures_total
+        values: '0+0x20'
+      - series: browserpane_gateway_recording_retention_failures_total
+        values: '0+0x20'
+    promql_expr_test:
+      - expr: browserpane:gateway_http_requests:rate5m
+        eval_time: 10m
+        exp_samples:
+          - labels: 'browserpane:gateway_http_requests:rate5m{}'
+            value: 0.5
+      - expr: browserpane:gateway_http_5xx:ratio_rate5m
+        eval_time: 10m
+        exp_samples:
+          - labels: 'browserpane:gateway_http_5xx:ratio_rate5m{}'
+            value: 0
+      - expr: browserpane:runtime_capacity_utilization:ratio
+        eval_time: 10m
+        exp_samples:
+          - labels: 'browserpane:runtime_capacity_utilization:ratio{}'
+            value: 0.25
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: BrowserPaneGatewayMetricsUnavailable
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: BrowserPaneGatewayHighServerErrorRatio
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: BrowserPaneRuntimeCapacitySaturated
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: BrowserPaneWorkflowEventDeliveryFailure
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: BrowserPaneRecordingArtifactFinalizeFailure
+        exp_alerts: []
+
+  - name: missing gateway target fires
+    interval: 1m
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: BrowserPaneGatewayMetricsUnavailable
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: BrowserPaneGatewayMetricsUnavailable
+        exp_alerts:
+          - exp_labels:
+              job: browserpane-gateway
+              severity: critical
+              subsystem: gateway
+            exp_annotations:
+              summary: BrowserPane gateway metrics are unavailable
+              description: The configured Prometheus target has not produced a successful scrape for two minutes.
+              runbook_url: https://github.com/ITmedes/browserpane/blob/main/docs/operations/PROMETHEUS_ALERT_RUNBOOK.md#browserpanegatewaymetricsunavailable
+
+  - name: gateway scrape recovery clears the availability alert
+    interval: 1m
+    input_series:
+      - series: 'up{job="browserpane-gateway",instance="gateway:8932"}'
+        values: '0+0x3 1+0x6'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: BrowserPaneGatewayMetricsUnavailable
+        exp_alerts:
+          - exp_labels:
+              instance: gateway:8932
+              job: browserpane-gateway
+              severity: critical
+              subsystem: gateway
+            exp_annotations:
+              summary: BrowserPane gateway metrics are unavailable
+              description: The configured Prometheus target has not produced a successful scrape for two minutes.
+              runbook_url: https://github.com/ITmedes/browserpane/blob/main/docs/operations/PROMETHEUS_ALERT_RUNBOOK.md#browserpanegatewaymetricsunavailable
+      - eval_time: 6m
+        alertname: BrowserPaneGatewayMetricsUnavailable
+        exp_alerts: []
+
+  - name: sustained server errors and runtime saturation fire
+    interval: 1m
+    input_series:
+      - series: 'up{job="browserpane-gateway",instance="gateway:8932"}'
+        values: '1+0x20'
+      - series: 'browserpane_gateway_http_requests_total{method="GET",route="/api/v1/sessions",status_class="2xx"}'
+        values: '0+54x20'
+      - series: 'browserpane_gateway_http_requests_total{method="GET",route="/api/v1/sessions",status_class="5xx"}'
+        values: '0+6x20'
+      - series: browserpane_gateway_runtime_active_assignments
+        values: '4+0x20'
+      - series: browserpane_gateway_runtime_starting_assignments
+        values: '0+0x20'
+      - series: browserpane_gateway_runtime_assignment_limit
+        values: '4+0x20'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: BrowserPaneGatewayHighServerErrorRatio
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              subsystem: gateway
+            exp_annotations:
+              summary: BrowserPane gateway server-error ratio is elevated
+              description: More than five percent of gateway requests are 5xx responses under sustained request volume.
+              runbook_url: https://github.com/ITmedes/browserpane/blob/main/docs/operations/PROMETHEUS_ALERT_RUNBOOK.md#browserpanegatewayhighservererrorratio
+      - eval_time: 12m
+        alertname: BrowserPaneRuntimeCapacitySaturated
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              subsystem: runtime
+            exp_annotations:
+              summary: BrowserPane runtime assignment capacity is saturated
+              description: Active and starting runtime assignments have met the configured assignment limit for ten minutes.
+              runbook_url: https://github.com/ITmedes/browserpane/blob/main/docs/operations/PROMETHEUS_ALERT_RUNBOOK.md#browserpaneruntimecapacitysaturated
+
+  - name: workflow failures and retries fire after their hold windows
+    interval: 1m
+    input_series:
+      - series: 'up{job="browserpane-gateway",instance="gateway:8932"}'
+        values: '1+0x20'
+      - series: browserpane_gateway_workflow_produced_file_upload_failures_total
+        values: '0 1+0x19'
+      - series: browserpane_gateway_workflow_event_delivery_retries_total
+        values: '0 1+0x19'
+      - series: browserpane_gateway_workflow_event_delivery_failures_total
+        values: '0 1+0x19'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: BrowserPaneWorkflowProducedFileUploadFailure
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              subsystem: workflow
+            exp_annotations:
+              summary: BrowserPane workflow produced-file uploads are failing
+              description: At least one produced-file upload failed during the rolling fifteen-minute window.
+              runbook_url: https://github.com/ITmedes/browserpane/blob/main/docs/operations/PROMETHEUS_ALERT_RUNBOOK.md#browserpaneworkflowproducedfileuploadfailure
+      - eval_time: 7m
+        alertname: BrowserPaneWorkflowEventDeliveryRetrying
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              subsystem: workflow
+            exp_annotations:
+              summary: BrowserPane workflow event delivery is retrying
+              description: Callback delivery scheduled at least one retry during the rolling fifteen-minute window.
+              runbook_url: https://github.com/ITmedes/browserpane/blob/main/docs/operations/PROMETHEUS_ALERT_RUNBOOK.md#browserpaneworkfloweventdeliveryretrying
+      - eval_time: 4m
+        alertname: BrowserPaneWorkflowEventDeliveryFailure
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              subsystem: workflow
+            exp_annotations:
+              summary: BrowserPane workflow event delivery reached terminal failure
+              description: At least one callback delivery exhausted its bounded retry policy during the rolling fifteen-minute window.
+              runbook_url: https://github.com/ITmedes/browserpane/blob/main/docs/operations/PROMETHEUS_ALERT_RUNBOOK.md#browserpaneworkfloweventdeliveryfailure
+
+  - name: recording playback and retention failures fire
+    interval: 1m
+    input_series:
+      - series: 'up{job="browserpane-gateway",instance="gateway:8932"}'
+        values: '1+0x20'
+      - series: browserpane_gateway_recording_artifact_finalize_failures_total
+        values: '0 1+0x19'
+      - series: browserpane_gateway_recording_failures_total
+        values: '0 1+0x19'
+      - series: browserpane_gateway_recording_playback_export_failures_total
+        values: '0 1+0x19'
+      - series: browserpane_gateway_workflow_retention_failures_total
+        values: '0 1+0x19'
+      - series: browserpane_gateway_recording_retention_failures_total
+        values: '0+0x20'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: BrowserPaneRecordingArtifactFinalizeFailure
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              subsystem: recording
+            exp_annotations:
+              summary: BrowserPane recording artifact finalization is failing
+              description: At least one recording artifact failed finalization during the rolling fifteen-minute window.
+              runbook_url: https://github.com/ITmedes/browserpane/blob/main/docs/operations/PROMETHEUS_ALERT_RUNBOOK.md#browserpanerecordingartifactfinalizefailure
+      - eval_time: 4m
+        alertname: BrowserPaneRecordingWorkerFailure
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              subsystem: recording
+            exp_annotations:
+              summary: BrowserPane recording segments are failing
+              description: At least one recording segment entered a failed state during the rolling fifteen-minute window.
+              runbook_url: https://github.com/ITmedes/browserpane/blob/main/docs/operations/PROMETHEUS_ALERT_RUNBOOK.md#browserpanerecordingworkerfailure
+      - eval_time: 4m
+        alertname: BrowserPaneRecordingPlaybackExportFailure
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              subsystem: recording
+            exp_annotations:
+              summary: BrowserPane recording playback exports are failing
+              description: At least one playback export failed during the rolling fifteen-minute window.
+              runbook_url: https://github.com/ITmedes/browserpane/blob/main/docs/operations/PROMETHEUS_ALERT_RUNBOOK.md#browserpanerecordingplaybackexportfailure
+      - eval_time: 7m
+        alertname: BrowserPaneRetentionFailure
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              subsystem: retention
+            exp_annotations:
+              summary: BrowserPane retention cleanup is failing
+              description: Workflow or recording retention reported a cleanup failure during the rolling one-hour window.
+              runbook_url: https://github.com/ITmedes/browserpane/blob/main/docs/operations/PROMETHEUS_ALERT_RUNBOOK.md#browserpaneretentionfailure
+
+  - name: process counter reset does not create false failures
+    interval: 1m
+    input_series:
+      - series: 'up{job="browserpane-gateway",instance="gateway:8932"}'
+        values: '1+0x20'
+      - series: browserpane_gateway_workflow_produced_file_upload_failures_total
+        values: '10+0x4 0+0x16'
+      - series: browserpane_gateway_workflow_event_delivery_retries_total
+        values: '10+0x4 0+0x16'
+      - series: browserpane_gateway_workflow_event_delivery_failures_total
+        values: '10+0x4 0+0x16'
+      - series: browserpane_gateway_recording_artifact_finalize_failures_total
+        values: '10+0x4 0+0x16'
+      - series: browserpane_gateway_recording_failures_total
+        values: '10+0x4 0+0x16'
+      - series: browserpane_gateway_recording_playback_export_failures_total
+        values: '10+0x4 0+0x16'
+      - series: browserpane_gateway_workflow_retention_failures_total
+        values: '10+0x4 0+0x16'
+      - series: browserpane_gateway_recording_retention_failures_total
+        values: '10+0x4 0+0x16'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: BrowserPaneWorkflowProducedFileUploadFailure
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: BrowserPaneWorkflowEventDeliveryFailure
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: BrowserPaneRecordingArtifactFinalizeFailure
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: BrowserPaneRetentionFailure
+        exp_alerts: []

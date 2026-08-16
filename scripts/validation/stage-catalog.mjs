@@ -53,6 +53,7 @@ export class ValidationStageCatalog {
         'scripts/ci/compose-diagnostics-collector.test.mjs',
         'scripts/ci/diagnostic-redactor.test.mjs',
         'scripts/ci/gateway-compose-e2e-wrapper.test.mjs',
+        'scripts/observability/prometheus-rules-contract.test.mjs',
         'scripts/security/admin-security-header-contract.test.mjs',
         'scripts/security/production-security-baseline-contract.test.mjs',
         'scripts/single-node/single-node-deployment.test.mjs',
@@ -113,6 +114,9 @@ export class ValidationStageCatalog {
   #buildComposeStages(root) {
     const client = path.join(root, 'code/web/bpane-client');
     return [
+      this.#node('observability-prometheus-rules',
+        'Validate Prometheus SLI and alert rules', root,
+        ['scripts/observability/validate-prometheus-rules.mjs'], 300),
       this.#stage('compose-gateway-api', 'Run gateway compose API suites', 'bash',
         ['scripts/run-gateway-compose-e2e.sh', '--suite', 'all'], root, 2700),
       ...ADMIN_PROMOTION_SMOKES.map(({ id, description, script, extraArgs }) => (
