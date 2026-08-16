@@ -20,6 +20,11 @@ console.log(`Prometheus observability rules passed with ${IMAGE}.`);
 function runPromtool(args) {
   const result = spawnSync('docker', [
     'run', '--rm',
+    '--network', 'none',
+    '--read-only',
+    '--cap-drop', 'ALL',
+    '--security-opt', 'no-new-privileges:true',
+    '--tmpfs', '/tmp:rw,noexec,nosuid,size=64m,uid=65534,gid=65534,mode=0700',
     '--entrypoint', '/bin/promtool',
     '--volume', `${EXAMPLE}:/work:ro`,
     IMAGE,
