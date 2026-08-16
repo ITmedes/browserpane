@@ -83,7 +83,7 @@ tests:
         alertname: BrowserPaneRecordingArtifactFinalizeFailure
         exp_alerts: []
 
-  - name: missing gateway target fires and recovery clears
+  - name: missing gateway target fires
     interval: 1m
     alert_rule_test:
       - eval_time: 1m
@@ -100,6 +100,28 @@ tests:
               summary: BrowserPane gateway metrics are unavailable
               description: The configured Prometheus target has not produced a successful scrape for two minutes.
               runbook_url: https://github.com/ITmedes/browserpane/blob/main/docs/operations/PROMETHEUS_ALERT_RUNBOOK.md#browserpanegatewaymetricsunavailable
+
+  - name: gateway scrape recovery clears the availability alert
+    interval: 1m
+    input_series:
+      - series: 'up{job="browserpane-gateway",instance="gateway:8932"}'
+        values: '0+0x3 1+0x6'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: BrowserPaneGatewayMetricsUnavailable
+        exp_alerts:
+          - exp_labels:
+              instance: gateway:8932
+              job: browserpane-gateway
+              severity: critical
+              subsystem: gateway
+            exp_annotations:
+              summary: BrowserPane gateway metrics are unavailable
+              description: The configured Prometheus target has not produced a successful scrape for two minutes.
+              runbook_url: https://github.com/ITmedes/browserpane/blob/main/docs/operations/PROMETHEUS_ALERT_RUNBOOK.md#browserpanegatewaymetricsunavailable
+      - eval_time: 6m
+        alertname: BrowserPaneGatewayMetricsUnavailable
+        exp_alerts: []
 
   - name: sustained server errors and runtime saturation fire
     interval: 1m
