@@ -185,10 +185,12 @@ This plan does not close the parent issue. Subsequent bounded checkpoints remain
 2. #229 completed the workflow/recording metrics checkpoint; queue, storage,
    transport, dependency, worker-process, and host signals remain further
    bounded slices.
-3. #231 owns the initial Prometheus recording-rule, starter-alert, and runbook
-   checkpoint. Calibrated SLO/error-budget definitions, dashboards, alert
-   routing, and synthetic checks remain later work.
-4. Reproducible load profiles and documented capacity envelopes tied to release
+3. #231 completed the initial Prometheus recording-rule, starter-alert, and
+   runbook checkpoint through PR #232.
+4. #233 owns the provisioned aggregate Grafana operations-dashboard checkpoint.
+   Calibrated SLO/error-budget definitions, alert routing, and synthetic checks
+   remain later work.
+5. Reproducible load profiles and documented capacity envelopes tied to release
    evidence.
 
 ## Out Of Scope

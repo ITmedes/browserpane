@@ -5,9 +5,10 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
+import { PROMETHEUS_IMAGE } from './observability-toolchain.mjs';
+
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const EXAMPLE = path.join(ROOT, 'deploy/examples/observability');
-const IMAGE = 'prom/prometheus@sha256:69f5241418838263316593f7274a304b095c40bcf22e57272865da91bd60a8ac';
 const CHECKS = [
   ['check', 'config', '/work/prometheus.yml'],
   ['check', 'rules', '/work/recording-rules.yml', '/work/alert-rules.yml'],
@@ -15,7 +16,7 @@ const CHECKS = [
 ];
 
 for (const args of CHECKS) runPromtool(args);
-console.log(`Prometheus observability rules passed with ${IMAGE}.`);
+console.log(`Prometheus observability rules passed with ${PROMETHEUS_IMAGE}.`);
 
 function runPromtool(args) {
   const result = spawnSync('docker', [
@@ -27,7 +28,7 @@ function runPromtool(args) {
     '--tmpfs', '/tmp:rw,noexec,nosuid,size=64m,uid=65534,gid=65534,mode=0700',
     '--entrypoint', '/bin/promtool',
     '--volume', `${EXAMPLE}:/work:ro`,
-    IMAGE,
+    PROMETHEUS_IMAGE,
     ...args,
   ], {
     cwd: ROOT,

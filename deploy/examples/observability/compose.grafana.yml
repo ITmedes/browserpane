@@ -1,0 +1,76 @@
+services:
+  prometheus:
+    image: prom/prometheus@sha256:69f5241418838263316593f7274a304b095c40bcf22e57272865da91bd60a8ac
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=6h
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./recording-rules.yml:/etc/prometheus/recording-rules.yml:ro
+      - ./alert-rules.yml:/etc/prometheus/alert-rules.yml:ro
+    tmpfs:
+      - /prometheus:size=128m,uid=65534,gid=65534,mode=0700
+      - /tmp:size=16m,uid=65534,gid=65534,mode=0700
+    expose:
+      - "9090"
+    healthcheck:
+      test: ["CMD", "promtool", "check", "ready", "--url=http://127.0.0.1:9090"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 5s
+
+  grafana:
+    image: grafana/grafana-oss@sha256:5dad0df181cb644a14e13617b913b261a54f7d4fd4510721dba420929f35bea2
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_LOG_MODE: console
+      GF_PATHS_DATA: /var/lib/grafana
+      GF_PATHS_LOGS: /tmp/grafana-logs
+      GF_PLUGINS_PREINSTALL_AUTO_UPDATE: "false"
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
+      GF_SECURITY_ADMIN_USER: ${BPANE_GRAFANA_ADMIN_USER:-bpane-operator}
+      GF_SECURITY_ADMIN_PASSWORD: ${BPANE_GRAFANA_ADMIN_PASSWORD:?set BPANE_GRAFANA_ADMIN_PASSWORD}
+      GF_SECURITY_DISABLE_GRAVATAR: "true"
+      GF_SECURITY_DISABLE_INITIAL_ADMIN_CREATION: "false"
+      GF_SECURITY_COOKIE_SECURE: "true"
+      GF_SECURITY_STRICT_TRANSPORT_SECURITY: "true"
+      GF_SERVER_ENABLE_GZIP: "true"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./grafana/provisioning/datasources/prometheus.yml:/etc/grafana/provisioning/datasources/browserpane-prometheus.yml:ro
+      - ./grafana/provisioning/dashboards/browserpane.yml:/etc/grafana/provisioning/dashboards/browserpane.yml:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    tmpfs:
+      - /var/lib/grafana:size=128m,uid=472,gid=0,mode=0700
+      - /tmp:size=32m,uid=472,gid=0,mode=0700
+    expose:
+      - "3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --output-document=- http://127.0.0.1:3000/api/health >/dev/null"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 10s
+
+networks:
+  default:
+    external: true
+    name: ${BPANE_OBSERVABILITY_NETWORK:?set BPANE_OBSERVABILITY_NETWORK}
