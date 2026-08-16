@@ -36,9 +36,10 @@ Current branch context:
 - The evidence-linked threat model and production-hardening baseline merged
   through PR `#224`. The bounded single-node Compose deployment profile merged
   through PR `#226` under broader issue `#66`. The gateway-to-runtime-broker
-  tracing checkpoint merged through PR `#228`, and workflow/recording metrics
-  merged through PR `#230`; issue `#231` is the current bounded Prometheus
-  SLI/alert/runbook checkpoint under `#178`.
+  tracing checkpoint merged through PR `#228`, workflow/recording metrics
+  merged through PR `#230`, and the Prometheus SLI/alert/runbook baseline merged
+  through PR `#232`; issue `#233` is the current bounded Grafana operations
+  dashboard checkpoint under `#178`.
 - Issue `#142` is closed as the historical redesign foundation. Follow-up
   implementation PRs use focused issues such as `#124` rather than reopening
   that lineage.
@@ -114,9 +115,12 @@ specifications and still require a bounded slice plan before coding.
 - `BPANE-00229_WORKFLOW_RECORDING_METRICS_PLAN.md`: merged bounded Production
   checkpoint for shared workflow/recording operations counters and OpenMetrics
   export under #178.
-- `BPANE-00231_PROMETHEUS_SLI_ALERT_BASELINE_PLAN.md`: current bounded
-  Production checkpoint for Prometheus recording rules, starter alerts,
-  deterministic behavior tests, and operator runbooks under #178.
+- `BPANE-00231_PROMETHEUS_SLI_ALERT_BASELINE_PLAN.md`: merged bounded Production
+  checkpoint for Prometheus recording rules, starter alerts, deterministic
+  behavior tests, and operator runbooks under #178.
+- `BPANE-00233_GRAFANA_OPERATIONS_DASHBOARD_PLAN.md`: current bounded Production
+  checkpoint for the provisioned aggregate Grafana operations dashboard under
+  #178.
 - `operations/PROMETHEUS_ALERT_RUNBOOK.md`: alert-specific aggregate triage,
   mitigation, recovery, and escalation for the #231 starter rules.
 - `SINGLE_NODE_DEPLOYMENT.md`: operator runbook and exact support boundary for

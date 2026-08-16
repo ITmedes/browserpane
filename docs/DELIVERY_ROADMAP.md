@@ -5,9 +5,9 @@ Status: Canonical execution roadmap
 Governance issue: [#173](https://github.com/ITmedes/browserpane/issues/173)
 
 Last implementation audit: 2026-08-16 on
-`feature/BPANE-00231-prometheus-sli-alert-baseline`. The subsystem-metrics
-checkpoint merged through PR #230. #231 is the current focused Prometheus
-recording-rule, starter-alert, and runbook checkpoint under #178.
+`feature/BPANE-00233-grafana-operations-dashboard`. The Prometheus SLI, alert,
+and runbook checkpoint merged through PR #232. #233 is the current focused
+Grafana operations-dashboard checkpoint under #178.
 
 ## How To Use This Document
 
@@ -50,7 +50,7 @@ or capacity decision.
 | Foundation | Trusted build, auth, contracts, storage, and lifecycle baseline. | Complete through #179 | Foundation Gate |
 | Pilot Value | One bounded reference workflow with accepted evidence and runbook. | #174 | Phase 0 Gate |
 | Operator Product | Complete and promote `/admin-new/` as the default operator console. | Default promoted through #163; #124 is the next focused catalog gap | Phase 1 Gate |
-| Production | Harden deployment, security, recovery, supply chain, and telemetry. | #229 subsystem metrics merged; #231 SLI/alert baseline is in progress | Production Baseline |
+| Production | Harden deployment, security, recovery, supply chain, and telemetry. | #231 SLI/alert baseline merged; #233 dashboard baseline is in progress | Production Baseline |
 | Enterprise | Organization controls, policy, residency, HA, and governed integrations. | #176 / #70 / #79 | Phase N Gate |
 | Innovation | Teach Mode and controlled repair after stable execution contracts. | #171 | Phase N capability gate |
 
@@ -84,7 +84,8 @@ or capacity decision.
 | 2 | #225 | Done | #223 evidence baseline | Independent, broker-only single-node Compose profile merged through PR #226. |
 | 3 | #227 | Done | #178 metrics checkpoint, #214, #225 | W3C/OpenTelemetry trace propagation for gateway-to-broker browser runtime operations merged through PR #228. |
 | 4 | #229 | Done | #178 metrics checkpoint, #227 | Shared label-free workflow, event-delivery, recording, playback, and retention OpenMetrics counters merged through PR #230. |
-| 5 | #231 | In Progress | #178 metrics checkpoint, #229 | Validated Prometheus recording rules, conservative starter alerts, and operator runbooks for shipped aggregate metrics. |
+| 5 | #231 | Done | #178 metrics checkpoint, #229 | Validated Prometheus recording rules, conservative starter alerts, and operator runbooks merged through PR #232. |
+| 6 | #233 | In Progress | #178 metrics checkpoint, #231 | Provisioned Grafana operations dashboard for the approved aggregate indicators. |
 
 #151, #184, and #185 established and accelerated the required validation
 baseline. #145 is merged through
@@ -115,9 +116,10 @@ single-node Compose package without absorbing Kubernetes, Fargate, HA, or
 compliance scope. It merged through PR #226. #227 merged through PR #228 as a
 bounded gateway-to-broker browser lifecycle trace checkpoint. #229 merged
 through PR #230 and adds existing workflow/recording operations counters to the
-shared scrape. #231 is the next bounded #178 checkpoint and turns shipped
-metrics into tested Prometheus indicators, starter alerts, and runbooks without
-absorbing dashboards, final SLOs, alert routing, synthetics, or load scope.
+shared scrape. #231 merged through PR #232 and turns shipped metrics into tested
+Prometheus indicators, starter alerts, and runbooks. #233 is the next bounded
+#178 checkpoint and provisions an aggregate operations dashboard without
+absorbing final SLOs, alert routing, synthetics, or load scope.
 #180 remains a governance decision rather than an implicit engineering license
 change.
 
@@ -190,9 +192,10 @@ bounded Pilot:
   implemented Docker-host runtime trust baseline,
 - #178 platform telemetry foundation is implemented; #227 adds the merged
   gateway-to-broker browser lifecycle trace checkpoint, #229 adds merged
-  workflow/recording subsystem counters, and #231 adds the current initial
-  Prometheus SLI/alert/runbook baseline, while broader traces, calibrated SLOs,
-  dashboards, synthetics, alert routing, and capacity evidence remain,
+  workflow/recording subsystem counters, #231 adds the merged initial
+  Prometheus SLI/alert/runbook baseline, and #233 owns the current aggregate
+  operations-dashboard checkpoint, while broader traces, calibrated SLOs,
+  synthetics, alert routing, and capacity evidence remain,
 - #223 evidence-linked threat model and hardening baseline merged through PR
   #224,
 - #72 remains the broader enterprise security-hardening owner after #223,
