@@ -3,8 +3,11 @@ import path from 'node:path';
 import { YamlDocumentParser } from '../validation/yaml-document-parser.mjs';
 import {
   DATASOURCE_UID,
-  GRAFANA_IMAGE,
 } from './grafana-dashboard-definition.mjs';
+import {
+  GRAFANA_IMAGE,
+  PROMETHEUS_IMAGE,
+} from './observability-toolchain.mjs';
 
 export class GrafanaProvisioningContract {
   #directory;
@@ -78,7 +81,9 @@ export class GrafanaProvisioningContract {
     const prometheus = document.services?.prometheus ?? {};
     const grafana = document.services?.grafana ?? {};
     if (grafana.image !== GRAFANA_IMAGE) errors.push('Grafana image is not the approved immutable image');
-    if (!String(prometheus.image ?? '').includes('@sha256:')) errors.push('Prometheus image must be immutable');
+    if (prometheus.image !== PROMETHEUS_IMAGE) {
+      errors.push('Prometheus image is not the approved immutable image');
+    }
     for (const [name, service] of Object.entries({ prometheus, grafana })) {
       if (service.ports) errors.push(`${name} must not publish host ports`);
       if (service.read_only !== true) errors.push(`${name} root filesystem must be read-only`);
