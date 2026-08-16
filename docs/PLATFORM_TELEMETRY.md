@@ -6,15 +6,19 @@ Runtime-tracing checkpoint: [#227](https://github.com/ITmedes/browserpane/issues
 
 Subsystem-metrics checkpoint: [#229](https://github.com/ITmedes/browserpane/issues/229)
 
+SLI/alert baseline checkpoint: [#231](https://github.com/ITmedes/browserpane/issues/231)
+
 BrowserPane exposes a standards-based gateway metrics foundation at
 `GET /metrics` on the gateway HTTP API port. It also has an opt-in
 OpenTelemetry checkpoint for gateway-to-runtime-broker browser lifecycle
 operations. The metrics response uses OpenMetrics; traces use W3C Trace Context
 and OTLP gRPC.
 
-These are bounded prototype checkpoints. They do not yet provide complete
-cross-process tracing, SLO, dashboard, alert, synthetic-check, or load evidence
-required for a Production claim.
+These are bounded prototype checkpoints. BrowserPane includes an initial
+Prometheus recording-rule, alert, and runbook starter pack, but it does not yet
+provide complete cross-process tracing, calibrated contractual SLOs,
+dashboards, synthetic checks, alert routing, or load evidence required for a
+Production claim.
 
 ## Current Metrics
 
@@ -87,6 +91,42 @@ scrape_configs:
 
 The example assumes the collector shares a private network with the gateway.
 Do not publish the scrape target merely to make the example reachable.
+
+## Prometheus SLI And Alert Starter Pack
+
+The observability example also loads:
+
+- `recording-rules.yml`: 15 aggregate indicators for gateway request rate/5xx
+  ratio/p95 latency, runtime assignment utilization, workflow upload and event
+  delivery outcomes, recording finalization, playback, and retention failures,
+- `alert-rules.yml`: 10 conservative starter alerts for scrape absence,
+  sustained gateway errors, sustained runtime saturation, workflow delivery or
+  artifact failures, recording/finalization/playback failures, and retention,
+- `rule-tests.yml`: deterministic healthy, firing, hold, recovery, no-traffic,
+  process-counter-reset, and target-absent behavior, and
+- `docs/operations/PROMETHEUS_ALERT_RUNBOOK.md`: aggregate-only triage,
+  mitigation, recovery, and escalation guidance for every alert.
+
+Validate the exact Prometheus configuration and behavior with the pinned
+upstream toolchain:
+
+```bash
+node --test scripts/observability/prometheus-rules-contract.test.mjs
+node scripts/observability/validate-prometheus-rules.mjs
+```
+
+The Docker-backed validator runs Prometheus/`promtool` 3.12.0 from the immutable
+image recorded in `deploy/examples/observability/README.md`. The static contract
+is part of the fast validation floor; semantic `promtool` validation is a named
+compose-class stage and an explicit required repository GitHub check.
+
+Ratios intentionally remain undefined when there is no traffic, ratio alerts
+use minimum-volume or operation-increase gates, and counter resets are tested as
+normal gateway restart behavior. Proposed thresholds and hold times must be
+calibrated against a named deployment and workload before paging, contractual
+SLO, or external availability use. The example does not include Alertmanager
+routing, notification receivers, dashboards, durable storage, or a public
+listener.
 
 ## Runtime Tracing Checkpoint
 
@@ -185,6 +225,7 @@ collector outage and recovery, and absence of sensitive fixture markers.
 - Workflow queue/running gauges, operation latency, and storage, transport,
   dependency, worker-process, and host metrics beyond the current bounded
   workflow/recording counters.
-- Initial SLOs, recording rules, dashboards, alerts, synthetic checks, and
-  response runbooks.
+- Calibrated SLO/error-budget definitions, dashboards, alert routing,
+  synthetic checks, and workload-specific threshold evidence beyond the #231
+  starter rules and runbooks.
 - Reproducible load profiles and documented capacity envelopes.

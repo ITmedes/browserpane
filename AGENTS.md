@@ -163,6 +163,12 @@ Current product shape:
     browser content, baggage, or raw errors.
 - `code/shared/bpane-protocol`
   - Shared wire protocol, frame envelope, channel IDs, and message types.
+- `deploy/examples/observability`
+  - Private Prometheus scrape example plus bounded gateway/runtime/workflow/
+    recording SLI rules and conservative starter alerts. Rules are validated
+    with digest-pinned upstream `promtool`; alert metadata links to
+    `docs/operations/PROMETHEUS_ALERT_RUNBOOK.md`. Thresholds are proposals,
+    not contractual SLOs.
 - `code/web/bpane-client/js`
   - Real browser client implementation.
   - `bpane.ts`: public API and session orchestration.
@@ -282,6 +288,8 @@ Current product shape:
 - Runtime-tracing fixture contract: `node scripts/validate-runtime-tracing-fixture.mjs`
 - Runtime-tracing unit contracts: `node --test scripts/runtime-tracing/*.test.mjs`
 - Runtime-tracing live smoke: `node scripts/smoke-runtime-tracing.mjs` after starting the single-node fixture
+- Prometheus rule policy tests: `node --test scripts/observability/prometheus-rules-contract.test.mjs`
+- Prometheus config/rule/unit validation: `node scripts/observability/validate-prometheus-rules.mjs`
 - Host tests: `cargo test -p bpane-host`
 - Protocol tests: `cargo test -p bpane-protocol`
 

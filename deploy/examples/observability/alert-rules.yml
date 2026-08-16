@@ -1,0 +1,112 @@
+groups:
+  - name: browserpane-starter-alerts
+    interval: 30s
+    rules:
+      - alert: BrowserPaneGatewayMetricsUnavailable
+        expr: |
+          (up{job="browserpane-gateway"} == 0)
+          or absent(up{job="browserpane-gateway"})
+        for: 2m
+        labels:
+          severity: critical
+          subsystem: gateway
+        annotations:
+          summary: BrowserPane gateway metrics are unavailable
+          description: The configured Prometheus target has not produced a successful scrape for two minutes.
+          runbook_url: https://github.com/ITmedes/browserpane/blob/main/docs/operations/PROMETHEUS_ALERT_RUNBOOK.md#browserpanegatewaymetricsunavailable
+      - alert: BrowserPaneGatewayHighServerErrorRatio
+        expr: |
+          browserpane:gateway_http_5xx:ratio_rate5m > 0.05
+          and browserpane:gateway_http_requests:rate5m >= 0.1
+        for: 10m
+        labels:
+          severity: warning
+          subsystem: gateway
+        annotations:
+          summary: BrowserPane gateway server-error ratio is elevated
+          description: More than five percent of gateway requests are 5xx responses under sustained request volume.
+          runbook_url: https://github.com/ITmedes/browserpane/blob/main/docs/operations/PROMETHEUS_ALERT_RUNBOOK.md#browserpanegatewayhighservererrorratio
+      - alert: BrowserPaneRuntimeCapacitySaturated
+        expr: |
+          browserpane:runtime_capacity_utilization:ratio >= 1
+          and browserpane_gateway_runtime_assignment_limit > 0
+        for: 10m
+        labels:
+          severity: warning
+          subsystem: runtime
+        annotations:
+          summary: BrowserPane runtime assignment capacity is saturated
+          description: Active and starting runtime assignments have met the configured assignment limit for ten minutes.
+          runbook_url: https://github.com/ITmedes/browserpane/blob/main/docs/operations/PROMETHEUS_ALERT_RUNBOOK.md#browserpaneruntimecapacitysaturated
+      - alert: BrowserPaneWorkflowProducedFileUploadFailure
+        expr: browserpane:workflow_produced_file_upload_failures:increase15m > 0
+        for: 2m
+        labels:
+          severity: warning
+          subsystem: workflow
+        annotations:
+          summary: BrowserPane workflow produced-file uploads are failing
+          description: At least one produced-file upload failed during the rolling fifteen-minute window.
+          runbook_url: https://github.com/ITmedes/browserpane/blob/main/docs/operations/PROMETHEUS_ALERT_RUNBOOK.md#browserpaneworkflowproducedfileuploadfailure
+      - alert: BrowserPaneWorkflowEventDeliveryRetrying
+        expr: browserpane:workflow_event_delivery_retries:increase15m > 0
+        for: 5m
+        labels:
+          severity: warning
+          subsystem: workflow
+        annotations:
+          summary: BrowserPane workflow event delivery is retrying
+          description: Callback delivery scheduled at least one retry during the rolling fifteen-minute window.
+          runbook_url: https://github.com/ITmedes/browserpane/blob/main/docs/operations/PROMETHEUS_ALERT_RUNBOOK.md#browserpaneworkfloweventdeliveryretrying
+      - alert: BrowserPaneWorkflowEventDeliveryFailure
+        expr: browserpane:workflow_event_delivery_failures:increase15m > 0
+        for: 2m
+        labels:
+          severity: critical
+          subsystem: workflow
+        annotations:
+          summary: BrowserPane workflow event delivery reached terminal failure
+          description: At least one callback delivery exhausted its bounded retry policy during the rolling fifteen-minute window.
+          runbook_url: https://github.com/ITmedes/browserpane/blob/main/docs/operations/PROMETHEUS_ALERT_RUNBOOK.md#browserpaneworkfloweventdeliveryfailure
+      - alert: BrowserPaneRecordingArtifactFinalizeFailure
+        expr: browserpane:recording_artifact_finalize_failures:increase15m > 0
+        for: 2m
+        labels:
+          severity: critical
+          subsystem: recording
+        annotations:
+          summary: BrowserPane recording artifact finalization is failing
+          description: At least one recording artifact failed finalization during the rolling fifteen-minute window.
+          runbook_url: https://github.com/ITmedes/browserpane/blob/main/docs/operations/PROMETHEUS_ALERT_RUNBOOK.md#browserpanerecordingartifactfinalizefailure
+      - alert: BrowserPaneRecordingWorkerFailure
+        expr: browserpane:recording_failures:increase15m > 0
+        for: 2m
+        labels:
+          severity: warning
+          subsystem: recording
+        annotations:
+          summary: BrowserPane recording segments are failing
+          description: At least one recording segment entered a failed state during the rolling fifteen-minute window.
+          runbook_url: https://github.com/ITmedes/browserpane/blob/main/docs/operations/PROMETHEUS_ALERT_RUNBOOK.md#browserpanerecordingworkerfailure
+      - alert: BrowserPaneRecordingPlaybackExportFailure
+        expr: browserpane:recording_playback_export_failures:increase15m > 0
+        for: 2m
+        labels:
+          severity: warning
+          subsystem: recording
+        annotations:
+          summary: BrowserPane recording playback exports are failing
+          description: At least one playback export failed during the rolling fifteen-minute window.
+          runbook_url: https://github.com/ITmedes/browserpane/blob/main/docs/operations/PROMETHEUS_ALERT_RUNBOOK.md#browserpanerecordingplaybackexportfailure
+      - alert: BrowserPaneRetentionFailure
+        expr: |
+          browserpane:workflow_retention_failures:increase1h > 0
+          or browserpane:recording_retention_failures:increase1h > 0
+        for: 5m
+        labels:
+          severity: warning
+          subsystem: retention
+        annotations:
+          summary: BrowserPane retention cleanup is failing
+          description: Workflow or recording retention reported a cleanup failure during the rolling one-hour window.
+          runbook_url: https://github.com/ITmedes/browserpane/blob/main/docs/operations/PROMETHEUS_ALERT_RUNBOOK.md#browserpaneretentionfailure

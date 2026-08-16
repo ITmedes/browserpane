@@ -61,7 +61,7 @@ The system has seven primary runtime roles plus persistent control-plane stores:
 | Screen capture | X11 SHM + XDamage + XComposite | Incremental damage, shared-memory pixel access, no full-frame polling |
 | Video encode | FFmpeg x11grab -> libx264 | H.264 Baseline for WebCodecs compat; process isolation from host |
 | Gateway | Rust + wtransport | QUIC/WebTransport server with reliable streams + datagrams |
-| Metrics | prometheus-client + OpenMetrics | Explicit gateway-owned registry with bounded aggregate labels |
+| Metrics and alerts | prometheus-client + OpenMetrics + Prometheus rules | Explicit gateway-owned bounded registry plus a validated backend-neutral recording/alert starter pack |
 | Tracing | OpenTelemetry + W3C Trace Context + OTLP gRPC | Opt-in gateway-to-runtime-broker lifecycle correlation through a vendor-neutral collector boundary |
 | Browser client | TypeScript + fzstd | WebGL 2 compositing (Canvas 2D fallback), WebCodecs H.264 decode, WebTransport API |
 | Wire protocol | Custom binary, no serde | Manual `[u8]` encode/decode for minimal overhead and zero alloc on hot path |
@@ -323,6 +323,11 @@ service.
   the same observability instances that serve authenticated operations
   snapshots; resource ids, raw paths, URLs, credentials, browser content, and
   egress data are excluded
+- **Prometheus operations example** (`deploy/examples/observability`): private
+  gateway scrape configuration, bounded SLI recording rules, conservative
+  starter alerts, deterministic upstream `promtool` tests, and a checked-in
+  operator runbook. Thresholds remain proposals until calibrated against a
+  named deployment and workload; alert routing and dashboards are not included.
 - **Runtime trace path** (`bpane-telemetry` plus `bpane-runtime-client`):
   optional W3C `traceparent`/`tracestate` continuation from bounded gateway HTTP
   spans through authenticated runtime-broker calls into fixed broker

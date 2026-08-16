@@ -1,8 +1,8 @@
 # Open GitHub Issues Context
 
 Created: 2026-07-10
-Revalidated: 2026-08-14 after #227 merged through PR #228 and focused
-workflow/recording metrics issue #229 entered implementation
+Revalidated: 2026-08-16 after #229 merged through PR #230 and focused
+Prometheus SLI/alert/runbook issue #231 entered implementation
 
 This document maps the current `docs/` workspace to the live open GitHub
 issues for `ITmedes/browserpane`. It is the bridge between the consolidated
@@ -10,8 +10,8 @@ local planning docs and the public issue tracker.
 
 Source check:
 
-- fetched through the GitHub API on 2026-08-14,
-- open issue range: `#6` through `#229`,
+- fetched through the GitHub API on 2026-08-16,
+- open issue range: `#6` through `#231`,
 - focused docs-derived implementation issues created on 2026-07-10: `#145`
   through `#170`,
 - focused Phase N Teach Mode issue created on 2026-07-31: `#171`,
@@ -29,7 +29,9 @@ Source check:
 - focused single-node Compose deployment slice created on 2026-08-14: `#225`,
 - focused OpenTelemetry runtime-tracing slice `#227` merged and closed through
   PR `#228` on 2026-08-14,
-- focused workflow/recording metrics slice created on 2026-08-14: `#229`,
+- focused workflow/recording metrics slice `#229` merged and closed through PR
+  `#230` on 2026-08-16,
+- focused Prometheus SLI/alert/runbook slice created on 2026-08-16: `#231`,
 - all executable open issues carry a priority, lane, state, and target-gate
   milestone; umbrella tracker `#6` intentionally carries only priority/state,
 - `#151` and `#173` are implemented and closed; `#184` is the implemented
@@ -55,7 +57,8 @@ Source check:
 | Completed threat-model baseline | closed `#223` | Durable evidence baseline merged through PR #224; #72 keeps residual security ownership. |
 | Completed single-node deployment | closed `#225` | Independent single-node package merged through PR #226; #66 keeps broader deployment ownership. |
 | Completed runtime tracing | closed `#227` | Gateway-to-broker browser lifecycle tracing merged through PR #228; #178 keeps broader telemetry ownership. |
-| Focused subsystem metrics | `#229` | Current bounded child of #178 for workflow/recording operations counters and OpenMetrics qualification. |
+| Completed subsystem metrics | closed `#229` | Workflow/recording operations counters merged through PR #230; #178 keeps broader telemetry ownership. |
+| Focused SLI/alert baseline | `#231` | Current bounded child of #178 for Prometheus recording rules, starter alerts, deterministic rule tests, and operator runbooks. |
 | Product/platform backlog | `#20`, `#21`, `#28`, `#30`, `#31`, `#47`, `#66`, `#69`, `#70`, `#71`, `#72`, `#73`, `#74`, `#75`, `#76`, `#79`, `#80` | Keep as roadmap and enterprise/product context. Prefer the matching focused issue from `#145`-`#170` when an implementation slice is covered there. |
 | Closed admin redesign lineage | `#142` | Historical design record for admin-new. It is not open; route remaining admin implementation slices through the focused admin issues in `#153`-`#163`. |
 
@@ -89,7 +92,7 @@ Source check:
 | `#175` Remote protocol specification and conformance | `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md`, ADR 0003 | Production lane | Canonical owner for wire spec, version negotiation, golden vectors, fuzzing, and gateway/client compatibility. |
 | `#176` Organization/project-role/service-principal grant enforcement | `IDENTITY_ACCESS_REQUIREMENTS.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md` | Enterprise lane | Canonical owner for enforceable authorization and migration from owner-scoped deployments. |
 | `#177` Provisioning/deprovisioning and break-glass lifecycle | `IDENTITY_ACCESS_REQUIREMENTS.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md` | Enterprise lane | Canonical owner for remaining identity lifecycle scope from closed #52. |
-| `#178` Platform telemetry, SLOs, and capacity evidence | `BPANE-00178_PLATFORM_TELEMETRY_PLAN.md`, `PLATFORM_TELEMETRY.md`, `DELIVERY_ROADMAP.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md` | Production lane | The gateway OpenMetrics/runtime-capacity checkpoint merged through PR #222 and browser lifecycle tracing through PR #228; #229 is the current workflow/recording metrics child. This parent remains canonical for broader traces/metrics, SLOs, alerts, runbooks, and tested envelopes. |
+| `#178` Platform telemetry, SLOs, and capacity evidence | `BPANE-00178_PLATFORM_TELEMETRY_PLAN.md`, `PLATFORM_TELEMETRY.md`, `DELIVERY_ROADMAP.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md` | Production lane | Gateway metrics merged through PR #222, browser lifecycle tracing through PR #228, and workflow/recording counters through PR #230; #231 is the current Prometheus SLI/alert/runbook child. This parent remains canonical for broader traces/metrics, calibrated SLOs, dashboards, alert routing, synthetics, and tested envelopes. |
 | `#179` Control API conformance and compatibility | `ADMIN_NEW_API_COVERAGE.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md` | Foundation/Production lane | Canonical owner for OpenAPI lint, route/schema conformance, examples, and breaking-change policy. |
 | `#180` Open-source license/contribution/IP governance | `PRODUCT_PHASES_AND_RELEASE_GATES.md`, `RISK_REGISTER.md`, ADR 0004 | Production governance | Canonical owner for resolving license metadata and contribution/security/IP policy. |
 | `#184` Reduce representative compose validation wall time | `BPANE-00184_COMPOSE_VALIDATION_PERFORMANCE_PLAN.md`, `VALIDATION_MATRIX.md` | Foundation maintenance | Canonical owner for hosted compose sharding and timing evidence without reducing the #151 scenario baseline. |
@@ -97,7 +100,8 @@ Source check:
 | `#214` Policy-validating runtime launch broker | `BPANE-00214_RUNTIME_LAUNCH_BROKER_PLAN.md`, `BPANE-00167_DOCKER_RUNTIME_BOUNDARY_PLAN.md`, `DELIVERY_ROADMAP.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md`, `RUNTIME_OPERATOR_REQUIREMENTS.md`, `VALIDATION_MATRIX.md` | Production lane, completion of item 23 | Canonical owner for authenticated typed launch/lifecycle/storage operations, request-body policy enforcement, and the gateway-isolated production-like Docker-host topology. |
 | `#225` Hardened single-node Compose deployment | `BPANE-00225_SINGLE_NODE_COMPOSE_BASELINE_PLAN.md`, `SINGLE_NODE_DEPLOYMENT.md`, `THREAT_MODEL.md`, `PRODUCTION_SECURITY_BASELINE.md`, `RUNTIME_OPERATOR_REQUIREMENTS.md`, `DELIVERY_ROADMAP.md`, `RISK_REGISTER.md`, `VALIDATION_MATRIX.md` | Closed Production child of #66 | Independent broker-only manifest, preflight, live workflow/recording/restart qualification, and bounded runbook merged through PR #226. |
 | `#227` OpenTelemetry broker runtime tracing | `BPANE-00227_OTEL_RUNTIME_TRACING_PLAN.md`, `PLATFORM_TELEMETRY.md`, `DELIVERY_ROADMAP.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md`, `VALIDATION_MATRIX.md` | Closed Production child of #178 | W3C propagation and bounded browser runtime lifecycle spans across gateway and broker merged through PR #228 with private collector parentage, redaction, malformed-context, and outage/recovery smoke evidence. |
-| `#229` Workflow and recording OpenMetrics | `BPANE-00229_WORKFLOW_RECORDING_METRICS_PLAN.md`, `PLATFORM_TELEMETRY.md`, `DELIVERY_ROADMAP.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md`, `VALIDATION_MATRIX.md` | Production lane, focused child of #178 | Current bounded slice: expose the existing workflow/recording operations counters through the shared registry without dynamic labels or duplicate accounting. |
+| `#229` Workflow and recording OpenMetrics | `BPANE-00229_WORKFLOW_RECORDING_METRICS_PLAN.md`, `PLATFORM_TELEMETRY.md`, `DELIVERY_ROADMAP.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md`, `VALIDATION_MATRIX.md` | Closed Production child of #178 | Shared label-free workflow/recording operation counters merged through PR #230. |
+| `#231` Prometheus SLI and alert baseline | `BPANE-00231_PROMETHEUS_SLI_ALERT_BASELINE_PLAN.md`, `PLATFORM_TELEMETRY.md`, `DELIVERY_ROADMAP.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md`, `VALIDATION_MATRIX.md` | Production lane, focused child of #178 | Current bounded slice: validated recording rules, conservative starter alerts, deterministic behavior tests, and operator runbooks for shipped metrics. |
 
 ## Focused Work-Order Issue Matrix
 
@@ -212,7 +216,8 @@ The cross-reference pass also updated the issue bodies in both directions:
 | `#223` | Implemented and closed Production checkpoint. | Merged through PR #224 on 2026-08-14. | Durable threat model, responsibility baseline, composed static contract, negative-evidence audit, and synchronized security docs. |
 | `#225` | Implemented and closed Production deployment checkpoint. | Independent broker-only single-node package and local qualification merged through PR #226 on 2026-08-14. | Target acceptance, Kubernetes/Fargate, HA, and broader production controls remain with #66 and focused owners. |
 | `#227` | Closed Production telemetry checkpoint. | Created from #178 after #225 merged and closed through PR #228 on 2026-08-14. | Owns the merged W3C/OpenTelemetry gateway-to-broker browser runtime lifecycle trace checkpoint. |
-| `#229` | Current focused Production telemetry checkpoint. | Created from #178 after #227 merged; implementation started on 2026-08-14. | Owns shared label-free workflow/recording operations counters and their OpenMetrics qualification. |
+| `#229` | Closed Production telemetry checkpoint. | Created from #178 after #227 merged and closed through PR #230 on 2026-08-16. | Owns shared label-free workflow/recording operations counters and their OpenMetrics qualification. |
+| `#231` | Current focused Production telemetry checkpoint. | Created from #178 after #229 merged; implementation started on 2026-08-16. | Owns Prometheus recording rules, starter alerts, rule tests, and operator runbooks without final SLO/dashboard scope. |
 
 ## Docs-To-Issue Context
 
@@ -237,6 +242,7 @@ shown as `closed #142`.
 | `BPANE-00225_SINGLE_NODE_COMPOSE_BASELINE_PLAN.md` | `#225`, focused single-node Compose package under parent `#66` |
 | `BPANE-00227_OTEL_RUNTIME_TRACING_PLAN.md` | `#227`, focused gateway-to-broker tracing checkpoint under parent `#178` |
 | `BPANE-00229_WORKFLOW_RECORDING_METRICS_PLAN.md` | `#229`, focused workflow/recording metrics checkpoint under parent `#178` |
+| `BPANE-00231_PROMETHEUS_SLI_ALERT_BASELINE_PLAN.md` | `#231`, focused Prometheus SLI/alert/runbook checkpoint under parent `#178` |
 | `SINGLE_NODE_DEPLOYMENT.md` | `#225`, bounded operator runbook and support boundary under parent `#66` |
 | `BPANE-00171_WORKFLOW_TEACH_MODE_PLAN.md` | `#171`, with dependencies on `#20`, `#21`, `#47`, `#71`, and `#172` |
 | `BPANE-00172_BPM_WORKFLOW_ENDPOINT_INTEGRATION_PLAN.md` | `#172`, with dependencies on `#28`, `#47`, `#66`, `#69`-`#72`, `#74`, `#76`, `#79`, `#80`, `#147`, `#150`, `#161`, `#162`, `#164`, `#174`, `#176`, `#179`, and `#171` |
@@ -285,7 +291,7 @@ issue and capture the exact slice boundary in a checked-in `docs/*_PLAN.md`:
 | Items 10-19: admin-new parity and promotion work | `#154`-`#163`, with session templates still tracked by `#124` | Use the matching focused issue and keep old admin regression scope explicit. |
 | Items 20-26: scalability, runtime hygiene, docs, performance, and refactors | `#164`-`#170` | Use the matching focused issue and require validation evidence before broad refactors. |
 | Pilot Value | `#174`, conditional `#172`, `#149`, `#71`, `#66`, `#154` | Use the Phase 0 plan and select only dependencies required by the agreed process. |
-| Production/Enterprise and Innovation | `#229` in progress; broad issues plus `#175`-`#180`, `#172`, `#171` qualified | Complete the focused #229 subsystem-metrics checkpoint; then reassess #178/#180/#66 and preserve the default #172-before-#171 Phase N order. |
+| Production/Enterprise and Innovation | `#231` in progress; broad issues plus `#175`-`#180`, `#172`, `#171` qualified | Complete the focused #231 SLI/alert/runbook checkpoint; then reassess #178/#180/#66 and preserve the default #172-before-#171 Phase N order. |
 
 ## Issue Hygiene Notes
 
