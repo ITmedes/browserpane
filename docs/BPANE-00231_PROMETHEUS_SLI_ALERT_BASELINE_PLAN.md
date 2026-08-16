@@ -4,11 +4,11 @@
 
 - Issue: [#231](https://github.com/ITmedes/browserpane/issues/231)
 - Parent: [#178](https://github.com/ITmedes/browserpane/issues/178)
-- State: In Progress
+- State: Qualified; ready for review
 - Lane: Production
 - Target gate: Production Baseline
 - Depends on: #150, #178 metrics foundation, #227, #229
-- Last verified commit/date: `main` at `68482734`, 2026-08-16
+- Last verified commit/date: `4c0b3b30`, 2026-08-16
 
 ## Business Outcome
 
@@ -29,17 +29,26 @@ from gateway 5xx pressure, runtime saturation, artifact upload failure, and
 collector outage without exposing workflow ids, target URLs, credentials,
 payloads, or browser content.
 
-## Current Evidence
+## Implemented Evidence
 
 - `GET /metrics` exports bounded HTTP RED histograms/counters, runtime-capacity
   gauges, and 25 label-free workflow/recording operation counters.
 - Workflow/recording authenticated snapshots and OpenMetrics use the same
   counter instances.
 - The single-node fixture includes a private OpenTelemetry collector for traces.
-- `deploy/examples/observability/prometheus.yml` contains only a gateway scrape
-  example; it does not load rules or provide alert/runbook behavior.
-- No checked-in recording rules, alert tests, final SLOs, dashboards, synthetic
-  checks, or alert-routing configuration currently exist.
+- `deploy/examples/observability/prometheus.yml` loads 15 recording rules and 10
+  starter alerts from the checked-in backend-neutral rule pack.
+- The official digest-pinned Prometheus 3.12.0 `promtool` validates the config,
+  rule syntax, and deterministic healthy, failure, hold, recovery, no-traffic,
+  counter-reset, and scrape-absence behavior.
+- Static contracts enforce the expected rule inventory, bounded labels,
+  required alert metadata, valid runbook anchors, and forbidden sensitive
+  fields.
+- The operator runbook covers safe triage, dependency checks, mitigation,
+  escalation, and recovery verification for every starter alert.
+- Final calibrated SLOs, dashboards, synthetic checks, capacity envelopes, and
+  Alertmanager routing remain explicitly outside this slice and open under
+  parent #178.
 
 ## Scope
 
@@ -206,7 +215,8 @@ Commit: `docs(observability): qualify the Prometheus operations baseline`.
 
 1. Start the single-node fixture and wait for gateway readiness.
 2. Start the observability example on the private fixture network.
-3. Open Prometheus locally through an explicitly loopback-bound test port.
+3. Query Prometheus through an operator-only path, such as `docker exec`, or an
+   explicitly loopback-bound test port; do not expose it publicly.
 4. Confirm all BrowserPane recording rules are healthy and initial ratios with
    no traffic do not trigger failure alerts.
 5. Run the qualification workflow and recording/playback smoke.
@@ -231,6 +241,37 @@ Commit: `docs(observability): qualify the Prometheus operations baseline`.
   does not claim a final SLO or unsupported production readiness.
 - Parent #178 remains open for broader signals/traces, dashboards, synthetics,
   final calibrated SLOs, and reproducible capacity envelopes.
+
+## Qualification Evidence
+
+Verified on 2026-08-16:
+
+- focused observability contracts: 3 tests passed,
+- pinned `promtool`: config valid, 15 recording rules, 10 alerts, and all rule
+  unit tests passed,
+- targeted validation: validation tooling (104 tests), repository documents
+  (84 Markdown, 16 YAML, 3 workflows), and the Prometheus rule stage passed,
+- canonical fast validation: all 44 stages passed,
+- Rust coverage ratchet: 60.92% line coverage and 64.88% region coverage,
+- `admin-new`: 196 test files and 620 tests passed; 92.28% statement, 90.43%
+  line, 93.86% function, and 76.74% branch coverage,
+- focused Compose gateway health/readiness test: 1 passed, including the
+  Postgres outage and recovery path,
+- single-node qualification: two isolated workflows, retained produced-file
+  evidence across a control-plane restart, gateway Docker denial, secret
+  protection, a 291,545-byte recording, and a 297,423-byte playback export,
+- live Prometheus smoke on the private fixture network: both rule groups were
+  healthy, no healthy-state alerts fired, produced-file failures evaluated to
+  zero, recording finalization success evaluated to one, and the gateway
+  scrape-absence alert progressed through pending to firing before resolving
+  after gateway recovery,
+- runtime tracing smoke: caller context propagation, collector outage
+  tolerance, recovery, malformed-context rejection, and redaction checks all
+  passed.
+
+The live Prometheus container was attached only to the private fixture network,
+had no host port, and was removed after qualification. The rebuilt single-node
+fixture remains available locally for manual inspection.
 
 ## Post-Implementation Smoke Sequence
 
