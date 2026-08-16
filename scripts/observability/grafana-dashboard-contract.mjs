@@ -69,6 +69,7 @@ export class GrafanaDashboardContract {
       errors.push('Grafana panel ids must be unique and match the stable inventory');
     }
     this.#checkGrid(errors, panels);
+    this.#checkNoActivityMappings(errors, panels);
 
     for (const expected of EXPECTED_PANELS) {
       const panel = panels.find((candidate) => candidate.id === expected.id);
@@ -117,6 +118,12 @@ export class GrafanaDashboardContract {
         || grid.x + grid.w > 24) {
         errors.push(`Grafana panel ${panel.id} has invalid grid geometry`);
       }
+      if (panel.type === 'text' && grid.h < 4) {
+        errors.push(`Grafana panel ${panel.id} must leave room for interpretation guidance`);
+      }
+      if (panel.type !== 'text' && grid.w < 6) {
+        errors.push(`Grafana panel ${panel.id} is too narrow for operator labels`);
+      }
     }
     for (let left = 0; left < panels.length; left += 1) {
       for (let right = left + 1; right < panels.length; right += 1) {
@@ -124,6 +131,18 @@ export class GrafanaDashboardContract {
           errors.push(`Grafana panels ${panels[left].id} and ${panels[right].id} overlap`);
         }
       }
+    }
+  }
+
+  #checkNoActivityMappings(errors, panels) {
+    for (const id of [10, 12, 15]) {
+      const mappings = panels.find((panel) => panel.id === id)
+        ?.fieldConfig?.defaults?.mappings ?? [];
+      const neutral = mappings.some((mapping) => mapping.type === 'special'
+        && mapping.options?.match === 'null'
+        && mapping.options?.result?.text === 'No activity'
+        && mapping.options?.result?.color === 'dark-gray');
+      if (!neutral) errors.push(`Grafana panel ${id} must map no activity to a neutral color`);
     }
   }
 

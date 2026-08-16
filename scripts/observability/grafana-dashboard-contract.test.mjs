@@ -60,6 +60,24 @@ test('contract rejects credentials, public ports, and mutable provisioning', (co
   assert(errors.some((error) => error.includes('must not publish host ports')));
 });
 
+test('contract rejects misleading no-activity colors and cramped panels', (context) => {
+  const fixture = copyFixture(context);
+  const dashboardPath = path.join(
+    fixture,
+    'deploy/examples/observability/grafana/dashboards/browserpane-operations.json',
+  );
+  const dashboard = JSON.parse(fs.readFileSync(dashboardPath, 'utf8'));
+  dashboard.panels[0].gridPos.h = 3;
+  dashboard.panels[11].gridPos.w = 4;
+  dashboard.panels[11].fieldConfig.defaults.mappings = [];
+  fs.writeFileSync(dashboardPath, `${JSON.stringify(dashboard, null, 2)}\n`);
+
+  const errors = new GrafanaDashboardContract(fixture).check();
+  assert(errors.some((error) => error.includes('interpretation guidance')));
+  assert(errors.some((error) => error.includes('too narrow for operator labels')));
+  assert(errors.some((error) => error.includes('map no activity to a neutral color')));
+});
+
 function copyFixture(context) {
   const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'bpane-grafana-dashboard-'));
   context.after(() => fs.rmSync(fixture, { recursive: true, force: true }));
