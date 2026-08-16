@@ -180,10 +180,11 @@ Completed on 2026-08-14:
 
 This plan does not close the parent issue. Subsequent bounded checkpoints remain:
 
-1. OpenTelemetry trace propagation and correlation across gateway, runtime
-   broker, workers, artifact stores, and callback delivery.
-2. Recording, workflow, queue, storage, transport, and dependency metric
-   expansion using the same facade.
+1. Extend the merged #227 gateway-to-runtime-broker trace checkpoint across
+   workers, artifact stores, and callback delivery where justified.
+2. Complete the #229 workflow/recording metrics checkpoint, then add queue,
+   storage, transport, dependency, worker-process, and host signals through
+   further bounded slices.
 3. Initial SLO definitions, recording rules, dashboards, alerts, synthetic
    checks, and operator runbooks.
 4. Reproducible load profiles and documented capacity envelopes tied to release

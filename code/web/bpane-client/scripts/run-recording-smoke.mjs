@@ -8,6 +8,7 @@ import { testEmbedPageUrl } from './workflow-smoke-lib.mjs';
 
 const DEFAULTS = {
   pageUrl: 'http://localhost:8080',
+  metricsUrl: process.env.BPANE_METRICS_URL ?? 'http://localhost:8932/metrics',
   certSpki: process.env.BPANE_BENCHMARK_CERT_SPKI ?? '',
   connectTimeoutMs: 30000,
   recordDurationMs: 4000,
@@ -33,6 +34,9 @@ function parseArgs(argv) {
     const next = argv[i + 1];
     if (arg === '--page-url' && next) {
       options.pageUrl = next;
+      i++;
+    } else if (arg === '--metrics-url' && next) {
+      options.metricsUrl = next;
       i++;
     } else if (arg === '--cert-spki' && next) {
       options.certSpki = next;
@@ -67,6 +71,7 @@ Usage: node scripts/run-recording-smoke.mjs [options]
 
 Options:
   --page-url <url>            Local test page URL (default: ${DEFAULTS.pageUrl})
+  --metrics-url <url>         Gateway OpenMetrics URL (default: ${DEFAULTS.metricsUrl})
   --cert-spki <base64>        SPKI pin for the local gateway cert
   --connect-timeout-ms <ms>   Connect timeout (default: ${DEFAULTS.connectTimeoutMs})
   --record-duration-ms <ms>   Capture duration after start (default: ${DEFAULTS.recordDurationMs})
@@ -294,6 +299,38 @@ async function fetchJson(url, init) {
     throw new Error(`HTTP ${response.status}${detail ? ` ${detail}` : ''}`);
   }
   return await response.json();
+}
+
+async function fetchOpenMetrics(options) {
+  const response = await fetch(options.metricsUrl);
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    throw new Error(`Metrics HTTP ${response.status}${detail ? ` ${detail}` : ''}`);
+  }
+  return await response.text();
+}
+
+function openMetricsInteger(body, metricName) {
+  const prefix = `${metricName} `;
+  const sample = body
+    .split('\n')
+    .find((line) => line.startsWith(prefix))
+    ?.slice(prefix.length);
+  if (!sample || !/^\d+$/.test(sample)) {
+    throw new Error(`OpenMetrics response is missing integer counter ${metricName}`);
+  }
+  return Number(sample);
+}
+
+function assertCounterAdvanced(before, after, metricName) {
+  const beforeValue = openMetricsInteger(before, metricName);
+  const afterValue = openMetricsInteger(after, metricName);
+  if (afterValue <= beforeValue) {
+    throw new Error(
+      `Expected ${metricName} to advance, got ${beforeValue} -> ${afterValue}`,
+    );
+  }
+  return { before: beforeValue, after: afterValue, delta: afterValue - beforeValue };
 }
 
 async function fetchSessionStatus(accessToken, options, sessionId) {
@@ -533,6 +570,7 @@ async function main() {
     if (!accessToken) {
       throw new Error('Failed to acquire an access token from the owner page.');
     }
+    const metricsBefore = await fetchOpenMetrics(options);
 
     recorderPage = await context.newPage();
     await configurePage(recorderPage, options);
@@ -754,6 +792,29 @@ async function main() {
 
     const sessionResource = await fetchSessionResource(accessToken, options, sessionId);
     const statusAfter = await fetchSessionStatus(accessToken, options, sessionId);
+    const metricsAfter = await fetchOpenMetrics(options);
+    const recordingMetrics = Object.fromEntries(
+      [
+        'browserpane_gateway_recording_artifact_finalize_requests_total',
+        'browserpane_gateway_recording_artifact_finalize_successes_total',
+        'browserpane_gateway_recording_playback_manifest_requests_total',
+        'browserpane_gateway_recording_playback_export_requests_total',
+        'browserpane_gateway_recording_playback_export_successes_total',
+        'browserpane_gateway_recording_playback_export_bytes_total',
+      ].map((metricName) => [
+        metricName,
+        assertCounterAdvanced(metricsBefore, metricsAfter, metricName),
+      ]),
+    );
+    for (const forbidden of [
+      accessToken,
+      sessionId,
+      ...recordingSegments.map((segment) => segment.id),
+    ]) {
+      if (forbidden && metricsAfter.includes(forbidden)) {
+        throw new Error('Recording OpenMetrics response exposed a forbidden resource value.');
+      }
+    }
     const summary = {
       scenario: 'recording-compose-smoke',
       pageUrl: options.pageUrl,
@@ -792,6 +853,7 @@ async function main() {
         },
       },
       recording_operations: recordingOperations,
+      recording_metrics: recordingMetrics,
       status_before_recording: statusBefore,
       status_after_recording: statusAfter,
       recorder_client: recorderState,
