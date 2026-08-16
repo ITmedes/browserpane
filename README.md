@@ -145,11 +145,13 @@ Current support and scope:
   compatibility policy remain planned under
   [issue #175](https://github.com/ITmedes/browserpane/issues/175).
 - Platform telemetry: the gateway exposes aggregate OpenMetrics request and
-  runtime-capacity signals at `/metrics`. An opt-in OpenTelemetry checkpoint
-  also propagates W3C Trace Context across gateway-to-runtime-broker browser
-  lifecycle operations and exports bounded spans through OTLP gRPC. Broader
-  worker/store/event tracing, complete SLOs, alerts, and capacity envelopes
-  remain planned under
+  runtime-capacity signals at `/metrics`, together with label-free workflow,
+  event-delivery, recording, playback, and retention counters. An opt-in
+  OpenTelemetry checkpoint also propagates W3C Trace Context across
+  gateway-to-runtime-broker browser lifecycle operations and exports bounded
+  spans through OTLP gRPC. Broader worker/store tracing, queue/state and
+  dependency metrics, complete SLOs, alerts, and capacity envelopes remain
+  planned under
   [issue #178](https://github.com/ITmedes/browserpane/issues/178); configuration
   and the supported evidence boundary are documented in
   [Platform Telemetry](docs/PLATFORM_TELEMETRY.md).
@@ -320,10 +322,13 @@ work up to a bounded timeout. The local defaults can be overridden with
 `BPANE_GATEWAY_SHUTDOWN_READINESS_GRACE_SECS`, and
 `BPANE_GATEWAY_SHUTDOWN_DRAIN_TIMEOUT_SECS`.
 
-`/metrics` reports bounded HTTP RED signals and aggregate runtime active,
-starting, and limit gauges. It never uses resource ids or raw request paths as
-labels. Keep this unauthenticated collector endpoint on a trusted private
-network in production. See
+`/metrics` reports bounded HTTP RED signals, aggregate runtime active/starting/
+limit gauges, and label-free workflow, event-delivery, recording, playback,
+and retention counters. The subsystem counters are process-local and share
+their source with the authenticated operations snapshots; they are operational
+signals, not durable audit or billing records. Metrics never use resource ids
+or raw request paths as labels. Keep this unauthenticated collector endpoint on
+a trusted private network in production. See
 [Platform Telemetry](docs/PLATFORM_TELEMETRY.md) for the metric contract,
 Prometheus example, and validation commands.
 

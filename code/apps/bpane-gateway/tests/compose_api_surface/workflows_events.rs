@@ -4,9 +4,25 @@ use anyhow::{anyhow, Result};
 use reqwest::StatusCode;
 use serde_json::json;
 
-use super::support::{json_array, json_id, label_map, recording_policy, ComposeHarness};
+use super::support::{
+    json_array, json_id, label_map, openmetrics_gauge, recording_policy, ComposeHarness,
+};
 
 pub async fn run(harness: &ComposeHarness) -> Result<()> {
+    let metrics_before = harness.get_text_outcome_without_bearer("/metrics").await?;
+    let uploads_before = openmetrics_gauge(
+        &metrics_before.body,
+        "browserpane_gateway_workflow_produced_file_uploads_total",
+    )?;
+    let delivery_attempts_before = openmetrics_gauge(
+        &metrics_before.body,
+        "browserpane_gateway_workflow_event_delivery_attempts_total",
+    )?;
+    let delivery_successes_before = openmetrics_gauge(
+        &metrics_before.body,
+        "browserpane_gateway_workflow_event_delivery_successes_total",
+    )?;
+
     harness.ensure_workflow_worker_image().await?;
     let source = harness.create_local_workflow_repo().await?;
 
@@ -340,6 +356,41 @@ pub async fn run(harness: &ComposeHarness) -> Result<()> {
         return Err(anyhow!(
             "workflow event delivery did not reach the explicitly allowed receiver: {deliveries:?}"
         ));
+    }
+
+    let metrics_after = harness.get_text_outcome_without_bearer("/metrics").await?;
+    let uploads_after = openmetrics_gauge(
+        &metrics_after.body,
+        "browserpane_gateway_workflow_produced_file_uploads_total",
+    )?;
+    let delivery_attempts_after = openmetrics_gauge(
+        &metrics_after.body,
+        "browserpane_gateway_workflow_event_delivery_attempts_total",
+    )?;
+    let delivery_successes_after = openmetrics_gauge(
+        &metrics_after.body,
+        "browserpane_gateway_workflow_event_delivery_successes_total",
+    )?;
+    if uploads_after <= uploads_before
+        || delivery_attempts_after <= delivery_attempts_before
+        || delivery_successes_after <= delivery_successes_before
+    {
+        return Err(anyhow!(
+            "workflow OpenMetrics counters did not advance: uploads {uploads_before}->{uploads_after}, attempts {delivery_attempts_before}->{delivery_attempts_after}, successes {delivery_successes_before}->{delivery_successes_after}"
+        ));
+    }
+    for forbidden in [
+        run_id.to_string(),
+        session_id.to_string(),
+        subscription_id.to_string(),
+        "http://web:8080/test/workflow-events".to_string(),
+        "compose-e2e-signing-secret".to_string(),
+    ] {
+        if metrics_after.body.contains(&forbidden) {
+            return Err(anyhow!(
+                "workflow OpenMetrics response exposed a forbidden resource value"
+            ));
+        }
     }
 
     let workflow_operations = harness.get_json("/api/v1/workflow/operations").await?;

@@ -15,7 +15,9 @@ use prometheus_client::metrics::histogram::Histogram;
 use prometheus_client::registry::Registry;
 use tracing::Instrument;
 
+use crate::recording::RecordingObservability;
 use crate::session_manager::SessionManager;
+use crate::workflow::WorkflowObservability;
 
 const OPENMETRICS_CONTENT_TYPE: &str = "application/openmetrics-text; version=1.0.0; charset=utf-8";
 const UNMATCHED_ROUTE: &str = "unmatched";
@@ -96,6 +98,16 @@ impl Default for GatewayMetrics {
 }
 
 impl GatewayMetrics {
+    pub(crate) fn with_observability(
+        recording: &RecordingObservability,
+        workflow: &WorkflowObservability,
+    ) -> Self {
+        let mut metrics = Self::default();
+        recording.register_metrics(&mut metrics.registry);
+        workflow.register_metrics(&mut metrics.registry);
+        metrics
+    }
+
     fn begin_http_request(&self) -> (Instant, InFlightGuard) {
         self.http_requests_in_flight.inc();
         (
@@ -255,6 +267,7 @@ mod tests {
     use axum::body::Body;
     use axum::http::Request;
     use axum::middleware;
+    use chrono::Utc;
     use tower::ServiceExt;
 
     use super::*;
@@ -314,6 +327,86 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn subsystem_metrics_share_observability_counters_without_dynamic_labels() {
+        let recording = RecordingObservability::default();
+        let workflow = WorkflowObservability::default();
+        let metrics = GatewayMetrics::with_observability(&recording, &workflow);
+        let sensitive_marker = uuid::Uuid::now_v7().to_string();
+        let now = Utc::now();
+
+        workflow.record_produced_file_upload();
+        workflow.record_produced_file_upload();
+        workflow.record_produced_file_upload_failure();
+        workflow.record_event_delivery_attempt();
+        workflow.record_event_delivery_success(now).await;
+        workflow.record_event_delivery_retry();
+        workflow.record_event_delivery_failure();
+        workflow.record_retention_pass(now, 2, 3).await;
+        workflow.record_retention_deleted_logs(4);
+        workflow.record_retention_cleared_output();
+        workflow.record_retention_failure();
+
+        recording.record_artifact_finalize_request();
+        recording.record_artifact_finalize_success();
+        recording.record_artifact_finalize_failure();
+        recording.record_recording_failure();
+        recording.record_playback_manifest_request();
+        recording.record_playback_export_request();
+        recording.record_playback_export_success(4_096, now).await;
+        recording.record_playback_export_failure();
+        recording.record_retention_pass(now, 5).await;
+        recording.record_retention_deleted_artifact();
+        recording.record_retention_failure();
+
+        let workflow_snapshot = workflow.snapshot().await;
+        let recording_snapshot = recording.snapshot().await;
+        let output = metrics.encode(&test_session_manager()).await.unwrap();
+
+        assert_eq!(workflow_snapshot.produced_file_uploads_total, 2);
+        assert_eq!(workflow_snapshot.retention_deleted_logs_total, 4);
+        assert_eq!(recording_snapshot.playback_export_bytes_total, 4_096);
+        assert_metric_value(
+            &output,
+            "browserpane_gateway_workflow_produced_file_uploads_total",
+            2,
+        );
+        assert_metric_value(
+            &output,
+            "browserpane_gateway_workflow_retention_deleted_logs_total",
+            4,
+        );
+        assert_metric_value(
+            &output,
+            "browserpane_gateway_recording_playback_export_bytes_total",
+            4_096,
+        );
+
+        for name in WORKFLOW_COUNTERS.into_iter().chain(RECORDING_COUNTERS) {
+            assert!(
+                output.contains(&format!("# HELP {name} ")),
+                "missing HELP for {name}"
+            );
+            assert!(
+                output.contains(&format!("# TYPE {name} counter")),
+                "missing counter TYPE for {name}"
+            );
+            assert!(
+                output
+                    .lines()
+                    .any(|line| line.starts_with(&format!("{name}_total "))),
+                "missing sample for {name}"
+            );
+            assert!(
+                !output
+                    .lines()
+                    .any(|line| line.starts_with(&format!("{name}_total{{"))),
+                "unexpected labels for {name}"
+            );
+        }
+        assert!(!output.contains(&sensitive_marker));
+    }
+
+    #[tokio::test]
     async fn request_instrumentation_uses_route_templates_and_ignores_malformed_context() {
         let metrics = Arc::new(GatewayMetrics::default());
         let app = Router::new()
@@ -346,4 +439,44 @@ mod tests {
         assert!(!output.contains("sensitive-trace-marker"));
         assert!(!output.contains("sensitive-baggage-marker"));
     }
+
+    fn assert_metric_value(output: &str, name: &str, expected: u64) {
+        assert!(
+            output
+                .lines()
+                .any(|line| line == format!("{name} {expected}")),
+            "expected {name} to equal {expected}"
+        );
+    }
+
+    const WORKFLOW_COUNTERS: [&str; 12] = [
+        "browserpane_gateway_workflow_produced_file_uploads",
+        "browserpane_gateway_workflow_produced_file_upload_failures",
+        "browserpane_gateway_workflow_event_delivery_attempts",
+        "browserpane_gateway_workflow_event_delivery_successes",
+        "browserpane_gateway_workflow_event_delivery_retries",
+        "browserpane_gateway_workflow_event_delivery_failures",
+        "browserpane_gateway_workflow_retention_passes",
+        "browserpane_gateway_workflow_retention_log_candidates",
+        "browserpane_gateway_workflow_retention_output_candidates",
+        "browserpane_gateway_workflow_retention_deleted_logs",
+        "browserpane_gateway_workflow_retention_cleared_outputs",
+        "browserpane_gateway_workflow_retention_failures",
+    ];
+
+    const RECORDING_COUNTERS: [&str; 13] = [
+        "browserpane_gateway_recording_artifact_finalize_requests",
+        "browserpane_gateway_recording_artifact_finalize_successes",
+        "browserpane_gateway_recording_artifact_finalize_failures",
+        "browserpane_gateway_recording_failures",
+        "browserpane_gateway_recording_playback_manifest_requests",
+        "browserpane_gateway_recording_playback_export_requests",
+        "browserpane_gateway_recording_playback_export_successes",
+        "browserpane_gateway_recording_playback_export_failures",
+        "browserpane_gateway_recording_playback_export_bytes",
+        "browserpane_gateway_recording_retention_passes",
+        "browserpane_gateway_recording_retention_candidates",
+        "browserpane_gateway_recording_retention_deleted_artifacts",
+        "browserpane_gateway_recording_retention_failures",
+    ];
 }

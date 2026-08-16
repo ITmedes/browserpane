@@ -149,6 +149,10 @@ pub async fn run_api_server(
     shutdown_readiness_grace: std::time::Duration,
 ) -> anyhow::Result<()> {
     let bind_addr = config.bind_addr;
+    let metrics = Arc::new(crate::metrics::GatewayMetrics::with_observability(
+        &config.recording_observability,
+        &config.workflow_observability,
+    ));
     let state = Arc::new(ApiState {
         registry: config.registry,
         auth_validator: config.auth_validator,
@@ -176,12 +180,7 @@ pub async fn run_api_server(
         mcp_bridge_control: config.mcp_bridge_control,
     });
 
-    let app = build_gateway_api_router(
-        state,
-        lifecycle.clone(),
-        readiness,
-        Arc::new(crate::metrics::GatewayMetrics::default()),
-    );
+    let app = build_gateway_api_router(state, lifecycle.clone(), readiness, metrics);
 
     let listener = tokio::net::TcpListener::bind(bind_addr).await?;
     info!("HTTP API listening on {bind_addr}");

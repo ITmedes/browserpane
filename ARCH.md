@@ -318,8 +318,11 @@ service.
   provider, and recording/workspace artifact stores; logs only readiness
   transitions
 - **Metrics facade** (`metrics.rs`): gateway-owned OpenMetrics registry with
-  bounded HTTP RED labels and scrape-time runtime-capacity gauges; resource ids,
-  raw paths, URLs, credentials, browser content, and egress data are excluded
+  bounded HTTP RED labels, scrape-time runtime-capacity gauges, and label-free
+  workflow/event-delivery/recording/playback/retention counters registered from
+  the same observability instances that serve authenticated operations
+  snapshots; resource ids, raw paths, URLs, credentials, browser content, and
+  egress data are excluded
 - **Runtime trace path** (`bpane-telemetry` plus `bpane-runtime-client`):
   optional W3C `traceparent`/`tracestate` continuation from bounded gateway HTTP
   spans through authenticated runtime-broker calls into fixed broker

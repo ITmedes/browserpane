@@ -35,9 +35,9 @@ Current branch context:
   pending a separate removal decision.
 - The evidence-linked threat model and production-hardening baseline merged
   through PR `#224`. The bounded single-node Compose deployment profile merged
-  through PR `#226` under broader issue `#66`. Issue `#227` is locally
-  implemented and qualified as the gateway-to-runtime-broker tracing checkpoint
-  under `#178`, pending review.
+  through PR `#226` under broader issue `#66`. The gateway-to-runtime-broker
+  tracing checkpoint merged through PR `#228`; issue `#229` is the current
+  bounded workflow/recording metrics checkpoint under `#178`.
 - Issue `#142` is closed as the historical redesign foundation. Follow-up
   implementation PRs use focused issues such as `#124` rather than reopening
   that lineage.
@@ -108,9 +108,11 @@ specifications and still require a bounded slice plan before coding.
   for an independent broker-only single-node Compose profile, deployment
   secret files, structured preflight, live fixture, and bounded operator
   runbook under issue #225/#66.
-- `BPANE-00227_OTEL_RUNTIME_TRACING_PLAN.md`: locally qualified Production
-  checkpoint for W3C/OpenTelemetry propagation across gateway and runtime
-  broker under #178; merge evidence remains pending.
+- `BPANE-00227_OTEL_RUNTIME_TRACING_PLAN.md`: merged Production checkpoint for
+  W3C/OpenTelemetry propagation across gateway and runtime broker under #178.
+- `BPANE-00229_WORKFLOW_RECORDING_METRICS_PLAN.md`: current bounded Production
+  checkpoint for shared workflow/recording operations counters and OpenMetrics
+  export under #178.
 - `SINGLE_NODE_DEPLOYMENT.md`: operator runbook and exact support boundary for
   the independent single-host package.
 - `BPANE-00171_WORKFLOW_TEACH_MODE_PLAN.md`: Phase N Teach Mode contract,
