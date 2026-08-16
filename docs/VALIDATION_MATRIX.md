@@ -47,6 +47,7 @@ node scripts/validate.mjs --profile full
 node scripts/check-repository-documents.mjs
 node scripts/check-production-security-baseline.mjs
 node scripts/observability/validate-prometheus-rules.mjs
+node scripts/observability/validate-grafana-dashboard.mjs
 ```
 
 - `fast` is the clean, non-compose validation floor.
@@ -67,9 +68,9 @@ Verified catalog on 2026-08-14:
 - the fast profile contains 44 stages, including the composed production
   security baseline plus Rust, browser-client,
   recording-worker, workflow-worker, and admin-new coverage ratchets,
-- the compose profile contains 34 bounded stages, including 24 admin promotion
-  stages plus Prometheus rule, API, CLI, MCP, recording, session-file, and
-  workflow evidence,
+- the compose profile contains 35 bounded stages, including 24 admin promotion
+  stages plus Prometheus rule, Grafana dashboard, API, CLI, MCP, recording,
+  session-file, and workflow evidence,
 - the compose gateway stage passes 17 default API and four docker-pool cases,
 - representative admin-new, compatibility-admin, CLI, MCP, recording, and
   workflow admission journeys pass against the running stack,
@@ -634,6 +635,34 @@ node scripts/validate.mjs --stage observability-prometheus-rules
 The static contract is part of `validation-tool-tests`. The semantic stage is
 compose-class because it executes the digest-pinned upstream Prometheus image;
 the required Repository Metadata GitHub job invokes it explicitly.
+
+For Grafana operations-dashboard changes, additionally prove:
+
+- datasource and dashboard provisioning use stable UIDs and remain
+  repository-authoritative,
+- all 20 panels have stable ids, non-overlapping bounded geometry, descriptions,
+  units, no-data semantics, and approved aggregate queries,
+- no variables, dynamic annotations, resource selectors, embedded credentials,
+  public ports, or sensitive query/legend/link fragments are present,
+- the digest-pinned Grafana image provisions the dashboard and private
+  Prometheus datasource without manual import,
+- all 19 query panels execute through Grafana's authenticated datasource API,
+- anonymous access, sign-up, plugin discovery, and plugin auto-update remain
+  disabled, and the administrator password is operator-supplied,
+- live validation detects error-level startup logs and cleans temporary
+  containers, networks, and files on success or failure.
+
+Run:
+
+```bash
+node --test scripts/observability/grafana-*.test.mjs
+node scripts/validate.mjs --stage observability-grafana-dashboard
+```
+
+The static contracts are part of `validation-tool-tests`. The live stage is
+compose-class because it creates an isolated private network and executes the
+digest-pinned Prometheus and Grafana images; the required Repository Metadata
+GitHub job invokes it explicitly.
 
 For OpenTelemetry runtime-tracing changes, additionally prove:
 

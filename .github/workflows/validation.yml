@@ -41,6 +41,7 @@ jobs:
           --stage repository-baseline
           --stage repository-documents
           --stage observability-prometheus-rules
+          --stage observability-grafana-dashboard
           --stage openapi-install
           --stage openapi-test
           --stage openapi-check
