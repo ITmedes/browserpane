@@ -11,15 +11,13 @@ services:
       - --listen-port
       - "3129"
       - --set
-      - confdir=/mitmproxy
-      - --set
       - flow_detail=1
       - --set
       - showhost=true
     ports:
       - "${BPANE_EGRESS_TLS_OBSERVER_PORT:-3129}:3129"
     volumes:
-      - ../../../dev/egress-mitmproxy:/mitmproxy
+      - ../../../dev/egress-mitmproxy:/home/mitmproxy/.mitmproxy
     networks:
       bpane-internal:
         aliases:

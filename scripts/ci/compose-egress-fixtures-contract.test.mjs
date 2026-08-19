@@ -7,8 +7,10 @@ import test from 'node:test';
 const root = path.resolve(import.meta.dirname, '../..');
 const helperPath = path.join(root, 'scripts/ci/start-compose-egress-fixtures.sh');
 const cleanupPath = path.join(root, 'scripts/ci/cleanup-compose.sh');
+const tlsComposePath = path.join(root, 'deploy/examples/egress-observer/compose.tls.yml');
 const helper = fs.readFileSync(helperPath, 'utf8');
 const cleanup = fs.readFileSync(cleanupPath, 'utf8');
+const tlsCompose = fs.readFileSync(tlsComposePath, 'utf8');
 
 test('egress fixture shell scripts have valid Bash syntax', () => {
   for (const script of [helperPath, cleanupPath]) {
@@ -31,6 +33,11 @@ test('egress fixture startup owns CA preparation, all observers, and bounded rea
   assert.match(helper, /proxy-user:proxy-pass/);
   assert.match(helper, /\.State\.Status/);
   assert.doesNotMatch(helper, /compose.*logs/);
+});
+
+test('TLS observer uses mitmproxy default config ownership handling', () => {
+  assert.match(tlsCompose, /:\/home\/mitmproxy\/\.mitmproxy/);
+  assert.doesNotMatch(tlsCompose, /confdir=/);
 });
 
 test('compose cleanup removes observer projects before the primary stack', () => {
