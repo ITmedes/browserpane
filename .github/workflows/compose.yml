@@ -40,10 +40,11 @@ jobs:
           docker login ghcr.io --username "${{ github.actor }}" --password-stdin
       - name: Resolve CI Rust builder
         run: node scripts/ci/ci-rust-builder-resolver.mjs --github-env "${GITHUB_ENV}"
-      - name: Install native build dependencies
-        run: >-
-          sudo apt-get update && sudo apt-get install -y
-          build-essential cmake pkg-config
+      - name: Verify native build prerequisites
+        run: |
+          for tool in cc c++ make cmake pkg-config; do
+            command -v "$tool"
+          done
       - name: Select pinned Rust toolchain
         run: rustup show active-toolchain
       - name: Cache Rust build inputs
@@ -189,6 +190,9 @@ jobs:
         run: docker compose -f deploy/compose.yml --profile workflow build workflow-worker
       - name: Prepare compose runtime
         run: scripts/run-gateway-compose-e2e.sh --suite stack
+      - name: Prepare egress observer fixtures
+        if: matrix.surface == 'compatibility'
+        run: scripts/ci/start-compose-egress-fixtures.sh
       - name: Run admin promotion validation
         run: node scripts/run-admin-promotion-validation.mjs "${{ matrix.surface }}"
       - name: Collect redacted failure diagnostics

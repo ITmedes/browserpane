@@ -91,6 +91,11 @@ export const AUTH_DEFINITIONS: readonly ApiAuthDefinition[] = [
     description: 'Short-lived session/run worker credential with a narrower purpose.',
   },
   {
+    id: 'recording-worker',
+    label: 'Recording worker',
+    description: 'Capability-scoped credential restricted to recording artifact finalization.',
+  },
+  {
     id: 'unauthenticated',
     label: 'Protocol bootstrap',
     description: 'A credential-free initial transport step with explicit follow-up authentication.',
@@ -175,10 +180,9 @@ export function commandForExample(operation: ApiOperation, example: ApiExample):
     `  --request ${operation.method} \\`,
     `  "\${BPANE_BASE_URL}${path}" \\`,
   ];
-  if (operation.auth === 'owner-bearer') {
-    lines.push('  --header "Authorization: Bearer ${BPANE_OWNER_TOKEN}" \\');
-  } else if (operation.auth === 'session-automation') {
-    lines.push('  --header "Authorization: Bearer ${BPANE_SESSION_AUTOMATION_TOKEN}" \\');
+  const authVariable = authTokenVariable(operation.auth);
+  if (authVariable) {
+    lines.push(`  --header "Authorization: Bearer \${${authVariable}}" \\`);
   }
   if (example.request.body !== undefined) {
     lines.push('  --header "Content-Type: application/json" \\');
@@ -190,6 +194,15 @@ export function commandForExample(operation: ApiOperation, example: ApiExample):
     if (last) lines[lines.length - 1] = last.replace(/ \\$/, '');
   }
   return lines.join('\n');
+}
+
+function authTokenVariable(auth: ApiAuthMode): string | null {
+  switch (auth) {
+    case 'owner-bearer': return 'BPANE_OWNER_TOKEN';
+    case 'session-automation': return 'BPANE_SESSION_AUTOMATION_TOKEN';
+    case 'recording-worker': return 'BPANE_RECORDING_WORKER_TOKEN';
+    case 'unauthenticated': return null;
+  }
 }
 
 export function operationFamilies(operations: readonly ApiOperation[]): readonly string[] {

@@ -42,7 +42,7 @@
   <AdminMessage
     tone="info"
     title="Credential domains stay separate"
-    message="Owner bearer tokens manage control-plane resources. Session connect tickets and session-automation credentials are short-lived, narrower credentials and are not interchangeable. This page never reads or inserts your current browser token."
+    message="Owner bearer tokens manage control-plane resources. Session connect tickets, session-automation credentials, and recording-worker capabilities are narrower credentials and are not interchangeable. This page never reads or inserts your current browser token."
     testId="api-credential-boundary"
   />
 
