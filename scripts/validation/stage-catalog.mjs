@@ -49,6 +49,7 @@ export class ValidationStageCatalog {
         'scripts/ci/ci-rust-builder-resolver.test.mjs',
         'scripts/ci/ci-rust-builder-workflow-contract.test.mjs',
         'scripts/ci/admin-security-headers-contract.test.mjs',
+        'scripts/ci/compose-egress-fixtures-contract.test.mjs',
         'scripts/ci/compose-workflow-contract.test.mjs',
         'scripts/ci/compose-diagnostics-collector.test.mjs',
         'scripts/ci/diagnostic-redactor.test.mjs',

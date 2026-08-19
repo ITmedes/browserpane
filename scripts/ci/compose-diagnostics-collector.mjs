@@ -11,6 +11,8 @@ export class ComposeDiagnosticsCollector {
 
   collect(rootDirectory) {
     const composeFile = `${rootDirectory}/deploy/compose.yml`;
+    const observerComposeFile = `${rootDirectory}/deploy/examples/egress-observer/compose.yml`;
+    const tlsComposeFile = `${rootDirectory}/deploy/examples/egress-observer/compose.tls.yml`;
     const commands = [
       {
         title: 'Compose service status',
@@ -28,6 +30,18 @@ export class ComposeDiagnosticsCollector {
         args: ['ps', '--all', '--filter', 'name=bpane-runtime-', '--filter',
           'name=bpane-workflow-', '--format',
           'table {{.Names}}\t{{.Image}}\t{{.State}}\t{{.Status}}']
+      },
+      {
+        title: 'Egress observer service status',
+        args: ['compose', '--project-name', 'bpane-ci-egress', '-f',
+          observerComposeFile, 'ps', '--all', '--format',
+          'table {{.Name}}\t{{.Service}}\t{{.State}}\t{{.Status}}']
+      },
+      {
+        title: 'TLS egress observer service status',
+        args: ['compose', '--project-name', 'bpane-ci-egress-tls', '-f',
+          tlsComposeFile, 'ps', '--all', '--format',
+          'table {{.Name}}\t{{.Service}}\t{{.State}}\t{{.Status}}']
       }
     ];
     return commands.map((command) => this.#capture(command, rootDirectory)).join('\n\n');

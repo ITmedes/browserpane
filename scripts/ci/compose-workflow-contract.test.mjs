@@ -59,6 +59,7 @@ test('compose workflow preserves every browser-facing smoke stage', () => {
 
 test('compose workflow runs unified and compatibility promotion lanes independently', () => {
   const job = workflow.jobs['admin-promotion'];
+  const fixtureStep = stepByName(job, 'Prepare egress observer fixtures');
 
   assert.ok(job);
   assert.equal(job.strategy['fail-fast'], false);
@@ -67,8 +68,24 @@ test('compose workflow runs unified and compatibility promotion lanes independen
     stepByName(job, 'Run admin promotion validation').run,
     'node scripts/run-admin-promotion-validation.mjs "${{ matrix.surface }}"',
   );
+  assert.equal(fixtureStep.if, "matrix.surface == 'compatibility'");
+  assert.equal(fixtureStep.run, 'scripts/ci/start-compose-egress-fixtures.sh');
   assert.ok(UNIFIED_ADMIN_PROMOTION_SMOKES.length > 0);
   assert.ok(COMPATIBILITY_ADMIN_PROMOTION_SMOKES.length > 0);
+});
+
+test('gateway validation uses preinstalled native tools without a host package manager', () => {
+  const job = workflow.jobs['gateway-api'];
+  const prerequisites = stepByName(job, 'Verify native build prerequisites');
+
+  for (const tool of ['cc', 'c++', 'make', 'cmake', 'pkg-config']) {
+    assert.match(prerequisites.run, new RegExp(`(?:^|\\s)${tool.replaceAll('+', '\\+')}(?:;|\\s)`));
+  }
+  assert.match(prerequisites.run, /command -v "\$tool"/);
+  assert.doesNotMatch(
+    JSON.stringify(workflow),
+    /(?:apt-get|apt |dnf |yum |brew install)/,
+  );
 });
 
 test('every compose lane retains failure diagnostics and unconditional cleanup', () => {
