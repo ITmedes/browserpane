@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import {
   ApiContractClient,
@@ -16,6 +18,7 @@ const OPERATIONS = {
     operation('createSession', 'POST', '/api/v1/sessions', 'Sessions', 'owner-bearer', 'ui-primary', ['201', '401']),
     operation('issueSessionAccessToken', 'POST', '/api/v1/sessions/{session_id}/access-tokens', 'Session Runtime', 'owner-bearer', 'ui-evidence', ['200', '401']),
     operation('appendWorkflowRunLog', 'POST', '/api/v1/workflow-runs/{run_id}/logs', 'Workflows', 'session-automation', 'internal-worker', ['200', '401']),
+    operation('finalizeRecording', 'POST', '/api/v1/sessions/{session_id}/recordings/{recording_id}/finalize', 'Session Recordings', 'recording-worker', 'internal-worker', ['200', '401']),
   ],
 };
 
@@ -26,7 +29,7 @@ const CLASSIFICATIONS = {
     'ui-primary': ['createProject', 'createSession'],
     'ui-evidence': ['issueSessionAccessToken'],
     'api-companion': [],
-    'internal-worker': ['appendWorkflowRunLog'],
+    'internal-worker': ['appendWorkflowRunLog', 'finalizeRecording'],
   },
 };
 
@@ -63,7 +66,7 @@ describe('ApiContractClient', () => {
 
     const evidence = await new ApiContractClient({ baseUrl: 'https://pane.example', fetchImpl }).load();
 
-    expect(evidence.operations).toHaveLength(4);
+    expect(evidence.operations).toHaveLength(5);
     expect(evidence.examples[0]?.request.body).toEqual({ name: 'Pilot' });
     expect(evidence.compatibilitySurfaces[0]?.id).toBe('legacy-session-status');
     expect(fetchImpl.mock.calls.map(([url]) => String(url))).toEqual([
@@ -86,6 +89,24 @@ describe('ApiContractClient', () => {
 });
 
 describe('API contract evidence parsers', () => {
+  it('accepts the committed repository evidence', () => {
+    const root = path.resolve(import.meta.dirname, '../../../../../..');
+    const readEvidence = (name: string): unknown => JSON.parse(fs.readFileSync(
+      path.join(root, 'openapi', `bpane-control-v1.${name}.json`),
+      'utf8',
+    ));
+
+    const evidence = parseApiContractEvidence(
+      readEvidence('operations'),
+      readEvidence('classifications'),
+      readEvidence('examples'),
+      readEvidence('compatibility'),
+    );
+
+    expect(evidence.operations).toHaveLength(131);
+    expect(evidence.operations.filter(({ auth }) => auth === 'recording-worker')).toHaveLength(2);
+  });
+
   it('returns safe, joined evidence', () => {
     const evidence = parseApiContractEvidence(OPERATIONS, CLASSIFICATIONS, EXAMPLES, COMPATIBILITY);
     expect(evidence.operations.map((item) => item.operationId)).toEqual([
@@ -93,6 +114,7 @@ describe('API contract evidence parsers', () => {
       'createSession',
       'issueSessionAccessToken',
       'appendWorkflowRunLog',
+      'finalizeRecording',
     ]);
   });
 

@@ -177,12 +177,27 @@ async function waitForAdminAuthSurface(page, options) {
 }
 
 async function waitForAdminAuthenticated(page, options) {
-  await poll(
+  const state = await poll(
     'admin authenticated route surface',
-    async () => await adminAuthenticatedVisible(page),
-    Boolean,
+    async () => ({
+      authenticated: await adminAuthenticatedVisible(page),
+      routeError: await visibleMessage(page, 'api-evidence-error'),
+      authError: await visibleMessage(page, 'admin-new-auth-error'),
+    }),
+    (value) => value.authenticated || Boolean(value.routeError) || Boolean(value.authError),
     options.connectTimeoutMs,
   );
+  if (!state.authenticated) {
+    throw new Error(`Admin route failed to initialize: ${state.routeError || state.authError}`);
+  }
+}
+
+async function visibleMessage(page, testId) {
+  const locator = page.getByTestId(testId);
+  if (!await locator.isVisible().catch(() => false)) {
+    return '';
+  }
+  return (await locator.textContent().catch(() => ''))?.trim() ?? '';
 }
 
 async function adminAuthenticatedVisible(page) {

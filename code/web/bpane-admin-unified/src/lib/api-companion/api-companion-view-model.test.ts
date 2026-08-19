@@ -21,6 +21,7 @@ const OPERATIONS: readonly ApiOperation[] = [
   operation('createFileWorkspace', 'POST', '/api/v1/file-workspaces', 'File Workspaces', 'owner-bearer', 'ui-primary', ['201', '401']),
   operation('listFileWorkspaces', 'GET', '/api/v1/file-workspaces', 'File Workspaces', 'owner-bearer', 'ui-primary', ['200', '401']),
   operation('appendWorkflowRunLog', 'POST', '/api/v1/workflow-runs/{run_id}/logs', 'Workflows', 'session-automation', 'internal-worker', ['200']),
+  operation('finalizeRecording', 'POST', '/api/v1/sessions/{session_id}/recordings/{recording_id}/finalize', 'Session Recordings', 'recording-worker', 'internal-worker', ['200']),
   operation('openAdminEvents', 'GET', '/api/v1/admin/events', 'Admin Events', 'unauthenticated', 'ui-evidence', ['101']),
 ];
 
@@ -50,7 +51,7 @@ const EVIDENCE: ApiContractEvidence = {
     'ui-primary': ['createProject', 'createSession', 'createWorkflowRun', 'listWorkflowDefinitions', 'createFileWorkspace', 'listFileWorkspaces'],
     'ui-evidence': ['issueSessionAccessToken', 'openAdminEvents'],
     'api-companion': [],
-    'internal-worker': ['appendWorkflowRunLog'],
+    'internal-worker': ['appendWorkflowRunLog', 'finalizeRecording'],
   },
   examples: EXAMPLES,
   compatibilitySurfaces: [
@@ -120,6 +121,22 @@ describe('API companion task flows', () => {
     const command = commandForExample(OPERATIONS.find((item) => item.operationId === 'appendWorkflowRunLog')!, workerExample);
     expect(command).toContain('${BPANE_SESSION_AUTOMATION_TOKEN}');
     expect(command).not.toContain('${BPANE_OWNER_TOKEN}');
+
+    const recordingExample: ApiExample = {
+      name: 'recording-finalize',
+      operationId: 'finalizeRecording',
+      request: {
+        method: 'POST',
+        path: '/api/v1/sessions/session-1/recordings/recording-1/finalize',
+      },
+      response: { status: 200 },
+    };
+    const recordingCommand = commandForExample(
+      OPERATIONS.find((item) => item.operationId === 'finalizeRecording')!,
+      recordingExample,
+    );
+    expect(recordingCommand).toContain('${BPANE_RECORDING_WORKER_TOKEN}');
+    expect(recordingCommand).not.toContain('${BPANE_OWNER_TOKEN}');
   });
 });
 
@@ -129,6 +146,7 @@ describe('API coverage projections', () => {
       'Admin Events',
       'File Workspaces',
       'Projects',
+      'Session Recordings',
       'Session Runtime',
       'Sessions',
       'Workflows',
@@ -137,11 +155,12 @@ describe('API coverage projections', () => {
       ['ui-primary', 6],
       ['ui-evidence', 2],
       ['api-companion', 0],
-      ['internal-worker', 1],
+      ['internal-worker', 2],
     ]);
     expect(authSummaries(OPERATIONS).map(({ id, count }) => [id, count])).toEqual([
       ['owner-bearer', 7],
       ['session-automation', 1],
+      ['recording-worker', 1],
       ['unauthenticated', 1],
     ]);
   });
@@ -174,6 +193,7 @@ describe('API coverage projections', () => {
   it('resolves stable classification and auth definitions', () => {
     expect(classificationDefinition('internal-worker').label).toBe('Internal worker');
     expect(authDefinition('owner-bearer').label).toBe('Owner bearer');
+    expect(authDefinition('recording-worker').label).toBe('Recording worker');
   });
 });
 

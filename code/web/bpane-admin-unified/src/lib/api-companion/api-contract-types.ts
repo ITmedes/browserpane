@@ -1,5 +1,10 @@
 export const API_CLASSIFICATIONS = ['ui-primary', 'ui-evidence', 'api-companion', 'internal-worker'] as const;
-export const API_AUTH_MODES = ['owner-bearer', 'session-automation', 'unauthenticated'] as const;
+export const API_AUTH_MODES = [
+  'owner-bearer',
+  'session-automation',
+  'recording-worker',
+  'unauthenticated',
+] as const;
 export const API_METHODS = ['DELETE', 'GET', 'POST', 'PUT'] as const;
 
 export type ApiClassification = (typeof API_CLASSIFICATIONS)[number];
