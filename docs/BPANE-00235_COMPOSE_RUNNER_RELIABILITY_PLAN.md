@@ -82,8 +82,20 @@ fixture or an external Ubuntu package mirror.
 
 ## Completion evidence
 
-- [ ] API evidence auth model and tests aligned.
-- [ ] Egress fixture lifecycle and readiness checks added.
-- [ ] Host package installation removed from Compose CI.
-- [ ] Focused local validation passed.
-- [ ] Complete branch Compose workflow passed.
+- [x] API evidence auth model and tests aligned.
+- [x] Egress fixture lifecycle and readiness checks added.
+- [x] Host package installation removed from Compose CI.
+- [x] Focused local validation passed.
+- [x] Complete branch Compose workflow passed.
+
+Evidence collected on 2026-08-19:
+
+- `node scripts/validate.mjs --stage validation-tool-tests`: 117 tests passed.
+- Unified admin check/build and focused API contract tests passed.
+- `smoke:admin-unified-api-companion`: 131 operations loaded and exercised.
+- `smoke:admin-egress-profiles`: plain, authenticated, rejected-auth, TLS,
+  diagnostics, and session runtime paths passed.
+- Fresh mitmproxy CA/config bootstrap passed with an unprivileged runtime and
+  no pre-existing runtime state.
+- [Compose workflow run 32228964102](https://github.com/ITmedes/browserpane/actions/runs/32228964102):
+  all five jobs passed for commit `77c9c4b5`.
