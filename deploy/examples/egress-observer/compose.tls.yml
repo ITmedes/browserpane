@@ -2,6 +2,16 @@ services:
   egress-tls-proxy:
     image: "${BPANE_EGRESS_MITMPROXY_IMAGE:-mitmproxy/mitmproxy:11.0.2}"
     container_name: bpane-egress-tls-observer
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        cp /bootstrap/mitmproxy-ca.pem /home/mitmproxy/.mitmproxy/mitmproxy-ca.pem
+        cp /bootstrap/mitmproxy-ca-cert.pem /home/mitmproxy/.mitmproxy/mitmproxy-ca-cert.pem
+        chown -R mitmproxy:mitmproxy /home/mitmproxy/.mitmproxy
+        chmod 600 /home/mitmproxy/.mitmproxy/mitmproxy-ca.pem
+        exec gosu mitmproxy "$$@"
+      - --
     command:
       - mitmdump
       - --mode
@@ -17,7 +27,9 @@ services:
     ports:
       - "${BPANE_EGRESS_TLS_OBSERVER_PORT:-3129}:3129"
     volumes:
-      - ../../../dev/egress-mitmproxy:/home/mitmproxy/.mitmproxy
+      - ../../../dev/egress-mitmproxy:/bootstrap:ro
+    tmpfs:
+      - /home/mitmproxy/.mitmproxy:mode=0700,uid=1000,gid=1000
     networks:
       bpane-internal:
         aliases:

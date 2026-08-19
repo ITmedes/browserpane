@@ -35,8 +35,12 @@ test('egress fixture startup owns CA preparation, all observers, and bounded rea
   assert.doesNotMatch(helper, /compose.*logs/);
 });
 
-test('TLS observer uses mitmproxy default config ownership handling', () => {
-  assert.match(tlsCompose, /:\/home\/mitmproxy\/\.mitmproxy/);
+test('TLS observer isolates host CA ownership from its unprivileged runtime', () => {
+  assert.match(tlsCompose, /:\/bootstrap:ro/);
+  assert.match(tlsCompose, /tmpfs:/);
+  assert.match(tlsCompose, /\/home\/mitmproxy\/\.mitmproxy:mode=0700,uid=1000,gid=1000/);
+  assert.match(tlsCompose, /chown -R mitmproxy:mitmproxy/);
+  assert.match(tlsCompose, /exec gosu mitmproxy/);
   assert.doesNotMatch(tlsCompose, /confdir=/);
 });
 
