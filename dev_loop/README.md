@@ -5,16 +5,21 @@ short, bounded Codex sessions while retaining the repository's issue, plan,
 test, review, and documentation rules.
 
 ```text
-Ready issue -> propose -> ready PR -> driver watches checks
-                                      | green -> current with main?
-                                      |          | no  -> update branch -> watch
-                                      |          | yes -> stop for review (default)
-                                      |                   or merge (explicit opt-in)
-                                      + red -> repair -> watch (bounded)
+Ready issue? -- no --> qualify one Qualified issue -- blocked/ambiguous --> stop
+     | yes                         |
+     +----------------------------+ Ready
+                                  v
+                     propose -> ready PR -> driver watches checks
+                                                   | green -> current with main?
+                                                   |          | no  -> update branch -> watch
+                                                   |          | yes -> stop for review (default)
+                                                   |                   or merge (explicit opt-in)
+                                                   + red -> repair -> watch (bounded)
 ```
 
-The Codex sessions never wait for CI and never merge. The shell driver owns
-those operations, so each model session has one auditable responsibility.
+Qualification, proposal, and repair use separate Codex sessions. They never
+wait for CI and never merge. The shell driver owns those operations, so each
+model session has one auditable responsibility.
 
 ## Prerequisites
 
@@ -25,7 +30,8 @@ those operations, so each model session has one auditable responsibility.
   update issue labels. Personal identities are not accepted.
 - Existing Codex authentication. For automation, scope `CODEX_API_KEY` to the
   process rather than storing it in this repository.
-- At least one live GitHub issue with `state:ready` and a matching focused
+- At least one live GitHub issue with `state:ready`, or one
+  roadmap-prioritized `state:qualified` candidate, with a matching focused
   `docs/BPANE-<five-digit-issue>_*_PLAN.md`.
 
 The loop deliberately refuses a dirty tree. It never stashes, resets, stages,
@@ -44,8 +50,11 @@ First run the read-only preflight and isolated tests:
 Then run one supervised iteration. A green PR remains open for human review:
 
 ```bash
-ITERATIONS=1 AUTO_MERGE=0 ./dev_loop/loop.sh
+ITERATIONS=1 AUTO_QUALIFY=1 AUTO_MERGE=0 ./dev_loop/loop.sh
 ```
+
+`AUTO_QUALIFY=1` is the default. Set it to `0` when a maintainer wants to
+manage the Ready queue manually.
 
 After the supervised path and branch protection are verified, enable the
 closed merge loop explicitly:
@@ -69,7 +78,8 @@ finished its validation.
 
 | Path | Purpose |
 |---|---|
-| `loop.sh` | Synchronize, propose, watch, repair, update, optionally merge, and journal. |
+| `loop.sh` | Synchronize, qualify, propose, watch, repair, update, optionally merge, and journal. |
+| `routines/qualify.md` | Audits and promotes at most one roadmap-prioritized Qualified issue. |
 | `routines/propose.md` | Implements one canonical Ready issue and opens one ready PR. |
 | `routines/repair.md` | Diagnoses one failed check set or merge conflict and makes one bounded repair decision. |
 | `schemas/routine-result.schema.json` | Constrains the final output of every non-interactive Codex session. |
@@ -95,6 +105,7 @@ diagnostic data.
 | `SETTLE_SECONDS` | `180` | Wait for a new check set after a push/update. |
 | `SESSION_TIMEOUT_SECONDS` | `10800` | Watchdog for one Codex session. |
 | `POST_MERGE_TIMEOUT_SECONDS` | `7200` | Maximum wait per post-merge main workflow. |
+| `AUTO_QUALIFY` | `1` | `1` audits and promotes one Qualified issue when the Ready queue is empty. |
 | `AUTO_MERGE` | `0` | `1` enables merge after green/current verification. |
 | `MERGE_METHOD` | `squash` | `squash`, `merge`, or `rebase`. |
 | `DEFAULT_BRANCH` | `main` | Published base branch. |
@@ -117,8 +128,13 @@ the required work.
 ## BrowserPane-Specific Delivery Rules
 
 - Live GitHub labels own execution state; there is no duplicate local queue.
-- The loop consumes only `state:ready`. It does not promote Qualified work or
-  create issues when the queue is empty.
+- The loop consumes `state:ready` first. When that queue is empty and
+  `AUTO_QUALIFY=1`, a separate session may promote exactly one
+  `state:qualified` issue after verifying roadmap order, dependencies, focused
+  plan, bounded scope, risks, acceptance criteria, and test/smoke evidence.
+- Qualification never creates issues, changes roadmap priority, implements
+  code, creates a branch/PR, waits for CI, or merges. Ambiguity, missing plans,
+  unmet dependencies, overlap, or unresolved decisions stop without promotion.
 - Every issue needs a focused `docs/*_PLAN.md` with business case, use case,
   contract impact, security, tests, manual smoke, and Definition of Done.
 - Proposal PRs use `Closes #N` only after the full bounded issue is complete.
@@ -139,6 +155,10 @@ the required work.
 The driver leaves branches and PRs intact for diagnosis:
 
 - `no-proposal`: no safe Ready issue was available.
+- `no-qualification`: no Qualified candidate passed the bounded readiness
+  audit.
+- `qualified-awaiting-proposal`: qualification completed and STOP was consumed
+  before a proposal session started.
 - `green-awaiting-review`: checks passed and automatic merge was disabled.
 - `draft-pr`: an interrupted proposal left an incomplete draft.
 - `ci-timeout`: the PR check set did not conclude in time.

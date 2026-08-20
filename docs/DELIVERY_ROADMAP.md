@@ -41,7 +41,10 @@ queues:
 
 At most one issue is the recommended first Ready implementation slice. Several
 lanes may contain Qualified work, but starting them requires an explicit gate
-or capacity decision.
+or capacity decision. The optional `dev_loop/` qualifier may execute that gate
+for exactly one documented next slice when its dependencies, focused plan,
+risks, acceptance criteria, and test evidence are already complete; it may not
+choose a different lane or infer a missing decision.
 
 ## Delivery Lanes
 
@@ -67,18 +70,19 @@ or capacity decision.
 | 4 | #150 | Done | #147 callback boundary | Lifecycle, dependency readiness, and bounded drain merged through PR #192. |
 | 5 | #152 | Done | #150 stable readiness contract | Shared in-memory/Postgres store contract parity merged through PR #193. |
 | 6 | #179 | Done | #152 persistent behavior baseline | Control API lint, conformance, examples, compatibility policy, and CI enforcement merged through PR #194. |
-| 7 | #241 | Review | #173 delivery governance | Add an optional Codex-native local delivery loop without changing product issue priority or gate evidence. |
+| 7 | #241 | In Progress | #173 delivery governance | Extend the optional Codex-native loop with bounded requirements qualification without changing product priority or gate evidence. |
 
 #241 is contributor tooling and does not block or supersede the next product
-slice, #47. It may consume #47 only after the loop itself is merged, started
-from clean `main`, and authenticated through an approved project identity.
+slice, #172. The merged baseline delivered #47 through PR #242; this follow-up
+may promote #172 only after its separate readiness audit passes from clean
+`main` under an approved project identity.
 
 ### Next Three Pilot Value Slices
 
 | Order | Issue | State | Dependency | Outcome |
 | --- | --- | --- | --- | --- |
-| 1 | #47 | Ready | Foundation and workflow baseline merged | Freeze the supported immutable Git-backed Playwright workflow package and regression contract. |
-| 2 | #172 | Qualified | #47 contract | Add one project-scoped, service-principal-authorized, polling-based BPM activity endpoint. |
+| 1 | #47 | Done | Foundation and workflow baseline merged | Supported immutable Git-backed Playwright workflow package and regression contract merged through PR #242. |
+| 2 | #172 | Qualified; next audit | #47 contract complete | Add one project-scoped, service-principal-authorized, polling-based BPM activity endpoint. |
 | 3 | #174 | Qualified | #47, #172, #180 and selected conditional controls | Select, deliver, operate, and review one real bounded activity. |
 
 #180 is parallel P0 Foundation/governance work and must complete before an

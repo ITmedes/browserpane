@@ -3,13 +3,14 @@
 ## Metadata
 
 - Issue: `#241`
-- State: Review
+- State: In Progress (bounded qualification follow-up)
 - Owner: BrowserPane maintainers / Codex
 - Lane: Foundation
 - Target gate: Repeatable, bounded contributor delivery
-- Depends on: `#173` delivery governance (complete), one live
-  `state:ready` issue, and a matching focused implementation plan
-- Last verified commit/date: `b6f32c14` / 2026-08-20
+- Depends on: `#173` delivery governance (complete), a live `state:ready`
+  issue or one roadmap-prioritized `state:qualified` candidate, and a matching
+  focused implementation plan
+- Last verified commit/date: `22150090` / 2026-08-20
 
 ## Business Outcome
 
@@ -22,18 +23,24 @@ one proposal or one repair.
 ## Example Use Case
 
 A maintainer starts the loop from a clean and synchronized `main` checkout.
-The loop finds `#47` as the highest-priority live Ready issue, verifies its
-focused plan, and starts one Codex proposal session. Codex implements the
-bounded slice on a `codex/BPANE-*` branch, runs the relevant local checks, and
-opens one ready PR. The shell driver waits for GitHub checks. If a check fails,
-one fresh repair session diagnoses and fixes that failure. With automatic
-merge disabled, the driver stops at a green PR for human review; with explicit
-opt-in, it first verifies that the tested branch contains current `main` and
-then merges.
+After `#47` is merged, the Ready queue is empty while `#172` remains Qualified.
+The loop starts a separate qualification session, verifies that `#47` is
+complete, `#172` is the documented next Pilot Value slice, and the canonical
+issue plus `BPANE-00172_PHASE_0_WORKFLOW_ENDPOINT_PLAN.md` contain a bounded
+scope, acceptance criteria, and executable test evidence. The qualifier posts
+an auditable readiness comment and promotes only `#172` to `state:ready`.
 
-The same run must stop without mutation when the checkout contains unrelated
-work, no issue is Ready, the issue lacks a focused plan, another Codex PR is
-already active, or repair safety cannot be established.
+A fresh proposal session then implements that Ready issue on a
+`codex/BPANE-*` branch, runs the relevant local checks, and opens one ready PR.
+The shell driver waits for GitHub checks. If a check fails, one fresh repair
+session diagnoses and fixes that failure. With automatic merge disabled, the
+driver stops at a green PR for human review; with explicit opt-in, it first
+verifies that the tested branch contains current `main` and then merges.
+
+The same run must stop without promotion when the checkout contains unrelated
+work, no Qualified candidate is safely promotable, requirements are ambiguous,
+the issue lacks a focused plan, another Codex PR is active, or repair safety
+cannot be established.
 
 ## Current Evidence
 
@@ -55,7 +62,12 @@ already active, or repair safety cannot be established.
 ## Scope
 
 - Add a maintained `dev_loop/` with a Codex-native driver, proposal routine,
-  repair routine, result schema, tests, and operator README.
+  qualification routine, repair routine, result schema, tests, and operator
+  README.
+- When no Ready issue exists, inspect exactly one roadmap-prioritized
+  `state:qualified` candidate in a separate Codex session and promote it only
+  after dependencies, issue/plan alignment, scope, risks, acceptance, and test
+  evidence pass a bounded readiness audit.
 - Select exactly one live `state:ready` issue according to the documented
   delivery order; require a matching `docs/*_PLAN.md` before implementation.
 - Run Codex non-interactively and retain raw JSONL, schema-valid final output,
@@ -69,8 +81,10 @@ already active, or repair safety cannot be established.
 ## Non-Goals
 
 - A hosted agent service, GitHub App, merge queue, or cross-repository scheduler.
-- Automatic issue creation, deduplication, reprioritization, or promotion from
-  Qualified to Ready.
+- Automatic issue creation, deduplication, roadmap reprioritization, or
+  promotion without the explicit qualification contract.
+- Editing product code, creating branches or PRs, merging, or resolving product
+  decisions inside the qualification session.
 - Copying Grattis run history, lock state, cloud fix workflow behavior, Maven
   commands, Claude CLI flags, or dollar-cost assumptions.
 - Claiming Compose smoke coverage on PRs where GitHub does not run Compose.
@@ -81,9 +95,17 @@ already active, or repair safety cannot be established.
 
 - Live GitHub labels are the execution-state source of truth. Local documents
   explain ordering and requirements but do not create a second machine queue.
-- The loop consumes Ready work only. If no issue is Ready, it returns
-  `NO_PROPOSAL` and stops so qualification remains a deliberate product-owner
-  action.
+- The loop consumes Ready work first. If no issue is Ready and
+  `AUTO_QUALIFY=1`, one separate session may promote exactly one Qualified
+  candidate after a deterministic readiness audit. `AUTO_QUALIFY=0` preserves
+  manual queue management.
+- The qualifier follows the explicit order in `CURRENT_CONTEXT.md` and
+  `DELIVERY_ROADMAP.md`; labels or issue numbers alone never authorize
+  reprioritization. It comments the evidence before changing labels and
+  verifies the resulting `state:ready` label.
+- Missing plans, material issue/plan drift, unresolved decisions, unmet
+  dependencies, overlap, or ambiguous order produce `NO_QUALIFICATION` or
+  `HALT` without label mutation.
 - A `codex/BPANE-` branch prefix and one open PR under that prefix form the
   cross-process mutex. The checkout also has a PID lock.
 - The proposal and repair routines never wait for checks and never merge. The
@@ -134,8 +156,8 @@ failure so a maintainer can inspect or continue them manually.
 
 ## Observability And Operator Feedback
 
-- Console phases distinguish preflight, proposal, CI wait, repair, branch
-  update, merge decision, and stop reason.
+- Console phases distinguish preflight, qualification, proposal, CI wait,
+  repair, branch update, merge decision, and stop reason.
 - Per-run directories retain exact prompts, JSONL events, final JSON results,
   and `journal.tsv` rows.
 - Journals record iteration, PR, outcome, repair count, wall time, input tokens,
@@ -153,12 +175,17 @@ failure so a maintainer can inspect or continue them manually.
 4. Add read-only preflight, parser/configuration tests, and contributor docs.
 5. Run shell/document validation, review the diff, and commit the coherent
    tooling slice without staging unrelated certificate files.
+6. Add the bounded qualification follow-up: routine, structured outcomes,
+   driver transition, issue-label verification, tests, and aligned contributor
+   documentation.
 
 ## Test Strategy
 
 ### Unit
 
 - Parse every allowed structured routine status and reject malformed output.
+- Accept schema-valid `QUALIFIED` and `NO_QUALIFICATION` results while rejecting
+  promotions without an issue number or no-candidate results without a reason.
 - Extract token usage from representative Codex JSONL completion events.
 - Extract unique GitHub run IDs from check links.
 - Validate booleans, merge methods, numeric bounds, and required files.
@@ -169,6 +196,9 @@ failure so a maintainer can inspect or continue them manually.
 
 - Source the driver in library mode so tests exercise its real functions
   without invoking Codex or GitHub mutations.
+- Exercise qualification context creation and the no-Ready transition with
+  mocked Codex/GitHub boundaries; assert that proposal follows only after the
+  selected issue is visibly `state:ready`.
 - Run `--check` to validate installed tools, Codex CLI availability, GitHub
   authentication, repository metadata, and dirty-state reporting without
   switching branches or editing files.
@@ -199,14 +229,17 @@ failure so a maintainer can inspect or continue them manually.
    available.
 3. Run `./dev_loop/loop.sh --check`; expect a read-only report.
 4. Run `./dev_loop/tests/loop_test.sh`; expect all isolated tests to pass.
-5. Review the next Ready issue and its focused plan.
-6. Run `ITERATIONS=1 AUTO_MERGE=0 ./dev_loop/loop.sh` under supervision.
-7. Confirm exactly one Codex branch and PR are created and no unrelated file is
+5. With no Ready issue, review the next Qualified issue and its focused plan.
+6. Run `ITERATIONS=1 AUTO_QUALIFY=1 AUTO_MERGE=0 ./dev_loop/loop.sh` under
+   supervision.
+7. Confirm the qualification session comments its evidence, promotes exactly
+   one issue, and exits before proposal starts.
+8. Confirm exactly one Codex branch and PR are created and no unrelated file is
    staged.
-8. Inspect the PR handoff, local validation evidence, JSONL/final result, and
+9. Inspect the PR handoff, local validation evidence, JSONL/final result, and
    journal.
-9. Let GitHub checks finish; expect the driver to stop with the green PR open.
-10. Clean up or merge manually. Enable `AUTO_MERGE=1` only after the supervised
+10. Let GitHub checks finish; expect the driver to stop with the green PR open.
+11. Clean up or merge manually. Enable `AUTO_MERGE=1` only after the supervised
     path and branch protections are verified.
 
 ## Documentation And Claim Impact
@@ -225,6 +258,9 @@ investor claims require no product change.
   workflow assumptions.
 - Structured output, local logs, bounded convergence, locks, STOP, branch
   currency, and opt-in merge behavior are implemented.
+- An empty Ready queue invokes at most one bounded qualifier; successful
+  promotion is verified through GitHub before proposal, while ambiguous or
+  blocked candidates stop without mutation.
 - Unit-style shell tests and read-only integration preflight pass.
 - Repository baseline and document validation pass.
 - Generated loop files are ignored and unrelated local changes remain
@@ -236,15 +272,21 @@ investor claims require no product change.
 1. Run `./dev_loop/loop.sh --check` and confirm it reports tools, auth,
    repository, active Codex PR, and cleanliness without mutation.
 2. Run `./dev_loop/tests/loop_test.sh`.
-3. From clean synchronized `main`, run one supervised iteration with
-   `ITERATIONS=1 AUTO_MERGE=0`.
-4. Verify the selected issue was Ready and had a matching focused plan.
-5. Verify one ready PR contains `Closes #<issue>`, a routine handoff, and
+3. From clean synchronized `main` with no Ready issue and one eligible
+   Qualified candidate, run one supervised iteration with
+   `ITERATIONS=1 AUTO_QUALIFY=1 AUTO_MERGE=0`.
+4. Verify the qualifier records dependencies, plan path, scope, risks,
+   acceptance, and test evidence before promoting exactly one issue.
+5. Verify the selected issue is visibly Ready and has a matching focused plan
+   before proposal starts.
+6. Verify one ready PR contains `Closes #<issue>`, a routine handoff, and
    truthful local/deferred validation evidence.
-6. Verify the shell, not Codex, waits for GitHub checks.
-7. Inspect the ignored run directory for prompt, JSONL, final result, and token
+7. Verify the shell, not Codex, waits for GitHub checks.
+8. Inspect the ignored run directory for qualification/proposal prompts,
+   JSONL, final results, and token
    journal artifacts.
-8. Exercise repair and STOP behavior on a disposable failing slice before
+9. Exercise repair, qualification halt, no-candidate, and STOP behavior on
+   disposable fixtures before
    enabling unattended mode.
 
 ## Evidence Record
@@ -252,9 +294,10 @@ investor claims require no product change.
 - Issue: <https://github.com/ITmedes/browserpane/issues/241>
 - Source pattern reviewed: local `../grattis-app/grattis/dev_loop/`
 - Issue metadata: authored by the approved project identity, labeled
-  `priority:P1`, `lane:foundation`, and `state:review`, with milestone
+  `priority:P1`, `lane:foundation`, and `state:in-progress`, with milestone
   `Foundation Gate`.
-- PR/commit: plan `a0a0f524`; implementation `b6f32c14`; PR pending.
+- Baseline commits: plan `a0a0f524`; implementation `b6f32c14`; merged on
+  `main` before the qualification follow-up.
 - Validation:
   - `bash -n dev_loop/loop.sh`
   - `bash -n dev_loop/tests/loop_test.sh`
@@ -279,5 +322,31 @@ investor claims require no product change.
 - Root `README.md`, `ARCH.md`, OpenAPI, and investor material: no change needed;
   contributor usage is isolated in `dev_loop/README.md`, `AGENTS.md`, and the
   current-context/roadmap documents.
-- Supervised first autonomous iteration: deferred until the tooling change is
-  merged and the maintainer explicitly starts it from clean `main`
+- Supervised first autonomous iteration: completed against #47. The loop
+  produced PR #242, which passed its required validation, merged at
+  `22150090`, and closed #47.
+
+### Qualification Follow-Up Evidence
+
+- Branch: `feature/BPANE-00241-qualification` from `22150090`.
+- Issue comment: the approved project identity recorded the bounded
+  qualification business case, example, acceptance, and safety limits before
+  implementation.
+- `bash -n dev_loop/loop.sh dev_loop/tests/loop_test.sh` - passed.
+- `jq -e . dev_loop/schemas/routine-result.schema.json` - passed.
+- `./dev_loop/tests/loop_test.sh` - 42/42 checks passed, including
+  schema-valid qualification/no-qualification results, nounset-safe context
+  generation, an empty-Ready successful promotion gate, rejection when the
+  reported issue is not exclusively Ready, rejection of multiple promotions,
+  manual-qualification bypass, no-candidate short-circuiting, identity policy,
+  CI outcomes, STOP, and lock behavior.
+- `node scripts/validate.mjs --stage repository-baseline --stage
+  repository-documents` - passed with 47 tracked JSON files, 95 Markdown
+  files, 19 YAML files, and 3 workflows.
+- Live read-only boundary check through the repository-local `gh` config:
+  `thebackplane`, `ADMIN`, zero Ready issues, and 32 Qualified issues.
+- Real #172 label/comment mutation is deferred until this follow-up is merged;
+  running the version under test from a feature branch would correctly violate
+  the qualifier's clean synchronized `main` precondition.
+- Root `README.md`, `ARCH.md`, OpenAPI, and runtime/product tests: no change
+  required because this follow-up changes contributor orchestration only.

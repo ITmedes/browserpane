@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 
 # BrowserPane's closed local Codex implementation loop.
-# Codex proposes or repairs one PR. This driver waits, updates, and optionally
-# merges. Every external wait and every repair budget is bounded.
+# Codex qualifies one issue, proposes one PR, or repairs one PR in separate
+# sessions. This driver waits, updates, and optionally merges. Every external
+# wait and every repair budget is bounded.
 
 set -euo pipefail
 
@@ -20,6 +21,7 @@ AUTO_RERUN_CANCELLED="${AUTO_RERUN_CANCELLED:-2}"
 SETTLE_SECONDS="${SETTLE_SECONDS:-180}"
 SESSION_TIMEOUT_SECONDS="${SESSION_TIMEOUT_SECONDS:-10800}"
 POST_MERGE_TIMEOUT_SECONDS="${POST_MERGE_TIMEOUT_SECONDS:-7200}"
+AUTO_QUALIFY="${AUTO_QUALIFY:-1}"
 AUTO_MERGE="${AUTO_MERGE:-0}"
 MERGE_METHOD="${MERGE_METHOD:-squash}"
 DEFAULT_BRANCH="${DEFAULT_BRANCH:-main}"
@@ -73,7 +75,7 @@ validate_config() {
     value="${!name}"
     is_positive_uint "$value" || die "$name must be a positive integer, got '$value'."
   done
-  for name in FAIL_FAST AUTO_MERGE; do
+  for name in FAIL_FAST AUTO_QUALIFY AUTO_MERGE; do
     value="${!name}"
     [[ "$value" == "0" || "$value" == "1" ]] || die "$name must be 0 or 1, got '$value'."
   done
@@ -136,14 +138,21 @@ validate_result() {
   jq -e '
     type == "object" and
     ((keys | sort) == (["commit_sha","issue_number","pr_url","reason","run_id","status","summary"] | sort)) and
-    (.status == "PROPOSED" or .status == "NO_PROPOSAL" or .status == "REPAIRED" or .status == "RERUN_ONLY" or .status == "HALT") and
+    (.status == "QUALIFIED" or .status == "NO_QUALIFICATION" or
+     .status == "PROPOSED" or .status == "NO_PROPOSAL" or
+     .status == "REPAIRED" or .status == "RERUN_ONLY" or .status == "HALT") and
     ((.issue_number == null) or ((.issue_number | type) == "number" and .issue_number >= 1 and .issue_number == (.issue_number | floor))) and
     ((.pr_url == null) or ((.pr_url | type) == "string")) and
     ((.commit_sha == null) or ((.commit_sha | type) == "string")) and
     ((.run_id == null) or ((.run_id | type) == "string")) and
     ((.reason == null) or ((.reason | type) == "string")) and
     ((.summary | type) == "string" and (.summary | length) > 0) and
-    (if .status == "PROPOSED" then
+    (if .status == "QUALIFIED" then
+       .issue_number != null and .pr_url == null and .commit_sha == null and .run_id == null and .reason == null
+     elif .status == "NO_QUALIFICATION" then
+       .pr_url == null and .commit_sha == null and .run_id == null and
+       (.reason | type) == "string" and (.reason | length) > 0
+     elif .status == "PROPOSED" then
        .issue_number != null and (.pr_url | type) == "string" and (.pr_url | startswith("https://github.com/")) and
        (.commit_sha | type) == "string" and (.commit_sha | test("^[0-9a-f]{7,64}$"))
      elif .status == "REPAIRED" then
@@ -264,6 +273,30 @@ ready_issues() {
       sort_by(.number) | map("- #\(.number) \(.title) | " + ([.labels[].name] | join(", ")) + " | \(.url)") | join("\n") end'
 }
 
+qualified_issues() {
+  gh issue list --state open --label state:qualified --limit 100 \
+    --json number,title,labels,url \
+    --jq 'if length == 0 then "(none)" else
+      sort_by(.number) | map("- #\(.number) \(.title) | " + ([.labels[].name] | join(", ")) + " | \(.url)") | join("\n") end'
+}
+
+state_issue_count() {
+  local label="$1"
+  gh issue list --state open --label "$label" --limit 100 --json number --jq 'length'
+}
+
+state_issue_numbers() {
+  local label="$1"
+  gh issue list --state open --label "$label" --limit 100 --json number \
+    --jq 'sort_by(.number) | .[].number'
+}
+
+issue_state_labels() {
+  local issue_number="$1"
+  gh issue view "$issue_number" --json labels \
+    | jq -r '[.labels[].name | select(startswith("state:"))] | sort | join(",")'
+}
+
 latest_workflow_line() {
   local workflow="$1"
   gh run list --workflow "$workflow" --branch "$DEFAULT_BRANCH" --limit 1 \
@@ -278,6 +311,7 @@ preflight_tools() {
   validate_config
   require bash; require git; require gh; require jq; require "$CODEX_BIN"
   [[ -f "$RESULT_SCHEMA" ]] || die "missing result schema: $RESULT_SCHEMA"
+  [[ -f "$here/routines/qualify.md" ]] || die "missing qualification routine"
   [[ -f "$here/routines/propose.md" ]] || die "missing proposal routine"
   [[ -f "$here/routines/repair.md" ]] || die "missing repair routine"
   jq -e . "$RESULT_SCHEMA" >/dev/null || die "result schema is not valid JSON"
@@ -313,6 +347,8 @@ repo_ready_report() {
   else
     say "active Codex PR: none"
   fi
+  say "Ready issues: $(state_issue_count state:ready 2>/dev/null || printf unknown)"
+  say "Qualified issues: $(state_issue_count state:qualified 2>/dev/null || printf unknown)"
   [[ "$branch" == "$DEFAULT_BRANCH" && -z "$dirty" ]] && ready=1
   if (( ready == 1 )); then
     good "read-only preflight passed; the checkout can enter the loop"
@@ -526,6 +562,96 @@ record_outcome() {
     "$iter_input" "$iter_cached" "$iter_output" "$iter_reasoning"
 }
 
+qualify() {
+  local number="$1"
+  local context="$LOG_DIR/$number-qualify.context.md"
+  local prompt="$LOG_DIR/$number-qualify.prompt.md" raw="$LOG_DIR/$number-qualify.jsonl"
+  local final="$LOG_DIR/$number-qualify.result.json"
+  {
+    printf '# This run\n\n'
+    printf -- '- Repository: `%s`\n' "$repo"
+    printf -- '- Default branch: `%s` at `%s`\n' "$DEFAULT_BRANCH" "$(git rev-parse "origin/$DEFAULT_BRANCH")"
+    printf -- '- Iteration: `%s`\n' "$number"
+    printf -- '- Approved GitHub identity: `%s`\n' "$GITHUB_LOGIN"
+    printf -- '- Latest main Validation: %s\n' "$(latest_workflow_line validation.yml)"
+    printf -- '- Latest main Compose: %s\n\n' "$(latest_workflow_line compose.yml)"
+    printf 'Live Ready issues (must still be empty):\n\n%s\n\n' "$(ready_issues || printf unavailable)"
+    printf 'Live Qualified candidates:\n\n%s\n\n' "$(qualified_issues || printf unavailable)"
+    printf 'Open non-Codex pull requests:\n\n%s\n\n' "$(human_prs || printf unavailable)"
+    printf 'Qualification may comment on and promote at most one issue. '
+    printf 'It must not edit Git, implement code, create a PR, wait for CI, or merge.\n'
+  } > "$context"
+  build_prompt "$here/routines/qualify.md" "$context" "$prompt"
+  step "iteration $number | Codex qualification"
+  local rc=0
+  run_session "$prompt" "$raw" "$final" || rc=$?
+  record_usage "$raw"
+  return "$rc"
+}
+
+qualification_gate() {
+  local number="$1" ready_count qualification_rc=0
+  local qualified_before qualification_result qualification_status post_ready_count
+  QUALIFIED_ISSUE=""
+  QUALIFICATION_REASON=""
+
+  if ! ready_count="$(state_issue_count state:ready)" || ! is_uint "$ready_count"; then
+    QUALIFICATION_REASON="could not determine the live Ready issue count"
+    return 20
+  fi
+  if (( ready_count > 0 )) || [[ "$AUTO_QUALIFY" == "0" ]]; then
+    return 0
+  fi
+
+  if ! qualified_before="$(state_issue_numbers state:qualified)"; then
+    QUALIFICATION_REASON="could not determine the live Qualified issue queue"
+    return 20
+  fi
+  if [[ -z "$qualified_before" ]]; then
+    QUALIFICATION_REASON="no open Qualified issue is available for readiness assessment"
+    return 10
+  fi
+
+  qualify "$number" || qualification_rc=$?
+  qualification_result="$LOG_DIR/$number-qualify.result.json"
+  if (( qualification_rc != 0 )) || ! validate_result "$qualification_result"; then
+    QUALIFICATION_REASON="qualification session failed; inspect $LOG_DIR/$number-qualify.jsonl and $qualification_result"
+    return 20
+  fi
+
+  qualification_status="$(routine_field "$qualification_result" status)"
+  case "$qualification_status" in
+    QUALIFIED)
+      QUALIFIED_ISSUE="$(routine_field "$qualification_result" issue_number)"
+      if ! post_ready_count="$(state_issue_count state:ready)"; then
+        QUALIFICATION_REASON="could not verify the Ready queue after qualification"
+        return 21
+      fi
+      if ! grep -Fxq "$QUALIFIED_ISSUE" <<< "$qualified_before"; then
+        QUALIFICATION_REASON="qualification reported issue #$QUALIFIED_ISSUE, which was not in the original Qualified queue"
+        return 21
+      fi
+      if [[ "$post_ready_count" != "1" || "$(issue_state_labels "$QUALIFIED_ISSUE")" != "state:ready" ]]; then
+        QUALIFICATION_REASON="qualification reported success but the Ready queue does not contain exactly issue #$QUALIFIED_ISSUE"
+        return 21
+      fi
+      return 0
+      ;;
+    NO_QUALIFICATION)
+      QUALIFICATION_REASON="$(routine_field "$qualification_result" reason)"
+      return 10
+      ;;
+    HALT)
+      QUALIFICATION_REASON="$(routine_field "$qualification_result" reason)"
+      return 11
+      ;;
+    *)
+      QUALIFICATION_REASON="qualification returned unexpected status $qualification_status"
+      return 22
+      ;;
+  esac
+}
+
 propose() {
   local number="$1"
   local context="$LOG_DIR/$number-propose.context.md"
@@ -594,7 +720,7 @@ usage() {
 Usage: dev_loop/loop.sh [--check] [--once] [--help]
 
   --check  Read-only tool, auth, schema, repository, and active-PR preflight.
-  --once   Run one proposal/PR convergence iteration.
+  --once   Run one qualification/proposal/PR convergence iteration.
   --help   Show this help.
 
 Configuration is documented in dev_loop/README.md.
@@ -642,7 +768,7 @@ trap on_exit EXIT
 trap 'printf "\n"; warn "interrupted"; exit 130' INT TERM
 
 printf '%sBrowserPane Codex development loop | run %s%s\n' "$c_b" "$RUN_ID" "$c_reset"
-say "iterations=$ITERATIONS repairs=$MAX_REPAIRS auto_merge=$AUTO_MERGE logs=dev_loop/runs/$RUN_ID"
+say "iterations=$ITERATIONS repairs=$MAX_REPAIRS auto_qualify=$AUTO_QUALIFY auto_merge=$AUTO_MERGE logs=dev_loop/runs/$RUN_ID"
 
 while :; do
   if (( ITERATIONS > 0 && iteration >= ITERATIONS )); then
@@ -665,6 +791,41 @@ while :; do
     pr="$(jq -r .number <<< "$pr_json")"
     warn "adopting open Codex PR #$pr"
   else
+    qualification_gate_rc=0
+    qualification_gate "$n" || qualification_gate_rc=$?
+    case "$qualification_gate_rc" in
+      0)
+        if [[ -n "$QUALIFIED_ISSUE" ]]; then
+          good "issue #$QUALIFIED_ISSUE passed qualification and is Ready"
+          if stop_requested; then
+            record_outcome "qualified-awaiting-proposal"
+            exit 0
+          fi
+        fi
+        ;;
+      10)
+        record_outcome "no-qualification"
+        good "no qualification: $QUALIFICATION_REASON"
+        break
+        ;;
+      11)
+        record_outcome "halted"
+        die "qualification halted: $QUALIFICATION_REASON"
+        ;;
+      20)
+        record_outcome "qualification-failed"
+        die "$QUALIFICATION_REASON"
+        ;;
+      21)
+        record_outcome "qualification-unverified"
+        die "$QUALIFICATION_REASON"
+        ;;
+      *)
+        record_outcome "invalid-qualification-status"
+        die "$QUALIFICATION_REASON"
+        ;;
+    esac
+
     proposal_rc=0
     propose "$n" || proposal_rc=$?
     result="$LOG_DIR/$n-propose.result.json"

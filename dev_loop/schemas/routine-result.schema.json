@@ -6,7 +6,15 @@
   "properties": {
     "status": {
       "type": "string",
-      "enum": ["PROPOSED", "NO_PROPOSAL", "REPAIRED", "RERUN_ONLY", "HALT"]
+      "enum": [
+        "QUALIFIED",
+        "NO_QUALIFICATION",
+        "PROPOSED",
+        "NO_PROPOSAL",
+        "REPAIRED",
+        "RERUN_ONLY",
+        "HALT"
+      ]
     },
     "issue_number": {
       "type": ["integer", "null"],

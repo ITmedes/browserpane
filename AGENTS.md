@@ -394,10 +394,15 @@ Run these where applicable:
   authorization to implement an unready issue; derive a bounded slice plan
   before coding.
 - The optional local Codex delivery loop lives under `dev_loop/`. It consumes
-  only live `state:ready` issues with matching focused plans, uses separate
-  proposal and repair sessions, and leaves automatic merging disabled unless a
-  maintainer explicitly enables it. Read `dev_loop/README.md` before running
-  it; never commit its generated `runs/`, `.lock/`, or `STOP` state.
+  live `state:ready` issues with matching focused plans. If none are Ready and
+  `AUTO_QUALIFY=1`, a separate qualification session may promote exactly one
+  roadmap-prioritized `state:qualified` issue only after its dependencies,
+  issue/plan contract, bounded scope, risks, acceptance criteria, and test
+  evidence pass; ambiguity must stop without promotion. Qualification,
+  proposal, and repair remain separate sessions, and automatic merging stays
+  disabled unless a maintainer explicitly enables it. Read
+  `dev_loop/README.md` before running it; never commit generated `runs/`,
+  `.lock/`, or `STOP` state.
 - When working with GitHub issues, keep issue state implementation-oriented:
   prefer one canonical issue per shippable slice, document the business case,
   scope, acceptance criteria, example use case, and smoke sequence on that

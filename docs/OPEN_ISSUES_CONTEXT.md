@@ -60,7 +60,7 @@ Source check:
 | Focused Pilot Value issues | `#47`, `#172`, `#174` | Use `#47` for the immutable Playwright package, `#172` for one polling-based BPM activity endpoint, and `#174` for the selected real Pilot process. |
 | Deferred workflow productization | `#171`, `#240` | Use `#171` for Teach Mode and controlled repair. Use `#240` for endpoint revisions, callbacks, replay, tracing, throttling, and connector compatibility. Neither is a Phase 0 dependency. |
 | Delivery governance | `#173` | Owns the canonical roadmap, maturity, gates, risks, plan template, and issue/claim reconciliation. It does not own runtime features. |
-| Contributor automation | `#241` | Owns the optional local Codex propose/watch/repair loop. It consumes the existing Ready queue and does not change product priority or capability maturity. |
+| Contributor automation | `#241` | Owns the optional local Codex qualify/propose/watch/repair loop. It consumes Ready work first and may promote one roadmap-prioritized Qualified issue after a bounded readiness audit; it does not change product priority or capability maturity. |
 | Focused cross-product gaps | `#174` through `#180` | Use these for Phase 0 delivery, protocol conformance, authorization, identity lifecycle, platform telemetry, API compatibility, and open-source governance. |
 | Focused validation performance | `#184` | Preserve the #151 validation baseline while reducing hosted compose feedback time through isolated execution lanes. |
 | Focused Docker build acceleration | `#185` | Preserve #184 lane coverage while adding deterministic, supply-chain-safe Docker build reuse for trusted hosted runs. |
@@ -116,7 +116,7 @@ Source check:
 | `#231` Prometheus SLI and alert baseline | `BPANE-00231_PROMETHEUS_SLI_ALERT_BASELINE_PLAN.md`, `PLATFORM_TELEMETRY.md`, `DELIVERY_ROADMAP.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md`, `VALIDATION_MATRIX.md` | Closed Production child of #178 | Recording rules, conservative starter alerts, deterministic behavior tests, and operator runbooks merged through PR #232. |
 | closed `#233` Grafana operations dashboard | `BPANE-00233_GRAFANA_OPERATIONS_DASHBOARD_PLAN.md`, `PLATFORM_TELEMETRY.md`, `DELIVERY_ROADMAP.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md`, `VALIDATION_MATRIX.md` | Completed Production checkpoint | Provisioned aggregate dashboard merged through PR #234. |
 | `#240` Workflow Endpoint lifecycle, callbacks, and connector compatibility | `BPANE-00240_WORKFLOW_ENDPOINT_PRODUCTIZATION_PLAN.md`, historical `BPANE-00172_BPM_WORKFLOW_ENDPOINT_INTEGRATION_PLAN.md` | Deferred Production/Enterprise | Owns endpoint revisions, callbacks, replay, tracing expansion, throttling, and connector compatibility after #172. |
-| `#241` Codex-native local delivery loop | `BPANE-00241_CODEX_DEVELOPMENT_LOOP_PLAN.md`, `CURRENT_CONTEXT.md`, `DELIVERY_ROADMAP.md` | Foundation contributor tooling | Optional bounded proposal/repair orchestration for live Ready issues. It does not promote backlog, replace plans, or advance a product gate. |
+| `#241` Codex-native local delivery loop | `BPANE-00241_CODEX_DEVELOPMENT_LOOP_PLAN.md`, `CURRENT_CONTEXT.md`, `DELIVERY_ROADMAP.md` | Foundation contributor tooling | Optional bounded qualification/proposal/repair orchestration. It may promote one already-scoped Qualified issue only after roadmap, dependency, plan, risk, acceptance, and test checks; it does not create backlog, replace plans, reprioritize work, or advance a product gate. |
 
 ## Focused Work-Order Issue Matrix
 
@@ -238,7 +238,7 @@ The cross-reference pass also updated the issue bodies in both directions:
 | `#231` | Closed Production telemetry checkpoint. | Created from #178 after #229 merged and closed through PR #232 on 2026-08-16. | Owns merged Prometheus recording rules, starter alerts, rule tests, and operator runbooks. |
 | closed `#233` | Completed Production telemetry checkpoint. | Merged through PR #234. | Provisioned aggregate Grafana dashboard without final SLO/alert-routing scope. |
 | `#240` | Deferred endpoint productization. | Created on GitHub 2026-08-20 when #172 was narrowed. | Owns revisions, callbacks, replay, trace expansion, throttling, and connector compatibility. |
-| `#241` | Review-state Foundation contributor tooling. | Created by the approved project identity with a focused plan, explicit identity allowlist, and bounded smoke sequence. | Consumes only existing Ready issues and does not alter product capability maturity. |
+| `#241` | In-progress Foundation contributor-tooling follow-up. | The merged baseline consumed Ready work; the bounded follow-up adds requirements qualification for an empty Ready queue. | Qualification may promote exactly one roadmap-prioritized candidate but does not alter product priority or capability maturity. |
 
 ## Docs-To-Issue Context
 
@@ -317,7 +317,7 @@ issue and capture the exact slice boundary in a checked-in `docs/*_PLAN.md`:
 | Active Operator Product work | none; `#124` qualified | Admin-new is promoted; select #124 only when session-template catalog work outranks the current Production slice. |
 | Items 10-19: admin-new parity and promotion work | `#154`-`#163`, with session templates still tracked by `#124` | Use the matching focused issue and keep old admin regression scope explicit. |
 | Items 20-26: scalability, runtime hygiene, docs, performance, and refactors | `#164`-`#170` | Use the matching focused issue and require validation evidence before broad refactors. |
-| Pilot Value | `#47` Ready, then `#172` and `#174`; `#180` parallel gate | Freeze package, implement polling endpoint, then deliver one real activity. Pull in only selected conditional controls. |
+| Pilot Value | closed `#47`; `#172` is the next qualification candidate, then `#174`; `#180` is a parallel gate | The package contract merged through PR #242. Audit and implement the polling endpoint next, then deliver one real activity. Pull in only selected conditional controls. |
 | Production/Enterprise and Innovation | #233 completed; broad issues plus `#175`-`#178`, `#240`, and `#171` qualified | Reassess after Phase 0 evidence; #240 and #171 must not displace the current Pilot sequence. |
 
 ## Issue Hygiene Notes
