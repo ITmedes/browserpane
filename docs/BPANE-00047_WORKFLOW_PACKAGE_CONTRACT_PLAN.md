@@ -2,7 +2,7 @@
 
 Issue: [#47](https://github.com/ITmedes/browserpane/issues/47)
 
-Status: Ready
+Status: Review
 
 Lane: Pilot Value
 
@@ -11,7 +11,9 @@ Target gate: Phase 0 Operational Proof prerequisite
 Depends on: merged Foundation validation, source hardening, worker lifecycle,
 store parity, and API-conformance baselines
 
-Last verified: 2026-08-20 on `main` at `2adbfdee`
+Last verified: 2026-08-20 on `codex/BPANE-00047-workflow-package-contract`;
+the exact implementation commit and review PR are recorded after the draft PR
+is opened.
 
 ## Business Outcome
 
@@ -51,7 +53,9 @@ Gaps to freeze:
 ## Scope
 
 1. Define Playwright TypeScript as the only supported Phase 0 executor and
-   reject unsupported executor values through the public contract.
+   reject unsupported executor values on package-bearing publication. Preserve
+   package-less creation for existing clients as an explicitly unsupported,
+   readable legacy compatibility path rather than silently rewriting it.
 2. Require Git-backed source, a resolved immutable commit, a validated relative
    entrypoint, and explicit workflow/runtime compatibility metadata.
 3. Adopt JSON Schema Draft 2020-12 for declared input/output schemas while
@@ -207,6 +211,70 @@ Gaps to freeze:
 
 ## Evidence Record
 
-Record the PR, commit, migration/compatibility decision, test and coverage
-results, Compose smoke run, deterministic example commit, and reviewed residual
-risks on issue `#47`.
+Review PR and implementation commit: recorded after the draft PR is opened.
+
+Migration and compatibility decision:
+
+- `20260820000100_workflow_package_contract.sql` adds one nullable JSONB
+  manifest column; existing immutable rows are not rewritten.
+- A valid `browserpane.workflow-package/v1` manifest is `supported`, a
+  package-less Playwright version is `legacy`, and a package-less version with
+  another stored executor is `unsupported`. New package-bearing publications
+  reject every executor except `playwright`.
+- The package copies its reviewed resource requirements into the existing run
+  policy fields, so authorization, project, context, egress, workspace,
+  extension, recording, and capability enforcement retain one authoritative
+  path.
+
+Exact local validation on 2026-08-20:
+
+- `node scripts/validate.mjs --profile fast` — passed all 44 stages, including
+  repository/security policy, formatting, clippy, workspace tests, Rust and
+  Node coverage ratchets, builds, and OpenAPI compatibility with 4 additive
+  and 0 unclassified changes.
+- `cargo test -p bpane-gateway workflow::package::tests -- --test-threads=1`
+  — 5 passed.
+- `cargo test -p bpane-gateway preserves_legacy_executor_compatibility_and_rejects_invalid_package_metadata -- --test-threads=1`
+  — 1 passed.
+- `BPANE_SESSION_STORE_CONTRACT_POSTGRES_URL=postgresql://browserpane:browserpane-dev@localhost:5433/browserpane cargo test -p bpane-gateway session_store_contract_postgres -- --ignored --test-threads=1`
+  — 1 passed against the local Postgres store.
+- `docker compose -f deploy/compose.yml up -d --build gateway` followed by
+  `curl -fsS http://localhost:8932/readyz` — rebuilt the changed gateway and
+  reported ready dependencies before the final live smokes.
+
+Exact local Compose/browser validation on 2026-08-20:
+
+- In `code/web/bpane-client`, each of
+  `npm run smoke:workflows -- --headless`,
+  `npm run smoke:workflow-credential-injection -- --headless`,
+  `npm run smoke:workflow-credentials -- --headless`,
+  `npm run smoke:workflow-workspace -- --headless`,
+  `npm run smoke:workflow-extension -- --headless`,
+  `npm run smoke:workflow-failure -- --headless`,
+  `npm run smoke:workflow-cancel -- --headless`,
+  `npm run smoke:workflow-reconnect -- --headless`,
+  `npm run smoke:workflow-cli -- --headless`, and
+  `npm run smoke:admin-unified-workflows -- --headless` passed.
+- The workflow smoke created a multi-file TypeScript source commit, published
+  it through a mutable ref, executed its imported module in a fresh session,
+  advanced the ref, and verified distinct immutable v1/v2 commits. The API
+  contract test repeats the same immutable-update proof without Compose.
+- Credential smokes proved form, cookie, storage, and TOTP behavior while
+  persisted structured output and logs contained redaction markers instead of
+  the resolved values. Workspace, extension, failure, cancellation, reconnect,
+  CLI, and Admin-New smokes exercised the adjacent policy and operator paths.
+
+Reviewed residual risk and deferral:
+
+- Invocation-time input/output schema rejection remains owned by `#172`; this
+  slice validates and persists bounded Draft 2020-12 publication metadata and
+  provides deterministic reference-package validation tests without claiming
+  endpoint enforcement.
+- Existing package-less versions remain executable under their stored behavior
+  and are visibly classified; they are not upgraded in place.
+- No remote-stream protocol, new endpoint, credential type, runtime/storage
+  adapter, callback, or sensitive-data class was added. `docs/THREAT_MODEL.md`
+  and `docs/PRODUCTION_SECURITY_BASELINE.md` therefore retain their existing
+  contracts; worker evidence redaction strengthens the existing Credential
+  Binding boundary. README, ARCH, AGENTS, OpenAPI, Admin-New status, capability
+  maturity, CLI help, and the authoring guide are aligned in this slice.

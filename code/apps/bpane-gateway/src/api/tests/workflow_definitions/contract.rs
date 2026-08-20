@@ -75,6 +75,7 @@ async fn creates_workflow_definitions_versions_and_workflow_runs_with_default_se
     let version = response_json(create_version).await;
     assert_eq!(version["version"], "v1");
     assert_eq!(version["executor"], "playwright");
+    assert_eq!(version["compatibility"]["state"], "legacy");
 
     let get_workflow = app
         .clone()
@@ -317,4 +318,306 @@ async fn creates_workflow_definitions_versions_and_workflow_runs_with_default_se
         .await
         .unwrap();
     assert_eq!(get_task.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn publishes_supported_package_and_preserves_immutable_git_evidence() {
+    let repository = tempdir().unwrap();
+    fs::create_dir_all(repository.path().join("workflow/lib")).unwrap();
+    fs::write(
+        repository.path().join("workflow/run.ts"),
+        "import { outcome } from './lib/outcome.ts';\nexport default async function run() { return outcome; }\n",
+    )
+    .unwrap();
+    fs::write(
+        repository.path().join("workflow/lib/outcome.ts"),
+        "export const outcome = { ok: true };\n",
+    )
+    .unwrap();
+    git(&["init"], repository.path());
+    git(
+        &["config", "user.email", "test@browserpane.local"],
+        repository.path(),
+    );
+    git(
+        &["config", "user.name", "BrowserPane Test"],
+        repository.path(),
+    );
+    git(&["add", "."], repository.path());
+    git(&["commit", "-m", "initial package"], repository.path());
+    let first_commit = git_head(repository.path());
+
+    let (app, token) = test_router();
+    sleep(Duration::from_secs(1)).await;
+    let workflow = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/workflows")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({ "name": "supported-package" }).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let workflow_id = workflow["id"].as_str().unwrap();
+    let publish = |version: &str| {
+        json!({
+            "version": version,
+            "executor": "playwright",
+            "entrypoint": "workflow/run.ts",
+            "source": {
+                "kind": "git",
+                "repository_url": repository.path(),
+                "ref": "HEAD",
+                "root_path": "workflow"
+            },
+            "input_schema": declared_object_schema(),
+            "output_schema": declared_object_schema(),
+            "package": supported_package_manifest()
+        })
+    };
+
+    let first_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/workflows/{workflow_id}/versions"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(publish("v1").to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(first_response.status(), StatusCode::CREATED);
+    let first = response_json(first_response).await;
+    assert_eq!(first["source"]["resolved_commit"], first_commit);
+    assert_eq!(first["compatibility"]["state"], "supported");
+    assert_eq!(first["package"]["runtime"]["language"], "typescript");
+    assert_eq!(
+        first["allowed_file_workspace_ids"],
+        supported_package_manifest()["requirements"]["allowed_file_workspace_ids"]
+    );
+
+    fs::write(
+        repository.path().join("workflow/lib/outcome.ts"),
+        "export const outcome = { ok: true, revision: 2 };\n",
+    )
+    .unwrap();
+    git(&["add", "."], repository.path());
+    git(&["commit", "-m", "second package"], repository.path());
+    let second_commit = git_head(repository.path());
+    assert_ne!(first_commit, second_commit);
+
+    let second_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/workflows/{workflow_id}/versions"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(publish("v2").to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(second_response.status(), StatusCode::CREATED);
+    let second = response_json(second_response).await;
+    assert_eq!(second["source"]["resolved_commit"], second_commit);
+
+    let original = response_json(
+        app.oneshot(
+            Request::builder()
+                .uri(format!("/api/v1/workflows/{workflow_id}/versions/v1"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap(),
+    )
+    .await;
+    assert_eq!(original["source"]["resolved_commit"], first_commit);
+    assert_eq!(original["package"], first["package"]);
+}
+
+#[tokio::test]
+async fn preserves_legacy_executor_compatibility_and_rejects_invalid_package_metadata() {
+    let (app, token) = test_router();
+    sleep(Duration::from_secs(1)).await;
+    let workflow = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/workflows")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({ "name": "invalid-package" }).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let workflow_id = workflow["id"].as_str().unwrap();
+
+    let unsupported = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/api/v1/workflows/{workflow_id}/versions"))
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "version": "v1",
+                            "executor": "shell",
+                            "entrypoint": "workflow/run.ts"
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(unsupported["compatibility"]["state"], "unsupported");
+
+    let invalid = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/workflows/{workflow_id}/versions"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "version": "v2",
+                        "executor": "playwright",
+                        "entrypoint": "workflow/run.mjs",
+                        "input_schema": declared_object_schema(),
+                        "output_schema": declared_object_schema(),
+                        "package": supported_package_manifest()
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+    assert!(response_json(invalid).await["error"]
+        .as_str()
+        .unwrap()
+        .contains("TypeScript"));
+
+    let packaged_unsupported = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/workflows/{workflow_id}/versions"))
+                .header("authorization", bearer(&token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "version": "v3",
+                        "executor": "shell",
+                        "entrypoint": "workflow/run.ts",
+                        "input_schema": declared_object_schema(),
+                        "output_schema": declared_object_schema(),
+                        "package": supported_package_manifest()
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(packaged_unsupported.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(
+        response_json(packaged_unsupported).await["error"],
+        "packaged workflow executor must be playwright"
+    );
+}
+
+fn declared_object_schema() -> Value {
+    json!({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false
+    })
+}
+
+fn supported_package_manifest() -> Value {
+    json!({
+        "package_id": "browserpane.test-package.v1",
+        "format_version": "browserpane.workflow-package/v1",
+        "runtime": {
+            "language": "typescript",
+            "browserpane_api_version": "v1",
+            "node_major_version": 22,
+            "playwright_major_version": 1,
+            "playwright_minor_version": 59
+        },
+        "requirements": {
+            "default_session": {
+                "project_id": "019c888e-934b-7000-8000-000000000001",
+                "browser_context": { "mode": "fresh", "context_id": null },
+                "network_identity": { "egress_profile_id": null },
+                "capabilities": {
+                    "browser_input": true,
+                    "clipboard": false,
+                    "audio": false,
+                    "microphone": false,
+                    "camera": false,
+                    "file_transfer": false,
+                    "resize": true
+                },
+                "recording": {
+                    "mode": "disabled",
+                    "format": "webm",
+                    "retention_sec": null
+                },
+                "extension_ids": []
+            },
+            "allowed_credential_binding_ids": [],
+            "allowed_extension_ids": [],
+            "allowed_file_workspace_ids": ["019c888e-934b-7000-8000-000000000002"]
+        },
+        "execution": {
+            "timeout_ms": 60000,
+            "assertions": ["schema-valid-output"],
+            "safe_cancellation_points": ["before-submit"],
+            "side_effect_checkpoints": ["after-submit"]
+        },
+        "publication": {
+            "reviewer": "browserpane-test-reviewer",
+            "reviewed_at": "2026-08-20T12:00:00Z",
+            "decision": "approved",
+            "fresh_context_replay": true,
+            "scenarios": [
+                { "kind": "happy_path", "result": "passed" },
+                { "kind": "validation", "result": "passed" },
+                { "kind": "missing_element", "result": "passed" },
+                { "kind": "authentication_challenge", "result": "passed" },
+                { "kind": "portal_failure", "result": "passed" },
+                { "kind": "runtime_failure", "result": "passed" },
+                { "kind": "cancellation", "result": "passed" },
+                { "kind": "ambiguous_post_side_effect", "result": "passed" }
+            ]
+        }
+    })
 }

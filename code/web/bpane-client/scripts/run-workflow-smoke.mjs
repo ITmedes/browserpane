@@ -253,13 +253,28 @@ async function createLocalWorkflowRepo() {
   const repoDir = await fs.mkdtemp(path.join(PROJECT_ROOT, '.workflow-smoke-repo-'));
   const workflowDir = path.join(repoDir, 'workflows', 'smoke');
   await fs.mkdir(workflowDir, { recursive: true });
+  await fs.mkdir(path.join(workflowDir, 'lib'), { recursive: true });
   await fs.writeFile(
-    path.join(workflowDir, 'run.mjs'),
-    `export default async function run({ page, input, sessionId, workflowRunId, automationTaskId, artifacts }) {
-  const targetUrl =
-    input && typeof input.target_url === 'string' && input.target_url.trim()
-      ? input.target_url.trim()
-      : 'http://web:8080/test-embed.html';
+    path.join(workflowDir, 'package.json'),
+    `${JSON.stringify({ type: 'module' }, null, 2)}\n`,
+    'utf8',
+  );
+  await fs.writeFile(
+    path.join(workflowDir, 'lib', 'input.ts'),
+    `export function targetUrl(input) {
+  return input && typeof input.target_url === 'string' && input.target_url.trim()
+    ? input.target_url.trim()
+    : 'http://web:8080/test-embed.html';
+}
+`,
+    'utf8',
+  );
+  await fs.writeFile(
+    path.join(workflowDir, 'run.ts'),
+    `import { targetUrl } from './lib/input.ts';
+
+export default async function run({ page, input, sessionId, workflowRunId, automationTaskId, artifacts }) {
+  const target = targetUrl(input);
   const outputWorkspaceId =
     input && typeof input.output_workspace_id === 'string' && input.output_workspace_id.trim()
       ? input.output_workspace_id.trim()
@@ -267,9 +282,9 @@ async function createLocalWorkflowRepo() {
   if (!outputWorkspaceId) {
     throw new Error('workflow smoke requires input.output_workspace_id');
   }
-  console.log(\`workflow visiting \${targetUrl}\`);
+  console.log(\`workflow visiting \${target}\`);
   await page.waitForTimeout(1000);
-  await page.goto(targetUrl, { waitUntil: 'networkidle' });
+  await page.goto(target, { waitUntil: 'networkidle' });
   const title = await page.title();
   const producedFile = await artifacts.uploadTextFile({
     workspaceId: outputWorkspaceId,
@@ -353,7 +368,7 @@ async function createWorkflowVersion(accessToken, options, workflowId, source, w
     body: JSON.stringify({
       version: 'v1',
       executor: 'playwright',
-      entrypoint: 'workflows/smoke/run.mjs',
+      entrypoint: 'workflows/smoke/run.ts',
       source: {
         kind: 'git',
         repository_url: source.repositoryUrl,
@@ -361,6 +376,7 @@ async function createWorkflowVersion(accessToken, options, workflowId, source, w
         root_path: 'workflows',
       },
       input_schema: {
+        $schema: 'https://json-schema.org/draft/2020-12/schema',
         type: 'object',
         required: ['target_url'],
         properties: {
@@ -373,6 +389,7 @@ async function createWorkflowVersion(accessToken, options, workflowId, source, w
         },
       },
       output_schema: {
+        $schema: 'https://json-schema.org/draft/2020-12/schema',
         type: 'object',
         required: [
           'title',
@@ -383,16 +400,61 @@ async function createWorkflowVersion(accessToken, options, workflowId, source, w
           'output_file_name',
         ],
       },
-      default_session: {
-        labels: {
-          origin: 'workflow-smoke',
+      package: {
+        package_id: 'browserpane.workflow-smoke.v1',
+        format_version: 'browserpane.workflow-package/v1',
+        runtime: {
+          language: 'typescript',
+          browserpane_api_version: 'v1',
+          node_major_version: 22,
+          playwright_major_version: 1,
+          playwright_minor_version: 59,
         },
-        recording: {
-          mode: 'manual',
-          format: 'webm',
+        requirements: {
+          default_session: {
+            project_id: null,
+            browser_context: { mode: 'fresh', context_id: null },
+            network_identity: { egress_profile_id: null },
+            capabilities: {
+              browser_input: true,
+              clipboard: false,
+              audio: false,
+              microphone: false,
+              camera: false,
+              file_transfer: false,
+              resize: true,
+            },
+            recording: { mode: 'manual', format: 'webm', retention_sec: null },
+            extension_ids: [],
+            labels: { origin: 'workflow-smoke' },
+          },
+          allowed_credential_binding_ids: [],
+          allowed_extension_ids: [],
+          allowed_file_workspace_ids: [workspaceId],
+        },
+        execution: {
+          timeout_ms: 120000,
+          assertions: ['title-captured', 'artifact-uploaded'],
+          safe_cancellation_points: ['before-navigation'],
+          side_effect_checkpoints: ['after-artifact-upload'],
+        },
+        publication: {
+          reviewer: 'browserpane-workflow-smoke',
+          reviewed_at: '2026-08-20T12:00:00Z',
+          decision: 'approved',
+          fresh_context_replay: true,
+          scenarios: [
+            { kind: 'happy_path', result: 'passed' },
+            { kind: 'validation', result: 'passed' },
+            { kind: 'missing_element', result: 'not_applicable' },
+            { kind: 'authentication_challenge', result: 'not_applicable' },
+            { kind: 'portal_failure', result: 'passed' },
+            { kind: 'runtime_failure', result: 'passed' },
+            { kind: 'cancellation', result: 'passed' },
+            { kind: 'ambiguous_post_side_effect', result: 'not_applicable' },
+          ],
         },
       },
-      allowed_file_workspace_ids: [workspaceId],
     }),
   });
 }
@@ -632,8 +694,14 @@ async function main() {
       throw new Error('Workflow source snapshot download returned an empty archive.');
     }
     const sourceSnapshotEntries = await inspectZipEntries(sourceSnapshotBytes);
-    if (!sourceSnapshotEntries.includes('workflows/smoke/run.mjs')) {
+    if (!sourceSnapshotEntries.includes('workflows/smoke/run.ts')) {
       throw new Error('Workflow source snapshot archive is missing the pinned entrypoint file.');
+    }
+    if (!sourceSnapshotEntries.includes('workflows/smoke/lib/input.ts')) {
+      throw new Error('Workflow source snapshot archive is missing a pinned imported module.');
+    }
+    if (!sourceSnapshotEntries.includes('workflows/smoke/package.json')) {
+      throw new Error('Workflow source snapshot archive is missing its ES module boundary.');
     }
     if (sourceSnapshotEntries.some((entry) => entry.startsWith('.git/'))) {
       throw new Error(

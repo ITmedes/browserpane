@@ -30,6 +30,9 @@ describe('workflow source editor view model', () => {
         ref: 'main',
         rootPath: 'workflows',
         entrypoint: 'workflows/run.ts',
+        inputSchemaJson: schemaJson(),
+        outputSchemaJson: schemaJson(),
+        packageJson: '{}',
       },
       [version('v1')],
     );
@@ -57,6 +60,9 @@ describe('workflow source editor view model', () => {
         ref: '',
         rootPath: '',
         entrypoint: '',
+        inputSchemaJson: 'not-json',
+        outputSchemaJson: '{}',
+        packageJson: '{}',
       },
       [version('v1')],
     );
@@ -64,6 +70,7 @@ describe('workflow source editor view model', () => {
     expect(validation.valid).toBe(false);
     expect(validation.fieldErrors.version?.[0]).toContain('already exists');
     expect(validation.fieldErrors.repositoryUrl?.[0]).toContain('required');
+    expect(validation.fieldErrors.inputSchemaJson?.[0]).toContain('valid JSON');
     expect(validation.request).toBeNull();
   });
 });
@@ -85,6 +92,14 @@ function version(value: string): WorkflowDefinitionVersionResource {
     allowed_credential_binding_ids: [],
     allowed_extension_ids: [],
     allowed_file_workspace_ids: [],
+    compatibility: { state: 'legacy', warnings: ['Legacy version.'] },
     created_at: '2026-06-21T09:30:00.000Z',
   };
+}
+
+function schemaJson(): string {
+  return JSON.stringify({
+    $schema: 'https://json-schema.org/draft/2020-12/schema',
+    type: 'object',
+  });
 }

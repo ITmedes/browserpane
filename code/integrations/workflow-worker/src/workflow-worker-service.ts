@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import { materializeSourceSnapshot } from "./source-snapshot.js";
 import { BoundedStreamReader } from "./bounded-output-capture.js";
+import { CredentialRedactor } from "./credential-redaction.js";
 import { WorkflowControlClient } from "./workflow-control-client.js";
 import type {
   GatewayAutomationTaskLogStream,
@@ -99,18 +100,21 @@ export class WorkflowWorkerService {
         `executing workflow entrypoint ${run.source_snapshot.entrypoint}`,
       );
 
-      const result = await this.executeWorkflowEntrypoint({
-        run,
-        endpointUrl: automationAccess.automation.endpoint_url,
-        authHeader: automationAccess.automation.auth_header,
-        authToken: automationToken,
-        sourceRoot,
-        entrypointPath,
-        credentialBindings: credentialMaterialization.bindings,
-        credentialBindingFiles: credentialMaterialization.files,
-        workspaceInputs,
-        resultPath: path.join(workDir, "result.json"),
-      });
+      const result = redactWorkflowExecutionResult(
+        await this.executeWorkflowEntrypoint({
+          run,
+          endpointUrl: automationAccess.automation.endpoint_url,
+          authHeader: automationAccess.automation.auth_header,
+          authToken: automationToken,
+          sourceRoot,
+          entrypointPath,
+          credentialBindings: credentialMaterialization.bindings,
+          credentialBindingFiles: credentialMaterialization.files,
+          workspaceInputs,
+          resultPath: path.join(workDir, "result.json"),
+        }),
+        credentialMaterialization.redactor,
+      );
 
       await this.appendCapturedLogs(
         run.automation_task_id,
@@ -315,9 +319,14 @@ export class WorkflowWorkerService {
     run: GatewayWorkflowRunResource,
     automationToken: string,
     destinationRoot: string,
-  ): Promise<{ bindings: WorkflowRunnerCredentialBinding[]; files: Record<string, string> }> {
+  ): Promise<{
+    bindings: WorkflowRunnerCredentialBinding[];
+    files: Record<string, string>;
+    redactor: CredentialRedactor;
+  }> {
+    const redactor = new CredentialRedactor();
     if (!run.credential_bindings.length) {
-      return { bindings: [], files: {} };
+      return { bindings: [], files: {}, redactor };
     }
 
     const resolvedRoot = path.resolve(destinationRoot);
@@ -330,6 +339,10 @@ export class WorkflowWorkerService {
         binding.id,
         automationToken,
       );
+      redactor.addPayload(resolved.payload);
+      if (binding.injection_mode === "totp_fill") {
+        redactor.addTotpDigits(binding.totp?.digits ?? 6);
+      }
       const localPath = path.join(resolvedRoot, `${binding.id}.json`);
       await fs.writeFile(
         localPath,
@@ -353,8 +366,20 @@ export class WorkflowWorkerService {
         `materialized workflow credential binding ${binding.id} (${binding.name})`,
       );
     }
-    return { bindings, files };
+    return { bindings, files, redactor };
   }
+}
+
+function redactWorkflowExecutionResult(
+  result: WorkflowExecutionResult,
+  redactor: CredentialRedactor,
+): WorkflowExecutionResult {
+  return {
+    output: redactor.redactValue(result.output),
+    stdoutLines: result.stdoutLines.map((line) => redactor.redactText(line)),
+    stderrLines: result.stderrLines.map((line) => redactor.redactText(line)),
+    error: result.error === null ? null : redactor.redactText(result.error),
+  };
 }
 
 function splitLogLines(value: string): string[] {

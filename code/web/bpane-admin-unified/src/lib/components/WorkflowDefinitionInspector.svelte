@@ -288,10 +288,12 @@
           </div>
 
           {#if model.selectedVersion}
-            <div class="mt-4 grid min-w-0 gap-3 xl:grid-cols-3">
+            <div class="mt-4 grid min-w-0 gap-3 xl:grid-cols-2">
               {@render MetadataPanel('Source', model.selectedVersion.sourceRows, 'workflow-definition-source')}
+              {@render MetadataPanel('Package publication', model.selectedVersion.packageRows, 'workflow-definition-package')}
               {@render MetadataPanel('Policy', model.selectedVersion.policyRows, 'workflow-definition-policy')}
               {@render MetadataPanel('Schemas', model.selectedVersion.schemaRows, 'workflow-definition-schemas')}
+              {@render MetadataPanel('Compatibility', model.selectedVersion.compatibilityRows, 'workflow-definition-compatibility')}
             </div>
           {:else}
             <AdminMessage tone="empty" title="No version metadata" message="Publish a workflow version before this definition can be invoked." density="compact" />

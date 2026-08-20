@@ -76,11 +76,12 @@ use crate::workflow::{
     WorkflowDefinitionListResponse, WorkflowDefinitionResource,
     WorkflowDefinitionSourceFileListResponse, WorkflowDefinitionSourcePreviewResource,
     WorkflowDefinitionSourceValidationResponse, WorkflowDefinitionVersionListResponse,
-    WorkflowDefinitionVersionResource, WorkflowRunEventListResponse, WorkflowRunEventResource,
-    WorkflowRunInterventionResource, WorkflowRunListResponse, WorkflowRunLogListResponse,
-    WorkflowRunLogResource, WorkflowRunProducedFileResource, WorkflowRunRecordingResource,
-    WorkflowRunResource, WorkflowRunRetentionResource, WorkflowRunSourceSnapshot, WorkflowRunState,
-    WorkflowRunTransitionRequest, WorkflowRunWorkspaceInput,
+    WorkflowDefinitionVersionResource, WorkflowPackageManifest, WorkflowRunEventListResponse,
+    WorkflowRunEventResource, WorkflowRunInterventionResource, WorkflowRunListResponse,
+    WorkflowRunLogListResponse, WorkflowRunLogResource, WorkflowRunProducedFileResource,
+    WorkflowRunRecordingResource, WorkflowRunResource, WorkflowRunRetentionResource,
+    WorkflowRunSourceSnapshot, WorkflowRunState, WorkflowRunTransitionRequest,
+    WorkflowRunWorkspaceInput,
 };
 use crate::workflow::{WorkflowObservabilitySnapshot, WorkflowSourceArchive};
 use crate::workflow_event_delivery::{

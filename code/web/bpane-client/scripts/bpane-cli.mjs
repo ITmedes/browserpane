@@ -236,6 +236,7 @@ function usageText() {
     '  bpane workflow create [options]',
     '  bpane workflow get <workflow-id> [options]',
     '  bpane workflow validate-source <workflow-id> [options]',
+    '  bpane workflow publish <workflow-id> [options]',
     '  bpane workflow version list <workflow-id> [options]',
     '  bpane workflow version create <workflow-id> [options]',
     '  bpane workflow version get <workflow-id> <version> [options]',
@@ -3832,6 +3833,22 @@ async function handleWorkflowCommand(config, positionals, options) {
       {
         method: 'POST',
         body: JSON.stringify(await requireJsonObjectBody(options, 'workflow validate-source')),
+      },
+    );
+  }
+  if (action === 'publish') {
+    const [workflowId] = requiredWorkflowPositionals(
+      positionals,
+      'workflow publish',
+      ['workflow-id'],
+      2,
+    );
+    return await requestGateway(
+      config,
+      `/api/v1/workflows/${encodeURIComponent(workflowId)}/versions`,
+      {
+        method: 'POST',
+        body: JSON.stringify(await requireJsonObjectBody(options, 'workflow publish')),
       },
     );
   }

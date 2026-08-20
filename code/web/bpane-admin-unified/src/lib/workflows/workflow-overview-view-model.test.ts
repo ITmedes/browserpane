@@ -79,6 +79,10 @@ describe('workflow overview view model', () => {
       label: 'File workspaces',
       value: 'workspace-1',
     });
+    expect(model.selectedVersion?.compatibilityRows).toContainEqual({
+      label: 'State',
+      value: 'legacy',
+    });
     expect(labelSummary({ z: 'last', a: 'first' })).toBe('a=first, z=last');
   });
 });
@@ -119,6 +123,7 @@ function version(overrides: Partial<{ readonly id: string; readonly version: str
     allowed_credential_binding_ids: [],
     allowed_extension_ids: ['extension-1'],
     allowed_file_workspace_ids: ['workspace-1'],
+    compatibility: { state: 'legacy', warnings: ['Publish a supported package.'] },
     created_at: '2026-06-21T09:30:00.000Z',
   };
 }

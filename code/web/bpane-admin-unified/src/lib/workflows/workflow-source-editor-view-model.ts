@@ -11,6 +11,9 @@ export type WorkflowSourceEditorDraft = {
   ref: string;
   rootPath: string;
   entrypoint: string;
+  inputSchemaJson: string;
+  outputSchemaJson: string;
+  packageJson: string;
 };
 
 export type WorkflowSourceEditorValidation = {
@@ -31,6 +34,9 @@ export function createWorkflowSourceEditorDraft(
     ref: baseVersion?.source?.ref || 'HEAD',
     rootPath: baseVersion?.source?.root_path || 'dev',
     entrypoint: baseVersion?.entrypoint || '',
+    inputSchemaJson: prettyJson(baseVersion?.input_schema ?? declaredObjectSchema()),
+    outputSchemaJson: prettyJson(baseVersion?.output_schema ?? declaredObjectSchema()),
+    packageJson: baseVersion?.package ? prettyJson(baseVersion.package) : '',
   };
 }
 
@@ -45,6 +51,9 @@ export function validateWorkflowSourceEditorDraft(
   const ref = draft.ref.trim();
   const rootPath = draft.rootPath.trim();
   const entrypoint = draft.entrypoint.trim();
+  const inputSchema = parseJsonObject('inputSchemaJson', draft.inputSchemaJson, fieldErrors);
+  const outputSchema = parseJsonObject('outputSchemaJson', draft.outputSchemaJson, fieldErrors);
+  const packageManifest = parseJsonObject('packageJson', draft.packageJson, fieldErrors);
 
   if (!version) {
     fieldErrors.version = ['Version is required.'];
@@ -85,11 +94,44 @@ export function validateWorkflowSourceEditorDraft(
     executor,
     entrypoint,
     source,
-    allowed_credential_binding_ids: [],
-    allowed_extension_ids: [],
-    allowed_file_workspace_ids: [],
+    input_schema: inputSchema,
+    output_schema: outputSchema,
+    package: packageManifest,
   };
   return { valid, fieldErrors, request, sourceRequest };
+}
+
+function parseJsonObject(
+  field: 'inputSchemaJson' | 'outputSchemaJson' | 'packageJson',
+  value: string,
+  fieldErrors: Partial<Record<keyof WorkflowSourceEditorDraft, readonly string[]>>,
+): Record<string, unknown> | null {
+  if (field === 'packageJson' && value.trim() === '') {
+    return null;
+  }
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      fieldErrors[field] = ['Must be a JSON object.'];
+      return null;
+    }
+    return parsed as Record<string, unknown>;
+  } catch {
+    fieldErrors[field] = ['Must contain valid JSON.'];
+    return null;
+  }
+}
+
+function declaredObjectSchema(): Record<string, unknown> {
+  return {
+    $schema: 'https://json-schema.org/draft/2020-12/schema',
+    type: 'object',
+    additionalProperties: false,
+  };
+}
+
+function prettyJson(value: unknown): string {
+  return JSON.stringify(value, null, 2);
 }
 
 export function workflowSourceEditorRequestKey(request: ValidateWorkflowDefinitionSourceRequest | null): string {

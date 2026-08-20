@@ -1,0 +1,95 @@
+{
+  "version": "v1",
+  "executor": "playwright",
+  "entrypoint": "dev/workflows/phase0-package/run.ts",
+  "source": {
+    "kind": "git",
+    "repository_url": "/workspace",
+    "ref": "HEAD",
+    "root_path": "dev/workflows/phase0-package"
+  },
+  "input_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["scenario"],
+    "properties": {
+      "scenario": {
+        "type": "string",
+        "enum": [
+          "happy_path",
+          "missing_element",
+          "authentication_challenge",
+          "portal_failure",
+          "runtime_failure",
+          "ambiguous_post_side_effect"
+        ]
+      }
+    }
+  },
+  "output_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["scenario", "status", "receipt"],
+    "properties": {
+      "scenario": { "const": "happy_path" },
+      "status": { "const": "completed" },
+      "receipt": { "const": "fixture-receipt-0001" }
+    }
+  },
+  "package": {
+    "package_id": "browserpane.phase0-reference.v1",
+    "format_version": "browserpane.workflow-package/v1",
+    "runtime": {
+      "language": "typescript",
+      "browserpane_api_version": "v1",
+      "node_major_version": 22,
+      "playwright_major_version": 1,
+      "playwright_minor_version": 59
+    },
+    "requirements": {
+      "default_session": {
+        "project_id": null,
+        "browser_context": { "mode": "fresh", "context_id": null },
+        "network_identity": { "egress_profile_id": null },
+        "capabilities": {
+          "browser_input": true,
+          "clipboard": false,
+          "audio": false,
+          "microphone": false,
+          "camera": false,
+          "file_transfer": false,
+          "resize": true
+        },
+        "recording": { "mode": "manual", "format": "webm", "retention_sec": null },
+        "extension_ids": []
+      },
+      "allowed_credential_binding_ids": [],
+      "allowed_extension_ids": [],
+      "allowed_file_workspace_ids": []
+    },
+    "execution": {
+      "timeout_ms": 60000,
+      "assertions": ["fixture-receipt"],
+      "safe_cancellation_points": ["before-submit"],
+      "side_effect_checkpoints": ["after-submit"]
+    },
+    "publication": {
+      "reviewer": "replace-with-reviewer-identity",
+      "reviewed_at": "2026-08-20T12:00:00Z",
+      "decision": "approved",
+      "fresh_context_replay": true,
+      "scenarios": [
+        { "kind": "happy_path", "result": "passed" },
+        { "kind": "validation", "result": "passed" },
+        { "kind": "missing_element", "result": "passed" },
+        { "kind": "authentication_challenge", "result": "passed" },
+        { "kind": "portal_failure", "result": "passed" },
+        { "kind": "runtime_failure", "result": "passed" },
+        { "kind": "cancellation", "result": "not_applicable" },
+        { "kind": "ambiguous_post_side_effect", "result": "passed" }
+      ]
+    }
+  }
+}

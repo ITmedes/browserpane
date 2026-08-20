@@ -48,6 +48,7 @@ COPY dev/web-fixtures/benchmark-scroll.html /usr/share/nginx/html/benchmark-scro
 COPY dev/web-fixtures/benchmark-article.html /usr/share/nginx/html/benchmark-article.html
 COPY dev/web-fixtures/workflow-credential-fixture.html /usr/share/nginx/html/workflow-credential-fixture.html
 COPY dev/web-fixtures/workflow-extension-fixture.html /usr/share/nginx/html/workflow-extension-fixture.html
+COPY dev/web-fixtures/workflow-package-fixture.html /usr/share/nginx/html/workflow-package-fixture.html
 COPY dev/web-fixtures/auth-config.template.json /usr/share/nginx/html/auth-config.template.json
 COPY openapi/bpane-control-v1.yaml /usr/share/nginx/html/openapi/bpane-control-v1.yaml
 COPY openapi/bpane-control-v1.operations.json /usr/share/nginx/html/openapi/bpane-control-v1.operations.json

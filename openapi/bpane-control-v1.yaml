@@ -4464,6 +4464,7 @@ components:
           type: string
         executor:
           type: string
+          description: "`playwright` is the only supported Phase 0 executor. Other values are accepted only to preserve creation of readable legacy versions, which are reported with `compatibility.state=unsupported`; a version carrying `package` must use `playwright`."
         entrypoint:
           type: string
         source:
@@ -4474,8 +4475,14 @@ components:
           nullable: true
         output_schema:
           nullable: true
+        package:
+          allOf:
+            - $ref: '#/components/schemas/WorkflowPackageManifest'
+          nullable: true
+          description: Required for a supported Phase 0 publication. Omission creates a readable legacy-compatible version only.
         default_session:
           nullable: true
+          description: Legacy publication field. Supported packages declare this value in `package.requirements.default_session`.
         allowed_credential_binding_ids:
           type: array
           items:
@@ -4530,6 +4537,8 @@ components:
         - source
         - input_schema
         - output_schema
+        - package
+        - compatibility
         - default_session
         - allowed_credential_binding_ids
         - allowed_extension_ids
@@ -4556,6 +4565,12 @@ components:
           nullable: true
         output_schema:
           nullable: true
+        package:
+          allOf:
+            - $ref: '#/components/schemas/WorkflowPackageManifest'
+          nullable: true
+        compatibility:
+          $ref: '#/components/schemas/WorkflowPackageCompatibility'
         default_session:
           nullable: true
         allowed_credential_binding_ids:
@@ -4575,6 +4590,181 @@ components:
         created_at:
           type: string
           format: date-time
+    WorkflowPackageManifest:
+      type: object
+      additionalProperties: false
+      required:
+        - package_id
+        - format_version
+        - runtime
+        - requirements
+        - execution
+        - publication
+      properties:
+        package_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: '^[A-Za-z0-9._/-]+$'
+        format_version:
+          type: string
+          enum: [browserpane.workflow-package/v1]
+        runtime:
+          $ref: '#/components/schemas/WorkflowPackageRuntime'
+        requirements:
+          $ref: '#/components/schemas/WorkflowPackageRequirements'
+        execution:
+          $ref: '#/components/schemas/WorkflowPackageExecution'
+        publication:
+          $ref: '#/components/schemas/WorkflowPackagePublication'
+    WorkflowPackageRuntime:
+      type: object
+      additionalProperties: false
+      required:
+        - language
+        - browserpane_api_version
+        - node_major_version
+        - playwright_major_version
+        - playwright_minor_version
+      properties:
+        language:
+          type: string
+          enum: [typescript]
+        browserpane_api_version:
+          type: string
+          enum: [v1]
+        node_major_version:
+          type: integer
+          enum: [22]
+        playwright_major_version:
+          type: integer
+          enum: [1]
+        playwright_minor_version:
+          type: integer
+          enum: [59]
+    WorkflowPackageRequirements:
+      type: object
+      additionalProperties: false
+      required:
+        - default_session
+        - allowed_credential_binding_ids
+        - allowed_extension_ids
+        - allowed_file_workspace_ids
+      properties:
+        default_session:
+          type: object
+          additionalProperties: true
+          description: Explicit Project, Browser Context, Egress Profile, recording, capability, and default extension binding contract.
+        allowed_credential_binding_ids:
+          type: array
+          maxItems: 64
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        allowed_extension_ids:
+          type: array
+          maxItems: 64
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        allowed_file_workspace_ids:
+          type: array
+          maxItems: 64
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+    WorkflowPackageExecution:
+      type: object
+      additionalProperties: false
+      required:
+        - timeout_ms
+        - assertions
+        - safe_cancellation_points
+        - side_effect_checkpoints
+      properties:
+        timeout_ms:
+          type: integer
+          minimum: 1000
+          maximum: 3600000
+        assertions:
+          $ref: '#/components/schemas/WorkflowPackageMarkerList'
+        safe_cancellation_points:
+          $ref: '#/components/schemas/WorkflowPackageMarkerList'
+        side_effect_checkpoints:
+          $ref: '#/components/schemas/WorkflowPackageMarkerList'
+    WorkflowPackageMarkerList:
+      type: array
+      minItems: 1
+      maxItems: 32
+      uniqueItems: true
+      items:
+        type: string
+        minLength: 1
+        maxLength: 128
+        pattern: '^[A-Za-z0-9._/-]+$'
+    WorkflowPackagePublication:
+      type: object
+      additionalProperties: false
+      required:
+        - reviewer
+        - reviewed_at
+        - decision
+        - fresh_context_replay
+        - scenarios
+      properties:
+        reviewer:
+          type: string
+          minLength: 1
+          maxLength: 200
+        reviewed_at:
+          type: string
+          format: date-time
+        decision:
+          type: string
+          enum: [approved]
+        fresh_context_replay:
+          type: boolean
+          enum: [true]
+        scenarios:
+          type: array
+          minItems: 8
+          maxItems: 8
+          items:
+            $ref: '#/components/schemas/WorkflowPackageScenarioEvidence'
+    WorkflowPackageScenarioEvidence:
+      type: object
+      additionalProperties: false
+      required: [kind, result]
+      properties:
+        kind:
+          type: string
+          enum:
+            - happy_path
+            - validation
+            - missing_element
+            - authentication_challenge
+            - portal_failure
+            - runtime_failure
+            - cancellation
+            - ambiguous_post_side_effect
+        result:
+          type: string
+          enum: [passed, not_applicable]
+    WorkflowPackageCompatibility:
+      type: object
+      additionalProperties: false
+      required: [state, warnings]
+      properties:
+        state:
+          type: string
+          enum: [supported, legacy, unsupported]
+        warnings:
+          type: array
+          items:
+            type: string
     WorkflowDefinitionSourcePreviewResource:
       type: object
       required:

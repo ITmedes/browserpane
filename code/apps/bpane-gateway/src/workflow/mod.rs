@@ -1,4 +1,5 @@
 pub mod observability;
+pub mod package;
 pub mod resources;
 pub mod retention;
 pub mod runtime;
@@ -6,6 +7,10 @@ pub mod source;
 pub mod state;
 
 pub use observability::{WorkflowObservability, WorkflowObservabilitySnapshot};
+pub use package::{
+    validate_workflow_definition_version_contract, WorkflowPackageCompatibility,
+    WorkflowPackageManifest,
+};
 pub use resources::{
     WorkflowDefinitionListResponse, WorkflowDefinitionResource,
     WorkflowDefinitionSourceFileListResponse, WorkflowDefinitionSourcePreviewResource,
@@ -59,6 +64,7 @@ pub struct PersistWorkflowDefinitionVersionRequest {
     pub source: Option<WorkflowSource>,
     pub input_schema: Option<Value>,
     pub output_schema: Option<Value>,
+    pub package: Option<WorkflowPackageManifest>,
     pub default_session: Option<Value>,
     pub allowed_credential_binding_ids: Vec<String>,
     pub allowed_extension_ids: Vec<String>,
@@ -143,6 +149,7 @@ pub struct StoredWorkflowDefinitionVersion {
     pub source: Option<WorkflowSource>,
     pub input_schema: Option<Value>,
     pub output_schema: Option<Value>,
+    pub package: Option<WorkflowPackageManifest>,
     pub default_session: Option<Value>,
     pub allowed_credential_binding_ids: Vec<String>,
     pub allowed_extension_ids: Vec<String>,

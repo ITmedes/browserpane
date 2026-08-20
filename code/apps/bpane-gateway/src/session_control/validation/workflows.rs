@@ -33,7 +33,17 @@ pub(in crate::session_control) fn validate_workflow_definition_version_request(
             "workflow version must not be empty".to_string(),
         ));
     }
-    if request.executor.trim().is_empty() {
+    if request.package.is_some() {
+        crate::workflow::validate_workflow_definition_version_contract(
+            &request.executor,
+            &request.entrypoint,
+            request.source.as_ref(),
+            request.input_schema.as_ref(),
+            request.output_schema.as_ref(),
+            request.package.as_ref(),
+        )
+        .map_err(SessionStoreError::InvalidRequest)?;
+    } else if request.executor.trim().is_empty() {
         return Err(SessionStoreError::InvalidRequest(
             "workflow executor must not be empty".to_string(),
         ));

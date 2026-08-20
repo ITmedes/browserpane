@@ -1629,6 +1629,33 @@ describe('bpane operator CLI', () => {
     expect(JSON.parse(calls[5].init.body)).toEqual({ version: 'v2' });
   });
 
+  it('publishes the supported workflow package contract without transforming metadata', async () => {
+    const { calls, fetchImpl } = createFetch(jsonResponse({ version: 'v3' }, 201));
+    const env = { BPANE_ACCESS_TOKEN: 'token-1', BPANE_BASE_URL: 'http://bpane.example/' };
+    const request = {
+      version: 'v3',
+      executor: 'playwright',
+      package: {
+        package_id: 'support/intake',
+        format_version: 'browserpane.workflow-package/v1',
+      },
+    };
+    const io = createIo();
+
+    expect(await runBpaneCli(
+      ['workflow', 'publish', 'workflow/with space', '--body-json', JSON.stringify(request)],
+      env,
+      io.io,
+      fetchImpl,
+    )).toBe(EXIT_CODES.ok);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url).toBe(
+      'http://bpane.example/api/v1/workflows/workflow%2Fwith%20space/versions',
+    );
+    expect(calls[0]?.init.method).toBe('POST');
+    expect(JSON.parse(calls[0]!.init.body)).toEqual(request);
+  });
+
   it('manages workflow runs, interventions, waiting, and produced files through the canonical CLI', async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'bpane-cli-workflow-run-test-'));
     const outputPath = path.join(tempDir, 'nested', 'output.txt');

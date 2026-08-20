@@ -21,6 +21,7 @@ import type {
   WorkflowDefinitionVersionResource,
   WorkflowSourceResource,
 } from './workflow-types';
+import { WorkflowPackageMapper } from './workflow-package-mapper';
 
 export type { AccessTokenProvider, FetchLike } from '$lib/api/authenticated-api';
 export type WorkflowCatalogErrorCode = AdminApiRequestErrorCode;
@@ -234,6 +235,8 @@ export function toWorkflowDefinitionResource(value: unknown): WorkflowDefinition
 export function toWorkflowDefinitionVersionResource(value: unknown): WorkflowDefinitionVersionResource {
   const object = expectRecord(value, 'workflow definition version');
   const source = object.source === undefined ? undefined : toWorkflowSource(object.source);
+  const executor = expectString(object.executor, 'workflow definition version executor');
+  const packageManifest = WorkflowPackageMapper.toManifest(object.package);
   return {
     id: expectString(object.id, 'workflow definition version id'),
     workflow_definition_id: expectString(
@@ -241,11 +244,13 @@ export function toWorkflowDefinitionVersionResource(value: unknown): WorkflowDef
       'workflow definition version workflow_definition_id',
     ),
     version: expectString(object.version, 'workflow definition version version'),
-    executor: expectString(object.executor, 'workflow definition version executor'),
+    executor,
     entrypoint: expectString(object.entrypoint, 'workflow definition version entrypoint'),
     ...(source !== undefined ? { source } : {}),
     input_schema: object.input_schema,
     output_schema: object.output_schema,
+    package: packageManifest,
+    compatibility: WorkflowPackageMapper.toCompatibility(object.compatibility, executor, packageManifest),
     default_session: object.default_session,
     allowed_credential_binding_ids: expectStringArray(
       object.allowed_credential_binding_ids ?? [],

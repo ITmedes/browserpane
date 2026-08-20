@@ -44,6 +44,16 @@ impl WorkflowDefinitionRepository<'_> {
 
         let now = Utc::now();
         let source_value = json_workflow_source(request.source.as_ref())?;
+        let package_value = request
+            .package
+            .as_ref()
+            .map(serde_json::to_value)
+            .transpose()
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to encode workflow package manifest: {error}"
+                ))
+            })?;
         let insert_query = format!(
             r#"
             INSERT INTO control_workflow_definition_versions (
@@ -55,6 +65,7 @@ impl WorkflowDefinitionRepository<'_> {
                 source,
                 input_schema,
                 output_schema,
+                package,
                 default_session,
                 allowed_credential_binding_ids,
                 allowed_extension_ids,
@@ -63,7 +74,7 @@ impl WorkflowDefinitionRepository<'_> {
             )
             VALUES (
                 $1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb,
-                $10::jsonb, $11::jsonb, $12::jsonb, $13
+                $10::jsonb, $11::jsonb, $12::jsonb, $13::jsonb, $14
             )
             RETURNING
                 {WORKFLOW_DEFINITION_VERSION_COLUMNS}
@@ -81,6 +92,7 @@ impl WorkflowDefinitionRepository<'_> {
                     &source_value,
                     &request.input_schema,
                     &request.output_schema,
+                    &package_value,
                     &request.default_session,
                     &json_string_array(&request.allowed_credential_binding_ids),
                     &json_string_array(&request.allowed_extension_ids),

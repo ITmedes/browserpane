@@ -11,6 +11,7 @@
     ValidateWorkflowDefinitionSourceRequest,
     WorkflowDefinitionSourceValidationResponse,
     WorkflowDefinitionVersionResource,
+    WorkflowPackageManifest,
   } from '$lib/workflows/workflow-types';
   import AdminMessage from './AdminMessage.svelte';
   import FieldFeedback from './FieldFeedback.svelte';
@@ -95,6 +96,7 @@
       const validatedSource = validationState.status === 'ready'
         ? validationState.response.source
         : validation.request.source;
+      const pendingPackage = (validation.request.package as WorkflowPackageManifest | null | undefined) ?? null;
       await onCreateVersion({
         ...validation.request,
         source: validatedSource,
@@ -111,6 +113,13 @@
             executor: validation.request.executor,
             entrypoint: validation.request.entrypoint,
             source: validatedSource,
+            input_schema: validation.request.input_schema,
+            output_schema: validation.request.output_schema,
+            package: pendingPackage,
+            compatibility: pendingPackage
+              ? { state: 'supported', warnings: [] }
+              : { state: 'legacy', warnings: ['This version does not declare a package manifest.'] },
+            default_session: null,
             allowed_credential_binding_ids: [],
             allowed_extension_ids: [],
             allowed_file_workspace_ids: [],
@@ -253,6 +262,42 @@
           testId="workflow-source-entrypoint-error"
         />
       </label>
+
+      <div class="grid gap-4 xl:grid-cols-3">
+        <label class="grid gap-1 text-sm">
+          <span class="font-medium text-admin-ink">Input schema</span>
+          <textarea
+            class="min-h-40 rounded-md border border-admin-border bg-white p-3 font-mono text-xs text-admin-ink outline-none focus:border-admin-accent"
+            bind:value={draft.inputSchemaJson}
+            disabled={disabled || creating}
+            data-testid="workflow-source-input-schema"
+          ></textarea>
+          <FieldFeedback errors={validation.fieldErrors.inputSchemaJson} />
+        </label>
+        <label class="grid gap-1 text-sm">
+          <span class="font-medium text-admin-ink">Output schema</span>
+          <textarea
+            class="min-h-40 rounded-md border border-admin-border bg-white p-3 font-mono text-xs text-admin-ink outline-none focus:border-admin-accent"
+            bind:value={draft.outputSchemaJson}
+            disabled={disabled || creating}
+            data-testid="workflow-source-output-schema"
+          ></textarea>
+          <FieldFeedback errors={validation.fieldErrors.outputSchemaJson} />
+        </label>
+        <label class="grid gap-1 text-sm">
+          <span class="font-medium text-admin-ink">Package manifest</span>
+          <textarea
+            class="min-h-40 rounded-md border border-admin-border bg-white p-3 font-mono text-xs text-admin-ink outline-none focus:border-admin-accent"
+            bind:value={draft.packageJson}
+            disabled={disabled || creating}
+            data-testid="workflow-source-package"
+          ></textarea>
+          <FieldFeedback
+            errors={validation.fieldErrors.packageJson}
+            hint="Use browserpane.workflow-package/v1 with reviewed publication evidence."
+          />
+        </label>
+      </div>
     </div>
 
     <aside class="min-w-0 rounded-md border border-admin-border bg-admin-panel p-3" data-testid="workflow-source-validation-panel">

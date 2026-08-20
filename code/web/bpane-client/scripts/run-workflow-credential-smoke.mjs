@@ -301,7 +301,7 @@ async function createCredentialBinding(accessToken, options, projectId) {
     },
     body: JSON.stringify({
       project_id: projectId,
-      name: 'demo-login',
+      name: 'fixture-login',
       provider: 'vault_kv_v2',
       namespace: 'smoke',
       allowed_origins: ['http://web:8080'],
@@ -562,11 +562,11 @@ async function main() {
     if (succeededRun.output?.title !== 'Credential Fixture Authenticated') {
       throw new Error('Workflow run did not persist the credential fixture title.');
     }
-    if (succeededRun.output?.bound_credential_name !== 'demo-login') {
+    if (succeededRun.output?.bound_credential_name !== 'fixture-login') {
       throw new Error('Workflow run did not persist the bound credential name.');
     }
-    if (succeededRun.output?.username !== 'demo') {
-      throw new Error('Workflow run did not persist the credential payload username.');
+    if (succeededRun.output?.username !== '[REDACTED]') {
+      throw new Error('Workflow run persisted the resolved credential payload username.');
     }
     if (
       typeof succeededRun.output?.final_url !== 'string' ||
@@ -580,8 +580,12 @@ async function main() {
     if (!logMessages.some((message) => message.includes('materialized workflow credential binding'))) {
       throw new Error('Workflow run logs are missing credential materialization evidence.');
     }
-    if (!logMessages.some((message) => message.includes('workflow loaded credential binding demo-login'))) {
+    if (!logMessages.some((message) => message.includes('workflow loaded credential binding fixture-login'))) {
       throw new Error('Workflow logs are missing workflow credential usage evidence.');
+    }
+    const publicEvidence = JSON.stringify({ run: succeededRun, logs });
+    if (publicEvidence.includes('demo-demo') || /["': ]demo(?:["', }]|$)/u.test(publicEvidence)) {
+      throw new Error('Workflow public evidence exposed resolved credential values.');
     }
 
     const summary = {

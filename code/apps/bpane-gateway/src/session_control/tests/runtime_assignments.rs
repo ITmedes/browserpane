@@ -199,6 +199,7 @@ async fn in_memory_store_persists_workflow_run_worker_assignments() {
                 source: None,
                 input_schema: None,
                 output_schema: None,
+                package: None,
                 default_session: None,
                 allowed_credential_binding_ids: Vec::new(),
                 allowed_extension_ids: Vec::new(),

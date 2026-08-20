@@ -73,6 +73,8 @@ export type WorkflowVersionDetail = {
   readonly sourceRows: readonly MetadataRow[];
   readonly policyRows: readonly MetadataRow[];
   readonly schemaRows: readonly MetadataRow[];
+  readonly packageRows: readonly MetadataRow[];
+  readonly compatibilityRows: readonly MetadataRow[];
 };
 
 export type WorkflowDefinitionDetailModel = {
@@ -220,7 +222,35 @@ function versionDetail(version: WorkflowDefinitionVersionResource): WorkflowVers
       { label: 'Output schema', value: summarizeJson(version.output_schema) },
       { label: 'Default session', value: summarizeJson(version.default_session) },
     ],
+    packageRows: version.package
+      ? [
+          { label: 'Package', value: version.package.package_id },
+          { label: 'Format', value: version.package.format_version },
+          {
+            label: 'Runtime',
+            value: `Node ${version.package.runtime.node_major_version} · Playwright ${version.package.runtime.playwright_major_version}.${version.package.runtime.playwright_minor_version}`,
+          },
+          { label: 'Reviewer', value: version.package.publication.reviewer },
+          { label: 'Reviewed', value: formatDateTime(version.package.publication.reviewed_at) },
+          { label: 'Scenarios', value: scenarioSummary(version.package.publication.scenarios) },
+        ]
+      : [{ label: 'Manifest', value: 'No Phase 0 package manifest' }],
+    compatibilityRows: [
+      { label: 'State', value: version.compatibility.state },
+      {
+        label: 'Warnings',
+        value: version.compatibility.warnings.length
+          ? version.compatibility.warnings.join(' ')
+          : 'No compatibility warnings',
+      },
+    ],
   };
+}
+
+function scenarioSummary(
+  scenarios: readonly { readonly kind: string; readonly result: string }[],
+): string {
+  return scenarios.map(({ kind, result }) => `${kind}: ${result}`).join(', ');
 }
 
 function labelRows(labels: Readonly<Record<string, string>>): readonly MetadataRow[] {

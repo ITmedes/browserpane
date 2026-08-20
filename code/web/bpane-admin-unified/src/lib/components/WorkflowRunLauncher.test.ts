@@ -218,6 +218,7 @@ function version(overrides: Partial<WorkflowDefinitionVersionResource> = {}): Wo
     allowed_file_workspace_ids: [],
     created_at: '2026-06-21T09:30:00.000Z',
     ...overrides,
+    compatibility: overrides.compatibility ?? { state: 'legacy', warnings: [] },
   };
 }
 

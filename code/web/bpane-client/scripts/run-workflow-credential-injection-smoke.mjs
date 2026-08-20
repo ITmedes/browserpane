@@ -311,14 +311,14 @@ async function main() {
     if (succeededRun.output?.title !== 'Credential Fixture Authenticated') {
       throw new Error('Workflow credential injection run did not reach the authenticated fixture state.');
     }
-    if (succeededRun.output?.cookie_value !== 'bpane-cookie=cookie-demo') {
-      throw new Error('Workflow credential injection run did not seed the expected cookie.');
+    if (succeededRun.output?.cookie_value !== '[REDACTED]=[REDACTED]') {
+      throw new Error('Workflow credential injection output did not redact the seeded cookie.');
     }
-    if (succeededRun.output?.local_storage_value !== 'local-demo') {
-      throw new Error('Workflow credential injection run did not seed localStorage.');
+    if (succeededRun.output?.local_storage_value !== '[REDACTED]') {
+      throw new Error('Workflow credential injection output did not redact localStorage.');
     }
-    if (succeededRun.output?.session_storage_value !== 'session-demo') {
-      throw new Error('Workflow credential injection run did not seed sessionStorage.');
+    if (succeededRun.output?.session_storage_value !== '[REDACTED]') {
+      throw new Error('Workflow credential injection output did not redact sessionStorage.');
     }
     if (succeededRun.output?.otp_length !== 6) {
       throw new Error('Workflow credential injection run did not fill a 6-digit TOTP value.');
@@ -328,6 +328,18 @@ async function main() {
     }
 
     const logs = await fetchWorkflowRunLogs(accessToken, options, runId);
+    const publicEvidence = JSON.stringify({ output: succeededRun.output, logs: logs.logs });
+    for (const sensitiveValue of [
+      'demo-demo',
+      'cookie-demo',
+      'local-demo',
+      'session-demo',
+      'JBSWY3DPEHPK3PXP',
+    ]) {
+      if (publicEvidence.includes(sensitiveValue)) {
+        throw new Error('Workflow credential injection evidence exposed a resolved credential value.');
+      }
+    }
     if (
       !logs.logs.some(
         (entry) =>

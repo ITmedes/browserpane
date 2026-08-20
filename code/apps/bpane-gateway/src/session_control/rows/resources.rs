@@ -1,5 +1,6 @@
 use super::super::*;
 use super::encoding::{row_to_json_string_array, row_to_json_uuid_array};
+use crate::workflow::WorkflowPackageManifest;
 
 pub(in crate::session_control) fn row_to_stored_browser_context(
     row: &Row,
@@ -366,6 +367,16 @@ pub(in crate::session_control) fn row_to_stored_workflow_definition_version(
             })
         })
         .transpose()?;
+    let package = row
+        .get::<_, Option<Value>>("package")
+        .map(|value| {
+            serde_json::from_value::<WorkflowPackageManifest>(value).map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "workflow definition version package must be valid workflow package json: {error}"
+                ))
+            })
+        })
+        .transpose()?;
     let allowed_credential_binding_ids = row_to_json_string_array(
         row.get("allowed_credential_binding_ids"),
         "workflow allowed_credential_binding_ids",
@@ -388,6 +399,7 @@ pub(in crate::session_control) fn row_to_stored_workflow_definition_version(
         source,
         input_schema: row.get("input_schema"),
         output_schema: row.get("output_schema"),
+        package,
         default_session: row.get("default_session"),
         allowed_credential_binding_ids,
         allowed_extension_ids,

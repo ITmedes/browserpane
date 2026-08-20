@@ -76,7 +76,7 @@ async fn workflow_event_subscriptions_preserve_lifecycle_delivery_order() {
                     .body(Body::from(
                         json!({
                             "version": "v1",
-                            "executor": "manual",
+                            "executor": "playwright",
                             "entrypoint": "workflows/ordered-events/run.mjs"
                         })
                         .to_string(),

@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>BrowserPane Workflow Package Fixture</title>
+  </head>
+  <body>
+    <main>
+      <h1>Workflow package fixture</h1>
+      <p data-testid="state">ready</p>
+      <button data-testid="submit" type="button">Submit</button>
+      <output data-testid="receipt"></output>
+    </main>
+    <script>
+      const scenario = new URLSearchParams(window.location.search).get('scenario');
+      const state = document.querySelector('[data-testid="state"]');
+      if (scenario === 'authentication_challenge') state.textContent = 'authentication_challenge';
+      if (scenario === 'portal_failure') state.textContent = 'portal_failure';
+      document.querySelector('[data-testid="submit"]').addEventListener('click', () => {
+        document.querySelector('[data-testid="receipt"]').textContent = 'fixture-receipt-0001';
+      });
+    </script>
+  </body>
+</html>

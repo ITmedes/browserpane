@@ -98,6 +98,7 @@ impl InMemorySessionStore {
             source: request.source,
             input_schema: request.input_schema,
             output_schema: request.output_schema,
+            package: request.package,
             default_session: request.default_session,
             allowed_credential_binding_ids: request.allowed_credential_binding_ids,
             allowed_extension_ids: request.allowed_extension_ids,
