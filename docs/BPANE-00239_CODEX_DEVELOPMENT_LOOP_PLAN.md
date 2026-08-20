@@ -9,7 +9,7 @@
 - Target gate: Repeatable, bounded contributor delivery
 - Depends on: `#173` delivery governance (complete), one live
   `state:ready` issue, and a matching focused implementation plan
-- Last verified commit/date: `a0a0f524` plus staged implementation / 2026-08-20
+- Last verified commit/date: `b6f32c14` / 2026-08-20
 
 ## Business Outcome
 
@@ -254,7 +254,7 @@ investor claims require no product change.
 - Issue metadata: authored by the approved project identity, labeled
   `priority:P1`, `lane:foundation`, and `state:review`, with milestone
   `Foundation Gate`.
-- PR/commit: implementation commit and PR pending.
+- PR/commit: plan `a0a0f524`; implementation `b6f32c14`; PR pending.
 - Validation:
   - `bash -n dev_loop/loop.sh`
   - `bash -n dev_loop/tests/loop_test.sh`
