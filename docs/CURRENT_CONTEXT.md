@@ -92,6 +92,40 @@ beyond bounded single-node Compose, and `#20`, `#72`, `#73`, or `#178` only when
 the selected process requires more inspection, security, recovery, or telemetry
 than the current baseline provides.
 
+## Beyond Phase 0
+
+The later phases remain valid, but they are evidence gates rather than a
+committed calendar or one continuous implementation branch:
+
+- **Phase 1 Operate:** make the proven activity repeatable for an agreed scope.
+  This includes the required Admin-New operator paths, incident/change
+  procedures, upgrades, rollback, backup, observed telemetry/SLO proposals,
+  support ownership, and explicit disposition of Phase 0 gaps.
+- **Production Baseline:** qualify named deployment profiles and limits with a
+  reviewed threat model, release signing/provenance, compatibility policy,
+  tested upgrades/rollback/backup/DR, SLOs, capacity, audit/retention, and
+  consistent open-source governance. The current single-node Compose profile is
+  Prototype evidence, not a generic Production claim.
+- **Phase N Scale:** generalize proven capabilities across organizations,
+  projects, callers, and deployment environments. Candidate owners include
+  `#176` authorization, `#177` identity lifecycle, `#76` residency/BYOK, `#79`
+  policy, `#80` DLP, `#74` HA, and `#66` Kubernetes/Fargate/cloud adapters.
+- **Workflow Endpoint productization:** `#237` may add immutable endpoint
+  revisions, promotion/rollback, callbacks, replay, tracing, throttling, and
+  connector compatibility after the bounded `#172` contract succeeds.
+- **Optional innovation:** `#171` Teach Mode/controlled repair and `#71` Human
+  Handoff remain deferred capabilities. They require separate evidence and
+  never imply autonomous publication or high-impact decision making.
+
+BrowserPane subprocess orchestration is not currently planned for a later
+phase. Scheduling, surrounding subprocesses, broad retries, compensation, and
+human-task orchestration remain responsibilities of the external BPM unless a
+future explicit product decision changes the boundary.
+
+Use `PRODUCT_PHASES_AND_RELEASE_GATES.md` for exact gate evidence and
+`DELIVERY_ROADMAP.md` for current issue order. Investor phase descriptions in
+`../pane-invest` must remain consistent with these engineering gates.
+
 ## Current Material Gaps
 
 The current code has immutable workflow versions, runs, session bindings,
@@ -121,6 +155,21 @@ Investor and management presentation artifacts are maintained in the sibling
 `../pane-invest` repository. Product claims there must follow this repository's
 capability and gate evidence; do not treat presentation targets as implemented
 code.
+
+## Durable Working Agreements
+
+- Commit every coherent, validated change instead of accumulating an unrelated
+  working-tree batch.
+- Start implementation work from one canonical issue and a matching
+  `docs/*_PLAN.md`; keep business case, acceptance criteria, use case, and smoke
+  sequence synchronized.
+- Prefer established libraries and current repository boundaries over custom
+  infrastructure without a measured need.
+- Validate affected behavior at unit, integration, smoke/E2E, and negative-path
+  levels appropriate to its risk. Keep API, Admin-New, CLI, OpenAPI, README, and
+  ARCH representations aligned.
+- When a merge is requested, wait for required GitHub checks and preserve a
+  clean, reviewable commit history.
 
 ## Fresh Session Checklist
 

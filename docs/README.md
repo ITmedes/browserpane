@@ -51,7 +51,8 @@ Current branch context:
 Use these first:
 
 - `CURRENT_CONTEXT.md`: concise fresh-session handoff for current product
-  decisions, issue order, implementation gaps, and working-tree guardrails.
+  decisions, Phase 0 and later-gate boundaries, issue order, implementation
+  gaps, durable working agreements, and working-tree guardrails.
 - `DELIVERY_ROADMAP.md`: current delivery lanes, states, dependencies, gates,
   and the next three implementation slices.
 - `CAPABILITY_MATURITY_MATRIX.md`: evidence-backed Implemented, Prototype,
