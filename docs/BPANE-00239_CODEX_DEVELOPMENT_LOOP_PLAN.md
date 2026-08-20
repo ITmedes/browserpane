@@ -3,13 +3,13 @@
 ## Metadata
 
 - Issue: `#239`
-- State: In Progress
+- State: Review
 - Owner: BrowserPane maintainers / Codex
 - Lane: Foundation
 - Target gate: Repeatable, bounded contributor delivery
 - Depends on: `#173` delivery governance (complete), one live
   `state:ready` issue, and a matching focused implementation plan
-- Last verified commit/date: `256a7eb3` / 2026-08-20
+- Last verified commit/date: `a0a0f524` plus staged implementation / 2026-08-20
 
 ## Business Outcome
 
@@ -219,7 +219,7 @@ investor claims require no product change.
 
 ## Definition Of Done
 
-- Issue `#238` and this plan agree on scope, use case, acceptance criteria, and
+- Issue `#239` and this plan agree on scope, use case, acceptance criteria, and
   smoke sequence.
 - The Codex-native driver and routines contain no Grattis/Claude/Maven/fix-
   workflow assumptions.
@@ -251,7 +251,33 @@ investor claims require no product change.
 
 - Issue: <https://github.com/ITmedes/browserpane/issues/239>
 - Source pattern reviewed: local `../grattis-app/grattis/dev_loop/`
-- PR/commit: pending
-- Validation: pending
+- Issue metadata: authored by the approved project identity, labeled
+  `priority:P1`, `lane:foundation`, and `state:review`, with milestone
+  `Foundation Gate`.
+- PR/commit: implementation commit and PR pending.
+- Validation:
+  - `bash -n dev_loop/loop.sh`
+  - `bash -n dev_loop/tests/loop_test.sh`
+  - `./dev_loop/tests/loop_test.sh` - 24/24 checks passed, including
+    status-specific results, token parsing, GitHub check exit-code handling,
+    post-merge workflow outcomes and conditional Rust-builder selection,
+    identity/permission policy, STOP, and stale locks.
+  - `node scripts/validate.mjs --stage repository-baseline --stage
+    repository-documents` - passed with 43 tracked JSON files, 94 Markdown
+    files, 19 YAML files, and 3 workflows.
+  - installed Codex CLI option parse for approval, JSONL, sandbox, repository,
+    output schema, and final-message output - passed.
+  - real `run_session` read-only Codex round trip - emitted
+    `thread.started`, `turn.started`, `item.completed`, and `turn.completed`,
+    wrote a schema-valid `NO_PROPOSAL`, and exposed parseable usage metadata.
+  - `./dev_loop/loop.sh --check` - approved project identity and `ADMIN`
+    permission were verified; the read-only report correctly rejected the
+    current non-main dirty implementation checkout. An unapproved identity was
+    rejected before repository GitHub operations.
+- Runtime/product tests: N/A; this slice changes contributor orchestration and
+  no BrowserPane runtime, API, protocol, UI, CLI, or deployment contract.
+- Root `README.md`, `ARCH.md`, OpenAPI, and investor material: no change needed;
+  contributor usage is isolated in `dev_loop/README.md`, `AGENTS.md`, and the
+  current-context/roadmap documents.
 - Supervised first autonomous iteration: deferred until the tooling change is
   merged and the maintainer explicitly starts it from clean `main`

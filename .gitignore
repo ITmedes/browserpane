@@ -41,3 +41,8 @@ plan-*.md
 !docs/*_PLAN.md
 !docs/**/*_PLAN.md
 *.docx
+
+# Local Codex development-loop runtime state.
+/dev_loop/runs/
+/dev_loop/.lock/
+/dev_loop/STOP

@@ -170,6 +170,10 @@ code.
   ARCH representations aligned.
 - When a merge is requested, wait for required GitHub checks and preserve a
   clean, reviewable commit history.
+- The optional `dev_loop/` tooling uses fresh Codex proposal and repair
+  sessions to consume one live Ready issue at a time. Start it only from clean,
+  synchronized `main` with an approved project GitHub identity; automatic
+  merging remains opt-in. It never qualifies or reprioritizes backlog.
 
 ## Fresh Session Checklist
 

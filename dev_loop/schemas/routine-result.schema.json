@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BrowserPane Codex routine result",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["PROPOSED", "NO_PROPOSAL", "REPAIRED", "RERUN_ONLY", "HALT"]
+    },
+    "issue_number": {
+      "type": ["integer", "null"],
+      "minimum": 1
+    },
+    "pr_url": {
+      "type": ["string", "null"]
+    },
+    "commit_sha": {
+      "type": ["string", "null"]
+    },
+    "run_id": {
+      "type": ["string", "null"]
+    },
+    "reason": {
+      "type": ["string", "null"]
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "status",
+    "issue_number",
+    "pr_url",
+    "commit_sha",
+    "run_id",
+    "reason",
+    "summary"
+  ]
+}

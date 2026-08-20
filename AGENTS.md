@@ -389,12 +389,22 @@ Run these where applicable:
   feature-level or qualification `*_PLAN.md` documents are specifications, not
   authorization to implement an unready issue; derive a bounded slice plan
   before coding.
+- The optional local Codex delivery loop lives under `dev_loop/`. It consumes
+  only live `state:ready` issues with matching focused plans, uses separate
+  proposal and repair sessions, and leaves automatic merging disabled unless a
+  maintainer explicitly enables it. Read `dev_loop/README.md` before running
+  it; never commit its generated `runs/`, `.lock/`, or `STOP` state.
 - When working with GitHub issues, keep issue state implementation-oriented:
   prefer one canonical issue per shippable slice, document the business case,
   scope, acceptance criteria, example use case, and smoke sequence on that
   issue, and close duplicates only after commenting with the canonical target.
   Keep the local `docs/*_PLAN.md` file aligned with the canonical issue before
   implementation starts.
+- Create and update BrowserPane GitHub issues only through the approved project
+  identity `thebackplane` (or another identity explicitly approved by the
+  user). Verify `gh api user --jq .login` before mutating an issue; never use a
+  personal identity. Do not expose local authentication material in commands,
+  logs, docs, or commits.
 - Use `docs/DELIVERY_ROADMAP.md` for current sequencing,
   `docs/CAPABILITY_MATURITY_MATRIX.md` for capability claims,
   `docs/PRODUCT_PHASES_AND_RELEASE_GATES.md` for promotion evidence, and

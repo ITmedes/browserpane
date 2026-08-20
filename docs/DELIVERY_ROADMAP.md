@@ -67,6 +67,11 @@ or capacity decision.
 | 4 | #150 | Done | #147 callback boundary | Lifecycle, dependency readiness, and bounded drain merged through PR #192. |
 | 5 | #152 | Done | #150 stable readiness contract | Shared in-memory/Postgres store contract parity merged through PR #193. |
 | 6 | #179 | Done | #152 persistent behavior baseline | Control API lint, conformance, examples, compatibility policy, and CI enforcement merged through PR #194. |
+| 7 | #239 | Review | #173 delivery governance | Add an optional Codex-native local delivery loop without changing product issue priority or gate evidence. |
+
+#239 is contributor tooling and does not block or supersede the next product
+slice, #47. It may consume #47 only after the loop itself is merged, started
+from clean `main`, and authenticated through an approved project identity.
 
 ### Next Three Pilot Value Slices
 
