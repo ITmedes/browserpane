@@ -11,7 +11,7 @@ will watch the next check set.
   run `gh run watch`.
 - Never create or update GitHub issues through a personal identity. Return
   `HALT` unless the active `gh` identity is an explicitly approved project
-  identity. Do not read `.github_token`.
+  identity. Do not discover credentials from repository-local token files.
 - Never force-push, rebase a shared PR branch, reset, stash, discard user work,
   disable workflows, or bypass branch protection.
 - Never weaken or delete a required test, coverage threshold, security check,

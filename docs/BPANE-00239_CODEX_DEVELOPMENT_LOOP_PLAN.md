@@ -118,9 +118,9 @@ already active, or repair safety cannot be established.
 - Raw JSONL and prompts can contain source, command output, issue content, or
   diagnostic data. Generated runs stay local and ignored; routines must not
   print secrets or resolved credential values.
-- The driver must not read `.github_token`, echo environment secrets, alter
-  authentication configuration, disable workflows, or bypass branch
-  protection.
+- The driver must not discover credentials from repository-local token files,
+  echo environment secrets, alter authentication configuration, disable
+  workflows, or bypass branch protection.
 - Sandbox and approval settings are explicit and configurable. The README must
   explain why network-capable unattended execution is high trust.
 

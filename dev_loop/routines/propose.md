@@ -13,7 +13,7 @@ open one pull request. The shell driver takes over after your final response.
   validation merely to make a result green.
 - Never create or update GitHub issues through a personal identity. Return
   `HALT` unless `gh api user --jq .login` resolves to an explicitly approved
-  project identity. Do not print, read, or expose `.github_token`.
+  project identity. Do not discover or expose repository-local token files.
 - Never print secrets, resolved credentials, bearer tokens, or private keys.
 - Do not edit `dev_loop/` unless the selected issue explicitly owns that
   tooling. Do not commit generated files, `node_modules`, `target`,
