@@ -400,9 +400,10 @@ Run these where applicable:
   issue/plan contract, bounded scope, risks, acceptance criteria, and test
   evidence pass; ambiguity must stop without promotion. Qualification,
   proposal, and repair remain separate sessions, and automatic merging stays
-  disabled unless a maintainer explicitly enables it. Read
-  `dev_loop/README.md` before running it; never commit generated `runs/`,
-  `.lock/`, or `STOP` state.
+  disabled unless a maintainer explicitly enables it. The loop stops local
+  work below `MIN_FREE_DISK_GB` (50 GiB by default) and never performs automatic
+  cleanup. Read `dev_loop/README.md` before running it; never commit generated
+  `runs/`, `.lock/`, or `STOP` state.
 - When working with GitHub issues, keep issue state implementation-oriented:
   prefer one canonical issue per shippable slice, document the business case,
   scope, acceptance criteria, example use case, and smoke sequence on that

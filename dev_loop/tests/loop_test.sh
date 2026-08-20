@@ -69,6 +69,53 @@ pass "qualification requires an issue number"
 assert_eq "PROPOSED" "$(routine_field "$valid" status)" "routine status extraction"
 assert_eq "239" "$(routine_field "$valid" issue_number)" "routine issue extraction"
 
+MOCK_DISK_MODE=valid
+MOCK_DISK_KIB=$((49 * 1048576))
+df() {
+  case "$MOCK_DISK_MODE" in
+    valid)
+      printf '%s\n' \
+        'Filesystem 1024-blocks Used Available Capacity Mounted on' \
+        "/dev/mock 999999999 1 $MOCK_DISK_KIB 1% /mock"
+      ;;
+    malformed) printf '%s\n' 'Filesystem output is incomplete' ;;
+    failure) return 1 ;;
+  esac
+}
+
+assert_eq "$MOCK_DISK_KIB" "$(disk_available_kib)" "available disk capacity is parsed from POSIX df output"
+assert_eq "49.0" "$(format_disk_gib "$MOCK_DISK_KIB")" "disk capacity is formatted as binary GiB"
+
+MIN_FREE_DISK_GB=50
+disk_guard_rc=0
+check_disk_space_guard >/dev/null 2>&1 || disk_guard_rc=$?
+assert_eq "1" "$disk_guard_rc" "capacity below 50 GiB is rejected"
+
+MOCK_DISK_KIB=$((50 * 1048576))
+check_disk_space_guard >/dev/null 2>&1 || fail "capacity equal to 50 GiB is accepted"
+pass "capacity equal to 50 GiB is accepted"
+
+MOCK_DISK_KIB=$((51 * 1048576))
+check_disk_space_guard >/dev/null 2>&1 || fail "capacity above 50 GiB is accepted"
+pass "capacity above 50 GiB is accepted"
+
+MIN_FREE_DISK_GB=0
+MOCK_DISK_KIB=0
+check_disk_space_guard >/dev/null 2>&1 || fail "zero threshold explicitly disables the minimum"
+pass "zero threshold explicitly disables the minimum"
+
+MIN_FREE_DISK_GB=50
+MOCK_DISK_MODE=malformed
+disk_guard_rc=0
+check_disk_space_guard >/dev/null 2>&1 || disk_guard_rc=$?
+assert_eq "2" "$disk_guard_rc" "malformed disk capacity fails closed"
+
+MOCK_DISK_MODE=failure
+disk_guard_rc=0
+check_disk_space_guard >/dev/null 2>&1 || disk_guard_rc=$?
+assert_eq "2" "$disk_guard_rc" "disk measurement command failure fails closed"
+unset -f df
+
 proposal_log_dir="$tmp/proposal"
 mkdir -p "$proposal_log_dir"
 LOG_DIR="$proposal_log_dir"
@@ -190,6 +237,11 @@ if AUTO_QUALIFY=invalid bash -c "source '$loop'; validate_config" >/dev/null 2>&
   fail "invalid auto-qualification configuration is rejected"
 fi
 pass "invalid auto-qualification configuration is rejected"
+
+if MIN_FREE_DISK_GB=invalid bash -c "source '$loop'; validate_config" >/dev/null 2>&1; then
+  fail "invalid disk threshold configuration is rejected"
+fi
+pass "invalid disk threshold configuration is rejected"
 
 if MERGE_METHOD=octopus bash -c "source '$loop'; validate_config" >/dev/null 2>&1; then
   fail "invalid merge method is rejected"

@@ -70,12 +70,13 @@ choose a different lane or infer a missing decision.
 | 4 | #150 | Done | #147 callback boundary | Lifecycle, dependency readiness, and bounded drain merged through PR #192. |
 | 5 | #152 | Done | #150 stable readiness contract | Shared in-memory/Postgres store contract parity merged through PR #193. |
 | 6 | #179 | Done | #152 persistent behavior baseline | Control API lint, conformance, examples, compatibility policy, and CI enforcement merged through PR #194. |
-| 7 | #241 | In Progress | #173 delivery governance | Extend the optional Codex-native loop with bounded requirements qualification without changing product priority or gate evidence. |
+| 7 | #241 | Done | #173 delivery governance | Bounded Codex qualification/proposal/repair delivery loop merged through PR #243. |
+| 8 | #244 | In Progress | #241 local delivery loop | Stop local Codex phases when repository-filesystem capacity falls below the configured 50 GiB default. |
 
-#241 is contributor tooling and does not block or supersede the next product
-slice, #172. The merged baseline delivered #47 through PR #242; this follow-up
-may promote #172 only after its separate readiness audit passes from clean
-`main` under an approved project identity.
+#241 and #244 are contributor tooling and do not block or supersede the next
+product slice, #172. The merged loop may promote #172 only after its separate
+readiness audit passes from clean `main` under an approved project identity;
+#244 adds a local capacity safety gate without changing that product order.
 
 ### Next Three Pilot Value Slices
 
