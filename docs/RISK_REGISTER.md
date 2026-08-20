@@ -2,7 +2,7 @@
 
 Governance issue: [#173](https://github.com/ITmedes/browserpane/issues/173)
 
-Last reviewed: 2026-08-16
+Last reviewed: 2026-08-20
 
 ## Scale
 
@@ -18,7 +18,7 @@ Last reviewed: 2026-08-16
 | R-004 | Application auth/header controls exist, but a deployment could still expose admin, MCP, metrics, or internal surfaces without the required TLS, origin, ingress, and network policy. | Medium | Critical | #223 / #72 / #66 | Executable application/header baseline plus target-specific ingress, exact-origin, private-network, and MCP transport controls. | Production |
 | R-005 | Webhook delivery can reach unsafe destinations or redirect targets. | Low | Critical | #147 | Mitigated and merged through PR #191: URL/DNS/IP validation, pinned delivery, no redirects/proxies, exact-origin exceptions, negative and compose tests. | Foundation |
 | R-007 | Protocol version is not enforced and compatibility is undocumented. | Medium | Critical | #175 | Version negotiation, shared vectors, fuzzing, compatibility matrix. | Production |
-| R-010 | Platform failures and saturation are not yet observable end to end through standard telemetry/SLOs. | High | High | #178 | Gateway OpenMetrics RED/runtime capacity merged through PR #222, bounded W3C/OTLP gateway-to-broker traces through PR #228, workflow/recording counters through PR #230, and Prometheus rules/alerts/runbooks through PR #232. #233 adds a provisioned aggregate operations dashboard. Broader worker/store coverage, queue/state and latency signals, calibrated SLOs/error budgets, synthetics, alert routing, and load evidence remain. | Phase 1 / Production |
+| R-010 | Platform failures and saturation are not yet observable end to end through standard telemetry/SLOs. | High | High | #178 | Gateway OpenMetrics RED/runtime capacity merged through PR #222, bounded W3C/OTLP gateway-to-broker traces through PR #228, workflow/recording counters through PR #230, Prometheus rules/alerts/runbooks through PR #232, and the Grafana dashboard through PR #234. Broader worker/store coverage, queue/state and latency signals, calibrated SLOs/error budgets, synthetics, alert routing, and load evidence remain. | Phase 1 / Production |
 | R-011 | Organization/project mappings are descriptive rather than a complete enforced authorization model. | High | Critical | #176 | Role/grant matrix, enforcement, migration, denial/audit tests. | Phase N |
 | R-012 | Deprovisioned identities or emergency access lack deterministic lifecycle controls. | Medium | Critical | #177 | Lifecycle API/SCIM path, stale review, break-glass controls. | Phase N |
 | R-013 | Local, broker-validation, or bounded single-node evidence is described beyond its supported deployment/capacity envelope. | Medium | High | #66 / #178 / #225 | Profiles are explicitly classified; the single-node package adds immutable inputs, preflight, live qualification, and a runbook. Target sandbox/network acceptance, real restore drills, load envelopes, HA, and managed-runtime support remain. | Phase 0 / Production |
@@ -27,6 +27,7 @@ Last reviewed: 2026-08-16
 | R-016 | A Phase 0 Pilot expands into an undefined enterprise platform commitment. | High | High | #174 | Qualification, explicit non-goals, bounded agreement, Stop/Operate/Phase 1 gate. | Phase 0 |
 | R-017 | Large overlapping planning documents produce conflicting priorities. | High | High | #173 | Canonical roadmap; historical docs marked supporting; only bounded Ready plans are executable. | Governance |
 | R-020 | Security controls and deployment obligations can drift across code, manifests, tests, and prose, causing an unsafe topology to appear accepted. | Medium | Critical | #223 / #72 / #225 | Canonical threat model, responsibility baseline, composed fast-profile contract, single-node structured preflight, negative evidence, operator runbook, and required review on boundary changes. | Production |
+| R-021 | An external BPM could duplicate or misinterpret browser side effects because no stable endpoint grant, schema enforcement, caller-scoped idempotency, typed outcome, or side-effect certainty contract exists. | High | Critical | #47 / #172 / #174 | Freeze the immutable Playwright package, implement the bounded polling endpoint and negative conformance fixture, then qualify one real activity. | Phase 0 |
 
 ## Closed Risks
 

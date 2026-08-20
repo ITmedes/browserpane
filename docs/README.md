@@ -1,7 +1,7 @@
 # BrowserPane Consolidated Planning Workspace
 
 Created: 2026-07-07
-Revalidated: 2026-08-16
+Revalidated: 2026-08-20
 
 This folder is the standalone planning workspace for the active BrowserPane
 plan set. It consolidates the still-valid information from the old plan files
@@ -29,6 +29,7 @@ Legacy inputs that were consolidated:
 
 Current branch context:
 
+- `main` is synchronized through PR `#236` at `2adbfdee`.
 - `/admin-new/` is the standard route-backed operator console and the default
   web-root target after promotion through PR `#211`.
 - `/admin/` remains directly addressable only as a compatibility fallback
@@ -38,8 +39,9 @@ Current branch context:
   through PR `#226` under broader issue `#66`. The gateway-to-runtime-broker
   tracing checkpoint merged through PR `#228`, workflow/recording metrics
   merged through PR `#230`, and the Prometheus SLI/alert/runbook baseline merged
-  through PR `#232`; issue `#233` is the current bounded Grafana operations
-  dashboard checkpoint under `#178`.
+  through PR `#232`; the Grafana operations dashboard merged through PR `#234`.
+  Compose runner reliability then merged through PR `#236`, with all five
+  post-merge Compose lanes green on `main`.
 - Issue `#142` is closed as the historical redesign foundation. Follow-up
   implementation PRs use focused issues such as `#124` rather than reopening
   that lineage.
@@ -48,6 +50,8 @@ Current branch context:
 
 Use these first:
 
+- `CURRENT_CONTEXT.md`: concise fresh-session handoff for current product
+  decisions, issue order, implementation gaps, and working-tree guardrails.
 - `DELIVERY_ROADMAP.md`: current delivery lanes, states, dependencies, gates,
   and the next three implementation slices.
 - `CAPABILITY_MATURITY_MATRIX.md`: evidence-backed Implemented, Prototype,
@@ -118,7 +122,7 @@ specifications and still require a bounded slice plan before coding.
 - `BPANE-00231_PROMETHEUS_SLI_ALERT_BASELINE_PLAN.md`: merged bounded Production
   checkpoint for Prometheus recording rules, starter alerts, deterministic
   behavior tests, and operator runbooks under #178.
-- `BPANE-00233_GRAFANA_OPERATIONS_DASHBOARD_PLAN.md`: current bounded Production
+- `BPANE-00233_GRAFANA_OPERATIONS_DASHBOARD_PLAN.md`: merged bounded Production
   checkpoint for the provisioned aggregate Grafana operations dashboard under
   #178.
 - `operations/PROMETHEUS_ALERT_RUNBOOK.md`: alert-specific aggregate triage,
@@ -128,17 +132,19 @@ specifications and still require a bounded slice plan before coding.
 - `BPANE-00171_WORKFLOW_TEACH_MODE_PLAN.md`: Phase N Teach Mode contract,
   semantic demonstration capture, candidate generation, replay, immutable
   publication, controlled repair, and smoke sequence.
-- `BPANE-00172_BPM_WORKFLOW_ENDPOINT_INTEGRATION_PLAN.md`: Phase N stable
-  project-scoped workflow endpoint contract for BPM/orchestration callers,
-  including machine grants, schemas, outcomes, deadlines, callbacks,
-  artifacts, endpoint revisions, completion profiles, compatibility exports,
-  credential/variable boundaries, handoff ownership, recoverable event
-  sequencing/replay, adapters, and conformance smoke.
+- `BPANE-00047_WORKFLOW_PACKAGE_CONTRACT_PLAN.md`: next Ready slice for the
+  supported immutable Git-backed Playwright package and publication contract.
+- `BPANE-00172_PHASE_0_WORKFLOW_ENDPOINT_PLAN.md`: bounded project-scoped,
+  service-principal-authorized polling endpoint for one Phase 0 BPM activity.
+- `BPANE-00172_BPM_WORKFLOW_ENDPOINT_INTEGRATION_PLAN.md`: historical combined
+  endpoint specification retained as source context; not executable.
+- `BPANE-00237_WORKFLOW_ENDPOINT_PRODUCTIZATION_PLAN.md`: deferred endpoint
+  revisions, callbacks, replay, tracing, throttling, and connector expansion.
 - `BPANE-00173_DELIVERY_GOVERNANCE_PLAN.md`: governance slice that establishes
   the canonical roadmap, maturity, phase gates, risks, issue ownership, and
   management claim traceability.
 - `BPANE-00174_PHASE_0_REFERENCE_WORKFLOW_PLAN.md`: process qualification,
-  bounded reference-workflow delivery, operating evidence, and Stop/Operate/
+  bounded BPM browser-activity delivery, operating evidence, and Stop/Operate/
   Phase 1 exit plan.
 - `DOMAIN_REQUIREMENTS.md`: standalone control-plane and product-domain
   requirements that remain relevant to the admin app and future slices.
@@ -294,21 +300,24 @@ plan. It separates semantic demonstration-to-workflow authoring and controlled
 repair from the existing workflow publishing, observability, artifact, and
 Human Handoff issue scopes.
 
-The twelfth pass added focused Phase N issue `#172` after a code/OpenAPI and
-industry-contract audit. It separates stable BPM-facing Workflow Endpoints,
-machine authorization, typed run semantics, traceable callbacks, and connector
-conformance from owner-facing workflow publishing and from Teach Mode. A
-second endpoint audit added immutable revision/environment promotion,
-poll/webhook/callback-token completion profiles, caller overload/readiness,
-attempt/side-effect evidence, credential/variable boundaries, Human Handoff
-ownership, public event sequencing/replay, and generated connector
-compatibility exports.
+The twelfth pass originally added a broad Phase N issue `#172` after a
+code/OpenAPI and industry-contract audit. The 2026-08-20 boundary review later
+narrowed `#172` to the Phase 0 polling endpoint and moved revision promotion,
+callbacks, replay, tracing, overload/readiness, and connector compatibility to
+`#237`. The old combined plan remains historical context only.
 
 The thirteenth pass established issue `#173` and the executable delivery
 governance model. It added parallel Foundation, Pilot Value, Operator Product,
 Production, Enterprise, and Innovation lanes; capability maturity and release
 gates; a risk register; durable ADRs; focused issues `#174` through `#180`; and
 a bounded Phase 0 reference-workflow plan.
+
+The fourteenth pass synchronized the long-running implementation session after
+PR #236. It added the concise current-context handoff, restored the missing
+plan template, narrowed Phase 0 to one polling-based BPM browser activity,
+split the old combined #172 specification into bounded #172 and deferred #237
+plans, made #47 the next Ready slice, and removed Human Handoff and Teach Mode
+from Phase 0 dependencies.
 
 ## Maintenance Rule
 
@@ -326,3 +335,5 @@ When maintaining this planning workspace, verify that:
 7. external management claims are current evidence, Pilot target, roadmap, or
    hypothesis and link to their evidence/owner,
 8. the promotion gate in `ADMIN_NEW_STATUS.md` still reflects the live code.
+9. `CURRENT_CONTEXT.md` reflects the current Phase 0 boundary and first Ready
+   issue.

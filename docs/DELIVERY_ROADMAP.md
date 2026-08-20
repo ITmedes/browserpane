@@ -4,10 +4,10 @@ Status: Canonical execution roadmap
 
 Governance issue: [#173](https://github.com/ITmedes/browserpane/issues/173)
 
-Last implementation audit: 2026-08-16 on
-`feature/BPANE-00233-grafana-operations-dashboard`. The Prometheus SLI, alert,
-and runbook checkpoint merged through PR #232. #233 is the current focused
-Grafana operations-dashboard checkpoint under #178.
+Last implementation audit: 2026-08-20 on `main` at `2adbfdee`. The Grafana
+operations-dashboard checkpoint merged through PR #234. Deterministic Compose
+validation was restored through #235/PR #236 and the post-merge main workflow
+passed all five Compose lanes.
 
 ## How To Use This Document
 
@@ -47,10 +47,10 @@ or capacity decision.
 
 | Lane | Outcome | Current entry point | Promotion target |
 | --- | --- | --- | --- |
-| Foundation | Trusted build, auth, contracts, storage, and lifecycle baseline. | Complete through #179 | Foundation Gate |
-| Pilot Value | One bounded reference workflow with accepted evidence and runbook. | #174 | Phase 0 Gate |
+| Foundation | Trusted build, auth, contracts, storage, and lifecycle baseline. | Complete through #179 plus #235 Compose reliability | Foundation Gate |
+| Pilot Value | One bounded reusable BPM browser activity with accepted evidence and runbook. | #47, then #172 and #174 | Phase 0 Gate |
 | Operator Product | Complete and promote `/admin-new/` as the default operator console. | Default promoted through #163; #124 is the next focused catalog gap | Phase 1 Gate |
-| Production | Harden deployment, security, recovery, supply chain, and telemetry. | #231 SLI/alert baseline merged; #233 dashboard baseline is in progress | Production Baseline |
+| Production | Harden deployment, security, recovery, supply chain, and telemetry. | #233 dashboard baseline merged; #178 retains broader telemetry scope | Production Baseline |
 | Enterprise | Organization controls, policy, residency, HA, and governed integrations. | #176 / #70 / #79 | Phase N Gate |
 | Innovation | Teach Mode and controlled repair after stable execution contracts. | #171 | Phase N capability gate |
 
@@ -68,13 +68,16 @@ or capacity decision.
 | 5 | #152 | Done | #150 stable readiness contract | Shared in-memory/Postgres store contract parity merged through PR #193. |
 | 6 | #179 | Done | #152 persistent behavior baseline | Control API lint, conformance, examples, compatibility policy, and CI enforcement merged through PR #194. |
 
-### Next Three Product Slices
+### Next Three Pilot Value Slices
 
 | Order | Issue | State | Dependency | Outcome |
 | --- | --- | --- | --- | --- |
-| 1 | #157 | Done | #156 session operations parity | Identity/access review and registry lifecycle merged through PR #199. |
-| 2 | #158 | Done | #179 governed contract evidence | API, coverage, and docs companion routes merged through PR #200. |
-| 3 | #159 | Done | #153 shared catalog patterns | Extensions, credential bindings, and workflow event-subscription catalogs merged through PR #201. |
+| 1 | #47 | Ready | Foundation and workflow baseline merged | Freeze the supported immutable Git-backed Playwright workflow package and regression contract. |
+| 2 | #172 | Qualified | #47 contract | Add one project-scoped, service-principal-authorized, polling-based BPM activity endpoint. |
+| 3 | #174 | Qualified | #47, #172, #180 and selected conditional controls | Select, deliver, operate, and review one real bounded activity. |
+
+#180 is parallel P0 Foundation/governance work and must complete before an
+external Pilot relies on the repository's open-source posture.
 
 ### Current Production Slice
 
@@ -85,7 +88,8 @@ or capacity decision.
 | 3 | #227 | Done | #178 metrics checkpoint, #214, #225 | W3C/OpenTelemetry trace propagation for gateway-to-broker browser runtime operations merged through PR #228. |
 | 4 | #229 | Done | #178 metrics checkpoint, #227 | Shared label-free workflow, event-delivery, recording, playback, and retention OpenMetrics counters merged through PR #230. |
 | 5 | #231 | Done | #178 metrics checkpoint, #229 | Validated Prometheus recording rules, conservative starter alerts, and operator runbooks merged through PR #232. |
-| 6 | #233 | In Progress | #178 metrics checkpoint, #231 | Provisioned Grafana operations dashboard for the approved aggregate indicators. |
+| 6 | #233 | Done | #178 metrics checkpoint, #231 | Provisioned Grafana operations dashboard merged through PR #234. |
+| 7 | #235 | Done | Existing Compose validation contract | Deterministic observer fixtures, admin evidence alignment, cleanup, and hosted runner reliability merged through PR #236. |
 
 #151, #184, and #185 established and accelerated the required validation
 baseline. #145 is merged through
@@ -117,9 +121,10 @@ compliance scope. It merged through PR #226. #227 merged through PR #228 as a
 bounded gateway-to-broker browser lifecycle trace checkpoint. #229 merged
 through PR #230 and adds existing workflow/recording operations counters to the
 shared scrape. #231 merged through PR #232 and turns shipped metrics into tested
-Prometheus indicators, starter alerts, and runbooks. #233 is the next bounded
-#178 checkpoint and provisions an aggregate operations dashboard without
-absorbing final SLOs, alert routing, synthetics, or load scope.
+Prometheus indicators, starter alerts, and runbooks. #233 merged through PR
+#234 and provisions an aggregate operations dashboard without absorbing final
+SLOs, alert routing, synthetics, or load scope. #235/PR #236 then restored
+deterministic hosted Compose validation for all five promotion lanes.
 #180 remains a governance decision rather than an implicit engineering license
 change.
 
@@ -154,12 +159,17 @@ are complete.
 
 | Sequence | Issue | Required outcome |
 | --- | --- | --- |
-| P0-1 | #174 | Qualify candidates and freeze one reference-workflow agreement. |
-| P0-2 | #172 P0 | Stable project-scoped asynchronous polling endpoint when external invocation is required. |
-| P0-3 | #154 | Route-backed run detail sufficient to operate and inspect the Pilot. |
-| P0-4 | #149 / #21 | Recording/artifact evidence selected by the agreement. |
-| P0-5 | #71 | Signed/private Human Handoff if required by the process. |
-| P0-6 | #66 | Bounded target deployment and operator runbook. |
+| P0-1 | #47 | Freeze the supported immutable Git-backed Playwright workflow package, resource, credential, and regression contract. |
+| P0-2 | #172 | Add the stable project-scoped polling endpoint, machine grant, schemas, idempotency, typed outcomes, cancellation, and side-effect certainty. |
+| P0-3 | #174 | Qualify candidates, freeze one agreement, deliver the workflow, operate it, and record the exit decision. |
+| P0-4 | #180 | Resolve license/package/contribution inconsistency before external Pilot reliance. |
+| P0-C | #21 / #66 / selected #20, #72, #73, #178 gaps | Pull in only artifact, deployment, inspection, security, recovery, or telemetry work required by the selected process. |
+
+Phase 0 explicitly excludes BrowserPane subprocesses, Human Handoff, Teach
+Mode, workflow training/generation, and automatic repair. A challenge returns
+terminal `external_intervention_required` to the external BPM. #237 owns later
+endpoint revisions, callbacks, replay, tracing expansion, throttling, and
+connector compatibility.
 
 The exit is not automatic expansion. The Phase 0 review chooses Stop, bounded
 Operate, or a separately scoped Phase 1.
@@ -193,9 +203,9 @@ bounded Pilot:
 - #178 platform telemetry foundation is implemented; #227 adds the merged
   gateway-to-broker browser lifecycle trace checkpoint, #229 adds merged
   workflow/recording subsystem counters, #231 adds the merged initial
-  Prometheus SLI/alert/runbook baseline, and #233 owns the current aggregate
+  Prometheus SLI/alert/runbook baseline, and #233 adds the merged aggregate
   operations-dashboard checkpoint, while broader traces, calibrated SLOs,
-  synthetics, alert routing, and capacity evidence remain,
+  synthetics, alert routing, and capacity evidence remain under #178,
 - #223 evidence-linked threat model and hardening baseline merged through PR
   #224,
 - #72 remains the broader enterprise security-hardening owner after #223,
@@ -213,7 +223,8 @@ bounded Pilot:
 - #79 central policy engine,
 - #80 DLP/content inspection.
 
-#172 P1/P2 provides production integration semantics and connector exports.
+#237 provides later production endpoint lifecycle, callback, and connector
+semantics after the bounded #172 polling contract.
 #171 Teach Mode follows stable publishing and endpoint semantics by default.
 #175 productizes the BrowserPane protocol independently of either feature and
 must be complete before broad compatibility claims.
@@ -225,8 +236,9 @@ must be complete before broad compatibility claims.
   slices and link back to them.
 - Do not create bounded implementation plans for all Backlog issues. Create or
   update one when a focused slice moves to Ready.
-- Feature specifications such as #171 and #172 must produce a smaller
-  slice-specific plan before each implementation PR.
+- Feature specifications such as #171 and #237 must produce a smaller
+  slice-specific plan before each implementation PR. #172 now has the bounded
+  Phase 0 plan `BPANE-00172_PHASE_0_WORKFLOW_ENDPOINT_PLAN.md`.
 - Issue body is canonical for business case, scope, acceptance, and smoke.
 - Plan file is canonical for code boundaries, decisions, migration/rollback,
   test decomposition, commits, and implementation evidence.

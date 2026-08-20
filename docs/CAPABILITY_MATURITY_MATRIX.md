@@ -2,8 +2,7 @@
 
 Governance issue: [#173](https://github.com/ITmedes/browserpane/issues/173)
 
-Last verified: 2026-08-14 on
-`feature/BPANE-00225-single-node-compose-baseline`
+Last verified: 2026-08-20 on `main` at `2adbfdee`
 
 ## Maturity Definitions
 
@@ -37,10 +36,11 @@ capability.
 | Credential bindings | Prototype | Vault KV v2 provider and workflow/egress integration | #159, #70, #76 |
 | Browser extensions | Prototype | approved extension metadata and docker workflow/session support | #159, #72 |
 | MCP session delegation | Prototype | explicit session endpoint, bridge proxy, smoke coverage | #69, #70, #176 |
-| Workflow publishing and execution | Prototype | pinned git sources, worker lifecycle, runs/events/logs/files, finite worker request deadlines, bounded process output, package tests, and compose admission/workspace evidence | #47 and production integration gates |
-| Stable BPM Workflow Endpoint | Planned | Detailed contract and slices in #172 | #172 |
-| Workflow Teach Mode | Planned | Demonstration-to-candidate specification in #171 | #171 |
-| Workflow Human Handoff | Partial prototype | run input/hold/resume primitives exist | #71, #154 |
+| Workflow publishing and execution | Prototype | pinned git sources, worker lifecycle, runs/events/logs/files, finite worker request deadlines, bounded process output, package tests, and Compose admission/workspace evidence | #47 supported Playwright package contract |
+| Phase 0 BPM Workflow Endpoint | Planned | Bounded polling contract and plan in #172; no endpoint resource/grant/schema/outcome implementation yet | #172 after #47 |
+| Production Workflow Endpoint lifecycle | Planned | Revisions, callbacks, replay, trace, throttling, and connector expansion isolated in #237 | #237 |
+| Workflow Teach Mode | Planned and deferred | Demonstration-to-candidate specification in #171; explicitly not Phase 0 | #171 |
+| Workflow Human Handoff | Partial prototype and deferred | run input/hold/resume primitives exist; explicitly not Phase 0 | #71 |
 | Recording lifecycle and playback | Prototype | recorder worker, worker-only exact-path finalization merged through PR #212, measured-byte accounting, finite worker requests, single-flight finalize polling, segmented artifacts, admin/CLI downloads, and off-thread playback export | #21 artifact/provider lifecycle |
 | Generalized artifact/evidence model | Partial prototype | recordings, workspace files, workflow produced files remain separate resources | #21, #70, #28 |
 | Workflow event delivery | Prototype | signed delivery, retry/backoff, diagnostics, DNS/IP/redirect policy, pinned delivery, finite worker requests, compose E2E | #28 retained event/audit lifecycle |
@@ -51,14 +51,14 @@ capability.
 | Admin-new resource console | Prototype | Standard root route with dashboard and major resource catalogs/details; promotion evidence merged through PRs #210-#211 | #124 session-template catalog and separate compatibility-admin removal decision |
 | Admin-new default promotion | Implemented | Root route selects `/admin-new/`; promotion contract and smoke evidence merged through PRs #210 and #211 | Separate compatibility-admin removal decision |
 | Gateway health/readiness/drain | Implemented | Public liveness/readiness probes, configured dependency checks, SIGINT/SIGTERM readiness withdrawal, bounded HTTP/WebTransport drain, unit and compose failure-path evidence on #150 branch | #66, #74, #178 production packaging/HA/telemetry |
-| Platform telemetry and SLOs | Partial prototype | Gateway OpenMetrics HTTP RED/runtime capacity merged through PR #222; W3C/OTLP gateway-to-broker lifecycle traces through PR #228; label-free workflow/recording counters through PR #230; Prometheus recording rules, starter alerts, and runbooks merged through PR #232; #233 adds a provisioned aggregate Grafana dashboard | #178 broader worker/store tracing/metrics, queue/state gauges, latency, calibrated SLOs/error budgets, alert routing, synthetics, and load envelopes |
+| Platform telemetry and SLOs | Partial prototype | Gateway OpenMetrics HTTP RED/runtime capacity merged through PR #222; W3C/OTLP gateway-to-broker lifecycle traces through PR #228; label-free workflow/recording counters through PR #230; Prometheus rules/alerts/runbooks through PR #232; Grafana dashboard through PR #234 | #178 broader worker/store tracing/metrics, queue/state gauges, latency, calibrated SLOs/error budgets, alert routing, synthetics, and load envelopes |
 | Threat model and production hardening baseline | Partial prototype | Evidence-linked trust-boundary model, responsibility checklist, composed static security contract, negative fixtures, admin-header contract, broker process confinement, and single-node preflight/secret-boundary evidence | #66 target acceptance; #72 residual hardening; #73-#80 production and enterprise controls |
 | Compose deployment | Prototype | Direct local compatibility, gateway-isolated broker validation, and an independent four-service single-node package with immutable-image/secret-file preflight, live workflow/recording/restart evidence, and an operator runbook | #66 target infrastructure and managed adapters; #178 load/SLO evidence; #73/#74 restore and HA |
 | Kubernetes/Fargate/cloud adapters | Planned | Architecture options, no production support claim | #66 deployment adapters; #214 shared typed launch contract |
 | HA and disaster recovery | Planned | No supported HA/DR contract | #73, #74 |
 | Supply-chain/release governance | Partial prototype | Required CI, dependency policy, pinned actions/toolchains, and deterministic GHCR Rust builder exist; SBOM, signing, provenance, vulnerability intake, and release policy do not | #75 |
 | Open-source governance | Gap with explicit issue | AGPL root conflicts with Cargo MIT metadata; contributor policy absent | #180 |
-| Phase 0 reference workflow | Planned | Management proposition exists; delivery owner newly defined | #174 |
+| Phase 0 BPM browser activity | Planned | Product boundary and issue sequence frozen; workflow, endpoint, and real candidate are not delivered | #47, #172, #174, #180 |
 
 ## Evidence Rules
 
@@ -77,8 +77,9 @@ Claims must use the exact maturity language. In particular:
 
 - Live View, recording, workflow execution, and MCP are current Prototype
   evidence, not a Production SLA.
-- Stable external BPM invocation is Planned until #172 P0 is implemented.
-- Teach Mode, AI authoring, and controlled repair are Planned under #171.
+- Stable external BPM invocation is Planned until #47 and #172 are implemented.
+- Teach Mode, AI authoring, controlled repair, and BrowserPane Human Handoff
+  are deferred and are not Phase 0 claims.
 - Autonomous self-healing and autonomous high-impact decisions remain
   Hypotheses/non-goals rather than current promises.
 - The custom protocol is implemented, but broad compatibility or standard

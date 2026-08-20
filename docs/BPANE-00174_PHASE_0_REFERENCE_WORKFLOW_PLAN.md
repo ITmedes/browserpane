@@ -2,211 +2,197 @@
 
 Issue: [#174](https://github.com/ITmedes/browserpane/issues/174)
 
-Status: Qualified; not yet selected for implementation
+Status: Qualified; candidate process not yet selected
 
 Lane: Pilot Value
 
 Target gate: Phase 0 Operational Proof
 
-Depends on: #151 plus the minimum applicable controls selected from #145,
-#146, #147, and #150; conditional #172, #149, #71, #66, #154
+Depends on: `#47`, `#172`, and `#180`; conditional `#21`, `#66`, and selected
+inspection/security/recovery/telemetry owners
 
-Last reviewed: 2026-07-31
+Last reviewed: 2026-08-20
 
 ## Business Outcome
 
-Select and deliver one browser-only process whose value, risk, integration
-boundary, operating model, and exit can be evaluated without committing to an
-enterprise-wide BrowserPane platform rollout.
+Prove that one recurring browser-only activity can be invoked and operated as a
+reusable step inside an external business process without committing to a
+general enterprise BrowserPane rollout.
 
 ## Example Use Case
 
-A business process repeatedly requires an operator to log into a third-party
-portal, locate a case, upload or retrieve a document, record the resulting
-status, and hand control to a human when authentication or a material exception
-requires judgment. The surrounding BPM system remains responsible for the
-overall business process. BrowserPane owns only the governed browser step,
-session state, Human Handoff, and agreed evidence.
+A process engine invokes `retrieve-supplier-report` with a reporting period and
+correlation id. BrowserPane starts one workflow run, opens one isolated browser
+session, authenticates through a Credential Binding, downloads the report, and
+returns typed JSON plus an authorized artifact reference. A portal challenge
+ends with `external_intervention_required`; the external process engine owns
+any human task.
 
 ## Product Boundary
 
-Phase 0 follows this integration order:
+Use a native API first, an established connector second, and BrowserPane only
+for the remaining browser-only activity.
 
-1. use a stable native API when it fully covers the process,
-2. use an established connector/integration where it meets the controls,
-3. use BrowserPane only for the remaining browser-only step.
+The external BPM owns scheduling, surrounding subprocesses, broad retry,
+compensation, human tasks, and business state. BrowserPane owns the approved
+workflow, its run, normally one browser session, and agreed evidence.
 
-BrowserPane does not become the enterprise BPM engine, system of record,
-medical/legal decision maker, or general AI decision platform. The external
-orchestrator owns process scheduling, broad retries, compensation, business
-state, and cross-system workflow logic.
+Phase 0 excludes BrowserPane subprocess orchestration, Human Handoff, Teach
+Mode, workflow generation, model training, and autonomous repair. The workflow
+is manually or engineering-assisted authored, reviewed, regression-tested, and
+published as an immutable Git-backed Playwright version.
 
 ## Candidate Qualification
 
-Score each candidate from 1 (poor) to 5 (strong) and record evidence:
+Score at least two candidates from 1 (poor) to 5 (strong) and record evidence:
 
 | Criterion | Qualification question |
 | --- | --- |
 | Business value | Does the recurring manual step have material time, quality, or throughput impact? |
-| Browser-only fit | Is the required function missing or incomplete in available APIs/connectors? |
-| Process stability | Is the happy path understandable and bounded enough for a first proof? |
-| Side-effect safety | Can writes/submissions be identified, reviewed, and stopped or compensated? |
-| Human Handoff | Are judgment, MFA, CAPTCHA, or sensitive-input boundaries explicit? |
+| API/connector fallback | Is the required function missing or incomplete in available APIs and established integrations? |
+| Process stability | Is the happy path bounded enough for a first proof? |
+| Side-effect safety | Can writes/submissions be identified, reconciled, and stopped or compensated externally? |
+| External intervention | Are MFA, CAPTCHA, consent, sensitive input, and judgment boundaries explicit? |
 | Data sensitivity | Can identity, credentials, files, recordings, and retention be governed? |
-| Vendor-change exposure | Can page changes be detected and handled through a controlled process? |
-| Integration fit | Can the leading workflow system invoke and reconcile the browser step? |
+| Vendor-change exposure | Can page changes be detected and handled through a controlled engineering process? |
+| Integration fit | Can the selected BPM invoke and reconcile the browser activity through polling? |
 | Deployment fit | Is there one feasible environment with accountable operations? |
-| Reversibility | Can the proof be stopped without trapping data, source, or process ownership? |
+| Reversibility | Can the proof stop without trapping data, source, or process ownership? |
 
-Reject candidates with unresolved legal/contractual automation restrictions,
-unbounded high-impact decisions, unknown side effects, or no responsible
-process/operator owner.
+Reject candidates with unresolved automation restrictions, unbounded
+high-impact decisions, unknown side effects, mandatory BrowserPane handoff, or
+no accountable process/operator owner.
 
-## Required Phase 0 Agreement
+## Required Agreement
 
 Freeze before implementation:
 
-- process owner, technical owner, operator, security/data owner, and escalation,
-- start trigger and external correlation/idempotency key,
-- versioned input schema and validation errors,
-- expected outputs and artifact/file contract,
-- browser context, egress, credentials, extensions, and workspace bindings,
-- read-only versus mutating steps and side-effect checkpoints,
-- Human Handoff trigger, authorization, expiry, and resume behavior,
-- timeout, cancellation, failure, retry, and reconciliation semantics,
-- recording/log/event policy, redaction, retention, and download authority,
-- target deployment, availability window, capacity limit, and maintenance,
-- acceptance evidence and Stop/Operate/Phase 1 review procedure.
+- process, technical, operator, security/data, and escalation owners,
+- endpoint key, external caller, trigger, correlation, and idempotency,
+- versioned input and output schemas,
+- bounded JSON and artifact/file results,
+- read-only and mutating browser steps,
+- context, egress, credentials, extensions, workspace, and recording policy,
+- side-effect checkpoints and `none`/`confirmed`/`uncertain` reconciliation,
+- challenge mapping to terminal `external_intervention_required`,
+- timeout, cancellation, retry guidance, and recovery,
+- evidence, redaction, authorization, retention, and download authority,
+- deployment, availability window, capacity, maintenance, and exit review.
 
-## Implementation Slices
+## Delivery Slices
 
-### Slice 0: Qualification And Contract Freeze
+### 1. Qualification And Contract Freeze
 
-- score two or three candidates,
-- document API/connectors considered,
-- select one candidate or deliberately stop,
-- produce process contract, threat/data profile, and target deployment,
-- map every required platform gap to a canonical issue.
+- compare candidates and API/connector alternatives,
+- select one or deliberately stop,
+- freeze process, data/threat profile, deployment, owners, and non-goals,
+- map selected product gaps to canonical issues.
 
-Manual checkpoint: stakeholders approve the bounded process and non-goals before
-runtime implementation begins.
+Manual checkpoint: stakeholders approve the bounded activity and non-goals
+before runtime implementation begins.
 
-### Slice 1: Reference Workflow Package
+### 2. Reusable Workflow Package
 
-- create or pin the versioned workflow source,
-- define inputs, outputs, credentials, files, egress, context, and capabilities,
-- add validation and safe error mapping,
-- cover read-only and mutating checkpoints,
-- publish only the reviewed immutable version.
+- apply `#47`,
+- pin reviewed immutable Playwright source and entrypoint,
+- define schemas, credentials, files, egress, context, capabilities, assertions,
+  and timeouts,
+- add deterministic positive and negative scenarios.
 
-Manual checkpoint: run the workflow in a non-production test environment and
-review source, configuration, and expected side effects.
+Manual checkpoint: reviewers inspect source, configuration, declared resources,
+and expected side effects before publication.
 
-### Slice 2: Integration Entry Point
+### 3. BPM Polling Endpoint
 
-- use #172 P0 when the external system requires a stable endpoint,
-- otherwise document the bounded existing workflow-run API integration,
-- propagate correlation/idempotency and map terminal states,
-- ensure cancellation and status reconciliation are explicit,
-- avoid claiming callback or production connector support until its owner ships.
+- apply `#172`,
+- bind one stable endpoint key to the approved version,
+- authorize the selected service principal,
+- enforce schemas, idempotency, typed outcomes, timeout, cancellation, and
+  side-effect certainty,
+- return bounded JSON and artifact references.
 
-Manual checkpoint: start and reconcile one run entirely from the intended
-external integration path.
+Manual checkpoint: the target-like BPM invokes and reconciles one run without
+an interactive BrowserPane owner token.
 
-### Slice 3: Operator And Human Handoff
+### 4. Operator Path And Evidence
 
-- provide the minimum route-backed run/session detail required to operate,
-- implement or bind the agreed Human Handoff path,
-- show validation, policy, waiting, failed, canceled, and artifact states,
-- document start, observe, intervene, stop, recover, and escalate procedures.
+- configure and inspect through Admin-New,
+- expose matching API/CLI/OpenAPI behavior,
+- document start, monitor, stop, recover, and escalate,
+- preserve BPM-to-endpoint-to-run-to-session-to-artifact correlation.
 
 Manual checkpoint: an operator who did not implement the workflow follows the
-runbook successfully.
+runbook and traces successful and failed evidence.
 
-### Slice 4: Evidence And Retention
+### 5. Bounded Trial And Exit
 
-- produce the agreed logs, events, files/artifacts, and recording segments,
-- make unavailable/expired evidence explicit,
-- verify checksums, authorization, redaction, and retention,
-- preserve correlation from external invocation to run, session, and artifact.
-
-Manual checkpoint: reviewers trace one successful and one failed run from
-invocation through retained evidence.
-
-### Slice 5: Operational Trial And Exit Review
-
-- operate only within the agreed duration/capacity envelope,
-- record interventions, failures, vendor changes, and operator effort,
-- test stop/recovery and one controlled dependency failure,
-- classify discovered gaps as process-specific or reusable product capability,
+- operate only within the agreed environment and capacity,
+- record failures, external intervention, portal changes, and operator effort,
+- test dependency failure, shutdown, and recovery,
 - decide Stop, bounded Operate, or separately scoped Phase 1.
 
 ## Security And Data Impact
 
 - Use external identity and short-lived scoped credentials; never put long-lived
-  secrets into source, URLs, logs, or artifacts.
-- Bind credentials, egress, files, and artifacts to the selected project.
+  secrets into source, URLs, logs, events, or artifacts.
+- Bind credentials, egress, contexts, files, recordings, and artifacts to the
+  selected project and prove cross-project denial.
 - Record browser-side effects and uncertainty instead of treating retries as
   inherently safe.
-- Keep recordings disabled unless the agreement selects them and #149 safety is
-  complete.
-- Do not ingest full proxy/decrypted traffic into BrowserPane telemetry.
-- Define data subject, retention, deletion, and download authority before using
-  real sensitive data.
+- Keep recordings disabled unless the agreement selects them; preserve the
+  purpose-scoped recording-worker and exact staging boundary.
+- Do not ingest full proxy or decrypted traffic into BrowserPane telemetry.
+- Define data subject, retention, deletion, artifact download authority, and
+  external-intervention ownership before using real sensitive data.
+- Reject candidates with unresolved automation restrictions or high-impact
+  decisions that cannot remain outside BrowserPane.
 
 ## Test Strategy
 
 ### Unit
 
-- schema validation and error taxonomy,
-- input normalization and output bounds,
-- side-effect checkpoint and idempotency behavior,
-- policy/grant denial,
-- timeout/cancel/Handoff state mapping.
+- schema and package validation,
+- endpoint/caller authorization and idempotency,
+- outcome, timeout, cancellation, and side-effect mapping,
+- input normalization, output bounds, and stable validation problems.
 
 ### Integration
 
-- external invocation to workflow run/session binding,
-- credentials, context, egress, workspace, and artifact boundaries,
-- in-memory/Postgres contract where affected,
-- recording/artifact finalization when selected,
-- callback/polling reconciliation profile selected by the agreement.
+- in-memory/Postgres behavior,
+- external invocation through endpoint, run, and session binding,
+- credential, context, egress, workspace, recording, and artifact boundaries,
+- terminal result and retained evidence reconciliation.
 
 ### Smoke And E2E
 
-- real supported runtime and target-like portal fixture,
-- happy path,
-- validation denial,
-- authentication/Handoff path,
-- target-site/runtime failure,
-- timeout/cancel,
-- post-side-effect uncertainty,
-- evidence download and retention expiry,
-- operator stop and recovery.
+- target-like happy path,
+- invalid input before runtime creation,
+- duplicate and conflicting invocation,
+- portal/runtime failure,
+- timeout and cancellation,
+- challenge to `external_intervention_required`,
+- ambiguous post-submit side effect,
+- evidence access, retention, shutdown, and recovery.
 
 ## Post-Implementation Smoke Sequence
 
-1. Score at least two candidates and verify the selected candidate satisfies the
-   documented threshold and exclusion rules.
-2. Provision the agreed project, identity, context, egress, workspace,
-   credentials, workflow version, and retention settings.
-3. Start a run through the agreed external integration entry point using a
-   stable correlation/idempotency key.
-4. Observe the same bound browser session and complete the happy path.
-5. Repeat with invalid input and verify no runtime starts.
-6. Exercise Human Handoff or an agreed operator intervention.
-7. Exercise timeout/cancel before a side effect and reconciliation after an
-   intentionally ambiguous side-effect boundary.
-8. Verify terminal state, logs, events, files/artifacts, recording when enabled,
-   checksums, redaction, authorization, and retention.
-9. Stop/restart one selected dependency and follow the recovery runbook.
-10. Record the closing Stop, bounded Operate, or Phase 1 decision and link every
-    remaining gap to a canonical issue.
+1. Score at least two candidates and record the selection.
+2. Provision project, service principal, credentials, context, egress,
+   workspace, workflow, endpoint, and retention.
+3. Invoke through the fake or target BPM and poll through success.
+4. Replay the same idempotency key and verify no duplicate action.
+5. Reject changed input under the same key.
+6. Reject invalid input before session/worker creation.
+7. Exercise runtime failure, timeout, and cancellation.
+8. Exercise challenge and uncertain-side-effect outcomes.
+9. Verify authorization, JSON, artifacts, logs, redaction, and retention.
+10. Follow the runbook through shutdown, dependency restart, and recovery.
+11. Record Stop, bounded Operate, or Phase 1.
 
 ## Exit Criteria
 
 - One workflow has accepted bounded operational evidence.
-- No broad Production or Enterprise claim is inferred from the proof.
-- Operations and failure ownership are explicit.
-- The external system can reconcile terminal and uncertain outcomes.
-- The result has a reversible exit and a separately scoped continuation path.
+- The external BPM can reconcile every terminal outcome without an internal
+  BrowserPane human task.
+- Operations, evidence, failure ownership, and exit are explicit.
+- No Production, Enterprise, Teach Mode, or subprocess claim is inferred.

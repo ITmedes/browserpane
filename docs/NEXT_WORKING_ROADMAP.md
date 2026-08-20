@@ -1,6 +1,6 @@
 # Admin-New Transition Roadmap
 
-Revalidated: 2026-08-04
+Revalidated: 2026-08-20
 
 This document preserves the admin-new transition sequence from the redesign
 requirements and security/runtime cleanup roadmap.
@@ -10,9 +10,11 @@ and release gates, use `DELIVERY_ROADMAP.md`. Use
 `IMPLEMENTATION_WORK_ORDER.md` for detailed historical rationale. This file is
 not the canonical next-slice queue.
 
-## Working Principle
+## Preserved Promotion Principle
 
-Do not promote `/admin-new/` to the default admin console until:
+The Admin-New promotion gate completed through PRs #210 and #211. Keep the
+following conditions as regression requirements while `/admin/` remains a
+compatibility fallback:
 
 1. the merged status-quo baseline remains stable,
 2. advertised navigation routes exist or are hidden,
@@ -21,16 +23,20 @@ Do not promote `/admin-new/` to the default admin console until:
    addressed,
 5. old `/admin/` parity remains covered by tests or explicit deferral.
 
-## Immediate State
+## Historical Starting State
 
-Merged PR `#143` is the current status checkpoint:
+Merged PR `#143` was the transition starting checkpoint:
 
 - snapshots the unified admin progress,
 - documents `/admin-new/` as under active development,
 - includes workflow source hardening,
 - includes MCP bridge control hardening,
-- keeps `/admin/` as stable/default,
-- carries forward the now-closed `#142` redesign lineage.
+- kept `/admin/` as the default at that historical checkpoint,
+- carried forward the now-closed `#142` redesign lineage.
+
+Current state: `/admin-new/` is the default web-root console; `/admin/` remains
+directly available pending a separate compatibility-removal decision. Use
+`DELIVERY_ROADMAP.md` and `CURRENT_CONTEXT.md` for current execution order.
 
 ## Recommended Next Slices
 
@@ -293,16 +299,18 @@ Validation:
 - smoke that routes load and expose expected operation families,
 - docs link checks.
 
-## Do Not Do In The Next PR
+## Preserved Transition Guardrails
 
-- Do not delete the old admin app.
-- Do not switch `/admin/` to the unified app.
+- Do not delete the compatibility admin without a separate removal decision and
+  regression gate.
+- Keep `/admin/` directly addressable while it remains the compatibility
+  fallback; the root route already selects `/admin-new/`.
 - Do not mix enterprise roadmap items like DLP, BYOK, HA, or support bundles
   into an admin-new parity slice.
 - Do not refactor all repeated admin components unless the slice directly
   benefits from it.
 
-## Subsequent Product/Enterprise Backlog
+## Subsequent Cross-Product Backlog
 
 Keep these as later roadmap work, not as blockers for the immediate
 `/admin-new` parity slices:
@@ -320,20 +328,19 @@ Keep these as later roadmap work, not as blockers for the immediate
 - data residency, encryption, and BYOK,
 - DLP/content-inspection hooks,
 - central enterprise policy engine,
-- project-scoped Workflow Endpoints for BPM/orchestration integrations through
-  focused Phase N issue `#172`, starting with a stable asynchronous polling
-  contract and then adding callback, promotion, overload, trace, and connector
-  compatibility semantics,
+- one project-scoped polling Workflow Endpoint for BPM integration through
+  Phase 0 issue `#172`, with later callback, promotion, overload, trace, and
+  connector compatibility under `#237`,
 - Workflow Studio Teach Mode and controlled demonstration-to-workflow
   publishing through focused Phase N issue `#171`.
 
-Both Phase N workflow slices remain behind the immediate security and
-admin-new promotion slices unless a bounded Pilot selects one explicitly.
-Within Phase N, implement the external endpoint contract in `#172` before Teach
-Mode in `#171` by default. Their detailed contracts, implementation order, and
-smoke sequences live in
-`BPANE-00172_BPM_WORKFLOW_ENDPOINT_INTEGRATION_PLAN.md` and
-`BPANE-00171_WORKFLOW_TEACH_MODE_PLAN.md`.
+The current Pilot order is `#47`, then `#172`, then `#174`, with `#180` as a
+parallel external-Pilot gate. Teach Mode `#171` and endpoint expansion `#237`
+remain deferred. Current plans are
+`BPANE-00047_WORKFLOW_PACKAGE_CONTRACT_PLAN.md`,
+`BPANE-00172_PHASE_0_WORKFLOW_ENDPOINT_PLAN.md`, and
+`BPANE-00174_PHASE_0_REFERENCE_WORKFLOW_PLAN.md`; the old combined #172 plan is
+historical only.
 
 The bounded Pilot owner is #174. Protocol compatibility is owned by #175,
 organization/grant enforcement by #176, identity lifecycle by #177, platform

@@ -1350,9 +1350,13 @@ CLI command.
 
 Workflow boundary:
 
-- BrowserPane owns browser-run execution, run state, recordings/artifacts, reusable runtime inputs, and human intervention around the run.
-- BrowserPane also owns browser-native admission/backpressure, paused-run runtime semantics, and signed lifecycle delivery for external systems.
-- External workflow systems should usually own schedules, DAGs, broad retry policy, and cross-system orchestration.
+- BrowserPane owns browser-run execution, run state, recordings/artifacts, and
+  reusable runtime inputs.
+- BrowserPane also owns browser-native admission/backpressure and the technical
+  paused-run/input primitives used by existing owner-scoped workflow runs.
+- For the bounded Phase 0 BPM contract, external workflow systems own schedules,
+  DAGs, broad retry policy, compensation, cross-system orchestration, and human
+  tasks.
 
 Current external-integration limit:
 
@@ -1362,20 +1366,23 @@ Current external-integration limit:
   does not yet enforce them before run creation or successful completion.
 - registered service-principal and identity-mapping resources do not yet grant
   a machine caller access to an approved workflow owned by another principal.
-- callbacks are signed and retried, but the current event envelope, replay,
-  trace, pagination, deadline, typed-outcome, and connector-compatibility
-  contracts are not yet production-shaped for general BPM integration.
+- the gateway does not yet expose endpoint/caller-scoped idempotency,
+  machine-readable terminal outcomes, or side-effect certainty to an external
+  BPM caller.
 
-The planned external contract is documented in the
-[BPM workflow endpoint integration plan](docs/BPANE-00172_BPM_WORKFLOW_ENDPOINT_INTEGRATION_PLAN.md).
-It adds stable
-endpoint keys, explicit machine grants, asynchronous polling/webhook/callback
-profiles, enforced schemas, typed outcomes, deadlines, trace correlation,
-artifact references, endpoint revision promotion, connector/target credential
-separation, explicit Human Handoff ownership, and public event
-sequencing/replay on top of the existing transactional Postgres delivery
-enqueue. It also adds connector conformance without turning BrowserPane into a
-BPMN/DAG engine.
+The current Phase 0 sequence first freezes the
+[supported workflow package](docs/BPANE-00047_WORKFLOW_PACKAGE_CONTRACT_PLAN.md),
+then adds the bounded
+[polling Workflow Endpoint](docs/BPANE-00172_PHASE_0_WORKFLOW_ENDPOINT_PLAN.md).
+That endpoint uses OIDC client credentials, explicit service-principal grants,
+enforced schemas, invoke/status/cancel operations, typed outcomes, side-effect
+certainty, bounded JSON, and artifact references. Challenges finish as
+`external_intervention_required`; the external process owns any human task.
+
+Endpoint revisions, callbacks, replay, expanded tracing, throttling, and
+connector compatibility are deferred to the
+[Workflow Endpoint productization plan](docs/BPANE-00237_WORKFLOW_ENDPOINT_PRODUCTIZATION_PLAN.md).
+The older combined endpoint plan is retained only as historical design context.
 
 Local usage options:
 

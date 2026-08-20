@@ -142,13 +142,13 @@ Required endpoint behavior:
   callers with stable machine-readable problems,
 - audit the caller, grant, endpoint, project, request id, and result.
 
-Some connector platforms require user-delegated authorization-code OAuth rather
-than client credentials. The endpoint contract may support both through the
-same grant decision. BrowserPane-issued API keys remain owned by `#70` and must
-not be introduced as unmanaged static secrets under `#172`. Where the identity
-platform supports it, private-key or workload-identity client authentication is
-preferred over another shared client secret; mutual TLS remains an explicit
-compatibility profile rather than an implicit requirement.
+Phase 0 `#172` uses external OIDC/OAuth 2.0 client credentials resolved to an
+active registered service principal and an explicit project/endpoint grant.
+User-delegated OAuth and additional connector authentication profiles are
+deferred to `#237`. BrowserPane-issued API keys remain owned by `#70` and must
+not be introduced as unmanaged static secrets. Where the identity platform
+supports it, private-key or workload-identity client authentication is
+preferred over another shared client secret.
 
 The connector credential authenticating the process system to BrowserPane is
 separate from target-website credentials consumed by a browser workflow.
@@ -157,8 +157,9 @@ credentials remain in the external process system's secret store or identity
 provider. Neither may be copied into process variables, endpoint schemas, run
 labels, callback tokens, or general audit payloads.
 
-Detailed endpoint authorization and negative-case tests live in
-`BPANE-00172_BPM_WORKFLOW_ENDPOINT_INTEGRATION_PLAN.md`.
+Phase 0 endpoint authorization and negative-case tests live in
+`BPANE-00172_PHASE_0_WORKFLOW_ENDPOINT_PLAN.md`; later connector identity
+profiles live in `BPANE-00237_WORKFLOW_ENDPOINT_PRODUCTIZATION_PLAN.md`.
 
 ## Admin-New Requirements
 

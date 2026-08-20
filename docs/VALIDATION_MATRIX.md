@@ -502,8 +502,6 @@ npm run smoke:admin-browserpane-tour -- --headless
 BPM Workflow Endpoint issue `#172` additionally requires:
 
 - endpoint/grant lifecycle and cross-project authorization tests,
-- immutable endpoint revision, compatibility, environment promotion, rollback,
-  and historical-run pinning tests,
 - client-credentials service-principal invocation without an interactive owner
   token,
 - concurrent idempotency tests proving one run and one browser side-effect
@@ -511,18 +509,24 @@ BPM Workflow Endpoint issue `#172` additionally requires:
 - JSON Schema dialect/schema/input/output validation, including rejection
   before session/worker creation,
 - RFC 9457 request problems and typed business/technical/policy/timeout
-  outcomes,
-- gateway-enforced queue/execution/Human Handoff deadlines,
-- endpoint/caller concurrency, rate-limit, accepted-queue, `429`, `503`,
-  `Retry-After`, degraded, maintenance, and dependency-readiness tests,
-- progress heartbeat, stale worker, cancellation request, acknowledgement, and
-  terminal-state tests,
-- attempt/checkpoint and side-effect uncertainty tests that prevent unsafe
-  whole-run retry assumptions,
+  outcomes, including `external_intervention_required`,
+- gateway-enforced execution timeout, cancellation, and terminal-state tests,
+- side-effect certainty tests that prevent unsafe whole-run retry assumptions,
 - declared process-variable mapping and strict separation of integration
   credentials from target-system Credential Bindings,
-- external-managed and BrowserPane-managed Human Handoff tests proving exactly
-  one task owner per endpoint revision,
+- inline-result size and artifact checksum/media-type/authorization/expiry
+  tests,
+- polling, canonical OpenAPI, Admin-New, CLI, and deterministic
+  fake-orchestrator conformance smokes.
+
+Deferred Workflow Endpoint productization issue `#237` additionally requires:
+
+- immutable endpoint revision, compatibility, environment promotion, rollback,
+  and historical-run pinning tests,
+- endpoint/caller concurrency, rate-limit, accepted-queue, `429`, `503`,
+  `Retry-After`, degraded, maintenance, and dependency-readiness tests,
+- progress heartbeat, stale worker, cancellation acknowledgement, attempt, and
+  checkpoint evidence,
 - W3C Trace Context continuity through gateway, worker, event, log, artifact,
   and callback evidence,
 - CloudEvents/AsyncAPI schema, signing, retry, replay, redelivery, secret
@@ -530,14 +534,12 @@ BPM Workflow Endpoint issue `#172` additionally requires:
 - Postgres transactional run/event/delivery persistence, supported-store
   parity, per-run sequence, replay, reorder, duplicate, and reconciliation
   tests,
-- inline-result size and artifact checksum/media-type/authorization/expiry
-  tests,
-- polling, signed webhook, and callback-token completion-profile tests,
+- signed webhook and callback-token completion-profile tests,
 - canonical OpenAPI and generated compatibility-export drift tests,
 - proof that callback tokens and connector credentials never enter labels,
   logs, events, diagnostics, or UI,
-- Admin-New, CLI, raw API, reference connector, durable-activity wrapper, and
-  deterministic fake-orchestrator conformance smokes.
+- Admin-New, CLI, raw API, reference connector, and durable-activity wrapper
+  conformance smokes.
 
 Do not count successful owner-token `POST /api/v1/workflow-runs` coverage as
 Workflow Endpoint validation. The smoke must use the stable endpoint key and an
@@ -852,7 +854,9 @@ include:
 - input validation before runtime side effects,
 - happy path and agreed portal/runtime failures,
 - timeout, cancellation, and uncertain post-side-effect reconciliation,
-- Human Handoff when required,
+- challenge or judgment mapped to terminal `external_intervention_required`
+  without an internal BrowserPane handoff,
+- endpoint/caller idempotency and explicit browser-side-effect certainty,
 - credential, egress, context, file, and artifact boundaries,
 - terminal run state and agreed evidence/retention behavior,
 - operator start, monitor, stop, recovery, and escalation runbook,
@@ -862,9 +866,10 @@ Do not require unrelated enterprise features merely to complete a bounded
 Phase 0. Do not omit a Foundation dependency selected by the process threat and
 data profile.
 
-## Manual Promotion Gate
+## Preserved Manual Promotion Regression Gate
 
-To complete the `/admin-new` promotion gate after the root-route switch:
+The `/admin-new` promotion completed through PRs #210 and #211. Preserve the
+accepted gate after the root-route switch:
 
 1. Verify every visible navigation route exists or is intentionally hidden.
 2. Run all current old-admin smokes for migrated behavior.

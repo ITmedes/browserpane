@@ -1,7 +1,9 @@
 # BrowserPane Implementation Plan Template
 
-Copy this structure into `docs/BPANE-<five-digit-issue>_<TOPIC>_PLAN.md` only
-when the canonical issue is moving to Ready or In Progress.
+Read `CURRENT_CONTEXT.md` and the canonical GitHub issue before using this
+template. Copy this structure into
+`docs/BPANE-<five-digit-issue>_<TOPIC>_PLAN.md` only when the issue is moving to
+Ready or In Progress.
 
 ## Metadata
 

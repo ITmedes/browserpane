@@ -93,6 +93,17 @@ A tenth productization pass added:
   invocation, completion profiles, endpoint revisions, overload/readiness,
   traceable callbacks, artifact handoff, and connector conformance.
 
+An eleventh delivery-boundary pass on 2026-08-20 retained that file as
+historical combined context and split current ownership into:
+
+- `BPANE-00047_WORKFLOW_PACKAGE_CONTRACT_PLAN.md` for the supported immutable
+  Playwright package,
+- `BPANE-00172_PHASE_0_WORKFLOW_ENDPOINT_PLAN.md` for the bounded polling
+  endpoint,
+- `BPANE-00174_PHASE_0_REFERENCE_WORKFLOW_PLAN.md` for one real activity,
+- `BPANE-00237_WORKFLOW_ENDPOINT_PRODUCTIZATION_PLAN.md` for later revisions,
+  callbacks, replay, tracing, throttling, and connector compatibility.
+
 ### Redesign Foundation Decision
 
 Status: Active requirement.
@@ -113,14 +124,15 @@ Retained decision:
 
 ### Unified Admin Shell And Promotion
 
-Status: Partial.
+Status: Implemented promotion baseline; compatibility removal remains open.
 
 Retained requirements:
 
 - build `/admin-new/` beside `/admin/`,
 - use static SvelteKit output,
 - preserve `/admin/`, `/dist/`, auth config, cert metadata, and API routes,
-- keep `/admin/` stable/default until parity and security gates pass,
+- keep `/admin/` directly available as a compatibility fallback after
+  `/admin-new/` promotion,
 - route-backed navigation and detail pages,
 - explicit loading/error/empty/disabled/success states,
 - manual checkpoints after each route migration,
@@ -131,9 +143,12 @@ Retained requirements:
 
 Current implementation:
 
-- shell and dashboard exist,
-- grouped navigation exists,
-- several navigation targets are still missing.
+- `/admin-new/` is the default web-root console after PR #211,
+- shell, dashboard, grouped navigation, and the major route-backed resource and
+  session/workflow detail surfaces exist,
+- `/admin/` removal remains a separate decision with regression requirements,
+- focused gaps such as the session-template catalog remain owned by their
+  canonical issues rather than reopening the promotion gate.
 
 ### Current Admin Parity
 

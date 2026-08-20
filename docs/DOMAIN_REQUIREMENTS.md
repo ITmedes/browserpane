@@ -237,73 +237,40 @@ Source security requirements:
 Current admin-new state:
 
 - workflow catalog/detail/source browser/code preview/launch controls exist,
-- workflow runs overview exists,
-- workflow-run detail route is missing.
+- workflow runs overview and route-backed detail exist, including logs, events,
+  controls, inputs, produced files, and related session links.
 
 ### Phase 0 Reference Workflow
 
 Issue #174 owns selection and delivery of one bounded real workflow. It uses
 the workflow/runtime resources below but does not redefine their product
 contracts. The candidate must pass an API-first/browser-fallback qualification,
-freeze its side effects and Human Handoff boundaries, select only the required
-Foundation dependencies, and exit through Stop, bounded Operate, or a newly
-scoped Phase 1.
+freeze schemas, side effects, challenge/escalation, runtime resources, and
+evidence, then exit through Stop, bounded Operate, or a newly scoped Phase 1.
 
-The process system remains authoritative for the end-to-end business process.
-BrowserPane owns only the browser-native step, session state, same-session
-human/agent control, and agreed evidence. See ADR 0001 and
+The process system remains authoritative for the end-to-end business process,
+subprocesses, broad retry, compensation, and human tasks. BrowserPane owns only
+one approved browser activity, its run, normally one session, and agreed
+evidence. Phase 0 excludes BrowserPane Human Handoff, Teach Mode, training,
+generation, and automatic repair. See ADR 0001 and
 `BPANE-00174_PHASE_0_REFERENCE_WORKFLOW_PLAN.md`.
 
 ### BPM Workflow Integration Endpoints
 
-Issue `#172` owns the Phase N contract for exposing an approved BrowserPane
-workflow as a stable project-scoped action to an external BPM, workflow, iPaaS,
-or durable-execution system. It is not currently implemented.
+Issue `#172` owns the Phase 0 project-scoped polling contract. It binds one
+stable endpoint key to one approved immutable workflow version, authorizes an
+external OIDC service principal, validates input/output schemas, creates runs
+idempotently, exposes status/cancel and typed outcomes, reports browser-side
+effect certainty, and separates bounded JSON from retained artifacts.
 
-#174 decides whether its bounded Phase 0 requires the #172 P0 polling contract.
-#176 owns generalized authorization enforcement, and #179 owns API
-conformance/compatibility. #172 consumes those contracts rather than creating
-parallel identity or API governance.
+A challenge requiring MFA, CAPTCHA, consent, or judgment returns terminal
+`external_intervention_required`. BrowserPane does not create a Human Handoff
+or subprocess in Phase 0.
 
-The endpoint model must:
-
-- bind a stable endpoint key to one approved immutable workflow version,
-- allow controlled version promotion without changing the caller contract,
-- authorize registered service principals through explicit project, endpoint,
-  and operation scopes,
-- support user-delegated OIDC where a connector platform cannot use client
-  credentials,
-- validate input and output against one declared JSON Schema dialect,
-- create runs idempotently under an endpoint/caller-scoped key,
-- expose typed business, validation, policy, technical, timeout, cancellation,
-  and Human Handoff outcomes,
-- enforce queue/execution/Human Handoff deadlines,
-- expose bounded progress/heartbeat and cancellation acknowledgement,
-- propagate W3C Trace Context and BrowserPane request correlation,
-- deliver versioned, signed, replayable lifecycle callbacks,
-- keep bounded JSON suitable for process variables separate from retained
-  artifact references,
-- expose the canonical asynchronous run through documented polling, signed
-  webhook, and callback-token adapter profiles,
-- create immutable endpoint revisions with compatibility checks, explicit
-  environment promotion, and audited rollback,
-- apply endpoint/caller concurrency and request-rate limits with stable
-  overload and `Retry-After` semantics,
-- expose attempt, checkpoint, and browser-side-effect uncertainty so the
-  calling process can choose retry, verification, compensation, or escalation,
-- map only declared process variables and keep BPM connector credentials
-  separate from BrowserPane target-system Credential Bindings,
-- preserve transactional run/event/delivery persistence and add a public
-  per-run sequence, replay, reconciliation, and store-parity guarantee,
-- select exactly one external-managed or BrowserPane-managed Human Handoff
-  profile per endpoint revision,
-- bind data classification, callback redaction/allowlists, retention, and
-  private-connectivity expectations without conflating control-plane ingress
-  with browser egress,
-- generate tested connector compatibility exports from one canonical contract,
-- provide OpenAPI control-plane and AsyncAPI callback contracts,
-- preserve external orchestration, scheduling, broad retry, and compensation
-  as responsibilities of the calling process system.
+Issue `#237` owns later production expansion: endpoint revisions and promotion,
+callbacks/replay, trace propagation, throttling/readiness, connector exports,
+and broader lifecycle diagnostics. #176 owns generalized organization/project
+authorization and #179 owns API compatibility governance.
 
 Current implementation gaps that must stay explicit:
 
@@ -311,24 +278,23 @@ Current implementation gaps that must stay explicit:
 - service-principal metadata is not yet an endpoint invocation grant,
 - input/output schemas are stored but not enforced by the gateway,
 - terminal run errors remain primarily free-form strings,
-- `timed_out` is not backed by a complete caller/gateway deadline contract,
-- run/event/log/delivery list APIs are unpaginated,
-- workflow callback envelopes are BrowserPane-specific and unversioned,
-- endpoint revision/environment promotion, caller-level throttling, and
-  side-effect/attempt evidence do not exist,
-- connector/target credential separation, public event sequence/replay, and
-  explicit Human Handoff ownership are not defined; Postgres already
-  transactionally enqueues deliveries with run transitions,
-- no stable endpoint/deployment resource or external connector conformance
-  package exists.
+- `timed_out` is not backed by the bounded endpoint timeout contract,
+- endpoint/caller idempotency with request fingerprinting and endpoint-scoped
+  side-effect evidence do not exist,
+- no stable endpoint resource or fake-BPM polling conformance package exists.
 
-Detailed resource, authorization, contract, slice, and smoke requirements live
-in `BPANE-00172_BPM_WORKFLOW_ENDPOINT_INTEGRATION_PLAN.md`.
+Deferred #237 gaps include pagination, callback versioning/replay, endpoint
+revision promotion, caller throttling, trace expansion, and connector exports.
+
+Current Phase 0 requirements live in
+`BPANE-00172_PHASE_0_WORKFLOW_ENDPOINT_PLAN.md`. The old combined specification
+is historical; deferred expansion lives in
+`BPANE-00237_WORKFLOW_ENDPOINT_PRODUCTIZATION_PLAN.md`.
 
 ### Workflow Teach Mode And Controlled Repair
 
 Issue `#171` owns this Phase N productization capability. It is not currently
-implemented.
+implemented and is not a Phase 0 dependency.
 
 Teach Mode must combine a prose specification with one or more semantically
 captured demonstrations to produce a reviewable workflow candidate. The

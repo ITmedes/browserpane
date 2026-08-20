@@ -19,6 +19,10 @@ When docs disagree, prefer:
 3. This file
 4. `README.md`
 
+Read `docs/CURRENT_CONTEXT.md` before selecting work in a clean session. It is
+the concise handoff for current product decisions, delivery order, issue
+boundaries, and local working-tree guardrails.
+
 For the frozen owner-scoped session-control contract, use `openapi/bpane-control-v1.yaml`.
 
 ## What BrowserPane is
@@ -404,6 +408,8 @@ Run these where applicable:
   - `node_modules/`
   - `test-results/`
 - Keep this file aligned with the live code when browser support, session-sharing behavior, media codecs, or runtime topology changes.
+- Keep `docs/CURRENT_CONTEXT.md` aligned when the current product boundary,
+  Phase 0 contract, issue order, or default operator surface changes.
 - Prefer narrow, subsystem-specific validation plus any impacted cross-cutting checks.
 
 ## When adding or changing features

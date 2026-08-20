@@ -5,15 +5,15 @@ It consolidates the previous BPANE-00142 planning files and current app state.
 
 ## Product Position
 
-The unified admin app is a route-backed operational control plane. It must
-eventually replace the old `/admin/` app, but only after parity and security
-gates pass.
+The unified admin app is the route-backed operational control plane. It became
+the default web-root console after the promotion and security gates passed.
 
 Current rule:
 
-- `/admin/` remains the stable/default admin console.
-- `/admin-new/` remains available for incremental testing and implementation.
-- Both apps must coexist until promotion is explicitly accepted.
+- `/admin-new/` is the default operator console.
+- `/admin/` remains directly available as a compatibility fallback.
+- Both apps coexist until a separate compatibility-removal decision and
+  regression gate are accepted.
 
 ## Core Design Direction
 
@@ -331,43 +331,50 @@ Recommended routes:
 - `/admin-new/workflow-endpoints/[endpoint_id]/runs`
 - `/admin-new/workflow-endpoints/[endpoint_id]/deliveries`
 
-Required behavior:
+Phase 0 behavior owned by `#172`:
 
-- catalog stable endpoint keys, state, project, active workflow/version, and
-  contract version,
-- create/edit draft endpoints and activate/disable/deprecate them,
-- promote an approved immutable workflow version without changing the external
-  endpoint key,
-- show immutable endpoint revisions, environment/stage, compatibility status,
-  and audited rollback,
-- preview input/output schemas, deadlines, inline-result limits, supported
-  controls, and callback contract,
+- catalog stable endpoint keys, state, project, and the approved immutable
+  workflow version,
+- create/edit draft endpoints and activate or disable them,
+- preview input/output schemas, execution timeout, inline-result limits, and
+  supported invoke/status/cancel controls,
 - manage registered service-principal grants and operation scopes,
-- configure endpoint/caller concurrency and request-rate limits,
-- explain polling, webhook, and callback-token completion profiles,
-- select and explain external-managed versus BrowserPane-managed Human Handoff,
-- show endpoint data-classification, redaction, retention, environment, and
-  private-connectivity policy references,
+- explain client-credentials authentication, idempotency, polling, typed
+  outcomes, and side-effect certainty,
 - show copyable invocation and authentication examples without secret
   material,
-- inspect correlated recent runs, typed outcomes, progress, intervention state,
-  artifacts, attempt/checkpoint evidence, side-effect uncertainty, and callback
-  delivery health,
+- inspect correlated recent runs, typed outcomes, artifacts, and side-effect
+  uncertainty,
+- explain that challenges return `external_intervention_required` and the
+  external process owns any human task,
+- expose audit evidence for activation, grant, invocation, and cancellation.
+
+Advanced behavior owned by `#237`:
+
+- promote an approved immutable workflow revision without changing the
+  external endpoint key and support audited rollback/deprecation,
+- show revision, environment/stage, compatibility, progress/heartbeat,
+  deadline, and cancellation-acknowledgement evidence,
+- configure endpoint/caller limits and explain webhook/callback profiles,
+- show data-classification, redaction, retention, and private-connectivity
+  references,
 - show readiness, degraded/maintenance, admission, throttling, and overload
   diagnostics without implying that an HTTP listener is execution-ready,
 - show event sequence/reconciliation health without exposing connector or
   target-system credentials,
 - rotate signing configuration and trigger bounded redelivery where
   authorized,
-- expose audit evidence for activation, grant, promotion, invocation, and
-  intervention decisions.
+- expose audit evidence for promotion, rollback, delivery, and redelivery.
 
 Endpoint management is route-backed, full-width resource administration. It
 must not be placed in the compact Operations Overlay, and it must not create a
 second UI-only endpoint or permission model.
 
-Current status: missing. This is Phase N issue `#172`, not an Admin-New
-promotion blocker.
+Current status: missing and not an Admin-New promotion blocker. Issue `#172`
+owns the bounded Phase 0 catalog/detail/grant and polling-run surface. Advanced
+revision promotion, callbacks/deliveries, replay, tracing, throttling, and
+connector diagnostics belong to `#237`. BrowserPane-managed Human Handoff is
+not part of either endpoint UI slice unless `#71` is selected later.
 
 ### Workflow Studio And Teach Mode
 
@@ -549,9 +556,10 @@ High-risk selectors to preserve or update in the same slice as the smoke:
 - `identity-mapping-row`
 - `download-workflow-file`
 
-## Promotion Gate
+## Promotion Gate (Completed)
 
-Do not promote `/admin-new` until:
+The gate below was completed through PRs #210 and #211. Preserve it as a
+regression contract while `/admin/` remains the compatibility fallback:
 
 1. all visible navigation routes exist or are intentionally hidden,
 2. old-admin parity families are implemented or explicitly deferred,

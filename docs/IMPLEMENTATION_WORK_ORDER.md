@@ -1,7 +1,7 @@
 # Consolidated Implementation Work Order
 
 Created: 2026-07-07
-Revalidated: 2026-08-04
+Revalidated: 2026-08-20
 
 This file preserves the detailed rationale and topic inventory across the
 active `docs/` workspace. It is broader than the review cleanup plan: it maps
@@ -57,9 +57,9 @@ current Foundation sequence is #151, #145, #146, #147, #150, #152, with #148
 and #149 selected when the target Pilot uses imported contexts or recording
 evidence.
 
-Do not promote `/admin-new/` to the default admin console until P0 and P1
-items that affect admin trust are complete, advertised routes are implemented
-or hidden, and old `/admin/` remains covered by regression smokes.
+The Admin-New promotion gate completed through PRs #210 and #211.
+`/admin-new/` is the default console; `/admin/` remains a compatibility fallback
+until a separate removal decision and regression gate are accepted.
 
 ## Current Baseline
 
@@ -585,28 +585,27 @@ Validation:
 - MCP preflight/doctor smokes,
 - local setup documentation link/path checks.
 
-### 19. Admin-New Promotion Gate
+### 19. Admin-New Promotion Gate (Completed)
 
-Tier: P3 release decision.
+Tier: completed release decision retained for traceability.
 
 Why here:
 
-- Promotion should be a deliberate checkpoint, not a side effect of route work.
-- Old admin must remain a fallback until parity and trust gates are met.
+- The executable promotion contract merged through PR #210.
+- PR #211 made `/admin-new/` the default while preserving `/admin/` as a
+  compatibility fallback.
 
 Scope:
 
-- verify advertised nav routes exist or are hidden,
-- run route-by-route manual checkpoints,
-- run final regression sequence from `ADMIN_NEW_MANUAL_CHECKPOINTS.md`,
-- compare old admin parity anchors,
-- decide whether `/admin-new/` becomes default or remains side-by-side.
+- preserve the route and validation contract,
+- keep route-by-route regression checkpoints current,
+- make compatibility-admin removal a separate explicit decision.
 
 Validation:
 
-- all mandatory admin-new smokes,
-- selected old-admin regression smokes,
-- manual promotion checklist signed off in PR notes.
+- mandatory Admin-New smokes,
+- selected compatibility-admin regression smokes,
+- root redirect and direct `/admin/` fallback checks.
 
 ### 20. Admin And Session Catalog Scalability
 
@@ -824,68 +823,48 @@ Deferred items:
 - HA/DR, backup/restore drills, BYOK, and data residency,
 - stealth/fingerprint/CAPTCHA/mobile automation,
 - Python SDK and broader language SDK expansion,
-- deleting old `/admin/` before admin-new reaches the promotion gate.
+- deleting old `/admin/` without a separate compatibility-removal decision and
+  regression gate.
 
-The following cross-cutting gaps now have focused owners:
+The following cross-cutting gaps have focused owners:
 
-- Phase 0 reference-workflow qualification and delivery: `#174`,
+- supported immutable Playwright package: `#47`,
+- Phase 0 polling Workflow Endpoint: `#172`,
+- Phase 0 BPM browser-activity qualification and delivery: `#174`,
 - remote protocol specification and conformance: `#175`,
 - platform telemetry, SLOs, and capacity evidence: `#178`,
 - OpenAPI conformance and compatibility governance: `#179`,
 - open-source license, contribution, and IP governance: `#180`.
 
-#### Focused Phase N Slice: BPM Workflow Integration Endpoints
+#### Current Pilot Value Sequence
 
-Issue `#172` promotes the external BrowserPane workflow-action contract out of
-the broad product backlog without changing the immediate security and
-Admin-New promotion order.
+1. `#47` freezes Playwright TypeScript, Git commit-pinned source, entrypoint,
+   schemas, resource bindings, credential behavior, and regression evidence as
+   one supported workflow package.
+2. `#172` exposes that package as one project-scoped, service-principal-
+   authorized asynchronous BPM activity using polling, schema enforcement,
+   idempotency, typed outcomes, timeout/cancel, side-effect certainty, and
+   bounded results/artifacts.
+3. `#174` selects and operates one real process under a bounded agreement and
+   records Stop, bounded Operate, or Phase 1.
+4. `#180` runs in parallel and must complete before an external Pilot relies on
+   BrowserPane's open-source posture.
 
-Business outcome:
+BrowserPane subprocesses, Human Handoff, Teach Mode, workflow training or
+generation, and automatic repair are not Phase 0 requirements. Challenges end
+as `external_intervention_required` and the external process owns human tasks.
 
-- expose an approved workflow through a stable project-scoped endpoint key,
-- let authorized process-system service principals invoke it without an
-  interactive owner token,
-- validate typed input/output and report machine-readable outcomes,
-- support idempotency, deadlines, progress, cancellation, Human Handoff,
-  correlation, callbacks, and artifact references,
-- provide immutable endpoint revisions, environment promotion/rollback,
-  caller-level overload semantics, and polling/webhook/callback-token
-  completion profiles,
-- expose attempt/checkpoint and browser-side-effect uncertainty rather than
-  claiming whole-run retries are inherently safe,
-- generate tested connector compatibility exports from one canonical API,
-- preserve scheduling, DAG/BPMN state, broad retry, and compensation in the
-  external process system.
+The executable plans are `BPANE-00047_WORKFLOW_PACKAGE_CONTRACT_PLAN.md`,
+`BPANE-00172_PHASE_0_WORKFLOW_ENDPOINT_PLAN.md`, and
+`BPANE-00174_PHASE_0_REFERENCE_WORKFLOW_PLAN.md`.
 
-Dependencies and boundaries:
+#### Deferred Workflow Endpoint Productization
 
-- `#47` owns immutable workflow publishing and executor strategy,
-- `#66` owns deployment profiles and private connectivity,
-- `#70` owns BrowserPane-issued API keys, immutable audit, and retention,
-- `#72` owns the enterprise security baseline and endpoint threat model,
-- `#76` owns residency, encryption, and BYOK,
-- `#80` owns DLP and content inspection,
-- `#28` owns generalized resource/security event infrastructure,
-- `#69` owns direct session automation descriptors,
-- `#71` owns Human Handoff and private fallback,
-- `#74` owns high availability and zero-downtime behavior,
-- `#150` owns dependency-aware readiness,
-- `#161` owns project governance evidence and policy UX,
-- `#162` owns general operator CLI parity,
-- `#164` owns catalog and history scalability,
-- `#147` owns webhook SSRF and redirect hardening,
-- `#174` owns the bounded Phase 0 process and delivery agreement,
-- `#176` owns enforced organization/project/service-principal grants,
-- `#179` owns canonical API conformance and compatibility,
-- the Foundation Gate remains ahead of production-shaped endpoint claims; a
-  bounded Pilot may select #172 P0 after its named minimum dependencies pass.
-
-Within Phase N, implement `#172` before `#171` by default. Existing workflows
-can then deliver business-process integration value before Teach Mode is
-available, while Teach Mode gains a stable deployment target.
-
-The step-by-step plan and smoke sequence are in
-`BPANE-00172_BPM_WORKFLOW_ENDPOINT_INTEGRATION_PLAN.md`.
+Issue `#237` owns immutable endpoint revisions, promotion/rollback, callbacks,
+replay, trace expansion, throttling/readiness, and connector compatibility.
+Its specification is `BPANE-00237_WORKFLOW_ENDPOINT_PRODUCTIZATION_PLAN.md`.
+The older `BPANE-00172_BPM_WORKFLOW_ENDPOINT_INTEGRATION_PLAN.md` is retained
+only as historical combined design context.
 
 #### Focused Phase N Slice: Workflow Teach Mode
 
@@ -923,7 +902,7 @@ The step-by-step plan and smoke sequence are in
 | Security cleanup from review | Items 1-6, 21, 23 |
 | Admin-new promotion blockers | Items 2, 9-19 |
 | Session domain requirements | Items 10-12, 17, 19 |
-| Workflow domain requirements | Items 3, 10, 15, 21, 27 (`#172` for BPM endpoints, then `#171` for Teach Mode) |
+| Workflow domain requirements | Items 3, 10, 15, 21, 27 (`#47` package, `#172` Phase 0 endpoint, `#237` productization, then `#171` Teach Mode) |
 | Recording requirements | Items 5, 11, 21 |
 | Browser context lifecycle | Items 4, 16, 22 |
 | Network identity and egress | Items 3, 11, 17, 23 |

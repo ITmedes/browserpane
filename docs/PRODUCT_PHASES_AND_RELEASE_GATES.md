@@ -38,20 +38,29 @@ bounded environment with explicit operational responsibility.
 Required evidence:
 
 - process qualification selected one candidate and documented alternatives,
-- inputs, outputs, side effects, credentials, files, retention, and Human
-  Handoff are frozen,
+- one manually authored or engineering-assisted immutable Playwright workflow
+  package is reviewed and source-pinned,
+- inputs, outputs, side effects, credentials, files, retention, timeout,
+  cancellation, and external-intervention behavior are frozen,
+- an authorized external service principal can invoke one stable project
+  endpoint, poll it, and reconcile typed terminal outcomes,
+- input is validated before runtime creation and output before success,
+- idempotency and browser-side-effect certainty prevent unsafe duplicate work,
 - happy path and agreed failures are reproducible,
 - operators can start, monitor, intervene, stop, and recover using a runbook,
 - terminal state and agreed artifacts/evidence are explainable,
 - the deployment and tested capacity envelope are explicit,
 - the review records Stop, bounded Operate, or a separately scoped Phase 1.
 
-Primary owner: #174. Conditional owners include #172 P0, #149, #21, #71, #66,
-and #154.
+Primary owners: #47, #172, and #174. #180 is an external-Pilot governance
+gate. Conditional owners include #21, #66, and process-selected inspection,
+security, recovery, and telemetry gaps.
 
 Permitted claim: `Pilot-ready for the named workflow and environment`.
 
 Not permitted: generic SLA, broad multi-tenancy, HA, or platform-scale claim.
+BrowserPane subprocesses, Human Handoff, Teach Mode, training, generation, and
+automatic repair are not Phase 0 capabilities.
 
 ## Gate 2: Phase 1 Operate
 
@@ -106,7 +115,8 @@ Required evidence:
 - Teach Mode or controlled repair, when selected, publishes only reviewed
   immutable workflow versions.
 
-Primary owners: #172 P1/P2, #176, #177, #76, #79, #80, #74, and #171.
+Primary owners: #237, #176, #177, #76, #79, #80, #74, and #171. The bounded
+#172 polling endpoint is the Phase 0 foundation consumed by #237.
 
 Permitted claim: only the exact Phase N capabilities whose gates passed.
 

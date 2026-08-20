@@ -1,7 +1,7 @@
 # Review Findings Coverage Audit
 
 Created: 2026-07-07
-Revalidated: 2026-08-04
+Revalidated: 2026-08-20
 
 This document is the traceability check between the raw `review/` reports and
 the consolidated `docs/` workspace. It complements
@@ -90,7 +90,7 @@ superseded by the current code baseline.
 | Finding family | Coverage decision |
 | --- | --- |
 | F1/V2 A2: `session_control` size and untested Postgres backend | Retained. Store contract tests are required before broad store/scalability refactors. |
-| F2: two admin apps without retirement gate | Retained. `/admin/` remains default until `/admin-new/` passes explicit promotion gates. |
+| F2: two admin apps without retirement gate | Partially resolved. `/admin-new/` passed the explicit promotion gate and is the default; `/admin/` remains a compatibility fallback until a separate removal decision and regression gate. |
 | F3: size-ceiling breaches and long functions | Retained as maintainability backlog; fix opportunistically inside touched modules. |
 | F4/V2 A4: no CI, no ESLint, `.mjs` guardrail gap | Retained as durable CI/lint requirement. |
 | F5/F6/F8: admin scaffolding, smoke helpers, and gateway test duplication | Retained as pattern-library/API-client/test-helper cleanup, not a standalone blocker. |
@@ -146,7 +146,8 @@ token/admin-auth/security work:
 - enterprise HA/DR/BYOK/data-residency packaging,
 - lower-priority media/render micro-optimizations,
 - broad monolith splitting without a touched-domain reason,
-- deleting `/admin/` before `/admin-new/` reaches its promotion gate.
+- deleting `/admin/` without a separate compatibility-removal decision and
+  regression gate.
 
 ## Good-State Check
 

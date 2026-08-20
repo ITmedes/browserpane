@@ -62,7 +62,7 @@ required for behavior that schemas cannot prove.
   required-field changes against the supported baseline,
 - publish additive-change, deprecation, compatibility-window, and versioning
   rules,
-- generate compatibility exports for #172 connectors from this contract rather
+- generate #237 connector compatibility exports from this contract rather
   than maintaining parallel schemas,
 - keep internal/compatibility endpoints explicitly outside the frozen public
   surface until intentionally promoted.
@@ -392,8 +392,10 @@ fields:
 - extension versions: `install_path`
 - workspace upload helper metadata such as `x-bpane-file-provenance`
 
-Future Phase N Workflow Endpoint fields from issue `#172` must be added to the
-frozen API and this coverage matrix before UI implementation. They include:
+Workflow Endpoint fields must be added to the frozen API and this coverage
+matrix before UI implementation. The bounded Phase 0 subset belongs to `#172`;
+advanced lifecycle and integration fields belong to `#237`. The combined
+inventory includes:
 
 - endpoint key, project, lifecycle state, immutable version binding, contract
   version, immutable revision, environment, compatibility status, schema
@@ -406,8 +408,8 @@ frozen API and this coverage matrix before UI implementation. They include:
   trace/request correlation, and artifact result references,
 - callback contract version, cursor/replay, secret rotation, and redelivery
   controls,
-- per-run event sequence, delivery replay/reconciliation evidence, Human
-  Handoff ownership profile, and data-classification/retention references,
+- per-run event sequence, delivery replay/reconciliation evidence, and
+  data-classification/retention references,
 - canonical OpenAPI plus generated, tested compatibility exports; compatibility
   documents must never become independent handwritten contracts.
 
