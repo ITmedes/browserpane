@@ -32,9 +32,15 @@ assert_eq() {
 valid="$tmp/valid.json"
 invalid="$tmp/invalid.json"
 invalid_proposed="$tmp/invalid-proposed.json"
+valid_qualified="$tmp/valid-qualified.json"
+valid_no_qualification="$tmp/valid-no-qualification.json"
+invalid_qualified="$tmp/invalid-qualified.json"
 printf '%s\n' '{"status":"PROPOSED","issue_number":239,"pr_url":"https://github.com/ITmedes/browserpane/pull/999","commit_sha":"abc1234","run_id":null,"reason":null,"summary":"opened"}' > "$valid"
 printf '%s\n' '{"status":"UNKNOWN","summary":"bad"}' > "$invalid"
 printf '%s\n' '{"status":"PROPOSED","issue_number":239,"pr_url":null,"commit_sha":null,"run_id":null,"reason":null,"summary":"incomplete"}' > "$invalid_proposed"
+printf '%s\n' '{"status":"QUALIFIED","issue_number":172,"pr_url":null,"commit_sha":null,"run_id":null,"reason":null,"summary":"promoted"}' > "$valid_qualified"
+printf '%s\n' '{"status":"NO_QUALIFICATION","issue_number":null,"pr_url":null,"commit_sha":null,"run_id":null,"reason":"dependency remains","summary":"no mutation"}' > "$valid_no_qualification"
+printf '%s\n' '{"status":"QUALIFIED","issue_number":null,"pr_url":null,"commit_sha":null,"run_id":null,"reason":null,"summary":"missing issue"}' > "$invalid_qualified"
 
 validate_result "$valid" || fail "valid structured result"
 pass "valid structured result"
@@ -49,6 +55,17 @@ if validate_result "$invalid_proposed" >/dev/null 2>&1; then
 fi
 pass "status-specific result requirements are enforced"
 
+validate_result "$valid_qualified" || fail "valid qualification result"
+pass "valid qualification result"
+
+validate_result "$valid_no_qualification" || fail "valid no-qualification result"
+pass "valid no-qualification result"
+
+if validate_result "$invalid_qualified" >/dev/null 2>&1; then
+  fail "qualification requires an issue number"
+fi
+pass "qualification requires an issue number"
+
 assert_eq "PROPOSED" "$(routine_field "$valid" status)" "routine status extraction"
 assert_eq "239" "$(routine_field "$valid" issue_number)" "routine issue extraction"
 
@@ -59,15 +76,88 @@ GITHUB_LOGIN="thebackplane"
 latest_workflow_line() { printf '%s\n' "completed / success"; }
 ready_issues() { printf '%s\n' "(none)"; }
 human_prs() { printf '%s\n' "(none)"; }
+qualified_issues() { printf '%s\n' "- #172 qualified"; }
+MOCK_SESSION_RESULT="$valid_qualified"
 run_session() {
   : > "$2"
-  cp "$valid" "$3"
+  cp "$MOCK_SESSION_RESULT" "$3"
 }
 record_usage() { :; }
+qualify "01" || fail "qualification setup is nounset-safe"
+[[ -f "$proposal_log_dir/01-qualify.context.md" ]] || fail "qualification context uses the iteration number"
+[[ -f "$proposal_log_dir/01-qualify.prompt.md" ]] || fail "qualification prompt uses the iteration number"
+pass "qualification setup is nounset-safe"
+
+MOCK_SESSION_RESULT="$valid"
 propose "01" || fail "proposal setup is nounset-safe"
 [[ -f "$proposal_log_dir/01-propose.context.md" ]] || fail "proposal context uses the iteration number"
 [[ -f "$proposal_log_dir/01-propose.prompt.md" ]] || fail "proposal prompt uses the iteration number"
 pass "proposal setup is nounset-safe"
+
+MOCK_READY_BEFORE=0
+MOCK_READY_AFTER=1
+MOCK_QUALIFIED_NUMBERS=172
+MOCK_STATE_LABEL="state:ready"
+MOCK_READY_MARKER="$tmp/ready-counted"
+gh() {
+  if [[ "$*" == *"issue list"* && "$*" == *"state:qualified"* ]]; then
+    printf '%s\n' "$MOCK_QUALIFIED_NUMBERS"
+  elif [[ "$*" == *"issue list"* ]]; then
+    if [[ -f "$MOCK_READY_MARKER" ]]; then
+      printf '%s\n' "$MOCK_READY_AFTER"
+    else
+      : > "$MOCK_READY_MARKER"
+      printf '%s\n' "$MOCK_READY_BEFORE"
+    fi
+  else
+    printf '{"labels":[{"name":"%s"}]}\n' "$MOCK_STATE_LABEL"
+  fi
+}
+AUTO_QUALIFY=1
+MOCK_SESSION_RESULT="$valid_qualified"
+rm -f "$MOCK_READY_MARKER"
+qualification_gate_rc=0
+qualification_gate "02" || qualification_gate_rc=$?
+assert_eq "0" "$qualification_gate_rc" "empty Ready queue promotes one verified candidate"
+assert_eq "172" "$QUALIFIED_ISSUE" "qualified candidate is returned to the driver"
+
+MOCK_STATE_LABEL="state:qualified"
+rm -f "$MOCK_READY_MARKER"
+qualification_gate_rc=0
+qualification_gate "03" || qualification_gate_rc=$?
+assert_eq "21" "$qualification_gate_rc" "unverified qualification blocks proposal"
+
+MOCK_STATE_LABEL="state:ready"
+MOCK_READY_AFTER=2
+rm -f "$MOCK_READY_MARKER"
+qualification_gate_rc=0
+qualification_gate "04" || qualification_gate_rc=$?
+assert_eq "21" "$qualification_gate_rc" "multiple Ready promotions block proposal"
+
+MOCK_READY_AFTER=1
+MOCK_SESSION_RESULT="$valid_no_qualification"
+rm -f "$MOCK_READY_MARKER"
+qualification_gate_rc=0
+qualification_gate "05" || qualification_gate_rc=$?
+assert_eq "10" "$qualification_gate_rc" "unqualifiable queue stops cleanly"
+assert_eq "dependency remains" "$QUALIFICATION_REASON" "qualification stop reason is retained"
+
+AUTO_QUALIFY=0
+MOCK_SESSION_RESULT="$invalid"
+rm -f "$MOCK_READY_MARKER"
+qualification_gate_rc=0
+qualification_gate "06" || qualification_gate_rc=$?
+assert_eq "0" "$qualification_gate_rc" "manual qualification mode bypasses the qualifier"
+assert_eq "" "$QUALIFIED_ISSUE" "manual qualification mode returns no promoted issue"
+
+AUTO_QUALIFY=1
+MOCK_QUALIFIED_NUMBERS=""
+rm -f "$MOCK_READY_MARKER"
+qualification_gate_rc=0
+qualification_gate "07" || qualification_gate_rc=$?
+assert_eq "10" "$qualification_gate_rc" "empty Qualified queue stops without a model session"
+assert_eq "no open Qualified issue is available for readiness assessment" "$QUALIFICATION_REASON" "empty Qualified queue reason is explicit"
+unset -f gh
 
 jsonl="$tmp/session.jsonl"
 printf '%s\n' \
@@ -96,6 +186,11 @@ if AUTO_MERGE=invalid bash -c "source '$loop'; validate_config" >/dev/null 2>&1;
 fi
 pass "invalid boolean configuration is rejected"
 
+if AUTO_QUALIFY=invalid bash -c "source '$loop'; validate_config" >/dev/null 2>&1; then
+  fail "invalid auto-qualification configuration is rejected"
+fi
+pass "invalid auto-qualification configuration is rejected"
+
 if MERGE_METHOD=octopus bash -c "source '$loop'; validate_config" >/dev/null 2>&1; then
   fail "invalid merge method is rejected"
 fi
@@ -118,7 +213,7 @@ if github_permission_allowed READ; then
 fi
 pass "read-only repository permission is rejected"
 
-jq -e '.properties.status.enum | index("PROPOSED") and index("REPAIRED") and index("HALT")' "$RESULT_SCHEMA" >/dev/null \
+jq -e '.properties.status.enum | index("QUALIFIED") and index("NO_QUALIFICATION") and index("PROPOSED") and index("REPAIRED") and index("HALT")' "$RESULT_SCHEMA" >/dev/null \
   || fail "result schema status contract"
 pass "result schema status contract"
 
@@ -128,6 +223,12 @@ gh() {
   printf '%s\n' "$MOCK_GH_JSON"
   return "$MOCK_GH_RC"
 }
+
+MOCK_GH_JSON='{"labels":[{"name":"priority:P0"},{"name":"state:ready"}]}'
+assert_eq "state:ready" "$(issue_state_labels 172)" "qualified issue lifecycle verification"
+
+MOCK_GH_JSON='0'
+assert_eq "0" "$(state_issue_count state:ready)" "empty Ready queue count"
 
 MOCK_GH_JSON='[{"name":"Validation","bucket":"pass","state":"SUCCESS","link":"https://github.com/ITmedes/browserpane/actions/runs/1"}]'
 wait_for_checks 999 || fail "green check set is accepted"

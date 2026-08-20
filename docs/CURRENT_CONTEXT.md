@@ -8,7 +8,7 @@ state. Detailed requirements remain in the linked domain and plan documents.
 
 ## Current Baseline
 
-- Canonical branch: `main` at `2adbfdee` after PR #236.
+- Canonical branch: `main` at `22150090` after PR #242.
 - `/admin-new/` is the default operator console. `/admin/` is a compatibility
   fallback pending a separate removal decision.
 - The gateway uses the typed runtime launch broker for the production-like
@@ -20,6 +20,9 @@ state. Detailed requirements remain in the linked domain and plan documents.
 - Compose CI reliability was restored through PR #236. The post-merge main run
   passed gateway default, gateway docker-pool, browser/integration, unified
   admin, and compatibility admin jobs.
+- The supported immutable Playwright workflow package contract is frozen
+  through #47/PR #242, including publication compatibility, Admin-New/CLI
+  visibility, worker evidence redaction, and live package regression evidence.
 - The public owner-scoped v1 API remains frozen in
   `openapi/bpane-control-v1.yaml`. New BPM endpoint work must extend it through
   the compatibility policy rather than bypass it.
@@ -73,10 +76,12 @@ blindly retry the complete activity.
 
 ## Immediate Issue Sequence And Parallel Gate
 
-1. `#47` - freeze the supported immutable Playwright workflow package and
-   publishing contract.
-2. `#172` - implement the Phase 0 project-scoped polling Workflow Endpoint.
-3. `#174` - select, deliver, and operate one real bounded BPM browser activity.
+1. `#47` - complete through PR #242: supported immutable Playwright workflow
+   package and publishing contract.
+2. `#172` - next qualification candidate: implement the Phase 0 project-scoped
+   polling Workflow Endpoint.
+3. `#174` - after #172 and its remaining gates: select, deliver, and operate one
+   real bounded BPM browser activity.
 
 In parallel, `#180` resolves AGPL/Cargo/Node metadata and
 contribution-governance inconsistency before an external Pilot relies on the
@@ -170,10 +175,12 @@ code.
   ARCH representations aligned.
 - When a merge is requested, wait for required GitHub checks and preserve a
   clean, reviewable commit history.
-- The optional `dev_loop/` tooling uses fresh Codex proposal and repair
-  sessions to consume one live Ready issue at a time. Start it only from clean,
-  synchronized `main` with an approved project GitHub identity; automatic
-  merging remains opt-in. It never qualifies or reprioritizes backlog.
+- The optional `dev_loop/` tooling uses separate Codex qualification, proposal,
+  and repair sessions. It consumes Ready work first; with an empty Ready queue
+  it may promote exactly one roadmap-prioritized Qualified issue after a
+  bounded requirements and dependency audit. It never creates issues or
+  reprioritizes the roadmap. Start it only from clean, synchronized `main` with
+  an approved project GitHub identity; automatic merging remains opt-in.
 
 ## Fresh Session Checklist
 

@@ -18,8 +18,9 @@ open one pull request. The shell driver takes over after your final response.
 - Do not edit `dev_loop/` unless the selected issue explicitly owns that
   tooling. Do not commit generated files, `node_modules`, `target`,
   `test-results`, local certificates, loop logs, locks, or STOP files.
-- Implement exactly one live `state:ready` issue. Do not create issues, promote
-  Qualified work, merge issue scopes, or reorder the roadmap.
+- Implement exactly one live `state:ready` issue. Do not create issues or
+  promote Qualified work in this proposal session, merge issue scopes, or
+  reorder the roadmap.
 - Use established libraries and existing BrowserPane boundaries before custom
   infrastructure. Follow `AGENTS.md`, `RUST_STANDARDS.md`, and
   `NODEJS_STANDARDS.md` as applicable.
@@ -68,7 +69,8 @@ completed as one coherent PR without changing its accepted scope.
    duplicated requirements.
 5. Confirm the issue has a business case, example use case, bounded scope,
    non-goals, acceptance criteria, and smoke sequence. If not, stop with
-   `NO_PROPOSAL`; this loop does not qualify backlog.
+   `NO_PROPOSAL`; the prior qualification result does not authorize proposal
+   to infer missing requirements.
 6. Move the issue from `state:ready` to `state:in-progress` when permissions
    allow. A label failure does not authorize scope changes; record it in the PR
    handoff.
