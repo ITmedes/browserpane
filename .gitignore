@@ -10,6 +10,8 @@ code/tests/e2e
 # TLS certificates (generated)
 *.pem
 *.key
+dev/certs/cert-fingerprint.txt
+dev/certs/cert-hash.txt
 dev/egress-mitmproxy/
 deploy/single-node/generated/
 !dev/gen-cert.sh
