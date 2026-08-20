@@ -62,7 +62,7 @@ required for behavior that schemas cannot prove.
   required-field changes against the supported baseline,
 - publish additive-change, deprecation, compatibility-window, and versioning
   rules,
-- generate #237 connector compatibility exports from this contract rather
+- generate #240 connector compatibility exports from this contract rather
   than maintaining parallel schemas,
 - keep internal/compatibility endpoints explicitly outside the frozen public
   surface until intentionally promoted.
@@ -394,7 +394,7 @@ fields:
 
 Workflow Endpoint fields must be added to the frozen API and this coverage
 matrix before UI implementation. The bounded Phase 0 subset belongs to `#172`;
-advanced lifecycle and integration fields belong to `#237`. The combined
+advanced lifecycle and integration fields belong to `#240`. The combined
 inventory includes:
 
 - endpoint key, project, lifecycle state, immutable version binding, contract

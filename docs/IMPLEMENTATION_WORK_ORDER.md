@@ -860,9 +860,9 @@ The executable plans are `BPANE-00047_WORKFLOW_PACKAGE_CONTRACT_PLAN.md`,
 
 #### Deferred Workflow Endpoint Productization
 
-Issue `#237` owns immutable endpoint revisions, promotion/rollback, callbacks,
+Issue `#240` owns immutable endpoint revisions, promotion/rollback, callbacks,
 replay, trace expansion, throttling/readiness, and connector compatibility.
-Its specification is `BPANE-00237_WORKFLOW_ENDPOINT_PRODUCTIZATION_PLAN.md`.
+Its specification is `BPANE-00240_WORKFLOW_ENDPOINT_PRODUCTIZATION_PLAN.md`.
 The older `BPANE-00172_BPM_WORKFLOW_ENDPOINT_INTEGRATION_PLAN.md` is retained
 only as historical combined design context.
 
@@ -902,7 +902,7 @@ The step-by-step plan and smoke sequence are in
 | Security cleanup from review | Items 1-6, 21, 23 |
 | Admin-new promotion blockers | Items 2, 9-19 |
 | Session domain requirements | Items 10-12, 17, 19 |
-| Workflow domain requirements | Items 3, 10, 15, 21, 27 (`#47` package, `#172` Phase 0 endpoint, `#237` productization, then `#171` Teach Mode) |
+| Workflow domain requirements | Items 3, 10, 15, 21, 27 (`#47` package, `#172` Phase 0 endpoint, `#240` productization, then `#171` Teach Mode) |
 | Recording requirements | Items 5, 11, 21 |
 | Browser context lifecycle | Items 4, 16, 22 |
 | Network identity and egress | Items 3, 11, 17, 23 |

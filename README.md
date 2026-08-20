@@ -1381,7 +1381,7 @@ certainty, bounded JSON, and artifact references. Challenges finish as
 
 Endpoint revisions, callbacks, replay, expanded tracing, throttling, and
 connector compatibility are deferred to the
-[Workflow Endpoint productization plan](docs/BPANE-00237_WORKFLOW_ENDPOINT_PRODUCTIZATION_PLAN.md).
+[Workflow Endpoint productization plan](docs/BPANE-00240_WORKFLOW_ENDPOINT_PRODUCTIZATION_PLAN.md).
 The older combined endpoint plan is retained only as historical design context.
 
 Local usage options:

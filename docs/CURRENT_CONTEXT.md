@@ -82,7 +82,7 @@ In parallel, `#180` resolves AGPL/Cargo/Node metadata and
 contribution-governance inconsistency before an external Pilot relies on the
 open-source posture.
 
-`#237` owns later endpoint revisions, promotion/rollback, callbacks, replay,
+`#240` owns later endpoint revisions, promotion/rollback, callbacks, replay,
 trace expansion, throttling, and connector compatibility. `#71` Human Handoff
 and `#171` Teach Mode remain valid later capabilities but are not Phase 0
 dependencies.
@@ -110,7 +110,7 @@ committed calendar or one continuous implementation branch:
   projects, callers, and deployment environments. Candidate owners include
   `#176` authorization, `#177` identity lifecycle, `#76` residency/BYOK, `#79`
   policy, `#80` DLP, `#74` HA, and `#66` Kubernetes/Fargate/cloud adapters.
-- **Workflow Endpoint productization:** `#237` may add immutable endpoint
+- **Workflow Endpoint productization:** `#240` may add immutable endpoint
   revisions, promotion/rollback, callbacks, replay, tracing, throttling, and
   connector compatibility after the bounded `#172` contract succeeds.
 - **Optional innovation:** `#171` Teach Mode/controlled repair and `#71` Human

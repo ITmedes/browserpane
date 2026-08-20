@@ -70,7 +70,7 @@ Missing:
 - BrowserPane-managed Human Handoff.
 - Teach Mode or workflow generation.
 - Webhooks, callbacks, endpoint revision promotion, connector generation,
-  tracing expansion, throttling, or production SLOs; these belong to `#237`.
+  tracing expansion, throttling, or production SLOs; these belong to `#240`.
 - BrowserPane-issued API keys.
 
 ## Dependencies And Risks
@@ -144,4 +144,4 @@ Missing:
 - Every public surface exposes one endpoint contract.
 - Negative authorization and pre-side-effect validation are proven.
 - A target-like BPM can invoke, poll, reconcile, and cancel the activity.
-- No Human Handoff, Teach Mode, subprocess, or advanced `#237` scope is added.
+- No Human Handoff, Teach Mode, subprocess, or advanced `#240` scope is added.

@@ -101,7 +101,7 @@ historical combined context and split current ownership into:
 - `BPANE-00172_PHASE_0_WORKFLOW_ENDPOINT_PLAN.md` for the bounded polling
   endpoint,
 - `BPANE-00174_PHASE_0_REFERENCE_WORKFLOW_PLAN.md` for one real activity,
-- `BPANE-00237_WORKFLOW_ENDPOINT_PRODUCTIZATION_PLAN.md` for later revisions,
+- `BPANE-00240_WORKFLOW_ENDPOINT_PRODUCTIZATION_PLAN.md` for later revisions,
   callbacks, replay, tracing, throttling, and connector compatibility.
 
 ### Redesign Foundation Decision

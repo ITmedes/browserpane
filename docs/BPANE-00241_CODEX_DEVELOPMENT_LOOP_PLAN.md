@@ -1,8 +1,8 @@
-# BPANE-00239 Codex Development Loop Plan
+# BPANE-00241 Codex Development Loop Plan
 
 ## Metadata
 
-- Issue: `#239`
+- Issue: `#241`
 - State: Review
 - Owner: BrowserPane maintainers / Codex
 - Lane: Foundation
@@ -219,7 +219,7 @@ investor claims require no product change.
 
 ## Definition Of Done
 
-- Issue `#239` and this plan agree on scope, use case, acceptance criteria, and
+- Issue `#241` and this plan agree on scope, use case, acceptance criteria, and
   smoke sequence.
 - The Codex-native driver and routines contain no Grattis/Claude/Maven/fix-
   workflow assumptions.
@@ -249,7 +249,7 @@ investor claims require no product change.
 
 ## Evidence Record
 
-- Issue: <https://github.com/ITmedes/browserpane/issues/239>
+- Issue: <https://github.com/ITmedes/browserpane/issues/241>
 - Source pattern reviewed: local `../grattis-app/grattis/dev_loop/`
 - Issue metadata: authored by the approved project identity, labeled
   `priority:P1`, `lane:foundation`, and `state:review`, with milestone

@@ -519,7 +519,7 @@ BPM Workflow Endpoint issue `#172` additionally requires:
 - polling, canonical OpenAPI, Admin-New, CLI, and deterministic
   fake-orchestrator conformance smokes.
 
-Deferred Workflow Endpoint productization issue `#237` additionally requires:
+Deferred Workflow Endpoint productization issue `#240` additionally requires:
 
 - immutable endpoint revision, compatibility, environment promotion, rollback,
   and historical-run pinning tests,

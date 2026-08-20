@@ -67,9 +67,9 @@ or capacity decision.
 | 4 | #150 | Done | #147 callback boundary | Lifecycle, dependency readiness, and bounded drain merged through PR #192. |
 | 5 | #152 | Done | #150 stable readiness contract | Shared in-memory/Postgres store contract parity merged through PR #193. |
 | 6 | #179 | Done | #152 persistent behavior baseline | Control API lint, conformance, examples, compatibility policy, and CI enforcement merged through PR #194. |
-| 7 | #239 | Review | #173 delivery governance | Add an optional Codex-native local delivery loop without changing product issue priority or gate evidence. |
+| 7 | #241 | Review | #173 delivery governance | Add an optional Codex-native local delivery loop without changing product issue priority or gate evidence. |
 
-#239 is contributor tooling and does not block or supersede the next product
+#241 is contributor tooling and does not block or supersede the next product
 slice, #47. It may consume #47 only after the loop itself is merged, started
 from clean `main`, and authenticated through an approved project identity.
 
@@ -172,7 +172,7 @@ are complete.
 
 Phase 0 explicitly excludes BrowserPane subprocesses, Human Handoff, Teach
 Mode, workflow training/generation, and automatic repair. A challenge returns
-terminal `external_intervention_required` to the external BPM. #237 owns later
+terminal `external_intervention_required` to the external BPM. #240 owns later
 endpoint revisions, callbacks, replay, tracing expansion, throttling, and
 connector compatibility.
 
@@ -228,7 +228,7 @@ bounded Pilot:
 - #79 central policy engine,
 - #80 DLP/content inspection.
 
-#237 provides later production endpoint lifecycle, callback, and connector
+#240 provides later production endpoint lifecycle, callback, and connector
 semantics after the bounded #172 polling contract.
 #171 Teach Mode follows stable publishing and endpoint semantics by default.
 #175 productizes the BrowserPane protocol independently of either feature and
@@ -241,7 +241,7 @@ must be complete before broad compatibility claims.
   slices and link back to them.
 - Do not create bounded implementation plans for all Backlog issues. Create or
   update one when a focused slice moves to Ready.
-- Feature specifications such as #171 and #237 must produce a smaller
+- Feature specifications such as #171 and #240 must produce a smaller
   slice-specific plan before each implementation PR. #172 now has the bounded
   Phase 0 plan `BPANE-00172_PHASE_0_WORKFLOW_ENDPOINT_PLAN.md`.
 - Issue body is canonical for business case, scope, acceptance, and smoke.

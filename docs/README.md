@@ -139,7 +139,7 @@ specifications and still require a bounded slice plan before coding.
   service-principal-authorized polling endpoint for one Phase 0 BPM activity.
 - `BPANE-00172_BPM_WORKFLOW_ENDPOINT_INTEGRATION_PLAN.md`: historical combined
   endpoint specification retained as source context; not executable.
-- `BPANE-00237_WORKFLOW_ENDPOINT_PRODUCTIZATION_PLAN.md`: deferred endpoint
+- `BPANE-00240_WORKFLOW_ENDPOINT_PRODUCTIZATION_PLAN.md`: deferred endpoint
   revisions, callbacks, replay, tracing, throttling, and connector expansion.
 - `BPANE-00173_DELIVERY_GOVERNANCE_PLAN.md`: governance slice that establishes
   the canonical roadmap, maturity, phase gates, risks, issue ownership, and
@@ -305,7 +305,7 @@ The twelfth pass originally added a broad Phase N issue `#172` after a
 code/OpenAPI and industry-contract audit. The 2026-08-20 boundary review later
 narrowed `#172` to the Phase 0 polling endpoint and moved revision promotion,
 callbacks, replay, tracing, overload/readiness, and connector compatibility to
-`#237`. The old combined plan remains historical context only.
+`#240`. The old combined plan remains historical context only.
 
 The thirteenth pass established issue `#173` and the executable delivery
 governance model. It added parallel Foundation, Pilot Value, Operator Product,
@@ -316,7 +316,7 @@ a bounded Phase 0 reference-workflow plan.
 The fourteenth pass synchronized the long-running implementation session after
 PR #236. It added the concise current-context handoff, restored the missing
 plan template, narrowed Phase 0 to one polling-based BPM browser activity,
-split the old combined #172 specification into bounded #172 and deferred #237
+split the old combined #172 specification into bounded #172 and deferred #240
 plans, made #47 the next Ready slice, and removed Human Handoff and Teach Mode
 from Phase 0 dependencies.
 

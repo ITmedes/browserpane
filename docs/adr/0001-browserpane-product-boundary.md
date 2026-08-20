@@ -36,7 +36,7 @@ or employment decisions.
   checkpoints, and uncertain browser-side effects.
 - A Phase 0 challenge terminates as `external_intervention_required`; the
   external process owns any human task.
-- #237 owns later endpoint revisions, callbacks, and connector compatibility.
+- #240 owns later endpoint revisions, callbacks, and connector compatibility.
 - #171 may later compile candidates into the existing workflow publication
   boundary.
 - Phase 0 selects one bounded browser-only process rather than promising a

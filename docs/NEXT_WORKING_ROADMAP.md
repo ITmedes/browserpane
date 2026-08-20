@@ -330,12 +330,12 @@ Keep these as later roadmap work, not as blockers for the immediate
 - central enterprise policy engine,
 - one project-scoped polling Workflow Endpoint for BPM integration through
   Phase 0 issue `#172`, with later callback, promotion, overload, trace, and
-  connector compatibility under `#237`,
+  connector compatibility under `#240`,
 - Workflow Studio Teach Mode and controlled demonstration-to-workflow
   publishing through focused Phase N issue `#171`.
 
 The current Pilot order is `#47`, then `#172`, then `#174`, with `#180` as a
-parallel external-Pilot gate. Teach Mode `#171` and endpoint expansion `#237`
+parallel external-Pilot gate. Teach Mode `#171` and endpoint expansion `#240`
 remain deferred. Current plans are
 `BPANE-00047_WORKFLOW_PACKAGE_CONTRACT_PLAN.md`,
 `BPANE-00172_PHASE_0_WORKFLOW_ENDPOINT_PLAN.md`, and

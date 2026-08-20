@@ -38,7 +38,7 @@ capability.
 | MCP session delegation | Prototype | explicit session endpoint, bridge proxy, smoke coverage | #69, #70, #176 |
 | Workflow publishing and execution | Prototype | pinned git sources, worker lifecycle, runs/events/logs/files, finite worker request deadlines, bounded process output, package tests, and Compose admission/workspace evidence | #47 supported Playwright package contract |
 | Phase 0 BPM Workflow Endpoint | Planned | Bounded polling contract and plan in #172; no endpoint resource/grant/schema/outcome implementation yet | #172 after #47 |
-| Production Workflow Endpoint lifecycle | Planned | Revisions, callbacks, replay, trace, throttling, and connector expansion isolated in #237 | #237 |
+| Production Workflow Endpoint lifecycle | Planned | Revisions, callbacks, replay, trace, throttling, and connector expansion isolated in #240 | #240 |
 | Workflow Teach Mode | Planned and deferred | Demonstration-to-candidate specification in #171; explicitly not Phase 0 | #171 |
 | Workflow Human Handoff | Partial prototype and deferred | run input/hold/resume primitives exist; explicitly not Phase 0 | #71 |
 | Recording lifecycle and playback | Prototype | recorder worker, worker-only exact-path finalization merged through PR #212, measured-byte accounting, finite worker requests, single-flight finalize polling, segmented artifacts, admin/CLI downloads, and off-thread playback export | #21 artifact/provider lifecycle |

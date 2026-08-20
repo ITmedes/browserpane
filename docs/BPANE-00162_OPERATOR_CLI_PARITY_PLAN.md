@@ -98,7 +98,7 @@ long-lived bearer token or resolved credential value is printed.
   still depends on them.
 - Generalized API-key issuance, organization RBAC, immutable audit export, DLP,
   and advanced Workflow Endpoint productization owned by `#70`, `#176`, `#80`,
-  and `#237`. The bounded Phase 0 polling endpoint remains under `#172`.
+  and `#240`. The bounded Phase 0 polling endpoint remains under `#172`.
 - Replacing the established CLI parser with a new framework solely for style.
   The current parser is extensively tested; a migration needs an independent
   measured benefit and compatibility plan.

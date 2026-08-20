@@ -115,8 +115,8 @@ Required evidence:
 - Teach Mode or controlled repair, when selected, publishes only reviewed
   immutable workflow versions.
 
-Primary owners: #237, #176, #177, #76, #79, #80, #74, and #171. The bounded
-#172 polling endpoint is the Phase 0 foundation consumed by #237.
+Primary owners: #240, #176, #177, #76, #79, #80, #74, and #171. The bounded
+#172 polling endpoint is the Phase 0 foundation consumed by #240.
 
 Permitted claim: only the exact Phase N capabilities whose gates passed.
 

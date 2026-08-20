@@ -4,7 +4,7 @@
 > this file as an executable implementation plan. On 2026-08-20 the capability
 > was split into the bounded Phase 0 polling contract in
 > `BPANE-00172_PHASE_0_WORKFLOW_ENDPOINT_PLAN.md` and the deferred production
-> expansion in `BPANE-00237_WORKFLOW_ENDPOINT_PRODUCTIZATION_PLAN.md`.
+> expansion in `BPANE-00240_WORKFLOW_ENDPOINT_PRODUCTIZATION_PLAN.md`.
 
 Issue: `#172` Add project-scoped workflow endpoints for BPM and orchestration
 integrations.

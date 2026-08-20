@@ -349,7 +349,7 @@ Phase 0 behavior owned by `#172`:
   external process owns any human task,
 - expose audit evidence for activation, grant, invocation, and cancellation.
 
-Advanced behavior owned by `#237`:
+Advanced behavior owned by `#240`:
 
 - promote an approved immutable workflow revision without changing the
   external endpoint key and support audited rollback/deprecation,
@@ -373,7 +373,7 @@ second UI-only endpoint or permission model.
 Current status: missing and not an Admin-New promotion blocker. Issue `#172`
 owns the bounded Phase 0 catalog/detail/grant and polling-run surface. Advanced
 revision promotion, callbacks/deliveries, replay, tracing, throttling, and
-connector diagnostics belong to `#237`. BrowserPane-managed Human Handoff is
+connector diagnostics belong to `#240`. BrowserPane-managed Human Handoff is
 not part of either endpoint UI slice unless `#71` is selected later.
 
 ### Workflow Studio And Teach Mode

@@ -267,7 +267,7 @@ A challenge requiring MFA, CAPTCHA, consent, or judgment returns terminal
 `external_intervention_required`. BrowserPane does not create a Human Handoff
 or subprocess in Phase 0.
 
-Issue `#237` owns later production expansion: endpoint revisions and promotion,
+Issue `#240` owns later production expansion: endpoint revisions and promotion,
 callbacks/replay, trace propagation, throttling/readiness, connector exports,
 and broader lifecycle diagnostics. #176 owns generalized organization/project
 authorization and #179 owns API compatibility governance.
@@ -283,13 +283,13 @@ Current implementation gaps that must stay explicit:
   side-effect evidence do not exist,
 - no stable endpoint resource or fake-BPM polling conformance package exists.
 
-Deferred #237 gaps include pagination, callback versioning/replay, endpoint
+Deferred #240 gaps include pagination, callback versioning/replay, endpoint
 revision promotion, caller throttling, trace expansion, and connector exports.
 
 Current Phase 0 requirements live in
 `BPANE-00172_PHASE_0_WORKFLOW_ENDPOINT_PLAN.md`. The old combined specification
 is historical; deferred expansion lives in
-`BPANE-00237_WORKFLOW_ENDPOINT_PRODUCTIZATION_PLAN.md`.
+`BPANE-00240_WORKFLOW_ENDPOINT_PRODUCTIZATION_PLAN.md`.
 
 ### Workflow Teach Mode And Controlled Repair
 

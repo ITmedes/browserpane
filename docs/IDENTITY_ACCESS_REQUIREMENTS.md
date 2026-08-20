@@ -145,7 +145,7 @@ Required endpoint behavior:
 Phase 0 `#172` uses external OIDC/OAuth 2.0 client credentials resolved to an
 active registered service principal and an explicit project/endpoint grant.
 User-delegated OAuth and additional connector authentication profiles are
-deferred to `#237`. BrowserPane-issued API keys remain owned by `#70` and must
+deferred to `#240`. BrowserPane-issued API keys remain owned by `#70` and must
 not be introduced as unmanaged static secrets. Where the identity platform
 supports it, private-key or workload-identity client authentication is
 preferred over another shared client secret.
@@ -159,7 +159,7 @@ labels, callback tokens, or general audit payloads.
 
 Phase 0 endpoint authorization and negative-case tests live in
 `BPANE-00172_PHASE_0_WORKFLOW_ENDPOINT_PLAN.md`; later connector identity
-profiles live in `BPANE-00237_WORKFLOW_ENDPOINT_PRODUCTIZATION_PLAN.md`.
+profiles live in `BPANE-00240_WORKFLOW_ENDPOINT_PRODUCTIZATION_PLAN.md`.
 
 ## Admin-New Requirements
 

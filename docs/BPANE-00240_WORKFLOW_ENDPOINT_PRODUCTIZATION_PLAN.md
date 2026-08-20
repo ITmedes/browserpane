@@ -1,6 +1,6 @@
-# BPANE-00237 Workflow Endpoint Productization Plan
+# BPANE-00240 Workflow Endpoint Productization Plan
 
-Issue: [#237](https://github.com/ITmedes/browserpane/issues/237)
+Issue: [#240](https://github.com/ITmedes/browserpane/issues/240)
 
 Status: Planned follow-up specification; not an executable Phase 0 slice
 
