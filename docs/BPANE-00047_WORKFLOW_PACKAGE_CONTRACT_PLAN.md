@@ -11,9 +11,9 @@ Target gate: Phase 0 Operational Proof prerequisite
 Depends on: merged Foundation validation, source hardening, worker lifecycle,
 store parity, and API-conformance baselines
 
-Last verified: 2026-08-20 on `codex/BPANE-00047-workflow-package-contract`;
-the exact implementation commit and review PR are recorded after the draft PR
-is opened.
+Last verified: 2026-08-20 on `codex/BPANE-00047-workflow-package-contract` at
+implementation commit `1a2924c0` for review in
+[#242](https://github.com/ITmedes/browserpane/pull/242).
 
 ## Business Outcome
 
@@ -211,7 +211,9 @@ Gaps to freeze:
 
 ## Evidence Record
 
-Review PR and implementation commit: recorded after the draft PR is opened.
+Review PR: [#242](https://github.com/ITmedes/browserpane/pull/242)
+
+Implementation commit: `1a2924c0b9d24665991e577f02ba6708e5f1e563`
 
 Migration and compatibility decision:
 
