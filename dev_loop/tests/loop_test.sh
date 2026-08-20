@@ -52,6 +52,23 @@ pass "status-specific result requirements are enforced"
 assert_eq "PROPOSED" "$(routine_field "$valid" status)" "routine status extraction"
 assert_eq "239" "$(routine_field "$valid" issue_number)" "routine issue extraction"
 
+proposal_log_dir="$tmp/proposal"
+mkdir -p "$proposal_log_dir"
+LOG_DIR="$proposal_log_dir"
+GITHUB_LOGIN="thebackplane"
+latest_workflow_line() { printf '%s\n' "completed / success"; }
+ready_issues() { printf '%s\n' "(none)"; }
+human_prs() { printf '%s\n' "(none)"; }
+run_session() {
+  : > "$2"
+  cp "$valid" "$3"
+}
+record_usage() { :; }
+propose "01" || fail "proposal setup is nounset-safe"
+[[ -f "$proposal_log_dir/01-propose.context.md" ]] || fail "proposal context uses the iteration number"
+[[ -f "$proposal_log_dir/01-propose.prompt.md" ]] || fail "proposal prompt uses the iteration number"
+pass "proposal setup is nounset-safe"
+
 jsonl="$tmp/session.jsonl"
 printf '%s\n' \
   '{"type":"thread.started","thread_id":"thread-1"}' \

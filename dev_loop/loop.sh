@@ -527,7 +527,8 @@ record_outcome() {
 }
 
 propose() {
-  local number="$1" context="$LOG_DIR/$number-propose.context.md"
+  local number="$1"
+  local context="$LOG_DIR/$number-propose.context.md"
   local prompt="$LOG_DIR/$number-propose.prompt.md" raw="$LOG_DIR/$number-propose.jsonl"
   local final="$LOG_DIR/$number-propose.result.json"
   {
