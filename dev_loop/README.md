@@ -24,7 +24,7 @@ model session has one auditable responsibility.
 ## Prerequisites
 
 - A clean local `main` checkout that can fast-forward to `origin/main`.
-- `bash`, `git`, `gh`, `jq`, and the Codex CLI on `PATH`.
+- `awk`, `bash`, `df`, `git`, `gh`, `jq`, and the Codex CLI on `PATH`.
 - `gh` authentication as `thebackplane` or another explicitly approved
   project identity that can read checks, push branches, create/edit PRs, and
   update issue labels. Personal identities are not accepted.
@@ -36,7 +36,8 @@ model session has one auditable responsibility.
 
 The loop deliberately refuses a dirty tree. It never stashes, resets, stages,
 or reverts pre-existing changes. Preserve local certificate changes or other
-work yourself before starting it.
+work yourself before starting it. It also refuses to start a local Codex phase
+with less than 50 GiB free on the repository filesystem by default.
 
 ## Start Safely
 
@@ -105,6 +106,7 @@ diagnostic data.
 | `SETTLE_SECONDS` | `180` | Wait for a new check set after a push/update. |
 | `SESSION_TIMEOUT_SECONDS` | `10800` | Watchdog for one Codex session. |
 | `POST_MERGE_TIMEOUT_SECONDS` | `7200` | Maximum wait per post-merge main workflow. |
+| `MIN_FREE_DISK_GB` | `50` | Minimum binary GiB available on the repository filesystem before local work; `0` explicitly disables the minimum. |
 | `AUTO_QUALIFY` | `1` | `1` audits and promotes one Qualified issue when the Ready queue is empty. |
 | `AUTO_MERGE` | `0` | `1` enables merge after green/current verification. |
 | `MERGE_METHOD` | `squash` | `squash`, `merge`, or `rebase`. |
@@ -157,6 +159,9 @@ The driver leaves branches and PRs intact for diagnosis:
 - `no-proposal`: no safe Ready issue was available.
 - `no-qualification`: no Qualified candidate passed the bounded readiness
   audit.
+- `low-disk`: available repository-filesystem capacity fell below
+  `MIN_FREE_DISK_GB` or could not be measured; clean local storage or adjust
+  the threshold explicitly before restarting.
 - `qualified-awaiting-proposal`: qualification completed and STOP was consumed
   before a proposal session started.
 - `green-awaiting-review`: checks passed and automatic merge was disabled.

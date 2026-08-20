@@ -8,7 +8,7 @@ state. Detailed requirements remain in the linked domain and plan documents.
 
 ## Current Baseline
 
-- Canonical branch: `main` at `22150090` after PR #242.
+- Canonical branch: `main` at `8618d83c` after PR #243.
 - `/admin-new/` is the default operator console. `/admin/` is a compatibility
   fallback pending a separate removal decision.
 - The gateway uses the typed runtime launch broker for the production-like
@@ -180,7 +180,9 @@ code.
   it may promote exactly one roadmap-prioritized Qualified issue after a
   bounded requirements and dependency audit. It never creates issues or
   reprioritizes the roadmap. Start it only from clean, synchronized `main` with
-  an approved project GitHub identity; automatic merging remains opt-in.
+  an approved project GitHub identity; automatic merging remains opt-in. Local
+  work stops below `MIN_FREE_DISK_GB` (50 GiB by default) without deleting
+  operator data.
 
 ## Fresh Session Checklist
 

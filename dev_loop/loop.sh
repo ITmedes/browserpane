@@ -21,6 +21,7 @@ AUTO_RERUN_CANCELLED="${AUTO_RERUN_CANCELLED:-2}"
 SETTLE_SECONDS="${SETTLE_SECONDS:-180}"
 SESSION_TIMEOUT_SECONDS="${SESSION_TIMEOUT_SECONDS:-10800}"
 POST_MERGE_TIMEOUT_SECONDS="${POST_MERGE_TIMEOUT_SECONDS:-7200}"
+MIN_FREE_DISK_GB="${MIN_FREE_DISK_GB:-50}"
 AUTO_QUALIFY="${AUTO_QUALIFY:-1}"
 AUTO_MERGE="${AUTO_MERGE:-0}"
 MERGE_METHOD="${MERGE_METHOD:-squash}"
@@ -67,7 +68,7 @@ is_positive_uint() { is_uint "$1" && (( 10#$1 > 0 )); }
 
 validate_config() {
   local name value
-  for name in ITERATIONS MAX_REPAIRS MAX_UPDATE_BRANCH AUTO_RERUN_CANCELLED; do
+  for name in ITERATIONS MAX_REPAIRS MAX_UPDATE_BRANCH AUTO_RERUN_CANCELLED MIN_FREE_DISK_GB; do
     value="${!name}"
     is_uint "$value" || die "$name must be a non-negative integer, got '$value'."
   done
@@ -82,6 +83,42 @@ validate_config() {
   case "$MERGE_METHOD" in squash|merge|rebase) ;; *) die "MERGE_METHOD must be squash, merge, or rebase." ;; esac
   [[ -n "$DEFAULT_BRANCH" ]] || die "DEFAULT_BRANCH must not be empty."
   [[ -n "$BRANCH_PREFIX" ]] || die "BRANCH_PREFIX must not be empty."
+}
+
+disk_available_kib() {
+  local available
+  available="$(df -Pk "$repo" 2>/dev/null | awk 'NR == 2 { print $4; found = 1; exit } END { if (!found) exit 1 }')" || return 1
+  is_uint "$available" || return 1
+  printf '%s\n' "$available"
+}
+
+format_disk_gib() {
+  LC_ALL=C awk -v available_kib="$1" 'BEGIN { printf "%.1f", available_kib / 1048576 }'
+}
+
+disk_space_sufficient() {
+  local available_kib="$1"
+  LC_ALL=C awk -v available_kib="$available_kib" -v minimum_gib="$MIN_FREE_DISK_GB" \
+    'BEGIN { exit !(minimum_gib == 0 || available_kib >= minimum_gib * 1048576) }'
+}
+
+check_disk_space_guard() {
+  local available_kib available_gib
+  if ! available_kib="$(disk_available_kib)"; then
+    err "disk space guard could not measure available capacity for $repo"
+    return 2
+  fi
+  available_gib="$(format_disk_gib "$available_kib")"
+  if disk_space_sufficient "$available_kib"; then
+    if [[ "$MIN_FREE_DISK_GB" =~ ^0+$ ]]; then
+      say "disk space: ${available_gib} GiB available (minimum disabled)"
+    else
+      say "disk space: ${available_gib} GiB available (minimum ${MIN_FREE_DISK_GB} GiB)"
+    fi
+    return 0
+  fi
+  err "disk space guard blocked the loop: ${available_gib} GiB available; minimum is ${MIN_FREE_DISK_GB} GiB"
+  return 1
 }
 
 github_identity_allowed() {
@@ -309,7 +346,7 @@ pr_head_oid() { gh pr view "$1" --json headRefOid --jq .headRefOid 2>/dev/null |
 
 preflight_tools() {
   validate_config
-  require bash; require git; require gh; require jq; require "$CODEX_BIN"
+  require awk; require bash; require df; require git; require gh; require jq; require "$CODEX_BIN"
   [[ -f "$RESULT_SCHEMA" ]] || die "missing result schema: $RESULT_SCHEMA"
   [[ -f "$here/routines/qualify.md" ]] || die "missing qualification routine"
   [[ -f "$here/routines/propose.md" ]] || die "missing proposal routine"
@@ -326,7 +363,7 @@ preflight_tools() {
 }
 
 repo_ready_report() {
-  local branch dirty ready=0
+  local branch dirty ready=0 disk_ready=0
   branch="$(git -C "$repo" branch --show-current)"
   dirty="$(git -C "$repo" status --porcelain)"
   say "repository: $repo"
@@ -347,9 +384,10 @@ repo_ready_report() {
   else
     say "active Codex PR: none"
   fi
+  if check_disk_space_guard; then disk_ready=1; fi
   say "Ready issues: $(state_issue_count state:ready 2>/dev/null || printf unknown)"
   say "Qualified issues: $(state_issue_count state:qualified 2>/dev/null || printf unknown)"
-  [[ "$branch" == "$DEFAULT_BRANCH" && -z "$dirty" ]] && ready=1
+  [[ "$branch" == "$DEFAULT_BRANCH" && -z "$dirty" && "$disk_ready" == "1" ]] && ready=1
   if (( ready == 1 )); then
     good "read-only preflight passed; the checkout can enter the loop"
     return 0
@@ -562,6 +600,13 @@ record_outcome() {
     "$iter_input" "$iter_cached" "$iter_output" "$iter_reasoning"
 }
 
+enforce_iteration_disk_space() {
+  local phase="$1"
+  if check_disk_space_guard; then return 0; fi
+  record_outcome "low-disk"
+  die "disk space guard stopped the loop before $phase"
+}
+
 qualify() {
   local number="$1"
   local context="$LOG_DIR/$number-qualify.context.md"
@@ -768,7 +813,7 @@ trap on_exit EXIT
 trap 'printf "\n"; warn "interrupted"; exit 130' INT TERM
 
 printf '%sBrowserPane Codex development loop | run %s%s\n' "$c_b" "$RUN_ID" "$c_reset"
-say "iterations=$ITERATIONS repairs=$MAX_REPAIRS auto_qualify=$AUTO_QUALIFY auto_merge=$AUTO_MERGE logs=dev_loop/runs/$RUN_ID"
+say "iterations=$ITERATIONS repairs=$MAX_REPAIRS min_free_disk_gb=$MIN_FREE_DISK_GB auto_qualify=$AUTO_QUALIFY auto_merge=$AUTO_MERGE logs=dev_loop/runs/$RUN_ID"
 
 while :; do
   if (( ITERATIONS > 0 && iteration >= ITERATIONS )); then
@@ -783,6 +828,7 @@ while :; do
   pr=""; attempt=0
 
   step "iteration $n | synchronize"
+  enforce_iteration_disk_space "synchronization"
   sync_default_branch
   say "$DEFAULT_BRANCH at $(git rev-parse --short "origin/$DEFAULT_BRANCH")"
 
@@ -791,6 +837,7 @@ while :; do
     pr="$(jq -r .number <<< "$pr_json")"
     warn "adopting open Codex PR #$pr"
   else
+    enforce_iteration_disk_space "qualification"
     qualification_gate_rc=0
     qualification_gate "$n" || qualification_gate_rc=$?
     case "$qualification_gate_rc" in
@@ -826,6 +873,7 @@ while :; do
         ;;
     esac
 
+    enforce_iteration_disk_space "proposal"
     proposal_rc=0
     propose "$n" || proposal_rc=$?
     result="$LOG_DIR/$n-propose.result.json"
@@ -923,6 +971,7 @@ while :; do
     fi
     stop_requested && exit 0
     attempt=$((attempt + 1))
+    enforce_iteration_disk_space "repair"
     old_sha="$(pr_head_oid "$pr")"
     repair_rc=0
     repair "$n" "$pr" "$attempt" "$situation" || repair_rc=$?
