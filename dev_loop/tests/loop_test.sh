@@ -33,14 +33,22 @@ valid="$tmp/valid.json"
 invalid="$tmp/invalid.json"
 invalid_proposed="$tmp/invalid-proposed.json"
 valid_qualified="$tmp/valid-qualified.json"
+valid_needs_specification="$tmp/valid-needs-specification.json"
 valid_no_qualification="$tmp/valid-no-qualification.json"
+valid_specified="$tmp/valid-specified.json"
 invalid_qualified="$tmp/invalid-qualified.json"
+invalid_needs_specification="$tmp/invalid-needs-specification.json"
+invalid_specified="$tmp/invalid-specified.json"
 printf '%s\n' '{"status":"PROPOSED","issue_number":239,"pr_url":"https://github.com/ITmedes/browserpane/pull/999","commit_sha":"abc1234","run_id":null,"reason":null,"summary":"opened"}' > "$valid"
 printf '%s\n' '{"status":"UNKNOWN","summary":"bad"}' > "$invalid"
 printf '%s\n' '{"status":"PROPOSED","issue_number":239,"pr_url":null,"commit_sha":null,"run_id":null,"reason":null,"summary":"incomplete"}' > "$invalid_proposed"
 printf '%s\n' '{"status":"QUALIFIED","issue_number":172,"pr_url":null,"commit_sha":null,"run_id":null,"reason":null,"summary":"promoted"}' > "$valid_qualified"
+printf '%s\n' '{"status":"NEEDS_SPECIFICATION","issue_number":172,"pr_url":null,"commit_sha":null,"run_id":null,"reason":"migration and rollback are omitted","summary":"selected one resolvable gap set without mutation"}' > "$valid_needs_specification"
 printf '%s\n' '{"status":"NO_QUALIFICATION","issue_number":null,"pr_url":null,"commit_sha":null,"run_id":null,"reason":"dependency remains","summary":"no mutation"}' > "$valid_no_qualification"
+printf '%s\n' '{"status":"SPECIFIED","issue_number":172,"pr_url":"https://github.com/ITmedes/browserpane/pull/999","commit_sha":"abc1234","run_id":null,"reason":null,"summary":"reconciled issue and plan"}' > "$valid_specified"
 printf '%s\n' '{"status":"QUALIFIED","issue_number":null,"pr_url":null,"commit_sha":null,"run_id":null,"reason":null,"summary":"missing issue"}' > "$invalid_qualified"
+printf '%s\n' '{"status":"NEEDS_SPECIFICATION","issue_number":172,"pr_url":null,"commit_sha":null,"run_id":null,"reason":null,"summary":"missing gaps"}' > "$invalid_needs_specification"
+printf '%s\n' '{"status":"SPECIFIED","issue_number":172,"pr_url":"https://github.com/ITmedes/browserpane/pull/999","commit_sha":null,"run_id":null,"reason":null,"summary":"missing commit"}' > "$invalid_specified"
 
 validate_result "$valid" || fail "valid structured result"
 pass "valid structured result"
@@ -58,13 +66,29 @@ pass "status-specific result requirements are enforced"
 validate_result "$valid_qualified" || fail "valid qualification result"
 pass "valid qualification result"
 
+validate_result "$valid_needs_specification" || fail "valid needs-specification result"
+pass "valid needs-specification result"
+
 validate_result "$valid_no_qualification" || fail "valid no-qualification result"
 pass "valid no-qualification result"
+
+validate_result "$valid_specified" || fail "valid specified result"
+pass "valid specified result"
 
 if validate_result "$invalid_qualified" >/dev/null 2>&1; then
   fail "qualification requires an issue number"
 fi
 pass "qualification requires an issue number"
+
+if validate_result "$invalid_needs_specification" >/dev/null 2>&1; then
+  fail "needs-specification requires an actionable reason"
+fi
+pass "needs-specification requires an actionable reason"
+
+if validate_result "$invalid_specified" >/dev/null 2>&1; then
+  fail "specified requires a PR and commit"
+fi
+pass "specified requires a PR and commit"
 
 assert_eq "PROPOSED" "$(routine_field "$valid" status)" "routine status extraction"
 assert_eq "239" "$(routine_field "$valid" issue_number)" "routine issue extraction"
@@ -135,6 +159,18 @@ qualify "01" || fail "qualification setup is nounset-safe"
 [[ -f "$proposal_log_dir/01-qualify.prompt.md" ]] || fail "qualification prompt uses the iteration number"
 pass "qualification setup is nounset-safe"
 
+gh() {
+  printf '%s\n' '# 172 Workflow endpoint' 'State: OPEN' 'Labels: state:qualified' 'Body fixture'
+}
+MOCK_SESSION_RESULT="$valid_specified"
+specify "01" "172" "migration and rollback are omitted" || fail "specification setup is nounset-safe"
+[[ -f "$proposal_log_dir/01-specify.context.md" ]] || fail "specification context uses the iteration number"
+[[ -f "$proposal_log_dir/01-specify.prompt.md" ]] || fail "specification prompt uses the iteration number"
+grep -q 'migration and rollback are omitted' "$proposal_log_dir/01-specify.context.md" \
+  || fail "specification context retains the qualification gaps"
+pass "specification setup is nounset-safe"
+unset -f gh
+
 MOCK_SESSION_RESULT="$valid"
 propose "01" || fail "proposal setup is nounset-safe"
 [[ -f "$proposal_log_dir/01-propose.context.md" ]] || fail "proposal context uses the iteration number"
@@ -189,11 +225,29 @@ qualification_gate "05" || qualification_gate_rc=$?
 assert_eq "10" "$qualification_gate_rc" "unqualifiable queue stops cleanly"
 assert_eq "dependency remains" "$QUALIFICATION_REASON" "qualification stop reason is retained"
 
+MOCK_READY_AFTER=0
+MOCK_STATE_LABEL="state:qualified"
+MOCK_SESSION_RESULT="$valid_needs_specification"
+rm -f "$MOCK_READY_MARKER"
+qualification_gate_rc=0
+qualification_gate "06" || qualification_gate_rc=$?
+assert_eq "12" "$qualification_gate_rc" "resolvable qualification gaps route to specification"
+assert_eq "172" "$SPECIFICATION_ISSUE" "specification candidate is retained"
+assert_eq "migration and rollback are omitted" "$QUALIFICATION_REASON" "specification gaps are retained"
+
+invalid_candidate="$tmp/invalid-candidate.json"
+printf '%s\n' '{"status":"NEEDS_SPECIFICATION","issue_number":999,"pr_url":null,"commit_sha":null,"run_id":null,"reason":"missing contract","summary":"wrong candidate"}' > "$invalid_candidate"
+MOCK_SESSION_RESULT="$invalid_candidate"
+rm -f "$MOCK_READY_MARKER"
+qualification_gate_rc=0
+qualification_gate "07" || qualification_gate_rc=$?
+assert_eq "21" "$qualification_gate_rc" "specification cannot switch to an unqueued issue"
+
 AUTO_QUALIFY=0
 MOCK_SESSION_RESULT="$invalid"
 rm -f "$MOCK_READY_MARKER"
 qualification_gate_rc=0
-qualification_gate "06" || qualification_gate_rc=$?
+qualification_gate "08" || qualification_gate_rc=$?
 assert_eq "0" "$qualification_gate_rc" "manual qualification mode bypasses the qualifier"
 assert_eq "" "$QUALIFIED_ISSUE" "manual qualification mode returns no promoted issue"
 
@@ -201,9 +255,39 @@ AUTO_QUALIFY=1
 MOCK_QUALIFIED_NUMBERS=""
 rm -f "$MOCK_READY_MARKER"
 qualification_gate_rc=0
-qualification_gate "07" || qualification_gate_rc=$?
+qualification_gate "09" || qualification_gate_rc=$?
 assert_eq "10" "$qualification_gate_rc" "empty Qualified queue stops without a model session"
 assert_eq "no open Qualified issue is available for readiness assessment" "$QUALIFICATION_REASON" "empty Qualified queue reason is explicit"
+unset -f gh
+
+MOCK_SPECIFICATION_STATE="state:qualified"
+MOCK_SPECIFICATION_PR_COUNT=1
+MOCK_SPECIFICATION_PR='{"number":999,"headRefName":"codex/BPANE-00172-specify-endpoint","headRefOid":"abc1234","isDraft":false,"url":"https://github.com/ITmedes/browserpane/pull/999","title":"docs: specify endpoint","mergeable":"MERGEABLE","mergeStateStatus":"CLEAN"}'
+gh() {
+  if [[ "$*" == *"issue view"* ]]; then
+    printf '{"labels":[{"name":"%s"}]}\n' "$MOCK_SPECIFICATION_STATE"
+  elif [[ "$*" == *"--json headRefName "* ]]; then
+    printf '%s\n' "$MOCK_SPECIFICATION_PR_COUNT"
+  else
+    printf '%s\n' "$MOCK_SPECIFICATION_PR"
+  fi
+}
+verified_pr="$(verified_specification_pr "$valid_specified" 172)" \
+  || fail "specified result matches one Qualified issue and Codex PR"
+assert_eq "999" "$(jq -r .number <<< "$verified_pr")" "specified PR is returned to the driver"
+
+MOCK_SPECIFICATION_STATE="state:ready"
+if verified_specification_pr "$valid_specified" 172 >/dev/null 2>&1; then
+  fail "specified result cannot promote the issue"
+fi
+pass "specified result cannot promote the issue"
+
+MOCK_SPECIFICATION_STATE="state:qualified"
+MOCK_SPECIFICATION_PR_COUNT=2
+if verified_specification_pr "$valid_specified" 172 >/dev/null 2>&1; then
+  fail "specified result requires exactly one Codex PR"
+fi
+pass "specified result requires exactly one Codex PR"
 unset -f gh
 
 jsonl="$tmp/session.jsonl"
@@ -243,6 +327,21 @@ if MIN_FREE_DISK_GB=invalid bash -c "source '$loop'; validate_config" >/dev/null
 fi
 pass "invalid disk threshold configuration is rejected"
 
+if MAX_SPECIFICATION_CYCLES=0 bash -c "source '$loop'; validate_config" >/dev/null 2>&1; then
+  fail "zero specification-cycle budget is rejected"
+fi
+pass "zero specification-cycle budget is rejected"
+
+MAX_SPECIFICATION_CYCLES=2
+specification_cycles=0
+reserve_specification_cycle || fail "first specification cycle is reserved"
+reserve_specification_cycle || fail "second specification cycle is reserved"
+assert_eq "2" "$specification_cycles" "specification-cycle reservations are counted"
+if reserve_specification_cycle; then
+  fail "specification-cycle budget exhaustion is enforced"
+fi
+pass "specification-cycle budget exhaustion is enforced"
+
 if MERGE_METHOD=octopus bash -c "source '$loop'; validate_config" >/dev/null 2>&1; then
   fail "invalid merge method is rejected"
 fi
@@ -265,7 +364,7 @@ if github_permission_allowed READ; then
 fi
 pass "read-only repository permission is rejected"
 
-jq -e '.properties.status.enum | index("QUALIFIED") and index("NO_QUALIFICATION") and index("PROPOSED") and index("REPAIRED") and index("HALT")' "$RESULT_SCHEMA" >/dev/null \
+jq -e '.properties.status.enum | index("QUALIFIED") and index("NEEDS_SPECIFICATION") and index("NO_QUALIFICATION") and index("SPECIFIED") and index("PROPOSED") and index("REPAIRED") and index("HALT")' "$RESULT_SCHEMA" >/dev/null \
   || fail "result schema status contract"
 pass "result schema status contract"
 

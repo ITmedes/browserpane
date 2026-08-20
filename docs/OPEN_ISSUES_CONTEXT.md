@@ -4,7 +4,7 @@ Created: 2026-07-10
 Revalidated: 2026-08-20 after #233 merged through PR #234, Compose runner
 reliability merged through #235/PR #236, and the Phase 0 issue set was narrowed
 and split through #47, #172, #174, #180, and new follow-up #240; contributor
-automation issues #241 and #244 were added with focused plans
+automation issues #241, #244, and #246 have focused plans
 
 This document maps the current `docs/` workspace to the live open GitHub
 issues for `ITmedes/browserpane`. It is the bridge between the consolidated
@@ -13,7 +13,7 @@ local planning docs and the public issue tracker.
 Source check:
 
 - fetched and updated through the GitHub API on 2026-08-20,
-- open issue range: `#6` through `#244`,
+- open issue range: `#6` through `#246`,
 - focused docs-derived implementation issues created on 2026-07-10: `#145`
   through `#170`,
 - focused Phase N Teach Mode issue created on 2026-07-31: `#171`,
@@ -41,7 +41,8 @@ Source check:
 - deferred Workflow Endpoint productization follow-up created on 2026-08-20:
   `#240`,
 - Codex-native local delivery-loop issue `#241` completed through PR `#243`;
-  disk-capacity guard follow-up created on 2026-08-20: `#244`,
+  disk-capacity guard `#244` completed through PR `#245`; bounded requirements-
+  specification follow-up created on 2026-08-20: `#246`,
 - all executable open issues carry a priority, lane, state, and target-gate
   milestone; umbrella tracker `#6` intentionally carries only priority/state,
 - `#151` and `#173` are implemented and closed; `#184` is the implemented
@@ -61,7 +62,7 @@ Source check:
 | Focused Pilot Value issues | `#47`, `#172`, `#174` | Use `#47` for the immutable Playwright package, `#172` for one polling-based BPM activity endpoint, and `#174` for the selected real Pilot process. |
 | Deferred workflow productization | `#171`, `#240` | Use `#171` for Teach Mode and controlled repair. Use `#240` for endpoint revisions, callbacks, replay, tracing, throttling, and connector compatibility. Neither is a Phase 0 dependency. |
 | Delivery governance | `#173` | Owns the canonical roadmap, maturity, gates, risks, plan template, and issue/claim reconciliation. It does not own runtime features. |
-| Contributor automation | `#241`, `#244` | #241 owns the optional local Codex qualify/propose/watch/repair loop. #244 adds its local disk-capacity stop. Neither changes product priority or capability maturity. |
+| Contributor automation | `#241`, `#244`, `#246` | #241 owns the optional local Codex qualify/propose/watch/repair loop. #244 adds its local disk-capacity stop. #246 routes one evidence-backed requirements gap set through a separate documentation PR and later requalification. None changes product priority or capability maturity. |
 | Focused cross-product gaps | `#174` through `#180` | Use these for Phase 0 delivery, protocol conformance, authorization, identity lifecycle, platform telemetry, API compatibility, and open-source governance. |
 | Focused validation performance | `#184` | Preserve the #151 validation baseline while reducing hosted compose feedback time through isolated execution lanes. |
 | Focused Docker build acceleration | `#185` | Preserve #184 lane coverage while adding deterministic, supply-chain-safe Docker build reuse for trusted hosted runs. |
@@ -117,8 +118,9 @@ Source check:
 | `#231` Prometheus SLI and alert baseline | `BPANE-00231_PROMETHEUS_SLI_ALERT_BASELINE_PLAN.md`, `PLATFORM_TELEMETRY.md`, `DELIVERY_ROADMAP.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md`, `VALIDATION_MATRIX.md` | Closed Production child of #178 | Recording rules, conservative starter alerts, deterministic behavior tests, and operator runbooks merged through PR #232. |
 | closed `#233` Grafana operations dashboard | `BPANE-00233_GRAFANA_OPERATIONS_DASHBOARD_PLAN.md`, `PLATFORM_TELEMETRY.md`, `DELIVERY_ROADMAP.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md`, `VALIDATION_MATRIX.md` | Completed Production checkpoint | Provisioned aggregate dashboard merged through PR #234. |
 | `#240` Workflow Endpoint lifecycle, callbacks, and connector compatibility | `BPANE-00240_WORKFLOW_ENDPOINT_PRODUCTIZATION_PLAN.md`, historical `BPANE-00172_BPM_WORKFLOW_ENDPOINT_INTEGRATION_PLAN.md` | Deferred Production/Enterprise | Owns endpoint revisions, callbacks, replay, tracing expansion, throttling, and connector compatibility after #172. |
-| `#241` Codex-native local delivery loop | `BPANE-00241_CODEX_DEVELOPMENT_LOOP_PLAN.md`, `CURRENT_CONTEXT.md`, `DELIVERY_ROADMAP.md` | Foundation contributor tooling | Optional bounded qualification/proposal/repair orchestration. It may promote one already-scoped Qualified issue only after roadmap, dependency, plan, risk, acceptance, and test checks; it does not create backlog, replace plans, reprioritize work, or advance a product gate. |
-| `#244` Local development-loop disk guard | `BPANE-00244_DEV_LOOP_DISK_GUARD_PLAN.md`, `CURRENT_CONTEXT.md`, `DELIVERY_ROADMAP.md` | Foundation contributor-tooling follow-up | Stops local Codex work below a configurable 50 GiB default without deleting Docker or user data. |
+| closed `#241` Codex-native local delivery loop | `BPANE-00241_CODEX_DEVELOPMENT_LOOP_PLAN.md`, `CURRENT_CONTEXT.md`, `DELIVERY_ROADMAP.md` | Foundation contributor tooling | Optional bounded qualification/proposal/repair orchestration. It may promote one already-scoped Qualified issue only after roadmap, dependency, plan, risk, acceptance, and test checks; it does not create backlog, replace plans, reprioritize work, or advance a product gate. |
+| closed `#244` Local development-loop disk guard | `BPANE-00244_DEV_LOOP_DISK_GUARD_PLAN.md`, `CURRENT_CONTEXT.md`, `DELIVERY_ROADMAP.md` | Foundation contributor-tooling follow-up | Stops local Codex work below a configurable 50 GiB default without deleting Docker or user data. |
+| `#246` Bounded requirements-specification cycle | `BPANE-00246_REQUIREMENTS_SPECIFICATION_LOOP_PLAN.md`, `BPANE-00241_CODEX_DEVELOPMENT_LOOP_PLAN.md`, `CURRENT_CONTEXT.md`, `DELIVERY_ROADMAP.md` | Foundation contributor-tooling follow-up | Lets qualification route one correctly ordered issue with evidence-backed contract gaps to a separate documentation PR; lifecycle promotion and implementation require a later post-merge qualification pass. |
 
 ## Focused Work-Order Issue Matrix
 
@@ -159,6 +161,7 @@ dedicated open issue ownership.
 | Production/Enterprise Workflow Endpoint expansion | `#240` Productize endpoint lifecycle, callbacks, and connector compatibility | `BPANE-00240_WORKFLOW_ENDPOINT_PRODUCTIZATION_PLAN.md`, historical `BPANE-00172_BPM_WORKFLOW_ENDPOINT_INTEGRATION_PLAN.md` |
 | Foundation contributor automation | `#241` Add a Codex-native local delivery loop | `BPANE-00241_CODEX_DEVELOPMENT_LOOP_PLAN.md`, `CURRENT_CONTEXT.md`, `DELIVERY_ROADMAP.md` |
 | Foundation contributor safety | `#244` Stop the local Codex loop before low disk space becomes unsafe | `BPANE-00244_DEV_LOOP_DISK_GUARD_PLAN.md`, `CURRENT_CONTEXT.md`, `DELIVERY_ROADMAP.md` |
+| Foundation requirements automation | `#246` Add bounded requirements-specification cycles | `BPANE-00246_REQUIREMENTS_SPECIFICATION_LOOP_PLAN.md`, `BPANE-00241_CODEX_DEVELOPMENT_LOOP_PLAN.md`, `CURRENT_CONTEXT.md`, `DELIVERY_ROADMAP.md` |
 | Phase N. Workflow Studio Teach Mode | `#171` Add Workflow Studio Teach Mode and controlled demonstration-to-workflow publishing | `BPANE-00171_WORKFLOW_TEACH_MODE_PLAN.md`, `DOMAIN_REQUIREMENTS.md`, `ADMIN_NEW_REQUIREMENTS.md`, `VALIDATION_MATRIX.md` |
 | Delivery governance | `#173` Establish executable delivery roadmap, capability maturity, and release gates | `BPANE-00173_DELIVERY_GOVERNANCE_PLAN.md`, `DELIVERY_ROADMAP.md`, `CAPABILITY_MATURITY_MATRIX.md`, `PRODUCT_PHASES_AND_RELEASE_GATES.md`, `RISK_REGISTER.md` |
 | Phase 0 BPM browser activity | `#174` Qualify and deliver one bounded Phase 0 BPM browser activity | `BPANE-00174_PHASE_0_REFERENCE_WORKFLOW_PLAN.md`, `DELIVERY_ROADMAP.md`, `PRODUCT_PHASES_AND_RELEASE_GATES.md` |
@@ -242,7 +245,8 @@ The cross-reference pass also updated the issue bodies in both directions:
 | closed `#233` | Completed Production telemetry checkpoint. | Merged through PR #234. | Provisioned aggregate Grafana dashboard without final SLO/alert-routing scope. |
 | `#240` | Deferred endpoint productization. | Created on GitHub 2026-08-20 when #172 was narrowed. | Owns revisions, callbacks, replay, trace expansion, throttling, and connector compatibility. |
 | `#241` | Closed Foundation contributor tooling. | Qualification, proposal, repair, bounded CI convergence, and opt-in merge orchestration merged through PR #243. | The loop may promote exactly one roadmap-prioritized candidate but does not alter product priority or capability maturity. |
-| `#244` | In-progress Foundation contributor-safety follow-up. | Adds a deterministic free-capacity gate around the merged local loop. | Defaults to 50 GiB, fails closed, and never deletes operator data. |
+| `#244` | Closed Foundation contributor-safety follow-up. | Deterministic free-capacity gate merged through PR #245. | Defaults to 50 GiB, fails closed, and never deletes operator data. |
+| `#246` | In-progress Foundation contributor-tooling follow-up. | Adds a bounded specification session and structured requirements-PR transition. | It may resolve evidence-backed issue/plan omissions, but cannot make product decisions, promote issues, or implement product code. |
 
 ## Docs-To-Issue Context
 
@@ -278,6 +282,7 @@ shown as `closed #142`.
 | `BPANE-00240_WORKFLOW_ENDPOINT_PRODUCTIZATION_PLAN.md` | `#240`, deferred Production/Enterprise endpoint expansion |
 | `BPANE-00241_CODEX_DEVELOPMENT_LOOP_PLAN.md` | `#241`, optional Foundation contributor automation; no product capability claim |
 | `BPANE-00244_DEV_LOOP_DISK_GUARD_PLAN.md` | `#244`, local contributor disk-capacity safety; no product capability claim |
+| `BPANE-00246_REQUIREMENTS_SPECIFICATION_LOOP_PLAN.md` | `#246`, local contributor requirements-specification cycle; no product capability claim |
 | `BPANE-00173_DELIVERY_GOVERNANCE_PLAN.md` | `#173` |
 | `BPANE-00174_PHASE_0_REFERENCE_WORKFLOW_PLAN.md` | `#174`, after `#47` and `#172`, with `#180` and selected conditional controls; explicitly excludes `#71` and `#171` |
 | `DELIVERY_ROADMAP.md` | all open issues organized into Foundation, Pilot Value, Operator Product, Production, Enterprise, and Innovation lanes |

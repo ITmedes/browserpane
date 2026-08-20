@@ -4,10 +4,9 @@ Status: Canonical execution roadmap
 
 Governance issue: [#173](https://github.com/ITmedes/browserpane/issues/173)
 
-Last implementation audit: 2026-08-20 on `main` at `2adbfdee`. The Grafana
-operations-dashboard checkpoint merged through PR #234. Deterministic Compose
-validation was restored through #235/PR #236 and the post-merge main workflow
-passed all five Compose lanes.
+Last implementation audit: 2026-08-20 on `main` at `51101a34`. The Codex
+delivery loop merged through PR #243 and its 50 GiB local capacity guard merged
+through #244/PR #245. Product order remains #172 then #174.
 
 ## How To Use This Document
 
@@ -44,7 +43,10 @@ lanes may contain Qualified work, but starting them requires an explicit gate
 or capacity decision. The optional `dev_loop/` qualifier may execute that gate
 for exactly one documented next slice when its dependencies, focused plan,
 risks, acceptance criteria, and test evidence are already complete; it may not
-choose a different lane or infer a missing decision.
+choose a different lane or infer a missing decision. If current evidence can
+resolve concrete issue/plan omissions without changing product direction, the
+loop may create one documentation-only specification PR under #246; the issue
+remains Qualified until a later post-merge audit passes.
 
 ## Delivery Lanes
 
@@ -71,12 +73,14 @@ choose a different lane or infer a missing decision.
 | 5 | #152 | Done | #150 stable readiness contract | Shared in-memory/Postgres store contract parity merged through PR #193. |
 | 6 | #179 | Done | #152 persistent behavior baseline | Control API lint, conformance, examples, compatibility policy, and CI enforcement merged through PR #194. |
 | 7 | #241 | Done | #173 delivery governance | Bounded Codex qualification/proposal/repair delivery loop merged through PR #243. |
-| 8 | #244 | In Progress | #241 local delivery loop | Stop local Codex phases when repository-filesystem capacity falls below the configured 50 GiB default. |
+| 8 | #244 | Done | #241 local delivery loop | 50 GiB default repository-filesystem capacity guard merged through PR #245. |
+| 9 | #246 | In Progress | #241 qualification loop | Route one evidence-backed requirements gap set through a separate documentation PR before later requalification. |
 
-#241 and #244 are contributor tooling and do not block or supersede the next
-product slice, #172. The merged loop may promote #172 only after its separate
-readiness audit passes from clean `main` under an approved project identity;
-#244 adds a local capacity safety gate without changing that product order.
+#241, #244, and #246 are contributor tooling and do not block or supersede the
+next product slice, #172. The loop may promote #172 only after its separate
+readiness audit passes from clean `main` under an approved project identity.
+#246 allows the concrete contract gaps found by that audit to be resolved in a
+separate requirements PR without treating #172 as Ready or implementing it.
 
 ### Next Three Pilot Value Slices
 

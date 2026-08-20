@@ -3,14 +3,14 @@
 ## Metadata
 
 - Issue: `#241`
-- State: In Progress (bounded qualification follow-up)
+- State: Done through PR #243; requirements-specification follow-up is `#246`
 - Owner: BrowserPane maintainers / Codex
 - Lane: Foundation
 - Target gate: Repeatable, bounded contributor delivery
 - Depends on: `#173` delivery governance (complete), a live `state:ready`
   issue or one roadmap-prioritized `state:qualified` candidate, and a matching
   focused implementation plan
-- Last verified commit/date: `22150090` / 2026-08-20
+- Last verified commit/date: `8618d83c` / 2026-08-20
 
 ## Business Outcome
 
@@ -56,8 +56,10 @@ cannot be established.
   output, explicit sandboxing, final-message files, and JSON Schema-constrained
   output.
 - `docs/CURRENT_CONTEXT.md` records the fresh-session entry point and identifies
-  `#47` as the current Ready implementation issue.
-- No open Codex-owned PR or existing Codex development-loop issue was found.
+  `#172` as the next qualification candidate after completed `#47`.
+- The baseline and qualification follow-up merged through PR #243. Issue #246
+  owns later routing of evidence-backed requirements gaps to a separate
+  documentation PR.
 
 ## Scope
 
@@ -103,9 +105,10 @@ cannot be established.
   `DELIVERY_ROADMAP.md`; labels or issue numbers alone never authorize
   reprioritization. It comments the evidence before changing labels and
   verifies the resulting `state:ready` label.
-- Missing plans, material issue/plan drift, unresolved decisions, unmet
-  dependencies, overlap, or ambiguous order produce `NO_QUALIFICATION` or
-  `HALT` without label mutation.
+- In the completed #241 baseline, missing plans, material issue/plan drift,
+  unresolved decisions, unmet dependencies, overlap, or ambiguous order stop
+  without label mutation. Issue #246 narrowly extends that behavior for
+  evidence-backed omissions while preserving hard stops for real decisions.
 - A `codex/BPANE-` branch prefix and one open PR under that prefix form the
   cross-process mutex. The checkout also has a PID lock.
 - The proposal and repair routines never wait for checks and never merge. The

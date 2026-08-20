@@ -175,14 +175,17 @@ code.
   ARCH representations aligned.
 - When a merge is requested, wait for required GitHub checks and preserve a
   clean, reviewable commit history.
-- The optional `dev_loop/` tooling uses separate Codex qualification, proposal,
-  and repair sessions. It consumes Ready work first; with an empty Ready queue
-  it may promote exactly one roadmap-prioritized Qualified issue after a
-  bounded requirements and dependency audit. It never creates issues or
-  reprioritizes the roadmap. Start it only from clean, synchronized `main` with
-  an approved project GitHub identity; automatic merging remains opt-in. Local
-  work stops below `MIN_FREE_DISK_GB` (50 GiB by default) without deleting
-  operator data.
+- The optional `dev_loop/` tooling uses separate Codex qualification,
+  requirements-specification, proposal, and repair sessions. It consumes Ready
+  work first; with an empty Ready queue it may promote exactly one
+  roadmap-prioritized Qualified issue after a bounded audit. When the direction
+  is decided but its issue/plan contract has evidence-backed omissions, one
+  documentation-only specification PR may be created instead. The issue stays
+  Qualified and a later post-merge iteration must reassess it before product
+  implementation. The loop never creates product issues or reprioritizes the
+  roadmap. Start it only from clean, synchronized `main` with an approved
+  project GitHub identity; automatic merging remains opt-in. Local work stops
+  below `MIN_FREE_DISK_GB` (50 GiB by default) without deleting operator data.
 
 ## Fresh Session Checklist
 

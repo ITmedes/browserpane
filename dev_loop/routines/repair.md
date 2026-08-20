@@ -20,6 +20,9 @@ will watch the next check set.
 - Do not edit `dev_loop/` unless the PR's canonical issue explicitly owns it.
 - Repair only the reported PR. Do not start adjacent roadmap work, refactor
   unrelated code, create product issues, or change issue priority/scope.
+- If the PR handoff declares `kind: specification`, preserve the specification
+  boundary: repair documentation and issue/plan consistency only, do not edit
+  product code, promote the issue, or convert the PR into implementation.
 - Do not claim post-merge Compose evidence as PR evidence.
 
 ## Inspect Before Changing
