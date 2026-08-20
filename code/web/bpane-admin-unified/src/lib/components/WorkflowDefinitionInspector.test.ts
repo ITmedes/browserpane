@@ -141,6 +141,7 @@ function version(): WorkflowDefinitionVersionResource {
     allowed_credential_binding_ids: ['credential-1'],
     allowed_extension_ids: [],
     allowed_file_workspace_ids: ['workspace-1'],
+    compatibility: { state: 'legacy', warnings: [] },
     created_at: '2026-06-21T09:30:00.000Z',
   };
 }

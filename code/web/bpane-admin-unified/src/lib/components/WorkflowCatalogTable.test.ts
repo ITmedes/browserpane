@@ -90,6 +90,7 @@ function version(workflowId: string): WorkflowDefinitionVersionResource {
     allowed_credential_binding_ids: [],
     allowed_extension_ids: [],
     allowed_file_workspace_ids: [],
+    compatibility: { state: 'legacy', warnings: [] },
     created_at: '2026-06-21T09:30:00.000Z',
   };
 }

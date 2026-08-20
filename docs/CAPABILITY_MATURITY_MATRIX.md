@@ -36,7 +36,7 @@ capability.
 | Credential bindings | Prototype | Vault KV v2 provider and workflow/egress integration | #159, #70, #76 |
 | Browser extensions | Prototype | approved extension metadata and docker workflow/session support | #159, #72 |
 | MCP session delegation | Prototype | explicit session endpoint, bridge proxy, smoke coverage | #69, #70, #176 |
-| Workflow publishing and execution | Prototype | pinned git sources, worker lifecycle, runs/events/logs/files, finite worker request deadlines, bounded process output, package tests, and Compose admission/workspace evidence | #47 supported Playwright package contract |
+| Workflow publishing and execution | Prototype | supported commit-pinned Playwright TypeScript package contract, Draft 2020-12 schemas, reviewed resource/regression evidence, compatibility state, worker lifecycle, runs/events/logs/files, finite worker request deadlines, bounded process output, and Compose package/workspace evidence | #172/#174 endpoint and selected-workflow proof |
 | Phase 0 BPM Workflow Endpoint | Planned | Bounded polling contract and plan in #172; no endpoint resource/grant/schema/outcome implementation yet | #172 after #47 |
 | Production Workflow Endpoint lifecycle | Planned | Revisions, callbacks, replay, trace, throttling, and connector expansion isolated in #240 | #240 |
 | Workflow Teach Mode | Planned and deferred | Demonstration-to-candidate specification in #171; explicitly not Phase 0 | #171 |

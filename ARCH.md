@@ -481,6 +481,11 @@ service.
   - removes docker-backed context profile volumes through the runtime manager and skips active writers for a later pass
 - **Workflow lifecycle** (`workflow_lifecycle.rs`, `workflow/observability.rs`, `workflow/retention.rs`):
   - resolves git-backed workflow versions to immutable snapshots
+  - validates new supported package publications as commit-pinned Playwright
+    TypeScript with the fixed Node 22/Playwright 1.59 runtime tuple, Draft
+    2020-12 schemas, explicit resource requirements, and reviewed regression
+    evidence; additive manifest persistence leaves old versions readable with
+    `legacy` or `unsupported` compatibility state
   - launches workflow workers with run-scoped automation access through the
     selected direct or broker worker-control path
   - exposes queued/admission state when worker capacity or project workflow-run quotas are exhausted

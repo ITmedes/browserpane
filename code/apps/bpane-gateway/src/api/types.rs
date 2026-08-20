@@ -37,8 +37,8 @@ use crate::session_hub::{SessionConnectionTelemetryRole, SessionTelemetrySnapsho
 use crate::session_manager::SessionManager;
 use crate::session_registry::SessionRegistry;
 use crate::workflow::{
-    WorkflowObservability, WorkflowRunProducedFileResource, WorkflowRunState, WorkflowSource,
-    WorkflowSourceResolver,
+    WorkflowObservability, WorkflowPackageManifest, WorkflowRunProducedFileResource,
+    WorkflowRunState, WorkflowSource, WorkflowSourceResolver,
 };
 use crate::workflow_event_delivery::WorkflowEventDestinationPolicy;
 use crate::workflow_lifecycle::WorkflowLifecycleManager;
@@ -279,6 +279,8 @@ pub(super) struct CreateWorkflowDefinitionVersionRequest {
     pub(super) input_schema: Option<Value>,
     #[serde(default)]
     pub(super) output_schema: Option<Value>,
+    #[serde(default)]
+    pub(super) package: Option<WorkflowPackageManifest>,
     #[serde(default)]
     pub(super) default_session: Option<Value>,
     #[serde(default)]

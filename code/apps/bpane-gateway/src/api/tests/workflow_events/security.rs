@@ -174,7 +174,7 @@ async fn dispatch_revalidates_and_fails_a_persisted_unsafe_target_without_retry(
                 .body(Body::from(
                     json!({
                         "version": "v1",
-                        "executor": "manual",
+                        "executor": "playwright",
                         "entrypoint": "workflows/security/run.mjs"
                     })
                     .to_string(),

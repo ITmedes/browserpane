@@ -22,6 +22,55 @@ export type WorkflowGitSourceResource = {
 
 export type WorkflowSourceResource = WorkflowGitSourceResource;
 
+export type WorkflowPackageScenarioKind =
+  | 'happy_path'
+  | 'validation'
+  | 'missing_element'
+  | 'authentication_challenge'
+  | 'portal_failure'
+  | 'runtime_failure'
+  | 'cancellation'
+  | 'ambiguous_post_side_effect';
+
+export type WorkflowPackageManifest = {
+  readonly package_id: string;
+  readonly format_version: 'browserpane.workflow-package/v1';
+  readonly runtime: {
+    readonly language: 'typescript';
+    readonly browserpane_api_version: 'v1';
+    readonly node_major_version: 22;
+    readonly playwright_major_version: 1;
+    readonly playwright_minor_version: 59;
+  };
+  readonly requirements: {
+    readonly default_session: unknown;
+    readonly allowed_credential_binding_ids: readonly string[];
+    readonly allowed_extension_ids: readonly string[];
+    readonly allowed_file_workspace_ids: readonly string[];
+  };
+  readonly execution: {
+    readonly timeout_ms: number;
+    readonly assertions: readonly string[];
+    readonly safe_cancellation_points: readonly string[];
+    readonly side_effect_checkpoints: readonly string[];
+  };
+  readonly publication: {
+    readonly reviewer: string;
+    readonly reviewed_at: string;
+    readonly decision: 'approved';
+    readonly fresh_context_replay: true;
+    readonly scenarios: readonly {
+      readonly kind: WorkflowPackageScenarioKind;
+      readonly result: 'passed' | 'not_applicable';
+    }[];
+  };
+};
+
+export type WorkflowPackageCompatibility = {
+  readonly state: 'supported' | 'legacy' | 'unsupported';
+  readonly warnings: readonly string[];
+};
+
 export type WorkflowDefinitionVersionResource = {
   readonly id: string;
   readonly workflow_definition_id: string;
@@ -31,6 +80,8 @@ export type WorkflowDefinitionVersionResource = {
   readonly source?: WorkflowSourceResource | null;
   readonly input_schema?: unknown;
   readonly output_schema?: unknown;
+  readonly package?: WorkflowPackageManifest | null;
+  readonly compatibility: WorkflowPackageCompatibility;
   readonly default_session?: unknown;
   readonly allowed_credential_binding_ids: readonly string[];
   readonly allowed_extension_ids: readonly string[];
@@ -97,6 +148,7 @@ export type CreateWorkflowDefinitionVersionRequest = {
   readonly source?: unknown;
   readonly input_schema?: unknown;
   readonly output_schema?: unknown;
+  readonly package?: unknown;
   readonly default_session?: unknown;
   readonly allowed_credential_binding_ids?: readonly string[];
   readonly allowed_extension_ids?: readonly string[];

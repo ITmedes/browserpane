@@ -253,6 +253,7 @@ async fn in_memory_store_reports_and_enforces_project_retained_storage() {
                 source: None,
                 input_schema: None,
                 output_schema: None,
+                package: None,
                 default_session: None,
                 allowed_credential_binding_ids: Vec::new(),
                 allowed_extension_ids: Vec::new(),

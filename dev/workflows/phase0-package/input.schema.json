@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["scenario"],
+  "properties": {
+    "scenario": {
+      "type": "string",
+      "enum": [
+        "happy_path",
+        "missing_element",
+        "authentication_challenge",
+        "portal_failure",
+        "runtime_failure",
+        "ambiguous_post_side_effect"
+      ]
+    }
+  }
+}

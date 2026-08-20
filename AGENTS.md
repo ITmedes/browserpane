@@ -100,6 +100,10 @@ Current product shape:
   - `session_manager.rs`: internal gateway boundary for session runtime lifecycle. The rest of the gateway should depend on this façade instead of backend details.
   - `credentials/provider.rs`: credential binding secret-provider boundary. Local compose uses HashiCorp Vault dev mode and the current implementation targets Vault KV v2. Credential bindings can be owner-scoped or project-scoped; workflow runs and egress-backed sessions must not consume project-bound bindings from another project.
   - `workflow/source.rs`: workflow source contract and git ref resolution. Workflow definition versions can pin git-backed source metadata to an immutable commit at publish time without embedding source blobs into the control plane.
+  - `workflow/package.rs`: Phase 0 package publication contract. New supported
+    versions are Git-backed Playwright TypeScript with fixed runtime/schema/
+    resource/review evidence; additive compatibility state keeps older rows
+    readable without rewriting immutable versions.
   - `workspaces/model.rs`: owner-scoped file workspace and workspace-file resource shapes persisted by the control plane.
   - `workspaces/file_store.rs`: workspace file content storage boundary. `local_fs` is the current implementation; workspace files carry opaque artifact refs plus optional provenance metadata instead of raw filesystem paths.
   - `session_files/`: session-scoped file binding resource shapes. Owners can bind workspace files to relative session mount paths; automation access can read/list those bindings before runtime materialization.

@@ -75,6 +75,7 @@ async fn create_workflow_fixture(
                 source: None,
                 input_schema: None,
                 output_schema: None,
+                package: None,
                 default_session: None,
                 allowed_credential_binding_ids: Vec::new(),
                 allowed_extension_ids: Vec::new(),

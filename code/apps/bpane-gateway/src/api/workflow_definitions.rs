@@ -153,6 +153,7 @@ async fn create_workflow_definition_version(
         source,
         input_schema,
         output_schema,
+        package,
         default_session,
         allowed_credential_binding_ids,
         allowed_extension_ids,
@@ -170,6 +171,22 @@ async fn create_workflow_definition_version(
         .workflow_source_resolver
         .validate_entrypoint(resolved_source.as_ref(), &entrypoint)
         .map_err(map_workflow_source_error)?;
+    crate::workflow::validate_workflow_definition_version_contract(
+        &executor,
+        &entrypoint,
+        resolved_source.as_ref(),
+        input_schema.as_ref(),
+        output_schema.as_ref(),
+        package.as_ref(),
+    )
+    .map_err(|error| (StatusCode::BAD_REQUEST, Json(ErrorResponse { error })))?;
+    let requirements = resolve_workflow_package_requirements(
+        package.as_ref(),
+        default_session,
+        allowed_credential_binding_ids,
+        allowed_extension_ids,
+        allowed_file_workspace_ids,
+    )?;
     let version = state
         .session_store
         .create_workflow_definition_version(
@@ -182,15 +199,59 @@ async fn create_workflow_definition_version(
                 source: resolved_source,
                 input_schema,
                 output_schema,
-                default_session,
-                allowed_credential_binding_ids,
-                allowed_extension_ids,
-                allowed_file_workspace_ids,
+                package,
+                default_session: requirements.default_session,
+                allowed_credential_binding_ids: requirements.allowed_credential_binding_ids,
+                allowed_extension_ids: requirements.allowed_extension_ids,
+                allowed_file_workspace_ids: requirements.allowed_file_workspace_ids,
             },
         )
         .await
         .map_err(map_session_store_error)?;
     Ok((StatusCode::CREATED, Json(version.to_resource())))
+}
+
+struct ResolvedWorkflowPackageRequirements {
+    default_session: Option<Value>,
+    allowed_credential_binding_ids: Vec<String>,
+    allowed_extension_ids: Vec<String>,
+    allowed_file_workspace_ids: Vec<String>,
+}
+
+fn resolve_workflow_package_requirements(
+    package: Option<&WorkflowPackageManifest>,
+    default_session: Option<Value>,
+    allowed_credential_binding_ids: Vec<String>,
+    allowed_extension_ids: Vec<String>,
+    allowed_file_workspace_ids: Vec<String>,
+) -> Result<ResolvedWorkflowPackageRequirements, (StatusCode, Json<ErrorResponse>)> {
+    let Some(package) = package else {
+        return Ok(ResolvedWorkflowPackageRequirements {
+            default_session,
+            allowed_credential_binding_ids,
+            allowed_extension_ids,
+            allowed_file_workspace_ids,
+        });
+    };
+    if default_session.is_some()
+        || !allowed_credential_binding_ids.is_empty()
+        || !allowed_extension_ids.is_empty()
+        || !allowed_file_workspace_ids.is_empty()
+    {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "supported workflow package resource bindings must be declared only in package.requirements"
+                    .to_string(),
+            }),
+        ));
+    }
+    Ok(ResolvedWorkflowPackageRequirements {
+        default_session: Some(package.requirements.default_session.clone()),
+        allowed_credential_binding_ids: package.requirements.allowed_credential_binding_ids.clone(),
+        allowed_extension_ids: package.requirements.allowed_extension_ids.clone(),
+        allowed_file_workspace_ids: package.requirements.allowed_file_workspace_ids.clone(),
+    })
 }
 
 async fn validate_workflow_definition_source(

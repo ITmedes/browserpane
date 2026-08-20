@@ -1249,6 +1249,10 @@ Current workflow capabilities:
 - signed outbound workflow lifecycle webhook delivery with URL, DNS/IP,
   redirect, and DNS-rebinding controls
 - git-backed workflow sources pinned to resolved commits
+- the supported Phase 0 package contract: Git-backed Playwright TypeScript on
+  Node 22 and Playwright 1.59, Draft 2020-12 schemas, explicit resource
+  requirements, reviewed fresh-context evidence, and visible compatibility
+  state for pre-contract versions
 - workflow source validation before immutable version creation, including entrypoint checks, bounded file listing, and bounded source snapshot materialization
 - source snapshot materialization per run
 - structured workflow source errors with machine-readable `code`, `category`,
@@ -1258,6 +1262,10 @@ Current workflow capabilities:
 - approved extension references on workflow versions and sessions
 - canonical `./scripts/bpane workflow` commands for owner-token-driven testing
   and automation
+
+See [Workflow Package Authoring](docs/WORKFLOW_PACKAGE_AUTHORING.md) for the
+clean-checkout reference package, publication command, resource contract,
+negative scenarios, and Credential Binding redaction boundary.
 
 Primary workflow routes:
 
@@ -1340,6 +1348,7 @@ subscriptions:
 ./scripts/bpane extension list
 ./scripts/bpane credential-binding list
 ./scripts/bpane workflow-event-subscription list
+./scripts/bpane workflow publish <workflow-id> --body-file reviewed-package.json
 ```
 
 Use `--body-file` for credential or subscription creation when the request

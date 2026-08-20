@@ -1,5 +1,7 @@
 use anyhow::{ensure, Context};
 
+use crate::workflow::WorkflowPackageManifest;
+
 use super::*;
 
 pub(super) async fn run_workflow_contracts(store: &SessionStore) -> anyhow::Result<()> {
@@ -67,6 +69,7 @@ pub(super) async fn run_workflow_contracts(store: &SessionStore) -> anyhow::Resu
                 source: None,
                 input_schema: Some(serde_json::json!({ "type": "object" })),
                 output_schema: Some(serde_json::json!({ "type": "object" })),
+                package: None,
                 default_session: None,
                 allowed_credential_binding_ids: Vec::new(),
                 allowed_extension_ids: Vec::new(),
@@ -82,6 +85,94 @@ pub(super) async fn run_workflow_contracts(store: &SessionStore) -> anyhow::Resu
             .context("read workflow version as another owner")?
             .is_none(),
         "workflow version was visible to another owner"
+    );
+    let supported_package: WorkflowPackageManifest = serde_json::from_value(serde_json::json!({
+        "package_id": "contract.workflow.v2",
+        "format_version": "browserpane.workflow-package/v1",
+        "runtime": {
+            "language": "typescript",
+            "browserpane_api_version": "v1",
+            "node_major_version": 22,
+            "playwright_major_version": 1,
+            "playwright_minor_version": 59
+        },
+        "requirements": {
+            "default_session": {
+                "project_id": null,
+                "browser_context": { "mode": "fresh", "context_id": null },
+                "network_identity": { "egress_profile_id": null },
+                "capabilities": {
+                    "browser_input": true,
+                    "clipboard": false,
+                    "audio": false,
+                    "microphone": false,
+                    "camera": false,
+                    "file_transfer": false,
+                    "resize": true
+                },
+                "recording": { "mode": "disabled", "format": "webm", "retention_sec": null },
+                "extension_ids": []
+            },
+            "allowed_credential_binding_ids": [],
+            "allowed_extension_ids": [],
+            "allowed_file_workspace_ids": []
+        },
+        "execution": {
+            "timeout_ms": 60000,
+            "assertions": ["contract-output"],
+            "safe_cancellation_points": ["before-submit"],
+            "side_effect_checkpoints": ["after-submit"]
+        },
+        "publication": {
+            "reviewer": "session-store-contract",
+            "reviewed_at": "2026-08-20T12:00:00Z",
+            "decision": "approved",
+            "fresh_context_replay": true,
+            "scenarios": [
+                { "kind": "happy_path", "result": "passed" },
+                { "kind": "validation", "result": "passed" },
+                { "kind": "missing_element", "result": "passed" },
+                { "kind": "authentication_challenge", "result": "passed" },
+                { "kind": "portal_failure", "result": "passed" },
+                { "kind": "runtime_failure", "result": "passed" },
+                { "kind": "cancellation", "result": "passed" },
+                { "kind": "ambiguous_post_side_effect", "result": "passed" }
+            ]
+        }
+    }))?;
+    let schema = serde_json::json!({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object"
+    });
+    let supported_version = store
+        .create_workflow_definition_version(
+            &owner,
+            PersistWorkflowDefinitionVersionRequest {
+                workflow_definition_id: definition.id,
+                version: "v2".to_string(),
+                executor: "playwright".to_string(),
+                entrypoint: "workflows/run.ts".to_string(),
+                source: Some(serde_json::from_value(serde_json::json!({
+                    "kind": "git",
+                    "repository_url": "https://example.test/workflow.git",
+                    "ref": "main",
+                    "resolved_commit": "a".repeat(40),
+                    "root_path": "workflows"
+                }))?),
+                input_schema: Some(schema.clone()),
+                output_schema: Some(schema),
+                package: Some(supported_package.clone()),
+                default_session: Some(supported_package.requirements.default_session.clone()),
+                allowed_credential_binding_ids: Vec::new(),
+                allowed_extension_ids: Vec::new(),
+                allowed_file_workspace_ids: Vec::new(),
+            },
+        )
+        .await
+        .context("create supported contract workflow version")?;
+    ensure!(
+        supported_version.package.as_ref() == Some(&supported_package),
+        "supported workflow package did not round-trip through the session store"
     );
 
     let client_request_id = format!("contract-request-{suffix}");

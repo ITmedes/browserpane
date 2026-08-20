@@ -2,7 +2,7 @@ use super::*;
 
 #[tokio::test]
 async fn workflow_runs_expose_runtime_hold_and_release_semantics() {
-    let (app, token, _) = test_router_with_workflow_lifecycle(WorkflowWorkerConfig {
+    let (app, token, state) = test_router_with_workflow_lifecycle(WorkflowWorkerConfig {
         docker_bin: std::path::PathBuf::from("/bin/sh"),
         image: "deploy-workflow-worker:test".to_string(),
         max_active_workers: 1,
@@ -41,28 +41,28 @@ async fn workflow_runs_expose_runtime_hold_and_release_semantics() {
     .await;
     let workflow_id = workflow["id"].as_str().unwrap().to_string();
 
-    response_json(
-        app.clone()
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri(format!("/api/v1/workflows/{workflow_id}/versions"))
-                    .header("authorization", bearer(&token))
-                    .header("content-type", "application/json")
-                    .body(Body::from(
-                        json!({
-                            "version": "v1",
-                            "executor": "manual_test",
-                            "entrypoint": "workflows/runtime-hold/run.mjs"
-                        })
-                        .to_string(),
-                    ))
-                    .unwrap(),
-            )
-            .await
-            .unwrap(),
-    )
-    .await;
+    let owner = state.auth_validator.authenticate(&token).await.unwrap();
+    state
+        .session_store
+        .create_workflow_definition_version(
+            &owner,
+            PersistWorkflowDefinitionVersionRequest {
+                workflow_definition_id: Uuid::parse_str(&workflow_id).unwrap(),
+                version: "v1".to_string(),
+                executor: "manual_test".to_string(),
+                entrypoint: "workflows/runtime-hold/run.mjs".to_string(),
+                source: None,
+                input_schema: None,
+                output_schema: None,
+                package: None,
+                default_session: None,
+                allowed_credential_binding_ids: Vec::new(),
+                allowed_extension_ids: Vec::new(),
+                allowed_file_workspace_ids: Vec::new(),
+            },
+        )
+        .await
+        .unwrap();
 
     let live_hold_run = response_json(
         app.clone()

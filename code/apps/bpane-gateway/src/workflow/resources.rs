@@ -14,11 +14,11 @@ use crate::session_control::{ProjectAdmissionDecision, SessionProjectResource};
 
 use super::{
     StoredWorkflowDefinition, StoredWorkflowDefinitionVersion, StoredWorkflowRun,
-    StoredWorkflowRunEvent, StoredWorkflowRunLog, WorkflowRunAdmissionResource,
-    WorkflowRunEventSource, WorkflowRunInterventionResource, WorkflowRunLogSource,
-    WorkflowRunProducedFile, WorkflowRunRuntimeResource, WorkflowRunSourceSnapshot,
-    WorkflowRunState, WorkflowRunWorkspaceInput, WorkflowSource, WorkflowSourceFileListing,
-    WorkflowSourcePreview,
+    StoredWorkflowRunEvent, StoredWorkflowRunLog, WorkflowPackageCompatibility,
+    WorkflowPackageManifest, WorkflowRunAdmissionResource, WorkflowRunEventSource,
+    WorkflowRunInterventionResource, WorkflowRunLogSource, WorkflowRunProducedFile,
+    WorkflowRunRuntimeResource, WorkflowRunSourceSnapshot, WorkflowRunState,
+    WorkflowRunWorkspaceInput, WorkflowSource, WorkflowSourceFileListing, WorkflowSourcePreview,
 };
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -115,6 +115,8 @@ pub struct WorkflowDefinitionVersionResource {
     pub source: Option<WorkflowSource>,
     pub input_schema: Option<Value>,
     pub output_schema: Option<Value>,
+    pub package: Option<WorkflowPackageManifest>,
+    pub compatibility: WorkflowPackageCompatibility,
     pub default_session: Option<Value>,
     pub allowed_credential_binding_ids: Vec<String>,
     pub allowed_extension_ids: Vec<String>,
@@ -264,6 +266,11 @@ impl StoredWorkflowDefinitionVersion {
             source: self.source.clone(),
             input_schema: self.input_schema.clone(),
             output_schema: self.output_schema.clone(),
+            package: self.package.clone(),
+            compatibility: WorkflowPackageCompatibility::for_version(
+                &self.executor,
+                self.package.as_ref(),
+            ),
             default_session: self.default_session.clone(),
             allowed_credential_binding_ids: self.allowed_credential_binding_ids.clone(),
             allowed_extension_ids: self.allowed_extension_ids.clone(),
