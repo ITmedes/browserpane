@@ -10,6 +10,7 @@ import {
   joinSelectedSession,
   openAdminTab,
 } from './admin-smoke-lib.mjs';
+import { resolveNewSessionId } from './new-session-selection.mjs';
 import { DEFAULTS, createLogger, fetchAuthConfig, fetchJson, launchChrome, parseSmokeArgs, poll } from './workflow-smoke-lib.mjs';
 
 async function run() {
@@ -41,6 +42,7 @@ async function run() {
 
     log('Authorizing a second connected session without clearing the first.');
     await disconnectEmbeddedBrowser(page, options);
+    await ensureAdminLoggedIn(page, options);
     sessionB = await createAndConnectSession(page, options);
     await assertMcpEndpoint(page, options, bridge, sessionB);
     await clickMcpAction(page, options, 'mcp-delegate', 'Authorized');
@@ -80,9 +82,11 @@ async function resolveMcpBridge(options) {
 
 async function createAndConnectSession(page, options) {
   await openAdminTab(page, 'sessions');
-  const previousSessionId = await readSelectedSessionId(page);
+  await waitForEnabled(page.getByTestId('session-new'), options, 'admin new session');
+  const previousSessionIds = await readVisibleSessionIds(page);
   await page.getByTestId('session-new').click();
-  const sessionId = await resolveSelectedSessionId(page, options, previousSessionId);
+  const sessionId = await resolveCreatedSessionId(page, options, previousSessionIds);
+  await selectSession(page, options, sessionId);
   await joinSelectedSession(page, options);
   await page.locator('[data-testid="browser-viewport"] canvas').first().waitFor({
     state: 'visible',
@@ -158,15 +162,17 @@ async function waitForMcpStatus(page, options, status) {
   }
 }
 
-async function resolveSelectedSessionId(page, options, previousSessionId) {
-  return await poll('new admin selected session', async () => {
-    return await readSelectedSessionId(page);
-  }, (sessionId) => Boolean(sessionId && sessionId !== previousSessionId), options.connectTimeoutMs);
+async function resolveCreatedSessionId(page, options, previousSessionIds) {
+  return await poll('new admin session row', async () => {
+    return resolveNewSessionId(previousSessionIds, await readVisibleSessionIds(page));
+  }, Boolean, options.connectTimeoutMs);
 }
 
 async function selectSession(page, options, sessionId) {
   await openAdminTab(page, 'sessions');
-  await page.locator(`[data-testid="session-row"][data-session-id="${sessionId}"]`).click();
+  if (await readSelectedSessionId(page) !== sessionId) {
+    await page.locator(`[data-testid="session-row"][data-session-id="${sessionId}"]`).click();
+  }
   await poll('selected admin session', async () => {
     return await readSelectedSessionId(page);
   }, (selectedId) => selectedId === sessionId, options.connectTimeoutMs);
@@ -178,6 +184,12 @@ async function readSelectedSessionId(page) {
     return '';
   }
   return await row.getAttribute('data-session-id') ?? '';
+}
+
+async function readVisibleSessionIds(page) {
+  return await page.locator('[data-testid="session-row"]').evaluateAll((rows) => rows
+    .map((row) => row.getAttribute('data-session-id'))
+    .filter((sessionId) => typeof sessionId === 'string' && sessionId.length > 0));
 }
 
 async function waitForEnabled(locator, options, description) {

@@ -18,11 +18,14 @@ import {
 } from './workflow-smoke-lib.mjs';
 
 const EXPECTED_CLASSIFICATIONS = Object.freeze({
-  'ui-primary': 108,
+  'ui-primary': 117,
   'ui-evidence': 6,
-  'api-companion': 5,
+  'api-companion': 9,
   'internal-worker': 12,
 });
+const EXPECTED_OPERATION_COUNT = Object.values(EXPECTED_CLASSIFICATIONS)
+  .reduce((total, count) => total + count, 0);
+const EXPECTED_EXAMPLE_COUNT = 22;
 
 async function run() {
   const options = parseSmokeArgs(process.argv.slice(2), 'run-admin-unified-api-companion-smoke.mjs');
@@ -110,8 +113,8 @@ async function loadPublishedEvidence(origin) {
 function assertEvidence(evidence) {
   assert.equal(evidence.operations.version, 1);
   assert.equal(evidence.operations.contract, 'bpane-control-v1');
-  assert.equal(evidence.operations.operations.length, 131);
-  assert.equal(evidence.examples.examples.length, 19);
+  assert.equal(evidence.operations.operations.length, EXPECTED_OPERATION_COUNT);
+  assert.equal(evidence.examples.examples.length, EXPECTED_EXAMPLE_COUNT);
   assert.equal(evidence.compatibility.surfaces.length, 14);
   assert.match(evidence.openapi, /title: BrowserPane Control Plane API/);
   for (const [classification, count] of Object.entries(EXPECTED_CLASSIFICATIONS)) {
@@ -126,7 +129,7 @@ function assertEvidence(evidence) {
 async function verifyApiCompanion(page, options, accessToken) {
   await page.goto(adminRouteUrl(options, 'api'), { waitUntil: 'domcontentloaded' });
   await page.getByTestId('api-companion-workspace').waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
-  await waitForContains(page, options, 'api-summary-total', '131');
+  await waitForContains(page, options, 'api-summary-total', String(EXPECTED_OPERATION_COUNT));
   for (const id of ['projects', 'sessions', 'workflows', 'file-workspaces']) {
     await page.getByTestId(`api-task-${id}`).waitFor({ state: 'visible' });
   }
@@ -146,19 +149,24 @@ async function verifyApiCompanion(page, options, accessToken) {
 async function verifyCoverage(page, options) {
   await page.goto(adminRouteUrl(options, 'coverage'), { waitUntil: 'domcontentloaded' });
   await page.getByTestId('api-coverage-workspace').waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
-  assert.equal(await page.getByTestId('api-operation-row').count(), 131);
+  assert.equal(await page.getByTestId('api-operation-row').count(), EXPECTED_OPERATION_COUNT);
   for (const [classification, count] of Object.entries(EXPECTED_CLASSIFICATIONS)) {
     await page.getByTestId('api-coverage-classification').selectOption(classification);
-    await waitForContains(page, options, 'api-coverage-result-count', `${count} of 131`);
+    await waitForContains(page, options, 'api-coverage-result-count', `${count} of ${EXPECTED_OPERATION_COUNT}`);
     assert.equal(await page.getByTestId('api-operation-row').count(), count);
   }
   await page.getByTestId('api-coverage-clear').click();
-  await waitForContains(page, options, 'api-coverage-result-count', '131 of 131');
+  await waitForContains(
+    page,
+    options,
+    'api-coverage-result-count',
+    `${EXPECTED_OPERATION_COUNT} of ${EXPECTED_OPERATION_COUNT}`,
+  );
   await page.goto(`${adminRouteUrl(options, 'coverage')}?operation=createProject`, { waitUntil: 'domcontentloaded' });
-  await waitForContains(page, options, 'api-coverage-result-count', '1 of 131');
+  await waitForContains(page, options, 'api-coverage-result-count', `1 of ${EXPECTED_OPERATION_COUNT}`);
   assert.equal(await page.getByTestId('api-operation-row').getAttribute('data-operation-id'), 'createProject');
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await waitForContains(page, options, 'api-coverage-result-count', '1 of 131');
+  await waitForContains(page, options, 'api-coverage-result-count', `1 of ${EXPECTED_OPERATION_COUNT}`);
   await assertNoBodyHorizontalOverflow(page, 'API coverage route');
 }
 
