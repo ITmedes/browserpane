@@ -5,21 +5,24 @@ short, bounded Codex sessions while retaining the repository's issue, plan,
 test, review, and documentation rules.
 
 ```text
-Ready issue? -- no --> qualify one Qualified issue -- blocked/ambiguous --> stop
-     | yes                         |
-     +----------------------------+ Ready
-                                  v
-                     propose -> ready PR -> driver watches checks
-                                                   | green -> current with main?
-                                                   |          | no  -> update branch -> watch
-                                                   |          | yes -> stop for review (default)
-                                                   |                   or merge (explicit opt-in)
-                                                   + red -> repair -> watch (bounded)
+Ready issue? -- yes -------------------------------------> propose implementation PR
+     | no
+     v
+qualify one Qualified issue
+     | ready --------------------------------------------> propose implementation PR
+     | resolvable requirements gaps -> specify docs PR --+
+     | unresolved decision / unsafe state -> stop        |
+                                                         v
+                                           driver watches checks
+                                             | red -> repair -> watch (bounded)
+                                             | green/current -> review (default)
+                                             |                 or opt-in merge
+                                             + merged -> next iteration requalifies
 ```
 
-Qualification, proposal, and repair use separate Codex sessions. They never
-wait for CI and never merge. The shell driver owns those operations, so each
-model session has one auditable responsibility.
+Qualification, requirements specification, proposal, and repair use separate
+Codex sessions. They never wait for CI and never merge. The shell driver owns
+those operations, so each model session has one auditable responsibility.
 
 ## Prerequisites
 
@@ -72,15 +75,16 @@ touch dev_loop/STOP
 
 Ctrl-C also stops the driver. A restart adopts the oldest open
 `codex/BPANE-` PR rather than proposing a second one. Draft Codex PRs are left
-open for manual inspection because a terminated proposal session may not have
-finished its validation.
+open for manual inspection because a terminated specification or proposal
+session may not have finished its validation.
 
 ## What Is Versioned
 
 | Path | Purpose |
 |---|---|
-| `loop.sh` | Synchronize, qualify, propose, watch, repair, update, optionally merge, and journal. |
-| `routines/qualify.md` | Audits and promotes at most one roadmap-prioritized Qualified issue. |
+| `loop.sh` | Synchronize, qualify, specify or propose, watch, repair, update, optionally merge, and journal. |
+| `routines/qualify.md` | Audits and either promotes one Qualified issue or identifies one resolvable requirements gap set. |
+| `routines/specify.md` | Reconciles one selected issue and focused plan in a documentation-only PR. |
 | `routines/propose.md` | Implements one canonical Ready issue and opens one ready PR. |
 | `routines/repair.md` | Diagnoses one failed check set or merge conflict and makes one bounded repair decision. |
 | `schemas/routine-result.schema.json` | Constrains the final output of every non-interactive Codex session. |
@@ -97,6 +101,7 @@ diagnostic data.
 |---|---:|---|
 | `ITERATIONS` | `0` | `0` continues until stopped or no Ready work remains. |
 | `MAX_REPAIRS` | `4` | Repair sessions allowed for one PR. |
+| `MAX_SPECIFICATION_CYCLES` | `3` | Requirements-specification PR cycles allowed in one loop run. |
 | `MAX_UPDATE_BRANCH` | `3` | Times a green PR may be updated after `main` moves. |
 | `CI_TIMEOUT_SECONDS` | `5400` | Maximum wait for one PR check set. |
 | `POLL_SECONDS` | `30` | PR check polling interval. |
@@ -120,12 +125,12 @@ diagnostic data.
 | `MODEL` | CLI default | Optional Codex model override. |
 | `CODEX_PROFILE` | none | Optional Codex configuration profile. |
 
-`danger-full-access` plus `never` is intentionally explicit because proposal
-and repair sessions need repository writes, networked GitHub access, and local
-test execution without an interactive approval prompt. Use this only on a
-controlled workstation with credentials and repository access you are willing
-to delegate. Override the sandbox when a narrower local setup still supports
-the required work.
+`danger-full-access` plus `never` is intentionally explicit because
+specification, proposal, and repair sessions need repository writes, networked
+GitHub access, and local validation without an interactive approval prompt.
+Use this only on a controlled workstation with credentials and repository
+access you are willing to delegate. Override the sandbox when a narrower local
+setup still supports the required work.
 
 ## BrowserPane-Specific Delivery Rules
 
@@ -134,9 +139,16 @@ the required work.
   `AUTO_QUALIFY=1`, a separate session may promote exactly one
   `state:qualified` issue after verifying roadmap order, dependencies, focused
   plan, bounded scope, risks, acceptance criteria, and test/smoke evidence.
-- Qualification never creates issues, changes roadmap priority, implements
-  code, creates a branch/PR, waits for CI, or merges. Ambiguity, missing plans,
-  unmet dependencies, overlap, or unresolved decisions stop without promotion.
+- When the direction is decided but the issue/plan contract has concrete gaps
+  that current evidence can resolve, qualification may instead route exactly
+  one issue to a fresh specification session. That session may reconcile the
+  canonical issue and directly related planning docs in one PR, but it cannot
+  implement product code or change lifecycle labels.
+- Qualification never edits Git, creates a PR, implements code, waits for CI,
+  or merges. Unresolved product/security/legal decisions, unmet dependencies,
+  ambiguous ordering, or ownership conflicts stop without mutation.
+- A specification PR must merge before a later iteration reruns qualification.
+  Specification and product implementation never occur in the same iteration.
 - Every issue needs a focused `docs/*_PLAN.md` with business case, use case,
   contract impact, security, tests, manual smoke, and Definition of Done.
 - Proposal PRs use `Closes #N` only after the full bounded issue is complete.
@@ -158,12 +170,21 @@ The driver leaves branches and PRs intact for diagnosis:
 
 - `no-proposal`: no safe Ready issue was available.
 - `no-qualification`: no Qualified candidate passed the bounded readiness
-  audit.
+  audit and no evidence-backed specification cycle was safe.
+- `specification-failed`: the dedicated requirements session or its structured
+  result failed.
+- `specification-unverified`: the reported issue, lifecycle state, PR, or
+  commit did not match the driver's live verification.
+- `specification-budget-exhausted`: the run consumed
+  `MAX_SPECIFICATION_CYCLES`; inspect the remaining decision or recurring gap
+  before restarting.
 - `low-disk`: available repository-filesystem capacity fell below
   `MIN_FREE_DISK_GB` or could not be measured; clean local storage or adjust
   the threshold explicitly before restarting.
 - `qualified-awaiting-proposal`: qualification completed and STOP was consumed
   before a proposal session started.
+- `qualification-awaiting-specification`: a gap set was identified and STOP
+  was consumed before the specification session started.
 - `green-awaiting-review`: checks passed and automatic merge was disabled.
 - `draft-pr`: an interrupted proposal left an incomplete draft.
 - `ci-timeout`: the PR check set did not conclude in time.

@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 
 # BrowserPane's closed local Codex implementation loop.
-# Codex qualifies one issue, proposes one PR, or repairs one PR in separate
-# sessions. This driver waits, updates, and optionally merges. Every external
-# wait and every repair budget is bounded.
+# Codex qualifies one issue, specifies one requirements gap set, proposes one
+# implementation PR, or repairs one PR in separate sessions. This driver waits,
+# updates, and optionally merges. Every external wait and repair budget is
+# bounded.
 
 set -euo pipefail
 
@@ -12,6 +13,7 @@ repo="$(cd "$here/.." && pwd)"
 
 ITERATIONS="${ITERATIONS:-0}"
 MAX_REPAIRS="${MAX_REPAIRS:-4}"
+MAX_SPECIFICATION_CYCLES="${MAX_SPECIFICATION_CYCLES:-3}"
 MAX_UPDATE_BRANCH="${MAX_UPDATE_BRANCH:-3}"
 CI_TIMEOUT_SECONDS="${CI_TIMEOUT_SECONDS:-5400}"
 POLL_SECONDS="${POLL_SECONDS:-30}"
@@ -72,7 +74,7 @@ validate_config() {
     value="${!name}"
     is_uint "$value" || die "$name must be a non-negative integer, got '$value'."
   done
-  for name in CI_TIMEOUT_SECONDS POLL_SECONDS FAIL_FAST_GRACE SETTLE_SECONDS SESSION_TIMEOUT_SECONDS POST_MERGE_TIMEOUT_SECONDS; do
+  for name in MAX_SPECIFICATION_CYCLES CI_TIMEOUT_SECONDS POLL_SECONDS FAIL_FAST_GRACE SETTLE_SECONDS SESSION_TIMEOUT_SECONDS POST_MERGE_TIMEOUT_SECONDS; do
     value="${!name}"
     is_positive_uint "$value" || die "$name must be a positive integer, got '$value'."
   done
@@ -175,7 +177,8 @@ validate_result() {
   jq -e '
     type == "object" and
     ((keys | sort) == (["commit_sha","issue_number","pr_url","reason","run_id","status","summary"] | sort)) and
-    (.status == "QUALIFIED" or .status == "NO_QUALIFICATION" or
+    (.status == "QUALIFIED" or .status == "NEEDS_SPECIFICATION" or
+     .status == "NO_QUALIFICATION" or .status == "SPECIFIED" or
      .status == "PROPOSED" or .status == "NO_PROPOSAL" or
      .status == "REPAIRED" or .status == "RERUN_ONLY" or .status == "HALT") and
     ((.issue_number == null) or ((.issue_number | type) == "number" and .issue_number >= 1 and .issue_number == (.issue_number | floor))) and
@@ -189,9 +192,13 @@ validate_result() {
      elif .status == "NO_QUALIFICATION" then
        .pr_url == null and .commit_sha == null and .run_id == null and
        (.reason | type) == "string" and (.reason | length) > 0
-     elif .status == "PROPOSED" then
+     elif .status == "NEEDS_SPECIFICATION" then
+       .issue_number != null and .pr_url == null and .commit_sha == null and .run_id == null and
+       (.reason | type) == "string" and (.reason | length) > 0
+     elif .status == "SPECIFIED" or .status == "PROPOSED" then
        .issue_number != null and (.pr_url | type) == "string" and (.pr_url | startswith("https://github.com/")) and
-       (.commit_sha | type) == "string" and (.commit_sha | test("^[0-9a-f]{7,64}$"))
+       (.commit_sha | type) == "string" and (.commit_sha | test("^[0-9a-f]{7,64}$")) and
+       .run_id == null and .reason == null
      elif .status == "REPAIRED" then
        .issue_number != null and (.pr_url | type) == "string" and
        (.commit_sha | type) == "string" and (.commit_sha | test("^[0-9a-f]{7,64}$"))
@@ -292,8 +299,13 @@ run_ids_from_links() {
 
 automation_pr() {
   gh pr list --state open --limit 100 \
-    --json number,headRefName,isDraft,url,title,mergeable,mergeStateStatus \
+    --json number,headRefName,headRefOid,isDraft,url,title,mergeable,mergeStateStatus \
     --jq "[.[] | select(.headRefName | startswith(\"$BRANCH_PREFIX\"))] | sort_by(.number) | .[0] // empty"
+}
+
+automation_pr_count() {
+  gh pr list --state open --limit 100 --json headRefName \
+    --jq "[.[] | select(.headRefName | startswith(\"$BRANCH_PREFIX\"))] | length"
 }
 
 human_prs() {
@@ -349,6 +361,7 @@ preflight_tools() {
   require awk; require bash; require df; require git; require gh; require jq; require "$CODEX_BIN"
   [[ -f "$RESULT_SCHEMA" ]] || die "missing result schema: $RESULT_SCHEMA"
   [[ -f "$here/routines/qualify.md" ]] || die "missing qualification routine"
+  [[ -f "$here/routines/specify.md" ]] || die "missing specification routine"
   [[ -f "$here/routines/propose.md" ]] || die "missing proposal routine"
   [[ -f "$here/routines/repair.md" ]] || die "missing repair routine"
   jq -e . "$RESULT_SCHEMA" >/dev/null || die "result schema is not valid JSON"
@@ -607,6 +620,12 @@ enforce_iteration_disk_space() {
   die "disk space guard stopped the loop before $phase"
 }
 
+reserve_specification_cycle() {
+  local used="${specification_cycles:-0}"
+  (( used < MAX_SPECIFICATION_CYCLES )) || return 1
+  specification_cycles=$((used + 1))
+}
+
 qualify() {
   local number="$1"
   local context="$LOG_DIR/$number-qualify.context.md"
@@ -623,7 +642,7 @@ qualify() {
     printf 'Live Ready issues (must still be empty):\n\n%s\n\n' "$(ready_issues || printf unavailable)"
     printf 'Live Qualified candidates:\n\n%s\n\n' "$(qualified_issues || printf unavailable)"
     printf 'Open non-Codex pull requests:\n\n%s\n\n' "$(human_prs || printf unavailable)"
-    printf 'Qualification may comment on and promote at most one issue. '
+    printf 'Qualification may comment on and promote at most one fully ready issue, or identify one bounded requirements gap set. '
     printf 'It must not edit Git, implement code, create a PR, wait for CI, or merge.\n'
   } > "$context"
   build_prompt "$here/routines/qualify.md" "$context" "$prompt"
@@ -639,6 +658,7 @@ qualification_gate() {
   local qualified_before qualification_result qualification_status post_ready_count
   QUALIFIED_ISSUE=""
   QUALIFICATION_REASON=""
+  SPECIFICATION_ISSUE=""
 
   if ! ready_count="$(state_issue_count state:ready)" || ! is_uint "$ready_count"; then
     QUALIFICATION_REASON="could not determine the live Ready issue count"
@@ -686,6 +706,23 @@ qualification_gate() {
       QUALIFICATION_REASON="$(routine_field "$qualification_result" reason)"
       return 10
       ;;
+    NEEDS_SPECIFICATION)
+      SPECIFICATION_ISSUE="$(routine_field "$qualification_result" issue_number)"
+      QUALIFICATION_REASON="$(routine_field "$qualification_result" reason)"
+      if ! grep -Fxq "$SPECIFICATION_ISSUE" <<< "$qualified_before"; then
+        QUALIFICATION_REASON="qualification requested specification for issue #$SPECIFICATION_ISSUE, which was not in the original Qualified queue"
+        return 21
+      fi
+      if ! post_ready_count="$(state_issue_count state:ready)"; then
+        QUALIFICATION_REASON="could not verify the Ready queue after specification routing"
+        return 21
+      fi
+      if [[ "$post_ready_count" != "0" || "$(issue_state_labels "$SPECIFICATION_ISSUE")" != "state:qualified" ]]; then
+        QUALIFICATION_REASON="qualification requested specification but issue #$SPECIFICATION_ISSUE did not remain solely Qualified or the Ready queue changed"
+        return 21
+      fi
+      return 12
+      ;;
     HALT)
       QUALIFICATION_REASON="$(routine_field "$qualification_result" reason)"
       return 11
@@ -695,6 +732,53 @@ qualification_gate() {
       return 22
       ;;
   esac
+}
+
+specify() {
+  local number="$1" issue_number="$2" qualification_reason="$3"
+  local context="$LOG_DIR/$number-specify.context.md"
+  local prompt="$LOG_DIR/$number-specify.prompt.md" raw="$LOG_DIR/$number-specify.jsonl"
+  local final="$LOG_DIR/$number-specify.result.json"
+  {
+    printf '# This run\n\n'
+    printf -- '- Repository: `%s`\n' "$repo"
+    printf -- '- Default branch: `%s` at `%s`\n' "$DEFAULT_BRANCH" "$(git rev-parse "origin/$DEFAULT_BRANCH")"
+    printf -- '- Iteration: `%s`\n' "$number"
+    printf -- '- Approved GitHub identity: `%s`\n' "$GITHUB_LOGIN"
+    printf -- '- Selected Qualified issue: `#%s`\n' "$issue_number"
+    printf -- '- Latest main Validation: %s\n' "$(latest_workflow_line validation.yml)"
+    printf -- '- Latest main Compose: %s\n\n' "$(latest_workflow_line compose.yml)"
+    printf 'Qualification gap report:\n\n%s\n\n' "$qualification_reason"
+    printf 'Live issue snapshot:\n\n'
+    gh issue view "$issue_number" --json number,title,state,labels,milestone,body,url \
+      --jq '"# \(.number) \(.title)\n\nState: \(.state)\nLabels: " + ([.labels[].name] | join(", ")) + "\nMilestone: \(.milestone.title // "none")\nURL: \(.url)\n\n" + .body'
+    printf '\n\nOpen non-Codex pull requests:\n\n%s\n\n' "$(human_prs || printf unavailable)"
+    printf 'Specification may reconcile this issue and its directly related planning documents only. '
+    printf 'It must not implement product code, promote lifecycle state, wait for CI, or merge.\n'
+  } > "$context"
+  build_prompt "$here/routines/specify.md" "$context" "$prompt"
+  step "iteration $number | Codex requirements specification for #$issue_number"
+  local rc=0
+  run_session "$prompt" "$raw" "$final" || rc=$?
+  record_usage "$raw"
+  return "$rc"
+}
+
+verified_specification_pr() {
+  local result="$1" expected_issue="$2" reported_issue reported_url reported_sha
+  local pr_count pr_json
+  reported_issue="$(routine_field "$result" issue_number)"
+  reported_url="$(routine_field "$result" pr_url)"
+  reported_sha="$(routine_field "$result" commit_sha)"
+  [[ "$reported_issue" == "$expected_issue" ]] || return 1
+  [[ "$(issue_state_labels "$expected_issue")" == "state:qualified" ]] || return 1
+  pr_count="$(automation_pr_count)" || return 1
+  [[ "$pr_count" == "1" ]] || return 1
+  pr_json="$(automation_pr)" || return 1
+  [[ -n "$pr_json" ]] || return 1
+  [[ "$(jq -r .url <<< "$pr_json")" == "$reported_url" ]] || return 1
+  [[ "$(jq -r .headRefOid <<< "$pr_json")" == "$reported_sha" ]] || return 1
+  printf '%s\n' "$pr_json"
 }
 
 propose() {
@@ -813,8 +897,9 @@ trap on_exit EXIT
 trap 'printf "\n"; warn "interrupted"; exit 130' INT TERM
 
 printf '%sBrowserPane Codex development loop | run %s%s\n' "$c_b" "$RUN_ID" "$c_reset"
-say "iterations=$ITERATIONS repairs=$MAX_REPAIRS min_free_disk_gb=$MIN_FREE_DISK_GB auto_qualify=$AUTO_QUALIFY auto_merge=$AUTO_MERGE logs=dev_loop/runs/$RUN_ID"
+say "iterations=$ITERATIONS repairs=$MAX_REPAIRS specification_cycles=$MAX_SPECIFICATION_CYCLES min_free_disk_gb=$MIN_FREE_DISK_GB auto_qualify=$AUTO_QUALIFY auto_merge=$AUTO_MERGE logs=dev_loop/runs/$RUN_ID"
 
+specification_cycles=0
 while :; do
   if (( ITERATIONS > 0 && iteration >= ITERATIONS )); then
     good "reached $ITERATIONS iteration(s)"
@@ -837,6 +922,7 @@ while :; do
     pr="$(jq -r .number <<< "$pr_json")"
     warn "adopting open Codex PR #$pr"
   else
+    next_phase="proposal"
     enforce_iteration_disk_space "qualification"
     qualification_gate_rc=0
     qualification_gate "$n" || qualification_gate_rc=$?
@@ -859,6 +945,19 @@ while :; do
         record_outcome "halted"
         die "qualification halted: $QUALIFICATION_REASON"
         ;;
+      12)
+        if ! reserve_specification_cycle; then
+          record_outcome "specification-budget-exhausted"
+          die "requirements specification budget of $MAX_SPECIFICATION_CYCLES cycle(s) was exhausted in this run"
+        fi
+        next_phase="specification"
+        good "issue #$SPECIFICATION_ISSUE needs bounded requirements specification"
+        say "$QUALIFICATION_REASON"
+        if stop_requested; then
+          record_outcome "qualification-awaiting-specification"
+          exit 0
+        fi
+        ;;
       20)
         record_outcome "qualification-failed"
         die "$QUALIFICATION_REASON"
@@ -873,34 +972,64 @@ while :; do
         ;;
     esac
 
-    enforce_iteration_disk_space "proposal"
-    proposal_rc=0
-    propose "$n" || proposal_rc=$?
-    result="$LOG_DIR/$n-propose.result.json"
-    if (( proposal_rc != 0 )) || ! validate_result "$result"; then
-      record_outcome "proposal-failed"
-      die "proposal session failed; inspect $LOG_DIR/$n-propose.jsonl and $result"
+    if [[ "$next_phase" == "specification" ]]; then
+      enforce_iteration_disk_space "requirements specification"
+      specification_rc=0
+      specify "$n" "$SPECIFICATION_ISSUE" "$QUALIFICATION_REASON" || specification_rc=$?
+      result="$LOG_DIR/$n-specify.result.json"
+      if (( specification_rc != 0 )) || ! validate_result "$result"; then
+        record_outcome "specification-failed"
+        die "specification session failed; inspect $LOG_DIR/$n-specify.jsonl and $result"
+      fi
+      specification_status="$(routine_field "$result" status)"
+      case "$specification_status" in
+        SPECIFIED)
+          pr_json="$(verified_specification_pr "$result" "$SPECIFICATION_ISSUE" || true)"
+          if [[ -z "$pr_json" ]]; then
+            record_outcome "specification-unverified"
+            die "specification result did not match exactly one Codex PR while issue #$SPECIFICATION_ISSUE remained Qualified"
+          fi
+          ;;
+        HALT)
+          record_outcome "halted"
+          die "specification halted: $(routine_field "$result" reason)"
+          ;;
+        *)
+          record_outcome "invalid-specification-status"
+          die "specification returned unexpected status $specification_status"
+          ;;
+      esac
+      pr="$(jq -r .number <<< "$pr_json")"
+    else
+      enforce_iteration_disk_space "proposal"
+      proposal_rc=0
+      propose "$n" || proposal_rc=$?
+      result="$LOG_DIR/$n-propose.result.json"
+      if (( proposal_rc != 0 )) || ! validate_result "$result"; then
+        record_outcome "proposal-failed"
+        die "proposal session failed; inspect $LOG_DIR/$n-propose.jsonl and $result"
+      fi
+      proposal_status="$(routine_field "$result" status)"
+      case "$proposal_status" in
+        PROPOSED) ;;
+        NO_PROPOSAL)
+          record_outcome "no-proposal"
+          good "no proposal: $(routine_field "$result" reason)"
+          break
+          ;;
+        HALT)
+          record_outcome "halted"
+          die "proposal halted: $(routine_field "$result" reason)"
+          ;;
+        *)
+          record_outcome "invalid-proposal-status"
+          die "proposal returned unexpected status $proposal_status"
+          ;;
+      esac
+      pr_json="$(automation_pr || true)"
+      [[ -n "$pr_json" ]] || { record_outcome "missing-pr"; die "proposal reported PROPOSED but no Codex PR exists"; }
+      pr="$(jq -r .number <<< "$pr_json")"
     fi
-    proposal_status="$(routine_field "$result" status)"
-    case "$proposal_status" in
-      PROPOSED) ;;
-      NO_PROPOSAL)
-        record_outcome "no-proposal"
-        good "no proposal: $(routine_field "$result" reason)"
-        break
-        ;;
-      HALT)
-        record_outcome "halted"
-        die "proposal halted: $(routine_field "$result" reason)"
-        ;;
-      *)
-        record_outcome "invalid-proposal-status"
-        die "proposal returned unexpected status $proposal_status"
-        ;;
-    esac
-    pr_json="$(automation_pr || true)"
-    [[ -n "$pr_json" ]] || { record_outcome "missing-pr"; die "proposal reported PROPOSED but no Codex PR exists"; }
-    pr="$(jq -r .number <<< "$pr_json")"
   fi
 
   pr_url="$(jq -r .url <<< "$pr_json")"

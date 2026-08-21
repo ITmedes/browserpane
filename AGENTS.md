@@ -398,8 +398,13 @@ Run these where applicable:
   `AUTO_QUALIFY=1`, a separate qualification session may promote exactly one
   roadmap-prioritized `state:qualified` issue only after its dependencies,
   issue/plan contract, bounded scope, risks, acceptance criteria, and test
-  evidence pass; ambiguity must stop without promotion. Qualification,
-  proposal, and repair remain separate sessions, and automatic merging stays
+  evidence pass. If the direction is decided but the issue/plan has concrete
+  evidence-backed omissions, qualification may route exactly one issue to a
+  fresh documentation-only specification session and PR. Unresolved product,
+  security, legal, dependency, ordering, or ownership decisions must stop.
+  Qualification, specification, proposal, and repair remain separate sessions;
+  specification never promotes or implements the issue, and implementation
+  requires a later post-merge qualification pass. Automatic merging stays
   disabled unless a maintainer explicitly enables it. The loop stops local
   work below `MIN_FREE_DISK_GB` (50 GiB by default) and never performs automatic
   cleanup. Read `dev_loop/README.md` before running it; never commit generated

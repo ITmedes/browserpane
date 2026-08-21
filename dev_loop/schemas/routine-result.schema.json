@@ -8,7 +8,9 @@
       "type": "string",
       "enum": [
         "QUALIFIED",
+        "NEEDS_SPECIFICATION",
         "NO_QUALIFICATION",
+        "SPECIFIED",
         "PROPOSED",
         "NO_PROPOSAL",
         "REPAIRED",
