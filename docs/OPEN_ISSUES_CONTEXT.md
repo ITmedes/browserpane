@@ -1,10 +1,9 @@
 # Open GitHub Issues Context
 
 Created: 2026-07-10
-Revalidated: 2026-08-20 after #233 merged through PR #234, Compose runner
-reliability merged through #235/PR #236, and the Phase 0 issue set was narrowed
-and split through #47, #172, #174, #180, and new follow-up #240; contributor
-automation issues #241, #244, and #246 have focused plans
+Revalidated: 2026-08-21 for the #172 review candidate based on `main` at
+`ab9dc564`; the bounded Workflow Endpoint has focused and real-Compose evidence,
+while #174 remains the next Pilot activity only after review and merge
 
 This document maps the current `docs/` workspace to the live open GitHub
 issues for `ITmedes/browserpane`. It is the bridge between the consolidated
@@ -327,7 +326,7 @@ issue and capture the exact slice boundary in a checked-in `docs/*_PLAN.md`:
 | Active Operator Product work | none; `#124` qualified | Admin-new is promoted; select #124 only when session-template catalog work outranks the current Production slice. |
 | Items 10-19: admin-new parity and promotion work | `#154`-`#163`, with session templates still tracked by `#124` | Use the matching focused issue and keep old admin regression scope explicit. |
 | Items 20-26: scalability, runtime hygiene, docs, performance, and refactors | `#164`-`#170` | Use the matching focused issue and require validation evidence before broad refactors. |
-| Pilot Value | closed `#47`; `#172` is the next qualification candidate, then `#174`; `#180` is a parallel gate | The package contract merged through PR #242. Audit and implement the polling endpoint next, then deliver one real activity. Pull in only selected conditional controls. |
+| Pilot Value | closed `#47`; `#172` is in review, then `#174`; `#180` is a parallel gate | Review and merge the polling endpoint candidate, then deliver one real activity. Pull in only selected conditional controls. |
 | Production/Enterprise and Innovation | #233 completed; broad issues plus `#175`-`#178`, `#240`, and `#171` qualified | Reassess after Phase 0 evidence; #240 and #171 must not displace the current Pilot sequence. |
 
 ## Issue Hygiene Notes

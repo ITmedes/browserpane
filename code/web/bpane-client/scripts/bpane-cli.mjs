@@ -37,6 +37,7 @@ const KNOWN_OPTIONS = new Set([
   'cleanup-action',
   'client-id',
   'client-request-id',
+  'idempotency-key',
   'config',
   'confirm',
   'create-session',
@@ -45,6 +46,7 @@ const KNOWN_OPTIONS = new Set([
   'default-label',
   'description',
   'dry-run',
+  'endpoint-purpose',
   'egress-profile-id',
   'external-id',
   'extension-id',
@@ -84,6 +86,7 @@ const KNOWN_OPTIONS = new Set([
   'name',
   'older-than-sec',
   'offset',
+  'operation',
   'output',
   'owner-mode',
   'profile',
@@ -98,6 +101,7 @@ const KNOWN_OPTIONS = new Set([
   'claim-name',
   'recording-mode',
   'recording-retention-sec',
+  'artifact-retention-sec',
   'retention-sec',
   'rx-bytes-delta',
   'save-token',
@@ -118,6 +122,8 @@ const KNOWN_OPTIONS = new Set([
   'timezone',
   'target-state',
   'timeout-ms',
+  'execution-timeout-sec',
+  'inline-result-max-bytes',
   'interval-ms',
   'traffic-observation-mode',
   'tx-bytes-delta',
@@ -242,6 +248,18 @@ function usageText() {
     '  bpane workflow version get <workflow-id> <version> [options]',
     '  bpane workflow version files <workflow-id> <version> [options]',
     '  bpane workflow version preview <workflow-id> <version> [options]',
+    '  bpane workflow endpoint create <project-id> <endpoint-key> [options]',
+    '  bpane workflow endpoint list <project-id> [options]',
+    '  bpane workflow endpoint get <project-id> <endpoint-key> [options]',
+    '  bpane workflow endpoint update <project-id> <endpoint-key> [options]',
+    '  bpane workflow endpoint activate <project-id> <endpoint-key> [options]',
+    '  bpane workflow endpoint disable <project-id> <endpoint-key> [options]',
+    '  bpane workflow endpoint grant <project-id> <endpoint-key> [options]',
+    '  bpane workflow endpoint revoke <project-id> <endpoint-key> <grant-id> [options]',
+    '  bpane workflow endpoint invoke <project-id> <endpoint-key> --idempotency-key <key> [options]',
+    '  bpane workflow endpoint status <project-id> <endpoint-key> <invocation-id> [options]',
+    '  bpane workflow endpoint cancel <project-id> <endpoint-key> <invocation-id> [options]',
+    '  bpane workflow endpoint download-artifact <project-id> <endpoint-key> <invocation-id> <file-id> --output <path> [options]',
     '  bpane workflow run list [options]',
     '  bpane workflow run create [options]',
     '  bpane workflow run get <run-id> [options]',
@@ -358,6 +376,12 @@ function usageText() {
     '  --source-system <value>   External source system for a workflow run.',
     '  --source-reference <ref>  External source reference for a workflow run.',
     '  --client-request-id <id>  Stable workflow run idempotency key.',
+    '  --idempotency-key <key>   Required endpoint/caller invocation idempotency key.',
+    '  --operation <name>        Repeatable endpoint grant: invoke, read, cancel, artifact.read.',
+    '  --endpoint-purpose <text> Workflow endpoint purpose override.',
+    '  --execution-timeout-sec <sec> Workflow endpoint execution deadline.',
+    '  --inline-result-max-bytes <bytes> Maximum endpoint JSON result size.',
+    '  --artifact-retention-sec <sec> Endpoint artifact reference retention.',
     '  --source-path <path>      Source file path for workflow version preview.',
     '  --summary                 Emit a compact workflow run summary.',
     '  --timeout-ms <ms>         Workflow run wait timeout. Default: 60000.',
@@ -3805,8 +3829,240 @@ async function handleWorkflowEventSubscriptionCommand(config, positionals, optio
   );
 }
 
+function workflowEndpointPath(projectId, endpointKey = null) {
+  const collection = `/api/v1/projects/${encodeURIComponent(projectId)}/workflow-endpoints`;
+  return endpointKey === null
+    ? collection
+    : `${collection}/${encodeURIComponent(endpointKey)}`;
+}
+
+async function buildWorkflowEndpointRequest(options, endpointKey, commandLabel) {
+  const body = await requireJsonObjectBody(options, commandLabel);
+  if (body.endpoint_key !== undefined && body.endpoint_key !== endpointKey) {
+    throw new CliError(
+      'USAGE',
+      `${commandLabel} body.endpoint_key must match ${endpointKey}.`,
+      EXIT_CODES.usage,
+    );
+  }
+  body.endpoint_key = endpointKey;
+  const purpose = getOption(options, 'endpoint-purpose');
+  if (purpose !== null) {
+    body.purpose = purpose;
+  }
+  const executionTimeoutSeconds = parseIntegerOption(options, 'execution-timeout-sec');
+  if (executionTimeoutSeconds !== null) {
+    body.execution_timeout_seconds = executionTimeoutSeconds;
+  }
+  const inlineResultMaxBytes = parseIntegerOption(options, 'inline-result-max-bytes');
+  if (inlineResultMaxBytes !== null) {
+    body.inline_result_max_bytes = inlineResultMaxBytes;
+  }
+  const artifactRetentionSeconds = parseIntegerOption(options, 'artifact-retention-sec');
+  if (artifactRetentionSeconds !== null) {
+    body.artifact_behavior = {
+      ...(isObjectRecord(body.artifact_behavior) ? body.artifact_behavior : {}),
+      mode: 'authorized_references',
+      retention_seconds: artifactRetentionSeconds,
+    };
+  }
+  return body;
+}
+
+async function buildWorkflowEndpointGrantRequest(options) {
+  const rawBody = await parseJsonBodyOption(options);
+  if (rawBody !== null) {
+    if (!isObjectRecord(rawBody)) {
+      throw new CliError('USAGE', 'workflow endpoint grant body must be a JSON object.', EXIT_CODES.usage);
+    }
+    return rawBody;
+  }
+  const servicePrincipalId = getOption(options, 'service-principal-id');
+  const operations = getOptions(options, 'operation')
+    .flatMap((value) => value.split(','))
+    .map((value) => value.trim())
+    .filter(Boolean);
+  if (!servicePrincipalId || operations.length === 0) {
+    throw new CliError(
+      'USAGE',
+      'workflow endpoint grant requires --service-principal-id and at least one --operation.',
+      EXIT_CODES.usage,
+    );
+  }
+  const allowed = new Set(['invoke', 'read', 'cancel', 'artifact.read']);
+  if (operations.some((operation) => !allowed.has(operation))) {
+    throw new CliError(
+      'USAGE',
+      'workflow endpoint grant operations are invoke, read, cancel, or artifact.read.',
+      EXIT_CODES.usage,
+    );
+  }
+  return {
+    service_principal_id: servicePrincipalId,
+    operations: Array.from(new Set(operations)),
+  };
+}
+
+async function buildWorkflowEndpointInvocationRequest(options) {
+  const rawBody = await parseJsonBodyOption(options);
+  if (rawBody !== null) {
+    if (!isObjectRecord(rawBody) || !Object.hasOwn(rawBody, 'input')) {
+      throw new CliError(
+        'USAGE',
+        'workflow endpoint invoke body must be a JSON object containing input.',
+        EXIT_CODES.usage,
+      );
+    }
+    return rawBody;
+  }
+  const hasInput = getOption(options, 'input-json') !== null || getOption(options, 'input-file') !== null;
+  if (!hasInput) {
+    throw new CliError(
+      'USAGE',
+      'workflow endpoint invoke requires --input-json, --input-file, --body-json, or --body-file.',
+      EXIT_CODES.usage,
+    );
+  }
+  const body = { input: await parseJsonSourceOption(options, 'input-json', 'input-file') };
+  const sourceSystem = getOption(options, 'source-system');
+  if (sourceSystem !== null) {
+    body.source_system = sourceSystem;
+  }
+  const sourceReference = getOption(options, 'source-reference');
+  if (sourceReference !== null) {
+    body.source_reference = sourceReference;
+  }
+  return body;
+}
+
+async function handleWorkflowEndpointCommand(config, positionals, options) {
+  const endpointAction = positionals[2];
+  if (endpointAction === 'list') {
+    const [projectId] = requiredWorkflowPositionals(
+      positionals,
+      'workflow endpoint list',
+      ['project-id'],
+      3,
+    );
+    return await requestGateway(config, workflowEndpointPath(projectId));
+  }
+  if (['create', 'get', 'update', 'activate', 'disable', 'grant'].includes(endpointAction)) {
+    const [projectId, endpointKey] = requiredWorkflowPositionals(
+      positionals,
+      `workflow endpoint ${endpointAction}`,
+      ['project-id', 'endpoint-key'],
+      3,
+    );
+    const endpointPath = workflowEndpointPath(projectId, endpointKey);
+    if (endpointAction === 'create' || endpointAction === 'update') {
+      const body = await buildWorkflowEndpointRequest(
+        options,
+        endpointKey,
+        `workflow endpoint ${endpointAction}`,
+      );
+      return await requestGateway(
+        config,
+        endpointAction === 'create' ? workflowEndpointPath(projectId) : endpointPath,
+        {
+          method: endpointAction === 'create' ? 'POST' : 'PUT',
+          body: JSON.stringify(body),
+        },
+      );
+    }
+    if (endpointAction === 'get') {
+      return await requestGateway(config, endpointPath);
+    }
+    if (endpointAction === 'activate' || endpointAction === 'disable') {
+      return await requestGateway(config, `${endpointPath}/${endpointAction}`, { method: 'POST' });
+    }
+    return await requestGateway(config, `${endpointPath}/grants`, {
+      method: 'POST',
+      body: JSON.stringify(await buildWorkflowEndpointGrantRequest(options)),
+    });
+  }
+  if (endpointAction === 'revoke') {
+    const [projectId, endpointKey, grantId] = requiredWorkflowPositionals(
+      positionals,
+      'workflow endpoint revoke',
+      ['project-id', 'endpoint-key', 'grant-id'],
+      3,
+    );
+    return await requestGateway(
+      config,
+      `${workflowEndpointPath(projectId, endpointKey)}/grants/${encodeURIComponent(grantId)}`,
+      { method: 'DELETE' },
+    );
+  }
+  if (endpointAction === 'invoke') {
+    const [projectId, endpointKey] = requiredWorkflowPositionals(
+      positionals,
+      'workflow endpoint invoke',
+      ['project-id', 'endpoint-key'],
+      3,
+    );
+    const idempotencyKey = getOption(options, 'idempotency-key');
+    if (!idempotencyKey) {
+      throw new CliError(
+        'USAGE',
+        'workflow endpoint invoke requires --idempotency-key.',
+        EXIT_CODES.usage,
+      );
+    }
+    return await requestGateway(
+      config,
+      `${workflowEndpointPath(projectId, endpointKey)}/invocations`,
+      {
+        method: 'POST',
+        headers: { 'Idempotency-Key': idempotencyKey },
+        body: JSON.stringify(await buildWorkflowEndpointInvocationRequest(options)),
+      },
+    );
+  }
+  if (['status', 'cancel'].includes(endpointAction)) {
+    const [projectId, endpointKey, invocationId] = requiredWorkflowPositionals(
+      positionals,
+      `workflow endpoint ${endpointAction}`,
+      ['project-id', 'endpoint-key', 'invocation-id'],
+      3,
+    );
+    const invocationPath = `${workflowEndpointPath(projectId, endpointKey)}/invocations/${encodeURIComponent(invocationId)}`;
+    return await requestGateway(
+      config,
+      endpointAction === 'cancel' ? `${invocationPath}/cancel` : invocationPath,
+      endpointAction === 'cancel' ? { method: 'POST' } : {},
+    );
+  }
+  if (endpointAction === 'download-artifact') {
+    const [projectId, endpointKey, invocationId, fileId] = requiredWorkflowPositionals(
+      positionals,
+      'workflow endpoint download-artifact',
+      ['project-id', 'endpoint-key', 'invocation-id', 'file-id'],
+      3,
+    );
+    return await downloadGatewayBinary(
+      config,
+      `${workflowEndpointPath(projectId, endpointKey)}/invocations/${encodeURIComponent(invocationId)}/artifacts/${encodeURIComponent(fileId)}/content`,
+      requiredOutputPath(options, 'workflow endpoint download-artifact'),
+      {
+        project_id: projectId,
+        endpoint_key: endpointKey,
+        invocation_id: invocationId,
+        file_id: fileId,
+      },
+    );
+  }
+  throw new CliError(
+    'USAGE',
+    `Unknown workflow endpoint command: ${positionals.slice(2).join(' ')}`.trim(),
+    EXIT_CODES.usage,
+  );
+}
+
 async function handleWorkflowCommand(config, positionals, options) {
   const action = positionals[1];
+  if (action === 'endpoint') {
+    return await handleWorkflowEndpointCommand(config, positionals, options);
+  }
   if (action === 'list' && positionals.length === 2) {
     return await requestGateway(config, '/api/v1/workflows');
   }

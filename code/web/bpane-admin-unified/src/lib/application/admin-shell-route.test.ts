@@ -21,6 +21,12 @@ describe('admin shell route metadata', () => {
       'BrowserPane Credential Binding Details',
     ],
     ['/admin-new/workflows/workflow-1', 'workflows', 'BrowserPane Workflow Details'],
+    ['/admin-new/workflow-endpoints', 'workflow-endpoints', 'BrowserPane Workflow Endpoints'],
+    [
+      '/admin-new/workflow-endpoints/project-1/report',
+      'workflow-endpoints',
+      'BrowserPane Workflow Endpoint Details',
+    ],
     ['/admin-new/runs', 'runs', 'BrowserPane Workflow Runs'],
     ['/admin-new/runs/run-1', 'runs', 'BrowserPane Workflow Run Details'],
     ['/admin-new/workflow-runs', 'runs', 'BrowserPane Workflow Runs'],

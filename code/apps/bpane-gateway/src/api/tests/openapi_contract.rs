@@ -28,7 +28,7 @@ struct ContractOperation {
 async fn openapi_contract_routes_are_registered() {
     let inventory: ContractInventory =
         serde_json::from_str(CONTRACT_INVENTORY).expect("OpenAPI operation inventory should parse");
-    assert_eq!(inventory.operations.len(), 131);
+    assert_eq!(inventory.operations.len(), 144);
 
     for operation in inventory.operations {
         let (router, _) = test_router();

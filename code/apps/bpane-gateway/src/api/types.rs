@@ -40,6 +40,7 @@ use crate::workflow::{
     WorkflowObservability, WorkflowPackageManifest, WorkflowRunProducedFileResource,
     WorkflowRunState, WorkflowSource, WorkflowSourceResolver,
 };
+use crate::workflow_endpoints::{WorkflowEndpointArtifactBehavior, WorkflowEndpointGrantOperation};
 use crate::workflow_event_delivery::WorkflowEventDestinationPolicy;
 use crate::workflow_lifecycle::WorkflowLifecycleManager;
 use crate::workspaces::WorkspaceFileStore;
@@ -123,6 +124,7 @@ pub(super) const BROWSER_CONTEXT_RETENTION_SEC_HEADER: &str =
 pub(super) const FILE_WORKSPACE_FILE_NAME_HEADER: &str = "x-bpane-file-name";
 pub(super) const FILE_WORKSPACE_FILE_PROVENANCE_HEADER: &str = "x-bpane-file-provenance";
 pub(super) const WORKFLOW_RUN_WORKSPACE_ID_HEADER: &str = "x-bpane-workflow-workspace-id";
+pub(super) const IDEMPOTENCY_KEY_HEADER: &str = "idempotency-key";
 
 #[derive(Serialize)]
 pub(super) struct SessionStatus {
@@ -394,6 +396,48 @@ pub(super) struct UpsertServicePrincipalRequest {
 
 fn default_service_principal_state() -> ServicePrincipalState {
     ServicePrincipalState::Active
+}
+
+#[derive(Clone, Deserialize)]
+pub(super) struct UpsertWorkflowEndpointRequest {
+    pub(super) endpoint_key: String,
+    pub(super) purpose: String,
+    pub(super) workflow_definition_id: Uuid,
+    pub(super) workflow_definition_version_id: Uuid,
+    pub(super) workflow_version: String,
+    pub(super) input_schema: Value,
+    pub(super) output_schema: Value,
+    #[serde(default = "default_workflow_endpoint_execution_timeout")]
+    pub(super) execution_timeout_seconds: u32,
+    #[serde(default = "default_workflow_endpoint_inline_result_limit")]
+    pub(super) inline_result_max_bytes: u32,
+    #[serde(default)]
+    pub(super) artifact_behavior: WorkflowEndpointArtifactBehavior,
+    #[serde(default)]
+    pub(super) labels: HashMap<String, String>,
+}
+
+fn default_workflow_endpoint_execution_timeout() -> u32 {
+    900
+}
+
+fn default_workflow_endpoint_inline_result_limit() -> u32 {
+    65_536
+}
+
+#[derive(Deserialize)]
+pub(super) struct UpsertWorkflowEndpointGrantRequest {
+    pub(super) service_principal_id: Uuid,
+    pub(super) operations: Vec<WorkflowEndpointGrantOperation>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub(super) struct InvokeWorkflowEndpointRequest {
+    pub(super) input: Value,
+    #[serde(default)]
+    pub(super) source_system: Option<String>,
+    #[serde(default)]
+    pub(super) source_reference: Option<String>,
 }
 
 #[derive(Deserialize)]

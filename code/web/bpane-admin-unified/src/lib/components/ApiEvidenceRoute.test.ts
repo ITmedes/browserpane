@@ -15,7 +15,7 @@ describe('ApiEvidenceRoute', () => {
     expect(byTestId(target, 'api-evidence-loading').textContent).toContain('Loading API contract evidence');
     await vi.waitFor(() => expect(loadEvidence).toHaveBeenCalledOnce());
     resolveEvidence?.(apiContractEvidenceFixture());
-    await vi.waitFor(() => expect(byTestId(target, 'api-evidence-ready').textContent).toContain('10 loaded'));
+    await vi.waitFor(() => expect(byTestId(target, 'api-evidence-ready').textContent).toContain('12 loaded'));
   });
 
   it('renders errors and retries through the same loader', async () => {
@@ -25,7 +25,7 @@ describe('ApiEvidenceRoute', () => {
     const target = renderComponent(ApiEvidenceRouteTest, { loadEvidence });
     await vi.waitFor(() => expect(byTestId(target, 'api-evidence-error').textContent).toContain('malformed'));
     byTestId(target, 'api-evidence-retry').click();
-    await vi.waitFor(() => expect(byTestId(target, 'api-evidence-ready').textContent).toContain('10 loaded'));
+    await vi.waitFor(() => expect(byTestId(target, 'api-evidence-ready').textContent).toContain('12 loaded'));
     expect(loadEvidence).toHaveBeenCalledTimes(2);
   });
 });

@@ -97,6 +97,7 @@ impl InMemorySessionStore {
         }
 
         let now = Utc::now();
+        let endpoint = request.endpoint.clone();
         let run = StoredWorkflowRun {
             id: Uuid::now_v7(),
             owner_subject: principal.subject.clone(),
@@ -111,6 +112,25 @@ impl InMemorySessionStore {
             source_reference: request.source_reference.clone(),
             client_request_id: request.client_request_id.clone(),
             create_request_fingerprint: request.create_request_fingerprint.clone(),
+            endpoint_id: endpoint.as_ref().map(|context| context.endpoint_id),
+            endpoint_invocation_id: endpoint.as_ref().map(|context| context.invocation_id),
+            endpoint_key: endpoint
+                .as_ref()
+                .map(|context| context.endpoint_key.clone()),
+            caller_service_principal_id: endpoint
+                .as_ref()
+                .map(|context| context.caller_service_principal_id),
+            endpoint_idempotency_key: endpoint
+                .as_ref()
+                .map(|context| context.idempotency_key.clone()),
+            endpoint_request_fingerprint: endpoint
+                .as_ref()
+                .map(|context| context.request_fingerprint.clone()),
+            execution_deadline_at: endpoint
+                .as_ref()
+                .map(|context| context.execution_deadline_at),
+            outcome: None,
+            side_effect_state: endpoint.as_ref().map(|_| WorkflowSideEffectState::None),
             source_snapshot: request.source_snapshot,
             extensions: request.extensions,
             credential_bindings: request.credential_bindings,
@@ -189,6 +209,19 @@ impl InMemorySessionStore {
             .await
             .iter()
             .find(|run| run.id == id)
+            .cloned())
+    }
+
+    pub(in crate::session_control) async fn get_workflow_run_by_automation_task_id(
+        &self,
+        automation_task_id: Uuid,
+    ) -> Result<Option<StoredWorkflowRun>, SessionStoreError> {
+        Ok(self
+            .workflow_runs
+            .lock()
+            .await
+            .iter()
+            .find(|run| run.automation_task_id == automation_task_id)
             .cloned())
     }
 

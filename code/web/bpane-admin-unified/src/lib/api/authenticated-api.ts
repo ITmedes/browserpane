@@ -143,7 +143,14 @@ export function parseAdminApiErrorBody(body: string): AdminApiErrorDetails {
     }
     const record = parsed as Record<string, unknown>;
     return {
-      message: typeof record.error === 'string' ? record.error : '',
+      message:
+        typeof record.detail === 'string'
+          ? record.detail
+          : typeof record.error === 'string'
+            ? record.error
+            : typeof record.title === 'string'
+              ? record.title
+              : '',
       ...(typeof record.code === 'string' ? { code: record.code } : {}),
       ...(typeof record.category === 'string' ? { category: record.category } : {}),
       ...(typeof record.recovery_hint === 'string' ? { recoveryHint: record.recovery_hint } : {}),

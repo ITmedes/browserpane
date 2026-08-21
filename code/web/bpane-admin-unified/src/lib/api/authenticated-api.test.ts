@@ -208,6 +208,22 @@ describe('admin API error parsing', () => {
     expect(parseAdminApiErrorBody(JSON.stringify({ error: 42, code: false }))).toEqual({ message: '' });
   });
 
+  it('uses RFC 9457 detail and title for problem responses', () => {
+    expect(parseAdminApiErrorBody(JSON.stringify({
+      type: 'https://browserpane.dev/problems/endpoint-inactive',
+      title: 'Workflow endpoint is inactive',
+      status: 409,
+      detail: 'The endpoint must be active before invocation.',
+      code: 'workflow_endpoint_inactive',
+    }))).toEqual({
+      message: 'The endpoint must be active before invocation.',
+      code: 'workflow_endpoint_inactive',
+    });
+    expect(parseAdminApiErrorBody(JSON.stringify({ title: 'Request denied' }))).toEqual({
+      message: 'Request denied',
+    });
+  });
+
   it('supports empty, plain-text, and scalar JSON error bodies', () => {
     expect(parseAdminApiErrorBody('')).toEqual({ message: '' });
     expect(parseAdminApiErrorBody('denied')).toEqual({ message: 'denied' });

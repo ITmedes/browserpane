@@ -22,7 +22,10 @@ export class ContractExampleValidator {
     const requestInput = {
       method: example.request?.method,
       path: example.request?.path,
-      headers: { authorization: 'Bearer example-contract-token' }
+      headers: {
+        authorization: 'Bearer example-contract-token',
+        ...example.request?.headers
+      }
     };
     if (example.request?.body !== undefined) requestInput.body = example.request.body;
     const [request, requestError] = this.openapi.request(requestInput);
@@ -35,7 +38,7 @@ export class ContractExampleValidator {
     const [, responseError] = request.response(
       example.response?.status,
       example.response?.body,
-      { 'content-type': 'application/json' }
+      { 'content-type': example.response?.contentType ?? 'application/json' }
     );
     if (responseError) throw new Error(responseError.toString());
   }

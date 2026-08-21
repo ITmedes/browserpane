@@ -46,6 +46,11 @@ Current product shape:
 - Viewer cap: configurable in `bpane-gateway` via `--max-viewers`, default `10` for restricted browser viewers.
 - MCP automation: supported via `mcp-bridge` and gateway ownership APIs.
 - Service-principal registry: owner-scoped external OIDC client metadata is supported through `/api/v1/service-principals`; disabled registered principals cannot be assigned as new automation delegates.
+- Workflow endpoints: Phase 0 project-scoped polling endpoints bind one
+  approved immutable workflow version to a stable key. External OIDC
+  client-credentials callers require an active registered service principal and
+  explicit per-endpoint invoke/read/cancel/artifact grant; this is not general
+  project RBAC or callback/connector productization.
 - Browser extensions: owner-approved unpacked extensions are supported for docker-backed sessions and workflow runs; `static_single` does not support session extension sets.
 - Project policies can restrict live browser uploads/downloads, session-file
   bindings, and manual recording starts for project-scoped sessions. Session
@@ -95,6 +100,11 @@ Current product shape:
   - `transport.rs`: browser connection loop, per-client policy, relay behavior.
   - `session_hub.rs`: fan-out, late-join bootstrap, viewer cap, telemetry.
   - `session_control.rs`: versioned session-control store and Postgres integration, including projects with admission quotas and template/egress/extension/context/file-workspace policy bindings, service principals, session templates, browser contexts, workflows, credential bindings, file workspaces, and approved extension metadata.
+  - `workflow_endpoints/` and `api/workflow_endpoints/`: project endpoint,
+    schema, endpoint/caller idempotency, typed outcome, side-effect certainty,
+    artifact projection, owner lifecycle/grant, and restricted machine polling
+    contracts. Persistence implementations live beside the other in-memory and
+    Postgres session-control resources.
   - `browser_contexts/retention.rs`: background cleanup for ready reusable browser contexts whose per-context retention window expired; runtime-backed cleanup skips active writers and removes docker profile volumes through the session manager. Browser context resources can also carry per-context profile storage limits; the API reports over-limit usage and blocks new reusable sessions from contexts whose inspected profile storage exceeds that limit. Inactive reusable contexts can be cloned into new owner-scoped reusable contexts, exported as zip archives, or imported from BrowserPane export archives into new reusable contexts; docker-backed runtimes copy, package, or restore profile volume data when present.
   - `api/browser_context_archive.rs`: bounded BrowserPane browser-context export/import format handling. Import authentication and concurrency are enforced at the API boundary; nested profile archives are size-, count-, path-, and entry-type validated before runtime materialization. Export ZIP assembly runs on Tokio's blocking pool instead of an asynchronous request thread.
   - `session_manager.rs`: internal gateway boundary for session runtime lifecycle. The rest of the gateway should depend on this façade instead of backend details.
@@ -339,6 +349,7 @@ Run these in `code/web/bpane-client`:
 - `npm run smoke:workflow-queued-cancel -- --headless`
 - `npm run smoke:workflow-restart-safety -- --headless`
 - `npm run smoke:workflow-runtime-hold -- --headless`
+- `npm run smoke:workflow-endpoint-compose -- --headless --connect-timeout-ms 120000`
 - `npm run smoke:workflow-embed-operations -- --headless`
 - `npm run smoke:multisession -- --headless`
 - `npm run test:coverage`

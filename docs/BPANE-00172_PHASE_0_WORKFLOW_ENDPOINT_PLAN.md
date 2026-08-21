@@ -2,14 +2,15 @@
 
 Issue: [#172](https://github.com/ITmedes/browserpane/issues/172)
 
-Status: Qualified; `#47` is complete through PR #242 and this issue is the next
-Pilot Value qualification candidate
+Status: In Progress
 
 Lane: Pilot Value
 
 Target gate: Phase 0 Operational Proof
 
-Last reviewed: 2026-08-20
+Last reviewed: 2026-08-21
+
+Verified baseline: `ab9dc5648df01b166d4eccde7a2aeffaa40675b2`
 
 ## Business Outcome
 

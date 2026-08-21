@@ -60,6 +60,11 @@ impl AuthenticatedPrincipalClaims {
 enum AuthMode {
     Hmac(HmacTokenValidator),
     Oidc(Arc<OidcTokenValidator>),
+    #[cfg(test)]
+    Fixed {
+        token: String,
+        principal: AuthenticatedPrincipal,
+    },
 }
 
 impl AuthValidator {
@@ -75,21 +80,49 @@ impl AuthValidator {
         })
     }
 
+    #[cfg(test)]
+    pub(crate) fn from_test_principal(principal: AuthenticatedPrincipal) -> Self {
+        Self {
+            mode: AuthMode::Fixed {
+                token: "test-machine-token".to_string(),
+                principal,
+            },
+        }
+    }
+
     pub fn generate_token(&self) -> Option<String> {
         match &self.mode {
             AuthMode::Hmac(validator) => Some(validator.generate_token()),
             AuthMode::Oidc(_) => None,
+            #[cfg(test)]
+            AuthMode::Fixed { token, .. } => Some(token.clone()),
         }
     }
 
     pub fn is_oidc(&self) -> bool {
-        matches!(self.mode, AuthMode::Oidc(_))
+        match &self.mode {
+            AuthMode::Hmac(_) => false,
+            AuthMode::Oidc(_) => true,
+            #[cfg(test)]
+            AuthMode::Fixed { .. } => true,
+        }
     }
 
     pub async fn authenticate(&self, token: &str) -> Result<AuthenticatedPrincipal, AuthError> {
         match &self.mode {
             AuthMode::Hmac(validator) => validator.authenticate(token),
             AuthMode::Oidc(validator) => validator.authenticate(token).await,
+            #[cfg(test)]
+            AuthMode::Fixed {
+                token: expected,
+                principal,
+            } => {
+                if token == expected {
+                    Ok(principal.clone())
+                } else {
+                    Err(AuthError::InvalidSignature)
+                }
+            }
         }
     }
 }

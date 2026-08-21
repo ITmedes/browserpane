@@ -14,6 +14,7 @@ mod session_templates;
 mod sessions;
 mod state;
 mod workflow_definitions;
+mod workflow_endpoints;
 mod workflow_events;
 mod workflow_runs;
 

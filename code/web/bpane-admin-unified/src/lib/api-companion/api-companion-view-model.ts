@@ -96,6 +96,11 @@ export const AUTH_DEFINITIONS: readonly ApiAuthDefinition[] = [
     description: 'Capability-scoped credential restricted to recording artifact finalization.',
   },
   {
+    id: 'machine-bearer',
+    label: 'Machine bearer',
+    description: 'External OIDC client-credentials access restricted by a registered service principal and endpoint grant.',
+  },
+  {
     id: 'unauthenticated',
     label: 'Protocol bootstrap',
     description: 'A credential-free initial transport step with explicit follow-up authentication.',
@@ -128,6 +133,16 @@ const TASK_FLOW_CONFIG = [
     examples: [
       { name: 'workflow-definitions-empty-list', title: 'List workflow definitions' },
       { name: 'companion-workflow-run-create', title: 'Create workflow run' },
+    ],
+  },
+  {
+    id: 'workflow-endpoints',
+    title: 'Invoke a project workflow endpoint',
+    description: 'Call one active endpoint with a confidential machine token and process-stable idempotency key.',
+    adminHref: '/admin-new/workflow-endpoints',
+    examples: [
+      { name: 'workflow-endpoints-empty-list', title: 'List project endpoints' },
+      { name: 'workflow-endpoint-idempotency-conflict', title: 'Invoke with idempotency' },
     ],
   },
   {
@@ -184,6 +199,9 @@ export function commandForExample(operation: ApiOperation, example: ApiExample):
   if (authVariable) {
     lines.push(`  --header "Authorization: Bearer \${${authVariable}}" \\`);
   }
+  for (const [name, value] of Object.entries(example.request.headers ?? {})) {
+    lines.push(`  --header "${name}: ${replacePlaceholders(value)}" \\`);
+  }
   if (example.request.body !== undefined) {
     lines.push('  --header "Content-Type: application/json" \\');
     lines.push('  --data @- <<JSON');
@@ -201,6 +219,7 @@ function authTokenVariable(auth: ApiAuthMode): string | null {
     case 'owner-bearer': return 'BPANE_OWNER_TOKEN';
     case 'session-automation': return 'BPANE_SESSION_AUTOMATION_TOKEN';
     case 'recording-worker': return 'BPANE_RECORDING_WORKER_TOKEN';
+    case 'machine-bearer': return 'BPANE_MACHINE_TOKEN';
     case 'unauthenticated': return null;
   }
 }

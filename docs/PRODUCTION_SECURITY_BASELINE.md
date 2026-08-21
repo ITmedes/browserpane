@@ -116,8 +116,19 @@ and broader security roadmap [#72](https://github.com/ITmedes/browserpane/issues
   exact-origin exception review, signing and bounded retries.
 - [ ] Rotate callback signing keys and require receivers to enforce authenticity,
   replay windows, payload limits and idempotency.
-- [ ] Keep generalized MCP, Human Handoff and external workflow endpoints private
-  until their auth, grant, callback and deployment profiles are accepted.
+- [ ] Keep generalized MCP and Human Handoff private until their auth and
+  deployment profiles are accepted. For Phase 0 Workflow Endpoints, expose
+  only the intended project/key routes through protected TLS ingress; require
+  external OIDC client credentials, active registered service-principal state,
+  exact project membership, declared operation scope, and the narrow endpoint
+  grant. Rotate IdP client secrets outside endpoint resources and do not treat
+  this grant as generalized project RBAC.
+- [ ] Preserve endpoint/caller idempotency fingerprints, pre-runtime input
+  validation, output-before-success validation, original-caller artifact
+  authorization, retention/expiry, and uncertain-side-effect retry denial.
+  External schedulers own broad retries, compensation, business state, and
+  human tasks. Keep callbacks, revisions/promotion, replay, throttling, and
+  connector compatibility disabled until #240 is accepted.
 
 ### Operations, telemetry and recovery
 

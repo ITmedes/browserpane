@@ -1,6 +1,6 @@
 # BrowserPane Current Context
 
-Last synchronized: 2026-08-20
+Last synchronized: 2026-08-21 for the #172 review candidate
 
 This is the first local document to read when starting a clean BrowserPane
 session. It records current product decisions, delivery order, and repository
@@ -8,7 +8,8 @@ state. Detailed requirements remain in the linked domain and plan documents.
 
 ## Current Baseline
 
-- Canonical branch: `main` at `8618d83c` after PR #243.
+- Canonical base: `main` at `ab9dc564`; #172 is implemented on its review
+  branch and is not merged evidence yet.
 - `/admin-new/` is the default operator console. `/admin/` is a compatibility
   fallback pending a separate removal decision.
 - The gateway uses the typed runtime launch broker for the production-like
@@ -23,6 +24,11 @@ state. Detailed requirements remain in the linked domain and plan documents.
 - The supported immutable Playwright workflow package contract is frozen
   through #47/PR #242, including publication compatibility, Admin-New/CLI
   visibility, worker evidence redaction, and live package regression evidence.
+- The #172 review candidate implements the bounded project Workflow Endpoint
+  across the gateway, Postgres, Admin-New, CLI, and OpenAPI. Its real local
+  Keycloak/Postgres/workflow-worker/browser fake-BPM smoke passes, including
+  idempotency, validation, cancellation, timeout, intervention, typed failure,
+  uncertain-side-effect, and authorization-denial paths.
 - The public owner-scoped v1 API remains frozen in
   `openapi/bpane-control-v1.yaml`. New BPM endpoint work must extend it through
   the compatibility policy rather than bypass it.
@@ -78,9 +84,9 @@ blindly retry the complete activity.
 
 1. `#47` - complete through PR #242: supported immutable Playwright workflow
    package and publishing contract.
-2. `#172` - next qualification candidate: implement the Phase 0 project-scoped
-   polling Workflow Endpoint.
-3. `#174` - after #172 and its remaining gates: select, deliver, and operate one
+2. `#172` - review and merge the Phase 0 project-scoped polling Workflow
+   Endpoint candidate.
+3. `#174` - after #172 merges and its remaining gates pass: select, deliver, and operate one
    real bounded BPM browser activity.
 
 In parallel, `#180` resolves AGPL/Cargo/Node metadata and

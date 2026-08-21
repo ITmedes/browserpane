@@ -31,6 +31,7 @@ pub(crate) fn build_api_router(state: Arc<ApiState>) -> Router {
         .merge(mcp_bridge_control::mcp_bridge_control_routes())
         .merge(workflow_events::workflow_event_subscription_routes())
         .merge(workflow_definitions::workflow_definition_routes())
+        .merge(workflow_endpoints::workflow_endpoint_routes())
         .merge(workflows::workflow_routes())
         .merge(workflow_files::workflow_file_routes())
         .merge(credential_bindings::workflow_run_credential_binding_routes())

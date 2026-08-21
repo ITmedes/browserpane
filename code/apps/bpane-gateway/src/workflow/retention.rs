@@ -243,6 +243,7 @@ mod tests {
                     source_reference: None,
                     client_request_id: None,
                     create_request_fingerprint: None,
+                    endpoint: None,
                     source_snapshot: None,
                     extensions: Vec::new(),
                     credential_bindings: Vec::new(),

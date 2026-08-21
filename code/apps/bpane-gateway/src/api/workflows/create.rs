@@ -212,6 +212,23 @@ pub(super) async fn create_workflow_run(
     State(state): State<Arc<ApiState>>,
     Json(request): Json<CreateWorkflowRunRequest>,
 ) -> Result<(StatusCode, Json<WorkflowRunResource>), (StatusCode, Json<ErrorResponse>)> {
+    let principal = authorize_api_request(&headers, &state.auth_validator)
+        .await
+        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
+    let (status, run) =
+        create_workflow_run_for_principal(&state, &principal, request, None).await?;
+    Ok((
+        status,
+        Json(build_workflow_run_resource(&state, &run).await?),
+    ))
+}
+
+pub(in crate::api) async fn create_workflow_run_for_principal(
+    state: &Arc<ApiState>,
+    principal: &AuthenticatedPrincipal,
+    request: CreateWorkflowRunRequest,
+    endpoint: Option<crate::workflow_endpoints::WorkflowEndpointRunContext>,
+) -> Result<(StatusCode, StoredWorkflowRun), (StatusCode, Json<ErrorResponse>)> {
     let request_fingerprint = workflow_run_request_fingerprint(&request)?;
     let CreateWorkflowRunRequest {
         workflow_id,
@@ -226,9 +243,6 @@ pub(super) async fn create_workflow_run(
         workspace_inputs,
         labels,
     } = request;
-    let principal = authorize_api_request(&headers, &state.auth_validator)
-        .await
-        .map_err(|error| (StatusCode::UNAUTHORIZED, Json(ErrorResponse { error })))?;
     if project_id == Some(Uuid::nil()) {
         return Err((
             StatusCode::BAD_REQUEST,
@@ -243,15 +257,12 @@ pub(super) async fn create_workflow_run(
     {
         if let Some(existing_run) = state
             .session_store
-            .find_workflow_run_by_client_request_id_for_owner(&principal, client_request_id)
+            .find_workflow_run_by_client_request_id_for_owner(principal, client_request_id)
             .await
             .map_err(map_session_store_error)?
         {
             if existing_run.create_request_fingerprint == request_fingerprint {
-                return Ok((
-                    StatusCode::OK,
-                    Json(build_workflow_run_resource(&state, &existing_run).await?),
-                ));
+                return Ok((StatusCode::OK, existing_run));
             }
             return Err((
                 StatusCode::CONFLICT,
@@ -266,7 +277,7 @@ pub(super) async fn create_workflow_run(
     }
     let workflow = state
         .session_store
-        .get_workflow_definition_for_owner(&principal, workflow_id)
+        .get_workflow_definition_for_owner(principal, workflow_id)
         .await
         .map_err(map_session_store_error)?
         .ok_or_else(|| {
@@ -279,7 +290,7 @@ pub(super) async fn create_workflow_run(
         })?;
     let version = state
         .session_store
-        .get_workflow_definition_version_for_owner(&principal, workflow_id, &workflow_version_name)
+        .get_workflow_definition_version_for_owner(principal, workflow_id, &workflow_version_name)
         .await
         .map_err(map_session_store_error)?
         .ok_or_else(|| {
@@ -296,8 +307,8 @@ pub(super) async fn create_workflow_run(
     let prevalidated_credential_bindings = if project_id.is_some() {
         Some(
             resolve_workflow_run_credential_bindings(
-                &state,
-                &principal,
+                state,
+                principal,
                 &version,
                 project_id,
                 credential_binding_ids.clone(),
@@ -308,10 +319,10 @@ pub(super) async fn create_workflow_run(
         None
     };
     let source_snapshot =
-        prepare_workflow_run_source_snapshot(&state, &principal, &workflow, &version).await?;
+        prepare_workflow_run_source_snapshot(state, principal, &workflow, &version).await?;
     let (session, session_source) = resolve_task_session_binding(
-        &state,
-        &principal,
+        state,
+        principal,
         session,
         version.default_session.as_ref(),
         Some(&version.allowed_extension_ids),
@@ -319,14 +330,14 @@ pub(super) async fn create_workflow_run(
     )
     .await?;
     let effective_project_id = project_id.or(session.project_id);
-    validate_workflow_run_project(&state, &principal, effective_project_id, session.project_id)
+    validate_workflow_run_project(state, principal, effective_project_id, session.project_id)
         .await?;
     let credential_bindings = match prevalidated_credential_bindings {
         Some(bindings) => bindings,
         None => {
             resolve_workflow_run_credential_bindings(
-                &state,
-                &principal,
+                state,
+                principal,
                 &version,
                 effective_project_id,
                 credential_binding_ids,
@@ -335,8 +346,8 @@ pub(super) async fn create_workflow_run(
         }
     };
     let workspace_inputs = resolve_workflow_run_workspace_inputs(
-        &state,
-        &principal,
+        state,
+        principal,
         &version,
         effective_project_id,
         workspace_inputs,
@@ -345,7 +356,7 @@ pub(super) async fn create_workflow_run(
     let task = state
         .session_store
         .create_automation_task(
-            &principal,
+            principal,
             PersistAutomationTaskRequest {
                 display_name: Some(format!("{} {}", workflow.name, version.version)),
                 executor: version.executor.clone(),
@@ -360,7 +371,7 @@ pub(super) async fn create_workflow_run(
     let run = state
         .session_store
         .create_workflow_run(
-            &principal,
+            principal,
             PersistWorkflowRunRequest {
                 workflow_definition_id: workflow.id,
                 workflow_definition_version_id: version.id,
@@ -372,6 +383,7 @@ pub(super) async fn create_workflow_run(
                 source_reference,
                 client_request_id,
                 create_request_fingerprint: request_fingerprint,
+                endpoint,
                 source_snapshot,
                 extensions: session.extensions.clone(),
                 credential_bindings,
@@ -409,6 +421,6 @@ pub(super) async fn create_workflow_run(
         } else {
             StatusCode::OK
         },
-        Json(build_workflow_run_resource(&state, &run).await?),
+        run,
     ))
 }

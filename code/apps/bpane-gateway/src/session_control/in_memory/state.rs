@@ -19,6 +19,11 @@ pub(in crate::session_control) struct InMemoryStoreState {
     pub(in crate::session_control) workflow_definition_versions:
         Mutex<Vec<StoredWorkflowDefinitionVersion>>,
     pub(in crate::session_control) workflow_runs: Mutex<Vec<StoredWorkflowRun>>,
+    pub(in crate::session_control) workflow_endpoints: Mutex<Vec<StoredWorkflowEndpoint>>,
+    pub(in crate::session_control) workflow_endpoint_grants:
+        Mutex<Vec<StoredWorkflowEndpointGrant>>,
+    pub(in crate::session_control) workflow_endpoint_invocations:
+        Mutex<Vec<StoredWorkflowEndpointInvocation>>,
     pub(in crate::session_control) workflow_run_events: Mutex<Vec<StoredWorkflowRunEvent>>,
     pub(in crate::session_control) workflow_run_logs: Mutex<Vec<StoredWorkflowRunLog>>,
     pub(in crate::session_control) workflow_event_subscriptions:
@@ -61,6 +66,9 @@ impl InMemoryStoreState {
             workflow_definitions: Mutex::new(Vec::new()),
             workflow_definition_versions: Mutex::new(Vec::new()),
             workflow_runs: Mutex::new(Vec::new()),
+            workflow_endpoints: Mutex::new(Vec::new()),
+            workflow_endpoint_grants: Mutex::new(Vec::new()),
+            workflow_endpoint_invocations: Mutex::new(Vec::new()),
             workflow_run_events: Mutex::new(Vec::new()),
             workflow_run_logs: Mutex::new(Vec::new()),
             workflow_event_subscriptions: Mutex::new(Vec::new()),

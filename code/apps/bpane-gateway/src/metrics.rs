@@ -345,6 +345,12 @@ mod tests {
         workflow.record_retention_deleted_logs(4);
         workflow.record_retention_cleared_output();
         workflow.record_retention_failure();
+        workflow.record_endpoint_invocation_accepted();
+        workflow.record_endpoint_invocation_replay();
+        workflow.record_endpoint_terminal(
+            crate::workflow_endpoints::WorkflowOutcomeCategory::Success,
+            crate::workflow_endpoints::WorkflowSideEffectState::Confirmed,
+        );
 
         recording.record_artifact_finalize_request();
         recording.record_artifact_finalize_success();
@@ -380,6 +386,10 @@ mod tests {
             "browserpane_gateway_recording_playback_export_bytes_total",
             4_096,
         );
+        assert!(output.contains("browserpane_gateway_workflow_endpoint_operations_total"));
+        assert!(output.contains("operation=\"invoke\""));
+        assert!(output.contains("outcome=\"idempotent_replay\""));
+        assert!(output.contains("side_effect_state=\"confirmed\""));
 
         for name in WORKFLOW_COUNTERS.into_iter().chain(RECORDING_COUNTERS) {
             assert!(

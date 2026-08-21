@@ -8,10 +8,10 @@ afterEach(cleanupRenderedComponents);
 describe('ApiContractSummary', () => {
   it('renders exact generated ownership counts', () => {
     const target = renderComponent(ApiContractSummary, { operations: apiContractEvidenceFixture().operations });
-    expect(byTestId(target, 'api-summary-total').textContent).toContain('10');
-    expect(byTestId(target, 'api-summary-ui-primary').textContent).toContain('6');
+    expect(byTestId(target, 'api-summary-total').textContent).toContain('12');
+    expect(byTestId(target, 'api-summary-ui-primary').textContent).toContain('7');
     expect(byTestId(target, 'api-summary-ui-evidence').textContent).toContain('2');
-    expect(byTestId(target, 'api-summary-api-companion').textContent).toContain('1');
+    expect(byTestId(target, 'api-summary-api-companion').textContent).toContain('2');
     expect(byTestId(target, 'api-summary-internal-worker').textContent).toContain('1');
   });
 });

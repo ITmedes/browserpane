@@ -134,9 +134,11 @@ Current support and scope:
   catalogs remain open. `/admin/` remains the directly addressable
   compatibility fallback until a separate removal decision is implemented.
 - Workflow boundary: BrowserPane currently focuses on executing and supervising browser workflows. Broader scheduling, DAG orchestration, and cross-system coordination are expected to sit above BrowserPane rather than inside it.
-- External BPM integration: the stable project-scoped Workflow Endpoint is
-  planned under [issue #172](https://github.com/ITmedes/browserpane/issues/172);
-  the existing owner-scoped workflow-run API is not that production contract.
+- External BPM integration: an additive Phase 0 project-scoped Workflow
+  Endpoint lets a registered confidential OIDC caller invoke, poll, cancel,
+  and retrieve authorized artifacts for one approved immutable workflow. It is
+  a bounded polling contract, not a production connector platform or general
+  BPM engine. The existing owner-scoped workflow-run API remains separate.
 - Teach Mode: prose/demonstration-to-workflow authoring and controlled repair
   are planned under [issue #171](https://github.com/ITmedes/browserpane/issues/171)
   and are not current capabilities.
@@ -1367,26 +1369,31 @@ Workflow boundary:
   DAGs, broad retry policy, compensation, cross-system orchestration, and human
   tasks.
 
-Current external-integration limit:
+Phase 0 external-integration contract:
 
-- `POST /api/v1/workflow-runs` is an owner-scoped execution API, not yet a
-  stable project-scoped BPM Workflow Endpoint.
-- `input_schema` and `output_schema` are workflow-version metadata; the gateway
-  does not yet enforce them before run creation or successful completion.
-- registered service-principal and identity-mapping resources do not yet grant
-  a machine caller access to an approved workflow owned by another principal.
-- the gateway does not yet expose endpoint/caller-scoped idempotency,
-  machine-readable terminal outcomes, or side-effect certainty to an external
-  BPM caller.
+- owners create a draft under
+  `/api/v1/projects/{project_id}/workflow-endpoints`, bind one approved
+  immutable workflow version, add a narrow service-principal grant, and
+  explicitly activate it;
+- confidential callers use external OIDC/OAuth 2.0 client credentials plus an
+  `Idempotency-Key` to invoke through the stable project and endpoint key;
+- input is validated against JSON Schema Draft 2020-12 before a session or
+  worker is created, while invalid output prevents success;
+- identical endpoint/caller/key requests return the original invocation and
+  changed payloads return RFC 9457 conflict details;
+- polling returns typed terminal outcomes, explicit timeout/cancellation, and
+  browser side-effect certainty. An uncertain side effect is never presented
+  as safely retryable;
+- bounded JSON remains inline. Large or binary output is represented by an
+  authorized artifact reference with checksum, media type, provenance,
+  retention, and expiry metadata;
+- challenges and required judgment finish as
+  `external_intervention_required`; the external process owns any human task.
 
-The current Phase 0 sequence first freezes the
-[supported workflow package](docs/BPANE-00047_WORKFLOW_PACKAGE_CONTRACT_PLAN.md),
-then adds the bounded
-[polling Workflow Endpoint](docs/BPANE-00172_PHASE_0_WORKFLOW_ENDPOINT_PLAN.md).
-That endpoint uses OIDC client credentials, explicit service-principal grants,
-enforced schemas, invoke/status/cancel operations, typed outcomes, side-effect
-certainty, bounded JSON, and artifact references. Challenges finish as
-`external_intervention_required`; the external process owns any human task.
+See the [supported workflow package](docs/BPANE-00047_WORKFLOW_PACKAGE_CONTRACT_PLAN.md)
+and [Phase 0 polling endpoint](docs/BPANE-00172_PHASE_0_WORKFLOW_ENDPOINT_PLAN.md)
+for the accepted boundary. This does not claim exactly-once browser effects,
+generalized project RBAC, callback delivery, or vendor connector compatibility.
 
 Endpoint revisions, callbacks, replay, expanded tracing, throttling, and
 connector compatibility are deferred to the
@@ -1398,8 +1405,13 @@ Local usage options:
 - UI: `/admin-new/workflows` provides the definition catalog and route-backed
   source/version/run launcher; `/admin-new/workflow-runs` provides the run
   catalog plus route-backed metadata, evidence, intervention controls, and
-  produced-file downloads. `/admin-new/runs` remains a compatibility alias.
-- CLI: use the repository-level `./scripts/bpane workflow` command family
+  produced-file downloads. `/admin-new/workflow-endpoints` provides the
+  project catalog, draft creation, lifecycle controls, contract preview,
+  narrow caller grants, machine invocation example, and related-run link.
+  `/admin-new/runs` remains a compatibility alias.
+- CLI: use the repository-level `./scripts/bpane workflow endpoint` commands
+  for create/list/get/update/activate/disable/grant/revoke/invoke/status/cancel
+  and safe artifact download
 - raw API: use the OpenAPI contract in `openapi/bpane-control-v1.yaml`
 
 Use the CLI or raw API for automation, bulk operations, and workflow event
@@ -1410,6 +1422,12 @@ Unified admin workflow-run catalog smoke:
 ```bash
 cd code/web/bpane-client && npm run smoke:admin-unified-workflow-runs -- --headless
 ```
+
+The deterministic fake-BPM contract fixture can run against a prepared
+endpoint with `npm run smoke:workflow-endpoint`. The real local Compose proof,
+including Keycloak client credentials, Postgres, a workflow worker, and a
+docker-backed browser, is `npm run smoke:workflow-endpoint-compose --
+--headless --connect-timeout-ms 120000`.
 
 Typical local workflow path:
 

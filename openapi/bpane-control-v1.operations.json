@@ -3,6 +3,24 @@
   "contract": "bpane-control-v1",
   "operations": [
     {
+      "operationId": "activateWorkflowEndpoint",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/workflow-endpoints/{endpoint_key}/activate",
+      "tags": [
+        "Workflow Endpoints"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "409",
+        "503"
+      ]
+    },
+    {
       "operationId": "appendAutomationTaskLog",
       "method": "POST",
       "path": "/api/v1/automation-tasks/{task_id}/logs",
@@ -67,6 +85,23 @@
         "401",
         "404",
         "409",
+        "503"
+      ]
+    },
+    {
+      "operationId": "cancelWorkflowEndpointInvocation",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/workflow-endpoints/{endpoint_key}/invocations/{invocation_id}/cancel",
+      "tags": [
+        "Workflow Endpoints"
+      ],
+      "auth": "machine-bearer",
+      "classification": "api-companion",
+      "responses": [
+        "200",
+        "401",
+        "403",
+        "404",
         "503"
       ]
     },
@@ -430,6 +465,24 @@
       ]
     },
     {
+      "operationId": "createWorkflowEndpoint",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/workflow-endpoints",
+      "tags": [
+        "Workflow Endpoints"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "201",
+        "400",
+        "401",
+        "404",
+        "409",
+        "503"
+      ]
+    },
+    {
       "operationId": "createWorkflowEventSubscription",
       "method": "POST",
       "path": "/api/v1/workflow-event-subscriptions",
@@ -515,6 +568,22 @@
       ]
     },
     {
+      "operationId": "deleteWorkflowEndpointGrant",
+      "method": "DELETE",
+      "path": "/api/v1/projects/{project_id}/workflow-endpoints/{endpoint_key}/grants/{grant_id}",
+      "tags": [
+        "Workflow Endpoints"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "204",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
       "operationId": "deleteWorkflowEventSubscription",
       "method": "DELETE",
       "path": "/api/v1/workflow-event-subscriptions/{subscription_id}",
@@ -536,6 +605,22 @@
       "path": "/api/v1/extensions/{extension_id}/disable",
       "tags": [
         "Extensions"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "disableWorkflowEndpoint",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/workflow-endpoints/{endpoint_key}/disable",
+      "tags": [
+        "Workflow Endpoints"
       ],
       "auth": "owner-bearer",
       "classification": "ui-primary",
@@ -1179,6 +1264,57 @@
       ]
     },
     {
+      "operationId": "getWorkflowEndpoint",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/workflow-endpoints/{endpoint_key}",
+      "tags": [
+        "Workflow Endpoints"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getWorkflowEndpointArtifactContent",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/workflow-endpoints/{endpoint_key}/invocations/{invocation_id}/artifacts/{file_id}/content",
+      "tags": [
+        "Workflow Endpoints"
+      ],
+      "auth": "machine-bearer",
+      "classification": "api-companion",
+      "responses": [
+        "200",
+        "401",
+        "403",
+        "404",
+        "410",
+        "503"
+      ]
+    },
+    {
+      "operationId": "getWorkflowEndpointInvocation",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/workflow-endpoints/{endpoint_key}/invocations/{invocation_id}",
+      "tags": [
+        "Workflow Endpoints"
+      ],
+      "auth": "machine-bearer",
+      "classification": "api-companion",
+      "responses": [
+        "200",
+        "401",
+        "403",
+        "404",
+        "503"
+      ]
+    },
+    {
       "operationId": "getWorkflowEventSubscription",
       "method": "GET",
       "path": "/api/v1/workflow-event-subscriptions/{subscription_id}",
@@ -1339,6 +1475,27 @@
         "409",
         "413",
         "429",
+        "503"
+      ]
+    },
+    {
+      "operationId": "invokeWorkflowEndpoint",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/workflow-endpoints/{endpoint_key}/invocations",
+      "tags": [
+        "Workflow Endpoints"
+      ],
+      "auth": "machine-bearer",
+      "classification": "api-companion",
+      "responses": [
+        "200",
+        "202",
+        "400",
+        "401",
+        "403",
+        "404",
+        "409",
+        "422",
         "503"
       ]
     },
@@ -1676,6 +1833,38 @@
       "path": "/api/v1/workflows/{workflow_id}/versions",
       "tags": [
         "Workflows"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "listWorkflowEndpointGrants",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/workflow-endpoints/{endpoint_key}/grants",
+      "tags": [
+        "Workflow Endpoints"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "listWorkflowEndpoints",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/workflow-endpoints",
+      "tags": [
+        "Workflow Endpoints"
       ],
       "auth": "owner-bearer",
       "classification": "ui-primary",
@@ -2113,6 +2302,24 @@
       ]
     },
     {
+      "operationId": "updateWorkflowEndpoint",
+      "method": "PUT",
+      "path": "/api/v1/projects/{project_id}/workflow-endpoints/{endpoint_key}",
+      "tags": [
+        "Workflow Endpoints"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
+        "400",
+        "401",
+        "404",
+        "409",
+        "503"
+      ]
+    },
+    {
       "operationId": "uploadFileWorkspaceFile",
       "method": "POST",
       "path": "/api/v1/file-workspaces/{workspace_id}/files",
@@ -2140,6 +2347,23 @@
       "classification": "internal-worker",
       "responses": [
         "201",
+        "400",
+        "401",
+        "404",
+        "503"
+      ]
+    },
+    {
+      "operationId": "upsertWorkflowEndpointGrant",
+      "method": "POST",
+      "path": "/api/v1/projects/{project_id}/workflow-endpoints/{endpoint_key}/grants",
+      "tags": [
+        "Workflow Endpoints"
+      ],
+      "auth": "owner-bearer",
+      "classification": "ui-primary",
+      "responses": [
+        "200",
         "400",
         "401",
         "404",

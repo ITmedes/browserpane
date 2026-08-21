@@ -3,6 +3,7 @@
   "contract": "bpane-control-v1",
   "classifications": {
     "ui-primary": [
+      "activateWorkflowEndpoint",
       "cancelQueuedSession",
       "cancelWorkflowRun",
       "clearAutomationOwner",
@@ -21,11 +22,14 @@
       "createSessionTemplate",
       "createWorkflowDefinition",
       "createWorkflowDefinitionVersion",
+      "createWorkflowEndpoint",
       "createWorkflowEventSubscription",
       "createWorkflowRun",
       "deleteBrowserContext",
       "deleteFileWorkspaceFile",
+      "deleteWorkflowEndpointGrant",
       "deleteWorkflowEventSubscription",
+      "disableWorkflowEndpoint",
       "disableExtension",
       "disconnectAllSessionConnections",
       "disconnectSessionConnection",
@@ -61,6 +65,7 @@
       "getWorkflowDefinition",
       "getWorkflowDefinitionSourcePreview",
       "getWorkflowDefinitionVersion",
+      "getWorkflowEndpoint",
       "getWorkflowEventSubscription",
       "getWorkflowRun",
       "getWorkflowRunEvents",
@@ -89,6 +94,8 @@
       "listWorkflowDefinitionSourceFiles",
       "listWorkflowDefinitionVersions",
       "listWorkflowDefinitions",
+      "listWorkflowEndpointGrants",
+      "listWorkflowEndpoints",
       "listWorkflowEventDeliveries",
       "listWorkflowEventSubscriptions",
       "listWorkflowRunProducedFiles",
@@ -109,6 +116,8 @@
       "updateServicePrincipal",
       "updateSessionRecordingPolicy",
       "updateSessionTemplate",
+      "updateWorkflowEndpoint",
+      "upsertWorkflowEndpointGrant",
       "uploadFileWorkspaceFile",
       "validateWorkflowDefinitionSource"
     ],
@@ -122,9 +131,13 @@
     ],
     "api-companion": [
       "cancelAutomationTask",
+      "cancelWorkflowEndpointInvocation",
       "createAutomationTask",
       "createSessionRecording",
       "deleteSession",
+      "getWorkflowEndpointArtifactContent",
+      "getWorkflowEndpointInvocation",
+      "invokeWorkflowEndpoint",
       "stopSessionRecording"
     ],
     "internal-worker": [

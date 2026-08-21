@@ -11,6 +11,7 @@ use crate::automation_tasks::{
 use crate::credentials::WorkflowRunCredentialBindingResource;
 use crate::extensions::{AppliedExtension, AppliedExtensionResource};
 use crate::session_control::{ProjectAdmissionDecision, SessionProjectResource};
+use crate::workflow_endpoints::{WorkflowRunOutcome, WorkflowSideEffectState};
 
 use super::{
     StoredWorkflowDefinition, StoredWorkflowDefinitionVersion, StoredWorkflowRun,
@@ -176,6 +177,12 @@ pub struct WorkflowRunResource {
     pub source_system: Option<String>,
     pub source_reference: Option<String>,
     pub client_request_id: Option<String>,
+    pub endpoint_id: Option<Uuid>,
+    pub endpoint_invocation_id: Option<Uuid>,
+    pub endpoint_key: Option<String>,
+    pub outcome: Option<WorkflowRunOutcome>,
+    pub side_effect_state: Option<WorkflowSideEffectState>,
+    pub execution_deadline_at: Option<DateTime<Utc>>,
     pub state: WorkflowRunState,
     pub session_id: Uuid,
     pub automation_task_id: Uuid,
@@ -375,6 +382,12 @@ impl StoredWorkflowRun {
             source_system: self.source_system.clone(),
             source_reference: self.source_reference.clone(),
             client_request_id: self.client_request_id.clone(),
+            endpoint_id: self.endpoint_id,
+            endpoint_invocation_id: self.endpoint_invocation_id,
+            endpoint_key: self.endpoint_key.clone(),
+            outcome: self.outcome.clone(),
+            side_effect_state: self.side_effect_state,
+            execution_deadline_at: self.execution_deadline_at,
             state: self.state,
             session_id: self.session_id,
             automation_task_id: self.automation_task_id,

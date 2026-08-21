@@ -61,14 +61,20 @@ impl SessionStore {
         principal: &AuthenticatedPrincipal,
         id: Uuid,
     ) -> Result<Option<StoredAutomationTask>, SessionStoreError> {
-        match &self.backend {
+        let task = match &self.backend {
             SessionStoreBackend::InMemory(store) => {
                 store.cancel_automation_task_for_owner(principal, id).await
             }
             SessionStoreBackend::Postgres(store) => {
                 store.cancel_automation_task_for_owner(principal, id).await
             }
+        }?;
+        if let Some(run) = self.get_workflow_run_by_automation_task_id(id).await? {
+            let _ = self
+                .persist_workflow_run_endpoint_evidence(&run, None)
+                .await?;
         }
+        Ok(task)
     }
 
     pub async fn list_automation_task_events_for_owner(
@@ -115,14 +121,24 @@ impl SessionStore {
         request: AutomationTaskTransitionRequest,
     ) -> Result<Option<StoredAutomationTask>, SessionStoreError> {
         validate_automation_task_transition_request(&request)?;
-        match &self.backend {
+        let request = self
+            .prepare_endpoint_automation_task_transition(id, request)
+            .await?;
+        let transition_data = request.event_data.clone();
+        let task = match &self.backend {
             SessionStoreBackend::InMemory(store) => {
                 store.transition_automation_task(id, request).await
             }
             SessionStoreBackend::Postgres(store) => {
                 store.transition_automation_task(id, request).await
             }
+        }?;
+        if let Some(run) = self.get_workflow_run_by_automation_task_id(id).await? {
+            let _ = self
+                .persist_workflow_run_endpoint_evidence(&run, transition_data.as_ref())
+                .await?;
         }
+        Ok(task)
     }
 
     pub async fn append_automation_task_log(

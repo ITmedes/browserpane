@@ -111,6 +111,20 @@ async fn cancel_automation_task(
                 }),
             )
         })?;
+    if let Some(run) = state
+        .session_store
+        .get_workflow_run_by_automation_task_id(task_id)
+        .await
+        .map_err(map_session_store_error)?
+    {
+        if let (Some(_), Some(outcome), Some(side_effect_state)) =
+            (run.endpoint_id, run.outcome.as_ref(), run.side_effect_state)
+        {
+            state
+                .workflow_observability
+                .record_endpoint_terminal(outcome.category, side_effect_state);
+        }
+    }
     Ok(Json(task.to_resource()))
 }
 

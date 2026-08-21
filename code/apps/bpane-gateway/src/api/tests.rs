@@ -63,6 +63,7 @@ mod session_files;
 mod session_templates;
 mod sessions;
 mod workflow_definitions;
+mod workflow_endpoints;
 mod workflow_events;
 mod workflow_files;
 mod workflow_run_operations;

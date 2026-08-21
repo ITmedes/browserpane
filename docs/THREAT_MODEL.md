@@ -68,7 +68,7 @@ Assumptions common to all profiles:
 
 | Class | Examples | Security objective |
 | --- | --- | --- |
-| Authentication material | OIDC tokens, connect tickets, automation tokens, admin-event tickets, broker/worker credentials | Confidentiality, short lifetime, audience/purpose binding, replay resistance |
+| Authentication material | Owner OIDC tokens, external client-credentials tokens, connect tickets, automation tokens, admin-event tickets, broker/worker credentials | Confidentiality, short lifetime, audience/purpose binding, replay resistance |
 | Secret material | Vault tokens, credential-binding values, proxy credentials, webhook signing secrets, CA private material | Never returned through owner APIs, logs, metrics, or artifacts |
 | Control-plane data | owners, projects, policies, templates, sessions, workflows, grants, run state | Authorization, integrity, tenant separation, auditability |
 | Browser/session data | rendered frames, input, clipboard, microphone, camera, cookies, profile state | Session isolation, capability enforcement, bounded retention |
@@ -85,6 +85,7 @@ Assumptions common to all profiles:
 | Owner/operator | Manage owner-visible resources and interactive sessions | Stolen token, malicious/compromised browser, accidental unsafe configuration |
 | Viewer | Observe a shared session subject to session policy | Input or data-exfiltration privilege escalation |
 | Automation principal | Operate one delegated session or workflow scope | Cross-session access, token replay, over-broad service identity |
+| External process caller | Invoke, poll, cancel, or read artifacts for one granted project Workflow Endpoint | Interactive-token substitution, unregistered/disabled identity, cross-project access, grant/scope bypass, unsafe retry after uncertain effects |
 | Runtime-broker service principal | Submit policy-valid runtime operations | Credential theft, replay, gateway compromise using allowed broker authority |
 | Browser runtime | Execute untrusted websites with approved session capabilities | Browser exploit, container escape, network/file/credential exfiltration |
 | Workflow/recording worker | Execute pinned workflow or record one session | Malicious source, wrong-session access, artifact/path abuse, output flooding |
@@ -103,6 +104,7 @@ Assumptions common to all profiles:
 | Browser to admin events | Short-lived first-frame credential, sanitized snapshots | Purpose-scoped admin-event token and wrong-purpose/expiry tests | Event-stream capacity and generalized security-event export remain #28/#164 |
 | Browser to WebTransport | Short-lived connect ticket, frames, input, media, files | Purpose-scoped/expired ticket tests; session capability and viewer enforcement | Public origin/TLS packaging and protocol conformance remain #66/#175 |
 | Automation to session API/CDP | Session automation token and delegated authority | Session-bound token, wrong-purpose and wrong-session API/Compose tests | Direct automation productization and broader grants remain #69/#176 |
+| External process to Workflow Endpoint | OIDC client-credentials token, endpoint input/correlation/idempotency key, restricted invocation/outcome/artifact projection | Issuer/client resolution to active service principal; project membership plus exact endpoint operation grant and declared scope; pre-runtime schema validation; endpoint/caller fingerprint; original-caller reads; RFC 9457 failures; typed bounded outcomes and artifact metadata | TLS/private ingress and IdP client-secret lifecycle are deployment-owned; generalized RBAC remains #176 and callbacks/revisions/rate limits remain #240 |
 | MCP client to bridge | MCP requests and selected/delegated session | Control mutation uses internal bearer through authenticated gateway proxy; session endpoint smoke | Public transport auth and exact-origin CORS are residual; host-exposed MCP is local/trusted-network only |
 | Gateway to Postgres | Control resources, ownership, lifecycle, metadata | Parameterized store implementations, shared store contract, readiness check | TLS, least-privilege DB identity, backup/restore, HA are #66/#73/#74 |
 | Gateway to Vault | Credential-binding lookup and secret value | Secret-provider boundary and opaque binding metadata | Local Compose passes a dev root token by argument; production-safe identity/secret injection remains #66/#70 |
@@ -138,6 +140,7 @@ Assumptions common to all profiles:
 | T-16 | Forged, redirected, replayed, or unavailable callback delivery | Signed events, destination policy, persisted retries/diagnostics and ordering tests | Key rotation, receiver replay window and generalized event export: #28/#70 |
 | T-17 | Data loss, incomplete cleanup, or unrecoverable state | Retention workers, persisted assignments, restart reconciliation, lifecycle readiness | Backup/restore and HA drills: #73/#74 |
 | T-18 | Protocol downgrade, parser ambiguity, or unsupported client behavior | Shared Rust/TypeScript protocol implementation and frame tests exist | Version negotiation, vectors, fuzzing and compatibility matrix: #175 |
+| T-19 | External Workflow Endpoint caller bypasses project/grant scope, duplicates a browser side effect, or leaks process credentials/data | Active registered service-principal and exact endpoint-operation checks precede runtime creation; Draft 2020-12 input/output enforcement; endpoint/caller fingerprint conflicts; restricted projections; bounded outcome/artifact evidence; uncertain side effects disable retry guidance | Public ingress/TLS, client-secret rotation, external compensation, and broader integration lifecycle remain deployment/#70/#176/#240 |
 
 ## Negative-Test Evidence
 
@@ -155,6 +158,7 @@ commands intentionally select behavior rather than implementation line numbers.
 | Broker authentication | Missing/expired token, wrong audience/client/key, malformed claims, and symmetric algorithms are rejected | `health_routes_are_public_but_operations_require_authentication`; `maps_expired_wrong_audience_client_and_key_failures`; auth unit tests | `cargo test -p bpane-runtime-broker maps_expired_wrong_audience_client_and_key_failures` |
 | Broker replay/idempotency | A reused request id with changed body/key or principal is denied while exact retries are stable | `exact_retry_is_cached_and_conflicting_reuse_is_denied`; ledger conflict/capacity tests | `cargo test -p bpane-runtime-broker exact_retry_is_cached_and_conflicting_reuse_is_denied` |
 | Callback delivery | Unsafe URL forms, non-public/mixed DNS answers, redirects, implicit proxies, and unapproved local targets are denied | `workflow_event_delivery::destination_policy::tests` and delivery client tests | `cargo test -p bpane-gateway workflow_event_delivery` |
+| Workflow Endpoint machine access | Missing/interactive, unregistered, disabled, cross-project, insufficient-scope, wrong-operation, and foreign-caller tokens are denied before runtime side effects; changed idempotency payload conflicts | `api::tests::workflow_endpoints`; in-memory/Postgres shared store contract; fake-BPM Compose smoke | `cargo test -p bpane-gateway workflow_endpoints` plus `npm run smoke:workflow-endpoint-compose -- --headless` |
 | Browser-context archives | Oversized archives, expansion/entry/path limits, traversal, links, devices, and FIFOs are rejected | `api::browser_context_archive::tests`; authenticated import capacity test | `cargo test -p bpane-gateway browser_context_archive` |
 | Recording finalization | Outside, mismatched, missing, directory, symlink, parent-symlink, and non-regular staging sources are rejected | `recording::artifact_store::tests`; worker/session/recording binding API tests | `cargo test -p bpane-gateway recording::artifact_store` |
 | Runtime policy | Mutable images, arbitrary environment, escaping mounts/socket paths, unsafe endpoints/networks, host privileges, weakened broker confinement, and direct gateway Docker access are rejected | runtime-broker browser/worker/storage tests and structured negative Compose fixtures | `cargo test -p bpane-runtime-broker` plus `node --test scripts/validate-runtime-broker-*.test.mjs` |

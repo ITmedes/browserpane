@@ -78,6 +78,22 @@
       ]
     },
     {
+      "clientId": "bpane-fake-bpm",
+      "name": "BrowserPane Fake BPM Conformance Caller",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "bpane-fake-bpm-dev-secret",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "protocol": "openid-connect",
+      "fullScopeAllowed": false,
+      "defaultClientScopes": [
+        "bpane-gateway-audience"
+      ]
+    },
+    {
       "clientId": "bpane-runtime-broker",
       "name": "BrowserPane Runtime Broker Audience",
       "protocol": "openid-connect",

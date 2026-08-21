@@ -4,9 +4,10 @@ Status: Canonical execution roadmap
 
 Governance issue: [#173](https://github.com/ITmedes/browserpane/issues/173)
 
-Last implementation audit: 2026-08-20 on `main` at `51101a34`. The Codex
-delivery loop merged through PR #243 and its 50 GiB local capacity guard merged
-through #244/PR #245. Product order remains #172 then #174.
+Last implementation audit: 2026-08-21 for the #172 review candidate based on
+`main` at `ab9dc564`. The Workflow Endpoint implementation has passing focused,
+contract, and real-Compose fake-BPM evidence; #174 remains next only after #172
+review and merge.
 
 ## How To Use This Document
 
@@ -53,7 +54,7 @@ remains Qualified until a later post-merge audit passes.
 | Lane | Outcome | Current entry point | Promotion target |
 | --- | --- | --- | --- |
 | Foundation | Trusted build, auth, contracts, storage, and lifecycle baseline. | Complete through #179 plus #235 Compose reliability | Foundation Gate |
-| Pilot Value | One bounded reusable BPM browser activity with accepted evidence and runbook. | #47, then #172 and #174 | Phase 0 Gate |
+| Pilot Value | One bounded reusable BPM browser activity with accepted evidence and runbook. | #172 in review, then #174 | Phase 0 Gate |
 | Operator Product | Complete and promote `/admin-new/` as the default operator console. | Default promoted through #163; #124 is the next focused catalog gap | Phase 1 Gate |
 | Production | Harden deployment, security, recovery, supply chain, and telemetry. | #233 dashboard baseline merged; #178 retains broader telemetry scope | Production Baseline |
 | Enterprise | Organization controls, policy, residency, HA, and governed integrations. | #176 / #70 / #79 | Phase N Gate |
@@ -77,17 +78,16 @@ remains Qualified until a later post-merge audit passes.
 | 9 | #246 | In Progress | #241 qualification loop | Route one evidence-backed requirements gap set through a separate documentation PR before later requalification. |
 
 #241, #244, and #246 are contributor tooling and do not block or supersede the
-next product slice, #172. The loop may promote #172 only after its separate
-readiness audit passes from clean `main` under an approved project identity.
-#246 allows the concrete contract gaps found by that audit to be resolved in a
-separate requirements PR without treating #172 as Ready or implementing it.
+Pilot sequence. #172 passed its separate readiness audit and is now the active
+review candidate; #174 must not begin before that candidate merges and its own
+remaining gates pass.
 
 ### Next Three Pilot Value Slices
 
 | Order | Issue | State | Dependency | Outcome |
 | --- | --- | --- | --- | --- |
 | 1 | #47 | Done | Foundation and workflow baseline merged | Supported immutable Git-backed Playwright workflow package and regression contract merged through PR #242. |
-| 2 | #172 | Qualified; next audit | #47 contract complete | Add one project-scoped, service-principal-authorized, polling-based BPM activity endpoint. |
+| 2 | #172 | Review candidate | #47 contract complete | Project-scoped, service-principal-authorized polling endpoint implemented with real-Compose conformance evidence. |
 | 3 | #174 | Qualified | #47, #172, #180 and selected conditional controls | Select, deliver, operate, and review one real bounded activity. |
 
 #180 is parallel P0 Foundation/governance work and must complete before an

@@ -4,6 +4,7 @@ mod recordings;
 
 mod resources;
 
+mod workflow_endpoints;
 mod workflows;
 
 mod automation_tasks;
