@@ -1,9 +1,9 @@
 # Open GitHub Issues Context
 
 Created: 2026-07-10
-Revalidated: 2026-08-21 for the #172 review candidate based on `main` at
-`ab9dc564`; the bounded Workflow Endpoint has focused and real-Compose evidence,
-while #174 remains the next Pilot activity only after review and merge
+Revalidated: 2026-08-21 after #180 specification merged through PR #259 based
+on `main` at `5f022af7`; #174 and #180 are externally deferred, with #175 then
+#124 as the finite engineering fallback
 
 This document maps the current `docs/` workspace to the live open GitHub
 issues for `ITmedes/browserpane`. It is the bridge between the consolidated
@@ -11,8 +11,8 @@ local planning docs and the public issue tracker.
 
 Source check:
 
-- fetched and updated through the GitHub API on 2026-08-20,
-- open issue range: `#6` through `#246`,
+- fetched and updated through the GitHub API on 2026-08-21,
+- open issue range: `#6` through `#260`,
 - focused docs-derived implementation issues created on 2026-07-10: `#145`
   through `#170`,
 - focused Phase N Teach Mode issue created on 2026-07-31: `#171`,
@@ -40,8 +40,9 @@ Source check:
 - deferred Workflow Endpoint productization follow-up created on 2026-08-20:
   `#240`,
 - Codex-native local delivery-loop issue `#241` completed through PR `#243`;
-  disk-capacity guard `#244` completed through PR `#245`; bounded requirements-
-  specification follow-up created on 2026-08-20: `#246`,
+  follow-ups through `#257` added disk safety, requirements specification,
+  result and merge contracts, admin merge, smoke reliability, and external-gate
+  deferral; `#260` owns finite ordered fallback traversal,
 - all executable open issues carry a priority, lane, state, and target-gate
   milestone; umbrella tracker `#6` intentionally carries only priority/state,
 - `#151` and `#173` are implemented and closed; `#184` is the implemented
@@ -61,7 +62,7 @@ Source check:
 | Focused Pilot Value issues | `#47`, `#172`, `#174` | Use `#47` for the immutable Playwright package, `#172` for one polling-based BPM activity endpoint, and `#174` for the selected real Pilot process. |
 | Deferred workflow productization | `#171`, `#240` | Use `#171` for Teach Mode and controlled repair. Use `#240` for endpoint revisions, callbacks, replay, tracing, throttling, and connector compatibility. Neither is a Phase 0 dependency. |
 | Delivery governance | `#173` | Owns the canonical roadmap, maturity, gates, risks, plan template, and issue/claim reconciliation. It does not own runtime features. |
-| Contributor automation | `#241`, `#244`, `#246` | #241 owns the optional local Codex qualify/propose/watch/repair loop. #244 adds its local disk-capacity stop. #246 routes one evidence-backed requirements gap set through a separate documentation PR and later requalification. None changes product priority or capability maturity. |
+| Contributor automation | `#241`, `#244`, `#246`, `#248`, `#251`, `#253`, `#255`, `#257`, `#260` | These issues own the optional bounded Codex loop, disk safety, requirements specification, result/merge handling, smoke reliability, external-gate deferral, and finite fallback traversal. None changes product priority or capability maturity. |
 | Focused cross-product gaps | `#174` through `#180` | Use these for Phase 0 delivery, protocol conformance, authorization, identity lifecycle, platform telemetry, API compatibility, and open-source governance. |
 | Focused validation performance | `#184` | Preserve the #151 validation baseline while reducing hosted compose feedback time through isolated execution lanes. |
 | Focused Docker build acceleration | `#185` | Preserve #184 lane coverage while adding deterministic, supply-chain-safe Docker build reuse for trusted hosted runs. |
@@ -119,7 +120,8 @@ Source check:
 | `#240` Workflow Endpoint lifecycle, callbacks, and connector compatibility | `BPANE-00240_WORKFLOW_ENDPOINT_PRODUCTIZATION_PLAN.md`, historical `BPANE-00172_BPM_WORKFLOW_ENDPOINT_INTEGRATION_PLAN.md` | Deferred Production/Enterprise | Owns endpoint revisions, callbacks, replay, tracing expansion, throttling, and connector compatibility after #172. |
 | closed `#241` Codex-native local delivery loop | `BPANE-00241_CODEX_DEVELOPMENT_LOOP_PLAN.md`, `CURRENT_CONTEXT.md`, `DELIVERY_ROADMAP.md` | Foundation contributor tooling | Optional bounded qualification/proposal/repair orchestration. It may promote one already-scoped Qualified issue only after roadmap, dependency, plan, risk, acceptance, and test checks; it does not create backlog, replace plans, reprioritize work, or advance a product gate. |
 | closed `#244` Local development-loop disk guard | `BPANE-00244_DEV_LOOP_DISK_GUARD_PLAN.md`, `CURRENT_CONTEXT.md`, `DELIVERY_ROADMAP.md` | Foundation contributor-tooling follow-up | Stops local Codex work below a configurable 50 GiB default without deleting Docker or user data. |
-| `#246` Bounded requirements-specification cycle | `BPANE-00246_REQUIREMENTS_SPECIFICATION_LOOP_PLAN.md`, `BPANE-00241_CODEX_DEVELOPMENT_LOOP_PLAN.md`, `CURRENT_CONTEXT.md`, `DELIVERY_ROADMAP.md` | Foundation contributor-tooling follow-up | Lets qualification route one correctly ordered issue with evidence-backed contract gaps to a separate documentation PR; lifecycle promotion and implementation require a later post-merge qualification pass. |
+| closed `#246` Bounded requirements-specification cycle | `BPANE-00246_REQUIREMENTS_SPECIFICATION_LOOP_PLAN.md`, `BPANE-00241_CODEX_DEVELOPMENT_LOOP_PLAN.md`, `CURRENT_CONTEXT.md`, `DELIVERY_ROADMAP.md` | Foundation contributor-tooling follow-up | Lets qualification route one correctly ordered issue with evidence-backed contract gaps to a separate documentation PR; lifecycle promotion and implementation require a later post-merge qualification pass. |
+| `#260` Ordered qualification fallback | `BPANE-00260_ORDERED_QUALIFICATION_FALLBACK_PLAN.md`, `CURRENT_CONTEXT.md`, `DELIVERY_ROADMAP.md` | Foundation contributor-tooling follow-up | Traverses only the finite roadmap-owned fallback queue when multiple earlier candidates wait for external decisions. |
 
 ## Focused Work-Order Issue Matrix
 
@@ -161,6 +163,7 @@ dedicated open issue ownership.
 | Foundation contributor automation | `#241` Add a Codex-native local delivery loop | `BPANE-00241_CODEX_DEVELOPMENT_LOOP_PLAN.md`, `CURRENT_CONTEXT.md`, `DELIVERY_ROADMAP.md` |
 | Foundation contributor safety | `#244` Stop the local Codex loop before low disk space becomes unsafe | `BPANE-00244_DEV_LOOP_DISK_GUARD_PLAN.md`, `CURRENT_CONTEXT.md`, `DELIVERY_ROADMAP.md` |
 | Foundation requirements automation | `#246` Add bounded requirements-specification cycles | `BPANE-00246_REQUIREMENTS_SPECIFICATION_LOOP_PLAN.md`, `BPANE-00241_CODEX_DEVELOPMENT_LOOP_PLAN.md`, `CURRENT_CONTEXT.md`, `DELIVERY_ROADMAP.md` |
+| Foundation ordered qualification | `#260` Traverse the documented fallback queue | `BPANE-00260_ORDERED_QUALIFICATION_FALLBACK_PLAN.md`, `CURRENT_CONTEXT.md`, `DELIVERY_ROADMAP.md` |
 | Phase N. Workflow Studio Teach Mode | `#171` Add Workflow Studio Teach Mode and controlled demonstration-to-workflow publishing | `BPANE-00171_WORKFLOW_TEACH_MODE_PLAN.md`, `DOMAIN_REQUIREMENTS.md`, `ADMIN_NEW_REQUIREMENTS.md`, `VALIDATION_MATRIX.md` |
 | Delivery governance | `#173` Establish executable delivery roadmap, capability maturity, and release gates | `BPANE-00173_DELIVERY_GOVERNANCE_PLAN.md`, `DELIVERY_ROADMAP.md`, `CAPABILITY_MATURITY_MATRIX.md`, `PRODUCT_PHASES_AND_RELEASE_GATES.md`, `RISK_REGISTER.md` |
 | Phase 0 BPM browser activity | `#174` Qualify and deliver one bounded Phase 0 BPM browser activity | `BPANE-00174_PHASE_0_REFERENCE_WORKFLOW_PLAN.md`, `DELIVERY_ROADMAP.md`, `PRODUCT_PHASES_AND_RELEASE_GATES.md` |
@@ -245,7 +248,8 @@ The cross-reference pass also updated the issue bodies in both directions:
 | `#240` | Deferred endpoint productization. | Created on GitHub 2026-08-20 when #172 was narrowed. | Owns revisions, callbacks, replay, trace expansion, throttling, and connector compatibility. |
 | `#241` | Closed Foundation contributor tooling. | Qualification, proposal, repair, bounded CI convergence, and opt-in merge orchestration merged through PR #243. | The loop may promote exactly one roadmap-prioritized candidate but does not alter product priority or capability maturity. |
 | `#244` | Closed Foundation contributor-safety follow-up. | Deterministic free-capacity gate merged through PR #245. | Defaults to 50 GiB, fails closed, and never deletes operator data. |
-| `#246` | In-progress Foundation contributor-tooling follow-up. | Adds a bounded specification session and structured requirements-PR transition. | It may resolve evidence-backed issue/plan omissions, but cannot make product decisions, promote issues, or implement product code. |
+| `#246` | Closed Foundation contributor-tooling follow-up. | Bounded specification session and structured requirements-PR transition merged through PR #247. | It may resolve evidence-backed issue/plan omissions, but cannot make product decisions, promote issues, or implement product code. |
+| `#260` | In-progress Foundation contributor-tooling follow-up. | Adds finite ordered traversal after multiple external gates. | It preserves each blocker, selects only the first eligible documented fallback, and cannot inspect arbitrary backlog work. |
 
 ## Docs-To-Issue Context
 
@@ -282,6 +286,7 @@ shown as `closed #142`.
 | `BPANE-00241_CODEX_DEVELOPMENT_LOOP_PLAN.md` | `#241`, optional Foundation contributor automation; no product capability claim |
 | `BPANE-00244_DEV_LOOP_DISK_GUARD_PLAN.md` | `#244`, local contributor disk-capacity safety; no product capability claim |
 | `BPANE-00246_REQUIREMENTS_SPECIFICATION_LOOP_PLAN.md` | `#246`, local contributor requirements-specification cycle; no product capability claim |
+| `BPANE-00260_ORDERED_QUALIFICATION_FALLBACK_PLAN.md` | `#260`, finite ordered qualification fallback; no product capability claim |
 | `BPANE-00173_DELIVERY_GOVERNANCE_PLAN.md` | `#173` |
 | `BPANE-00174_PHASE_0_REFERENCE_WORKFLOW_PLAN.md` | `#174`, after `#47` and `#172`, with `#180` and selected conditional controls; explicitly excludes `#71` and `#171` |
 | `BPANE-00180_OPEN_SOURCE_GOVERNANCE_PLAN.md` | `#180`, open-source license, contribution, third-party notice, and IP-governance contract; reviewed approval remains an external gate |
@@ -327,7 +332,7 @@ issue and capture the exact slice boundary in a checked-in `docs/*_PLAN.md`:
 | Active Operator Product work | none; `#124` qualified | Admin-new is promoted; select #124 only when session-template catalog work outranks the current Production slice. |
 | Items 10-19: admin-new parity and promotion work | `#154`-`#163`, with session templates still tracked by `#124` | Use the matching focused issue and keep old admin regression scope explicit. |
 | Items 20-26: scalability, runtime hygiene, docs, performance, and refactors | `#164`-`#170` | Use the matching focused issue and require validation evidence before broad refactors. |
-| Pilot Value | closed `#47`; `#172` is in review, then `#174`; `#180` is a parallel gate | Review and merge the polling endpoint candidate, then deliver one real activity. Pull in only selected conditional controls. |
+| Pilot Value | closed `#47` and `#172`; `#174` is externally deferred; `#180` is a parallel external-use gate | Select and deliver one real activity after stakeholder decisions. While waiting, follow the finite engineering fallback `#175` then `#124`. |
 | Production/Enterprise and Innovation | #233 completed; broad issues plus `#175`-`#178`, `#240`, and `#171` qualified | Reassess after Phase 0 evidence; #240 and #171 must not displace the current Pilot sequence. |
 
 ## Issue Hygiene Notes

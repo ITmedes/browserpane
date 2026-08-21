@@ -25,10 +25,11 @@ separate bounded requirements-specification session.
   details to infer. Distinguish them from evidence-backed omissions or stale
   issue/plan statements that a separate specification session can resolve.
 - A blocker on the first documented candidate does not authorize arbitrary
-  backlog skipping. You may evaluate another candidate only when the canonical
-  roadmap explicitly identifies it as parallel work or as the fallback while
-  the first candidate waits. Retain the deferred issue and exact blocker in
-  the result reason and summary; do not mutate or promote the deferred issue.
+  backlog skipping. You may traverse only the finite ordered fallback queue
+  explicitly named by the canonical roadmap. Evaluate candidates in that exact
+  order and stop at the first one that can be promoted or specified. Retain
+  every deferred issue and exact blocker in the result reason and summary.
+  Do not mutate or promote a deferred issue.
 - Do not expose credentials, local tokens, private run logs, or sensitive
   environment data in comments or output.
 
@@ -59,12 +60,15 @@ separate bounded requirements-specification session.
    omission and the issue plus canonical repository evidence are sufficient to
    create it without inventing policy. Multiple plans remain an ambiguity.
 5. Confirm no open issue or pull request owns materially overlapping scope.
-6. If the first candidate is blocked, inspect another only when current
-   canonical documents explicitly call it parallel or fallback work. Do not
-   infer that relationship from labels, issue number, or convenience.
-7. If ordering is ambiguous, a decision or dependency remains unresolved for
-   every explicitly eligible candidate, or no candidate can safely progress,
-   return `NO_QUALIFICATION` with the concrete blocker.
+6. If a candidate is blocked, continue through the finite ordered fallback
+   queue only when current canonical documents explicitly name the next issue.
+   Do not infer that relationship from labels, issue number, or convenience.
+7. Select the first eligible candidate in that queue. Do not skip an eligible
+   candidate in favor of an easier later issue, and do not assess issues beyond
+   the documented queue.
+8. If ordering is ambiguous, a decision or dependency remains unresolved for
+   every candidate in the documented queue, or no candidate can safely
+   progress, return `NO_QUALIFICATION` with the complete blocker chain.
 
 ## Phase 3: Apply The Readiness Contract
 
@@ -113,12 +117,18 @@ begin it. A separate, explicitly documented parallel candidate may still be
 assessed, and its internal engineering scope may proceed while a clearly
 separated external-use gate remains open.
 
+Continue this assessment through the documented queue until the first candidate
+can be promoted or routed to specification, or until that finite queue is
+exhausted.
+
 Return `NO_QUALIFICATION`, not `NEEDS_SPECIFICATION`, when the selected
 candidate's missing material requires a maintainer or stakeholder decision,
 real target selection, legal or security acceptance, dependency
 implementation, issue split/merge, ownership change, or roadmap ordering
-decision. This does not prevent assessment of a different candidate that the
-canonical roadmap explicitly authorizes in parallel or as fallback work.
+decision. This does not prevent assessment of the next candidate in the
+canonical ordered fallback queue. When every candidate in the documented queue
+has such a blocker, return `NO_QUALIFICATION` and do not inspect arbitrary
+backlog issues.
 
 For `NEEDS_SPECIFICATION`, return the selected issue number and a concise but
 complete actionable reason naming each gap and its evidence source. Do not

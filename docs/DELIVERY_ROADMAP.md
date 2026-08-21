@@ -4,11 +4,12 @@ Status: Canonical execution roadmap
 
 Governance issue: [#173](https://github.com/ITmedes/browserpane/issues/173)
 
-Last implementation audit: 2026-08-21 after #172 merged through PR #250 based
-on `main` at `07a2ff44`. The Workflow Endpoint has passing focused, contract,
-and real-Compose fake-BPM evidence. #174 remains the next Pilot Value outcome
-but waits for real candidate and stakeholder decisions; #180 is explicitly
-eligible in parallel.
+Last implementation audit: 2026-08-21 after #180 requirements specification
+merged through PR #259 based on `main` at `5f022af7`. The Workflow Endpoint has
+passing focused, contract, and real-Compose fake-BPM evidence. #174 remains the
+next Pilot Value outcome but waits for real candidate and stakeholder
+decisions. #180 is specified but waits for reviewed legal/business decisions.
+The ordered engineering fallback begins with #175.
 
 ## How To Use This Document
 
@@ -45,9 +46,10 @@ lanes may contain Qualified work, but starting them requires an explicit gate
 or capacity decision. The optional `dev_loop/` qualifier may execute that gate
 for exactly one documented next slice when its dependencies, focused plan,
 risks, acceptance criteria, and test evidence are already complete; it may not
-choose a different lane or infer a missing decision. If the first candidate is
-externally gated, the loop may evaluate another only when this roadmap names it
-as parallel or fallback work. If current evidence can resolve concrete
+choose a different lane or infer a missing decision. If a candidate is
+externally gated, the loop may traverse only the finite ordered fallback queue
+named by this roadmap and must stop at the first eligible candidate. If current
+evidence can resolve concrete
 issue/plan omissions without changing product direction, the loop may create
 one documentation-only specification PR under #246/#257; the issue remains
 Qualified until a later post-merge audit passes.
@@ -83,12 +85,12 @@ Qualified until a later post-merge audit passes.
 | 11 | #251 | Done | #241 merge convergence | Review-required and branch-policy states stop cleanly through PR #252. |
 | 12 | #253 | Done | #251 merge gates | Explicit admin merge remains opt-in and constrained; merged through PR #254. |
 | 13 | #255 | Done | #172 main smoke evidence | Admin promotion-gate smokes stabilized through PR #256. |
-| 14 | #257 | In Progress | #246 requirements loop | Defer external decisions and evaluate only documented parallel/fallback requirements work. |
+| 14 | #257 | Done | #246 requirements loop | Defer external decisions and evaluate only documented parallel/fallback requirements work; merged through PR #258. |
+| 15 | #260 | In Progress | #257 deferred-candidate contract | Traverse a finite roadmap-owned fallback queue without inferring external decisions. |
 
-#241, #244, #246, #248, #251, #253, #255, and #257 are contributor tooling or
-validation reliability and do not supersede the Pilot sequence. #172 is
-complete. #174 remains externally gated; #180 is explicitly eligible as
-parallel requirements and governance work.
+#241, #244, #246, #248, #251, #253, #255, #257, and #260 are contributor
+tooling or validation reliability and do not supersede the Pilot sequence.
+#172 is complete. #174 and #180 remain externally gated.
 
 ### Next Three Pilot Value Slices
 
@@ -98,10 +100,25 @@ parallel requirements and governance work.
 | 2 | #172 | Done | #47 contract complete | Project-scoped, service-principal-authorized polling endpoint merged through PR #250 with real-Compose conformance evidence. |
 | 3 | #174 | Qualified / externally deferred | #47 and #172 complete; real candidate selection, #180 external-use gate, and selected conditional controls remain | Select, deliver, operate, and review one real bounded activity without inferring stakeholder decisions. |
 
-#180 is the next eligible parallel P0 Foundation/governance requirements
-candidate and must complete before an external Pilot relies on the
-repository's open-source posture. Its engineering contract may be prepared
-without claiming that external legal approval is complete.
+#180 is a parallel P0 Foundation/governance gate and must complete before an
+external Pilot relies on the repository's open-source posture. Its engineering
+contract is specified through PR #259, but implementation waits for the
+reviewed legal/business decision.
+
+### Ordered Qualification Fallback Queue
+
+When no Ready work exists, use this finite order:
+
+`#174` -> `#180` -> `#175` -> `#124`
+
+The qualifier must preserve the blockers on `#174` and `#180`, then assess
+`#175` as the first engineering fallback. `#175` has an accepted product
+direction in ADR 0003; its missing focused plan is an evidence-backed
+specification task. `#124` is the final current fallback and may be considered
+only if `#175` is blocked, exhausted, or complete. This queue does not make
+`#175` or `#124` an external-Pilot dependency and does not authorize selecting
+any other backlog issue. If all four candidates are blocked, the loop stops and
+reports the complete blocker chain.
 
 ### Current Production Slice
 

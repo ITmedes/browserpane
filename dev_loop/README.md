@@ -164,10 +164,11 @@ setup still supports the required work.
   canonical issue and directly related planning docs in one PR, but it cannot
   implement product code or change lifecycle labels.
 - A genuinely external decision on the first candidate does not make the whole
-  queue executable or empty. Qualification may defer it and assess another
-  issue only when the canonical roadmap explicitly marks that issue as
-  parallel or fallback work; the deferred issue and blocker remain visible in
-  the result evidence and are not mutated.
+  queue executable or empty. Qualification traverses only the finite ordered
+  fallback queue named by the canonical roadmap, keeps each deferred issue and
+  blocker visible without mutation, and stops at the first promotable or
+  evidence-backed specification candidate. It returns `NO_QUALIFICATION` only
+  after that documented queue is exhausted.
 - A missing focused plan may itself route to specification when exactly one
   issue owns the scope and its issue plus canonical repository evidence are
   sufficient to create the complete plan without inventing product, legal,
