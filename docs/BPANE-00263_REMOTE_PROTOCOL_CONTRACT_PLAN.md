@@ -9,7 +9,7 @@
 - Target gate: Production Baseline protocol contract checkpoint
 - Depends on: accepted ADR 0003, merged `#151` validation floor
 - Parent program: `#175`; protocol slice 1 of 6
-- Last verified commit/date: `ad77af1efb4e` / 2026-08-21
+- Last verified commit/date: `5dc1c3f839ce` / 2026-08-21
 
 ## Business Outcome
 
@@ -160,7 +160,7 @@ R-007, and ADR references only to that evidence level.
 
 - Branch: `codex/BPANE-00263-remote-protocol-contract` from
   `ac3a5d5f27f5`; implementation commit `ad77af1e`.
-- PR: pending creation after this review-state evidence commit.
+- PR: [#270](https://github.com/ITmedes/browserpane/pull/270)
 - Contract/catalog: BrowserPane protocol v1 is normative in
   `REMOTE_PROTOCOL_V1.md`; fixture schema version `1`, catalog
   `browserpane-current-seed`, with all 15 original vectors retained (12 valid,
