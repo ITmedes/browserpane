@@ -874,6 +874,33 @@ repair() {
   return "$rc"
 }
 
+merge_gate_from_json() {
+  jq -er '
+    if .mergeable == "CONFLICTING" or .mergeStateStatus == "DIRTY" then
+      "merge-conflict"
+    elif .reviewDecision == "CHANGES_REQUESTED" then
+      "changes-requested"
+    elif .reviewDecision == "REVIEW_REQUIRED" then
+      "review-required"
+    elif .mergeable == "UNKNOWN" or .mergeStateStatus == "UNKNOWN" then
+      "merge-state-unknown"
+    elif .mergeStateStatus == "BLOCKED" then
+      "merge-policy-blocked"
+    elif .mergeStateStatus == "BEHIND" then
+      "base-behind"
+    elif .mergeable == "MERGEABLE" then
+      "ready"
+    else
+      "merge-state-unknown"
+    end
+  '
+}
+
+pr_merge_gate() {
+  gh pr view "$1" --json mergeable,mergeStateStatus,reviewDecision \
+    | merge_gate_from_json
+}
+
 land() {
   local pr_number="$1"
   gh pr merge "$pr_number" "--$MERGE_METHOD" --delete-branch
@@ -1094,23 +1121,54 @@ while :; do
           good "#${pr} is green and current; AUTO_MERGE=0 leaves it open for review"
           exit 0
         fi
-        step "iteration $n | merge PR #$pr"
-        required_post_merge_workflows="$(post_merge_workflows_for_pr "$pr")"
-        if land "$pr"; then
-          merge_sha="$(gh pr view "$pr" --json mergeCommit --jq '.mergeCommit.oid // empty')"
-          [[ -n "$merge_sha" ]] || { record_outcome "merge-sha-missing"; die "#${pr} merged but its merge SHA is unavailable"; }
-          good "#${pr} merged at ${merge_sha:0:12}; validating published main"
-          post_merge_rc=0
-          wait_for_post_merge_workflows "$merge_sha" "$required_post_merge_workflows" || post_merge_rc=$?
-          if (( post_merge_rc != 0 )); then
-            record_outcome "post-merge-failed"
-            die "post-merge workflows did not pass for $merge_sha (status $post_merge_rc)"
-          fi
-          record_outcome "landed"
-          good "#${pr} merged and post-merge workflows passed"
-          break
+        if ! merge_gate="$(pr_merge_gate "$pr")"; then
+          record_outcome "merge-state-unavailable"
+          die "could not read the live merge gate for #$pr"
         fi
-        situation="merge-conflict"
+        if [[ "$merge_gate" == "ready" ]]; then
+          step "iteration $n | merge PR #$pr"
+          required_post_merge_workflows="$(post_merge_workflows_for_pr "$pr")"
+          if land "$pr"; then
+            merge_sha="$(gh pr view "$pr" --json mergeCommit --jq '.mergeCommit.oid // empty')"
+            [[ -n "$merge_sha" ]] || { record_outcome "merge-sha-missing"; die "#${pr} merged but its merge SHA is unavailable"; }
+            good "#${pr} merged at ${merge_sha:0:12}; validating published main"
+            post_merge_rc=0
+            wait_for_post_merge_workflows "$merge_sha" "$required_post_merge_workflows" || post_merge_rc=$?
+            if (( post_merge_rc != 0 )); then
+              record_outcome "post-merge-failed"
+              die "post-merge workflows did not pass for $merge_sha (status $post_merge_rc)"
+            fi
+            record_outcome "landed"
+            good "#${pr} merged and post-merge workflows passed"
+            break
+          fi
+          if ! merge_gate="$(pr_merge_gate "$pr")"; then
+            record_outcome "merge-state-unavailable"
+            die "merge command failed and the live merge gate for #$pr is unavailable"
+          fi
+        fi
+        case "$merge_gate" in
+          merge-conflict)
+            situation="merge-conflict"
+            ;;
+          review-required|changes-requested|merge-policy-blocked)
+            record_outcome "$merge_gate"
+            good "#${pr} is green and current but stopped by $merge_gate; leaving it open"
+            exit 0
+            ;;
+          base-behind)
+            record_outcome "base-state-stale"
+            die "GitHub reports #$pr behind even though origin/$DEFAULT_BRANCH is an ancestor; rerun after merge state settles"
+            ;;
+          ready)
+            record_outcome "merge-command-failed"
+            die "merge command failed for #$pr although its refreshed merge gate is ready"
+            ;;
+          *)
+            record_outcome "merge-state-unknown"
+            die "GitHub returned an unknown merge gate for #$pr"
+            ;;
+        esac
       else
         if (( update_rounds >= MAX_UPDATE_BRANCH )); then
           record_outcome "base-keeps-moving"
@@ -1123,7 +1181,24 @@ while :; do
           settle_after_change "$pr" "$old_sha"
           continue
         fi
-        situation="merge-conflict"
+        if ! merge_gate="$(pr_merge_gate "$pr")"; then
+          record_outcome "merge-state-unavailable"
+          die "branch update failed and the live merge gate for #$pr is unavailable"
+        fi
+        case "$merge_gate" in
+          merge-conflict)
+            situation="merge-conflict"
+            ;;
+          review-required|changes-requested|merge-policy-blocked)
+            record_outcome "$merge_gate"
+            good "#${pr} branch update is stopped by $merge_gate; leaving it open"
+            exit 0
+            ;;
+          *)
+            record_outcome "update-branch-failed"
+            die "could not update #$pr from origin/$DEFAULT_BRANCH (merge gate: $merge_gate)"
+            ;;
+        esac
       fi
     else
       situation="ci-red"
