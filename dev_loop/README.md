@@ -147,6 +147,9 @@ setup still supports the required work.
 - Qualification never edits Git, creates a PR, implements code, waits for CI,
   or merges. Unresolved product/security/legal decisions, unmet dependencies,
   ambiguous ordering, or ownership conflicts stop without mutation.
+- A successful `QUALIFIED` result may include a concise rationale. The rationale
+  is informational; the driver still verifies the original Qualified queue,
+  exact Ready count, and selected issue lifecycle before proposal.
 - A specification PR must merge before a later iteration reruns qualification.
   Specification and product implementation never occur in the same iteration.
 - Every issue needs a focused `docs/*_PLAN.md` with business case, use case,
