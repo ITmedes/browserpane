@@ -69,6 +69,24 @@ paths:
   });
 });
 
+test('classifies confidential machine callers separately from owner access', () => {
+  withContract(`
+openapi: 3.0.3
+paths:
+  /api/v1/projects/{project_id}/workflow-endpoints/{endpoint_key}/invocations:
+    post:
+      tags: [Workflow Endpoints]
+      operationId: invokeWorkflowEndpoint
+      security:
+        - machineBearer: []
+      responses:
+        '202': { description: Accepted }
+`, (filename) => {
+    const [operation] = OpenApiContract.load(filename).operations();
+    assert.equal(operation.auth, 'machine-bearer');
+  });
+});
+
 test('rejects duplicate YAML keys before inventory generation', () => {
   withContract(`
 openapi: 3.0.3

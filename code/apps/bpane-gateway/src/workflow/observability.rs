@@ -1,5 +1,7 @@
 use chrono::{DateTime, Utc};
+use prometheus_client::encoding::EncodeLabelSet;
 use prometheus_client::metrics::counter::Counter;
+use prometheus_client::metrics::family::Family;
 use prometheus_client::registry::Registry;
 use serde::Serialize;
 use tokio::sync::Mutex;
@@ -18,8 +20,16 @@ pub struct WorkflowObservability {
     retention_deleted_logs_total: Counter,
     retention_cleared_outputs_total: Counter,
     retention_failures_total: Counter,
+    endpoint_operations_total: Family<WorkflowEndpointOperationLabels, Counter>,
     last_event_delivery_at: Mutex<Option<DateTime<Utc>>>,
     last_retention_pass_at: Mutex<Option<DateTime<Utc>>>,
+}
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
+struct WorkflowEndpointOperationLabels {
+    operation: &'static str,
+    outcome: &'static str,
+    side_effect_state: &'static str,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -102,6 +112,11 @@ impl WorkflowObservability {
             "Workflow retention operation failures",
             self.retention_failures_total.clone(),
         );
+        registry.register(
+            "browserpane_gateway_workflow_endpoint_operations",
+            "Workflow endpoint operations by bounded outcome and side-effect state",
+            self.endpoint_operations_total.clone(),
+        );
     }
 
     pub fn record_produced_file_upload(&self) {
@@ -155,6 +170,57 @@ impl WorkflowObservability {
         self.retention_failures_total.inc();
     }
 
+    pub fn record_endpoint_invocation_accepted(&self) {
+        self.record_endpoint_operation("invoke", "accepted", "none");
+    }
+
+    pub fn record_endpoint_invocation_replay(&self) {
+        self.record_endpoint_operation("invoke", "idempotent_replay", "none");
+    }
+
+    pub fn record_endpoint_invocation_conflict(&self) {
+        self.record_endpoint_operation("invoke", "idempotency_conflict", "none");
+    }
+
+    pub fn record_endpoint_validation_denial(&self) {
+        self.record_endpoint_operation("invoke", "validation_denied", "none");
+    }
+
+    pub fn record_endpoint_authorization_denial(&self, operation: &'static str) {
+        self.record_endpoint_operation(operation, "authorization_denied", "none");
+    }
+
+    pub fn record_endpoint_admission_failure(&self) {
+        self.record_endpoint_operation("invoke", "admission_failed", "none");
+    }
+
+    pub fn record_endpoint_cancel_requested(&self) {
+        self.record_endpoint_operation("cancel", "requested", "none");
+    }
+
+    pub fn record_endpoint_terminal(
+        &self,
+        category: crate::workflow_endpoints::WorkflowOutcomeCategory,
+        side_effect_state: crate::workflow_endpoints::WorkflowSideEffectState,
+    ) {
+        self.record_endpoint_operation("terminal", category.as_str(), side_effect_state.as_str());
+    }
+
+    fn record_endpoint_operation(
+        &self,
+        operation: &'static str,
+        outcome: &'static str,
+        side_effect_state: &'static str,
+    ) {
+        self.endpoint_operations_total
+            .get_or_create(&WorkflowEndpointOperationLabels {
+                operation,
+                outcome,
+                side_effect_state,
+            })
+            .inc();
+    }
+
     pub async fn snapshot(&self) -> WorkflowObservabilitySnapshot {
         WorkflowObservabilitySnapshot {
             produced_file_uploads_total: self.produced_file_uploads_total.get(),
@@ -196,6 +262,17 @@ mod tests {
         observability.record_retention_cleared_output();
         observability.record_retention_failure();
         observability.record_retention_pass(now, 2, 1).await;
+        observability.record_endpoint_invocation_accepted();
+        observability.record_endpoint_invocation_replay();
+        observability.record_endpoint_invocation_conflict();
+        observability.record_endpoint_validation_denial();
+        observability.record_endpoint_authorization_denial("read");
+        observability.record_endpoint_admission_failure();
+        observability.record_endpoint_cancel_requested();
+        observability.record_endpoint_terminal(
+            crate::workflow_endpoints::WorkflowOutcomeCategory::Success,
+            crate::workflow_endpoints::WorkflowSideEffectState::Confirmed,
+        );
 
         let snapshot = observability.snapshot().await;
         assert_eq!(snapshot.produced_file_uploads_total, 1);

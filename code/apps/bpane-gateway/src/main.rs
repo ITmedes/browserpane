@@ -24,6 +24,7 @@ mod transport;
 mod worker_process_output;
 mod worker_runtime_control;
 mod workflow;
+mod workflow_endpoints;
 mod workflow_event_delivery;
 mod workflow_lifecycle;
 mod workspaces;

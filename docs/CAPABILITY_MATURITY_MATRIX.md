@@ -2,7 +2,8 @@
 
 Governance issue: [#173](https://github.com/ITmedes/browserpane/issues/173)
 
-Last verified: 2026-08-20 on `main` at `2adbfdee`
+Last verified: 2026-08-21 for the #172 review candidate based on `main` at
+`ab9dc564`
 
 ## Maturity Definitions
 
@@ -27,7 +28,7 @@ capability.
 | Tile-first remote rendering and ROI H.264 | Prototype | `bpane-protocol`, host capture, TypeScript compositors, media tests | #175, #168, #169 |
 | BrowserPane remote protocol | Prototype | Rust frame types and TypeScript client interoperate | #175 specification/conformance |
 | Shared live sessions and reconnect | Prototype | gateway session hub, client session tests, multisession/reconnect smokes | #169, #178 |
-| Owner-scoped control API | Prototype | 131 governed OpenAPI operations, generated classification inventory, 19 executable examples, Axum route recognition, semantic diff, and contract-derived admin-new API/coverage/docs companions | #75 release compatibility; domain and production gates |
+| Owner-scoped control API | Prototype | 144 governed OpenAPI operations, generated classification inventory, 22 executable examples, Axum route recognition, semantic diff, and contract-derived admin-new API/coverage/docs companions | #75 release compatibility; domain and production gates |
 | Projects and policy bindings | Prototype | API/store resources and admin-new project views | #161, #176, #79 |
 | Session templates | Implemented API; incomplete operator product | API/store and legacy coverage | #124 admin-new catalog |
 | Reusable browser contexts | Prototype | lifecycle, limits, and clone/export/import paths covered through API, CLI, compatibility admin, and admin-new smokes | Production storage/provider gates |
@@ -36,8 +37,8 @@ capability.
 | Credential bindings | Prototype | Vault KV v2 provider and workflow/egress integration | #159, #70, #76 |
 | Browser extensions | Prototype | approved extension metadata and docker workflow/session support | #159, #72 |
 | MCP session delegation | Prototype | explicit session endpoint, bridge proxy, smoke coverage | #69, #70, #176 |
-| Workflow publishing and execution | Prototype | supported commit-pinned Playwright TypeScript package contract, Draft 2020-12 schemas, reviewed resource/regression evidence, compatibility state, worker lifecycle, runs/events/logs/files, finite worker request deadlines, bounded process output, and Compose package/workspace evidence | #172/#174 endpoint and selected-workflow proof |
-| Phase 0 BPM Workflow Endpoint | Planned | Bounded polling contract and plan in #172; no endpoint resource/grant/schema/outcome implementation yet | #172 after #47 |
+| Workflow publishing and execution | Prototype | supported commit-pinned Playwright TypeScript package contract, Draft 2020-12 schemas, reviewed resource/regression evidence, compatibility state, worker lifecycle, runs/events/logs/files, finite worker request deadlines, bounded process output, and Compose package/workspace evidence | #174 selected-workflow proof |
+| Phase 0 BPM Workflow Endpoint | Prototype | #172 review candidate implements project endpoint lifecycle, exact service-principal grants, Draft 2020-12 input/output enforcement, endpoint/caller idempotency, typed outcomes, cancellation, artifact authorization, Admin-New/CLI/OpenAPI, and a passing real Keycloak/Postgres/worker/browser fake-BPM smoke | #174 real activity and #180 Pilot governance gate |
 | Production Workflow Endpoint lifecycle | Planned | Revisions, callbacks, replay, trace, throttling, and connector expansion isolated in #240 | #240 |
 | Workflow Teach Mode | Planned and deferred | Demonstration-to-candidate specification in #171; explicitly not Phase 0 | #171 |
 | Workflow Human Handoff | Partial prototype and deferred | run input/hold/resume primitives exist; explicitly not Phase 0 | #71 |
@@ -45,7 +46,7 @@ capability.
 | Generalized artifact/evidence model | Partial prototype | recordings, workspace files, workflow produced files remain separate resources | #21, #70, #28 |
 | Workflow event delivery | Prototype | signed delivery, retry/backoff, diagnostics, DNS/IP/redirect policy, pinned delivery, finite worker requests, compose E2E | #28 retained event/audit lifecycle |
 | OIDC login and current-principal identity | Prototype | Shared `oauth4webapi` browser core, Keycloak compose, gateway JWT validation, identity/access-review APIs, auth and browser-header negative tests | #176/#177 enterprise authorization and lifecycle; #66 production IdP profile |
-| Service-principal registry | Implemented metadata; grants not fully enforced | registry CRUD and disabled-delegation guard | #176, #70 |
+| Service-principal registry | Implemented metadata with one enforced endpoint grant | registry CRUD, disabled-delegation guard, and #172 exact project/endpoint machine grants; generalized resource authorization remains absent | #176, #70 |
 | Organization/project RBAC | Planned | Current mappings are descriptive and owner-scoped | #176 |
 | Provisioning/deprovisioning and break-glass | Planned | Explicitly outside current identity baseline | #177 |
 | Admin-new resource console | Prototype | Standard root route with dashboard and major resource catalogs/details; promotion evidence merged through PRs #210-#211 | #124 session-template catalog and separate compatibility-admin removal decision |
@@ -58,7 +59,7 @@ capability.
 | HA and disaster recovery | Planned | No supported HA/DR contract | #73, #74 |
 | Supply-chain/release governance | Partial prototype | Required CI, dependency policy, pinned actions/toolchains, and deterministic GHCR Rust builder exist; SBOM, signing, provenance, vulnerability intake, and release policy do not | #75 |
 | Open-source governance | Gap with explicit issue | AGPL root conflicts with Cargo MIT metadata; contributor policy absent | #180 |
-| Phase 0 BPM browser activity | Planned | Product boundary and issue sequence frozen; workflow, endpoint, and real candidate are not delivered | #47, #172, #174, #180 |
+| Phase 0 BPM browser activity | Planned | Workflow package and generic polling endpoint have review evidence; no real candidate activity or Pilot operating decision is delivered | #174, #180 |
 
 ## Evidence Rules
 
@@ -77,7 +78,8 @@ Claims must use the exact maturity language. In particular:
 
 - Live View, recording, workflow execution, and MCP are current Prototype
   evidence, not a Production SLA.
-- Stable external BPM invocation is Planned until #47 and #172 are implemented.
+- Stable external BPM invocation is Prototype evidence from #47/#172; a real
+  Pilot activity remains Planned until #174 and the #180 governance gate.
 - Teach Mode, AI authoring, controlled repair, and BrowserPane Human Handoff
   are deferred and are not Phase 0 claims.
 - Autonomous self-healing and autonomous high-impact decisions remain

@@ -37,6 +37,15 @@ impl WorkflowRunRepository<'_> {
                     error,
                     artifact_refs,
                     labels,
+                    endpoint_id,
+                    endpoint_invocation_id,
+                    endpoint_key,
+                    caller_service_principal_id,
+                    endpoint_idempotency_key,
+                    endpoint_request_fingerprint,
+                    execution_deadline_at,
+                    endpoint_outcome,
+                    endpoint_side_effect_state,
                     started_at,
                     completed_at,
                     created_at,
@@ -92,6 +101,15 @@ impl WorkflowRunRepository<'_> {
                     run.error,
                     run.artifact_refs,
                     run.labels,
+                    run.endpoint_id,
+                    run.endpoint_invocation_id,
+                    run.endpoint_key,
+                    run.caller_service_principal_id,
+                    run.endpoint_idempotency_key,
+                    run.endpoint_request_fingerprint,
+                    run.execution_deadline_at,
+                    run.endpoint_outcome,
+                    run.endpoint_side_effect_state,
                     run.started_at,
                     run.completed_at,
                     run.created_at,
@@ -148,6 +166,15 @@ impl WorkflowRunRepository<'_> {
                     error,
                     artifact_refs,
                     labels,
+                    endpoint_id,
+                    endpoint_invocation_id,
+                    endpoint_key,
+                    caller_service_principal_id,
+                    endpoint_idempotency_key,
+                    endpoint_request_fingerprint,
+                    execution_deadline_at,
+                    endpoint_outcome,
+                    endpoint_side_effect_state,
                     started_at,
                     completed_at,
                     created_at,
@@ -162,6 +189,31 @@ impl WorkflowRunRepository<'_> {
                 SessionStoreError::Backend(format!("failed to load workflow run by id: {error}"))
             })?;
         row.as_ref().map(row_to_stored_workflow_run).transpose()
+    }
+
+    pub(in crate::session_control) async fn get_workflow_run_by_automation_task_id(
+        &self,
+        automation_task_id: Uuid,
+    ) -> Result<Option<StoredWorkflowRun>, SessionStoreError> {
+        let row = self
+            .store
+            .db
+            .client()
+            .await?
+            .query_opt(
+                "SELECT id FROM control_workflow_runs WHERE automation_task_id = $1",
+                &[&automation_task_id],
+            )
+            .await
+            .map_err(|error| {
+                SessionStoreError::Backend(format!(
+                    "failed to load workflow run by automation task id: {error}"
+                ))
+            })?;
+        let Some(row) = row else {
+            return Ok(None);
+        };
+        self.get_workflow_run_by_id(row.get("id")).await
     }
 
     pub(in crate::session_control) async fn find_workflow_run_by_client_request_id_for_owner(
@@ -201,6 +253,15 @@ impl WorkflowRunRepository<'_> {
                     error,
                     artifact_refs,
                     labels,
+                    endpoint_id,
+                    endpoint_invocation_id,
+                    endpoint_key,
+                    caller_service_principal_id,
+                    endpoint_idempotency_key,
+                    endpoint_request_fingerprint,
+                    execution_deadline_at,
+                    endpoint_outcome,
+                    endpoint_side_effect_state,
                     started_at,
                     completed_at,
                     created_at,

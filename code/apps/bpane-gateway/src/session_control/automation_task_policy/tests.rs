@@ -72,6 +72,29 @@ fn transition_plan_rejects_invalid_task_transition() {
 }
 
 #[test]
+fn transition_plan_allows_timeout_before_execution_starts() {
+    for state in [AutomationTaskState::Pending, AutomationTaskState::Queued] {
+        let task = stored_task(state);
+        let now = Utc::now();
+        let request = AutomationTaskTransitionRequest {
+            state: AutomationTaskState::TimedOut,
+            output: None,
+            error: Some("execution deadline elapsed".to_string()),
+            artifact_refs: Vec::new(),
+            event_type: "automation_task.timed_out".to_string(),
+            event_message: "task timed out before execution started".to_string(),
+            event_data: None,
+        };
+
+        let plan = plan_automation_task_transition(&task, &request, now).unwrap();
+
+        assert_eq!(plan.task_state, AutomationTaskState::TimedOut);
+        assert_eq!(plan.task_started_at, None);
+        assert_eq!(plan.task_completed_at, Some(now));
+    }
+}
+
+#[test]
 fn transition_plan_rejects_terminal_task() {
     let task = stored_task(AutomationTaskState::Succeeded);
     let request = AutomationTaskTransitionRequest {

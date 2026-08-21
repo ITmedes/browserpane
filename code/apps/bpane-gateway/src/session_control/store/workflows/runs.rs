@@ -56,6 +56,24 @@ impl SessionStore {
         }
     }
 
+    pub async fn get_workflow_run_by_automation_task_id(
+        &self,
+        automation_task_id: Uuid,
+    ) -> Result<Option<StoredWorkflowRun>, SessionStoreError> {
+        match &self.backend {
+            SessionStoreBackend::InMemory(store) => {
+                store
+                    .get_workflow_run_by_automation_task_id(automation_task_id)
+                    .await
+            }
+            SessionStoreBackend::Postgres(store) => {
+                store
+                    .get_workflow_run_by_automation_task_id(automation_task_id)
+                    .await
+            }
+        }
+    }
+
     pub async fn list_dispatchable_workflow_runs(
         &self,
     ) -> Result<Vec<StoredWorkflowRun>, SessionStoreError> {
@@ -171,13 +189,27 @@ impl SessionStore {
         request: WorkflowRunTransitionRequest,
     ) -> Result<Option<StoredWorkflowRun>, SessionStoreError> {
         validate_workflow_run_transition_request(&request)?;
-        match &self.backend {
+        let request = self
+            .prepare_endpoint_workflow_run_transition(id, request)
+            .await?;
+        let transition_data = request.data.clone();
+        let run = match &self.backend {
             SessionStoreBackend::InMemory(store) => {
                 store.transition_workflow_run(id, request).await
             }
             SessionStoreBackend::Postgres(store) => {
                 store.transition_workflow_run(id, request).await
             }
+        }?;
+        match run {
+            Some(run) => {
+                let run = self.get_workflow_run_by_id(id).await?.unwrap_or(run);
+                Ok(Some(
+                    self.persist_workflow_run_endpoint_evidence(&run, transition_data.as_ref())
+                        .await?,
+                ))
+            }
+            None => Ok(None),
         }
     }
 
@@ -185,13 +217,23 @@ impl SessionStore {
         &self,
         id: Uuid,
     ) -> Result<Option<StoredWorkflowRun>, SessionStoreError> {
-        match &self.backend {
+        let run = match &self.backend {
             SessionStoreBackend::InMemory(store) => {
                 store.reconcile_workflow_run_from_task(id).await
             }
             SessionStoreBackend::Postgres(store) => {
                 store.reconcile_workflow_run_from_task(id).await
             }
+        }?;
+        match run {
+            Some(run) => {
+                let run = self.get_workflow_run_by_id(id).await?.unwrap_or(run);
+                Ok(Some(
+                    self.persist_workflow_run_endpoint_evidence(&run, None)
+                        .await?,
+                ))
+            }
+            None => Ok(None),
         }
     }
 

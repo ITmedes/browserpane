@@ -103,8 +103,9 @@ describe('API contract evidence parsers', () => {
       readEvidence('compatibility'),
     );
 
-    expect(evidence.operations).toHaveLength(131);
+    expect(evidence.operations).toHaveLength(144);
     expect(evidence.operations.filter(({ auth }) => auth === 'recording-worker')).toHaveLength(2);
+    expect(evidence.operations.filter(({ auth }) => auth === 'machine-bearer')).toHaveLength(4);
   });
 
   it('returns safe, joined evidence', () => {

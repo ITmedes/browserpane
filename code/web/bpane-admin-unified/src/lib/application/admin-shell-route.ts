@@ -71,6 +71,12 @@ export function resolveAdminShellRoute(pathname: string): AdminShellRoute | null
   if (route.startsWith('/workflows/')) {
     return { activeId: 'workflows', title: 'BrowserPane Workflow Details' };
   }
+  if (route === '/workflow-endpoints') {
+    return { activeId: 'workflow-endpoints', title: 'BrowserPane Workflow Endpoints' };
+  }
+  if (route.startsWith('/workflow-endpoints/')) {
+    return { activeId: 'workflow-endpoints', title: 'BrowserPane Workflow Endpoint Details' };
+  }
   if (route === '/runs' || route.startsWith('/runs/')) {
     return {
       activeId: 'runs',

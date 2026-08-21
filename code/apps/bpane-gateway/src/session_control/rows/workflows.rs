@@ -86,6 +86,24 @@ pub(in crate::session_control) fn row_to_stored_workflow_run(
             ))
         })
         .collect::<Result<HashMap<_, _>, SessionStoreError>>()?;
+    let outcome = row
+        .try_get::<_, Option<Value>>("endpoint_outcome")
+        .ok()
+        .flatten()
+        .map(serde_json::from_value::<crate::workflow_endpoints::WorkflowRunOutcome>)
+        .transpose()
+        .map_err(|error| {
+            SessionStoreError::Backend(format!(
+                "workflow run endpoint_outcome column must be valid outcome json: {error}"
+            ))
+        })?;
+    let side_effect_state = row
+        .try_get::<_, Option<String>>("endpoint_side_effect_state")
+        .ok()
+        .flatten()
+        .map(|value| value.parse::<crate::workflow_endpoints::WorkflowSideEffectState>())
+        .transpose()
+        .map_err(|error| SessionStoreError::Backend(error.to_string()))?;
 
     Ok(StoredWorkflowRun {
         id: row.get("id"),
@@ -102,6 +120,15 @@ pub(in crate::session_control) fn row_to_stored_workflow_run(
         source_reference: row.get("source_reference"),
         client_request_id: row.get("client_request_id"),
         create_request_fingerprint: row.get("create_request_fingerprint"),
+        endpoint_id: row.try_get("endpoint_id").ok().flatten(),
+        endpoint_invocation_id: row.try_get("endpoint_invocation_id").ok().flatten(),
+        endpoint_key: row.try_get("endpoint_key").ok().flatten(),
+        caller_service_principal_id: row.try_get("caller_service_principal_id").ok().flatten(),
+        endpoint_idempotency_key: row.try_get("endpoint_idempotency_key").ok().flatten(),
+        endpoint_request_fingerprint: row.try_get("endpoint_request_fingerprint").ok().flatten(),
+        execution_deadline_at: row.try_get("execution_deadline_at").ok().flatten(),
+        outcome,
+        side_effect_state,
         source_snapshot,
         extensions,
         credential_bindings,

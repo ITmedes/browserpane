@@ -23,6 +23,8 @@ const OPERATIONS: readonly ApiOperation[] = [
   operation('appendWorkflowRunLog', 'POST', '/api/v1/workflow-runs/{run_id}/logs', 'Workflows', 'session-automation', 'internal-worker', ['200']),
   operation('finalizeRecording', 'POST', '/api/v1/sessions/{session_id}/recordings/{recording_id}/finalize', 'Session Recordings', 'recording-worker', 'internal-worker', ['200']),
   operation('openAdminEvents', 'GET', '/api/v1/admin/events', 'Admin Events', 'unauthenticated', 'ui-evidence', ['101']),
+  operation('invokeWorkflowEndpoint', 'POST', '/api/v1/projects/{project_id}/workflow-endpoints/{endpoint_key}/invocations', 'Workflow Endpoints', 'machine-bearer', 'api-companion', ['202', '409']),
+  operation('listWorkflowEndpoints', 'GET', '/api/v1/projects/{project_id}/workflow-endpoints', 'Workflow Endpoints', 'owner-bearer', 'ui-primary', ['200']),
 ];
 
 const EXAMPLES: readonly ApiExample[] = [
@@ -43,14 +45,29 @@ const EXAMPLES: readonly ApiExample[] = [
     project_id: '11111111-1111-4111-8111-111111111111',
   }),
   getExample('file-workspaces-empty-list', 'listFileWorkspaces', '/api/v1/file-workspaces'),
+  getExample('workflow-endpoints-empty-list', 'listWorkflowEndpoints', '/api/v1/projects/11111111-1111-4111-8111-111111111111/workflow-endpoints'),
+  {
+    ...example(
+      'workflow-endpoint-idempotency-conflict',
+      'invokeWorkflowEndpoint',
+      '/api/v1/projects/11111111-1111-4111-8111-111111111111/workflow-endpoints/report/invocations',
+      { input: { reporting_period: '2026-Q3' } },
+    ),
+    request: {
+      method: 'POST',
+      path: '/api/v1/projects/11111111-1111-4111-8111-111111111111/workflow-endpoints/report/invocations',
+      headers: { 'idempotency-key': 'process-123-activity-1' },
+      body: { input: { reporting_period: '2026-Q3' } },
+    },
+  },
 ];
 
 const EVIDENCE: ApiContractEvidence = {
   operations: OPERATIONS,
   classifications: {
-    'ui-primary': ['createProject', 'createSession', 'createWorkflowRun', 'listWorkflowDefinitions', 'createFileWorkspace', 'listFileWorkspaces'],
+    'ui-primary': ['createProject', 'createSession', 'createWorkflowRun', 'listWorkflowDefinitions', 'createFileWorkspace', 'listFileWorkspaces', 'listWorkflowEndpoints'],
     'ui-evidence': ['issueSessionAccessToken', 'openAdminEvents'],
-    'api-companion': [],
+    'api-companion': ['invokeWorkflowEndpoint'],
     'internal-worker': ['appendWorkflowRunLog', 'finalizeRecording'],
   },
   examples: EXAMPLES,
@@ -88,7 +105,7 @@ const EVIDENCE: ApiContractEvidence = {
 describe('API companion task flows', () => {
   it('builds all task groups from canonical examples', () => {
     const flows = buildApiTaskFlows(EVIDENCE);
-    expect(flows.map((flow) => flow.id)).toEqual(['projects', 'sessions', 'workflows', 'file-workspaces']);
+    expect(flows.map((flow) => flow.id)).toEqual(['projects', 'sessions', 'workflows', 'workflow-endpoints', 'file-workspaces']);
     expect(flows[1]?.steps.map((step) => step.title)).toEqual(['Create session', 'Mint connect ticket']);
     expect(flows[0]?.steps[0]?.coverageHref).toBe('/admin-new/coverage?operation=createProject');
   });
@@ -149,18 +166,20 @@ describe('API coverage projections', () => {
       'Session Recordings',
       'Session Runtime',
       'Sessions',
+      'Workflow Endpoints',
       'Workflows',
     ]);
     expect(classificationSummaries(OPERATIONS).map(({ id, count }) => [id, count])).toEqual([
-      ['ui-primary', 6],
+      ['ui-primary', 7],
       ['ui-evidence', 2],
-      ['api-companion', 0],
+      ['api-companion', 1],
       ['internal-worker', 2],
     ]);
     expect(authSummaries(OPERATIONS).map(({ id, count }) => [id, count])).toEqual([
-      ['owner-bearer', 7],
+      ['owner-bearer', 8],
       ['session-automation', 1],
       ['recording-worker', 1],
+      ['machine-bearer', 1],
       ['unauthenticated', 1],
     ]);
   });
@@ -171,7 +190,13 @@ describe('API coverage projections', () => {
       classification: 'all',
       auth: 'all',
       family: 'all',
-    }).map((item) => item.operationId)).toEqual(['createWorkflowRun', 'appendWorkflowRunLog', 'listWorkflowDefinitions']);
+    }).map((item) => item.operationId)).toEqual([
+      'listWorkflowEndpoints',
+      'invokeWorkflowEndpoint',
+      'createWorkflowRun',
+      'appendWorkflowRunLog',
+      'listWorkflowDefinitions',
+    ]);
     expect(filterApiOperations(OPERATIONS, {
       query: '',
       classification: 'internal-worker',
@@ -194,6 +219,16 @@ describe('API coverage projections', () => {
     expect(classificationDefinition('internal-worker').label).toBe('Internal worker');
     expect(authDefinition('owner-bearer').label).toBe('Owner bearer');
     expect(authDefinition('recording-worker').label).toBe('Recording worker');
+    expect(authDefinition('machine-bearer').label).toBe('Machine bearer');
+  });
+
+  it('generates a machine-token endpoint command with the canonical idempotency header', () => {
+    const operation = OPERATIONS.find((item) => item.operationId === 'invokeWorkflowEndpoint')!;
+    const example = EXAMPLES.find((item) => item.name === 'workflow-endpoint-idempotency-conflict')!;
+    const command = commandForExample(operation, example);
+    expect(command).toContain('Authorization: Bearer ${BPANE_MACHINE_TOKEN}');
+    expect(command).toContain('idempotency-key: process-123-activity-1');
+    expect(command).not.toContain('${BPANE_OWNER_TOKEN}');
   });
 });
 

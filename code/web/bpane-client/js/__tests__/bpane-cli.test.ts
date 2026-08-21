@@ -1831,6 +1831,128 @@ describe('bpane operator CLI', () => {
     }
   });
 
+  it('manages workflow endpoints, machine invocations, grants, and safe artifacts through the canonical CLI', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'bpane-cli-workflow-endpoint-test-'));
+    const outputPath = path.join(tempDir, 'supplier-report.txt');
+    const artifactBytes = Buffer.from('supplier report\n');
+    const endpointBody = {
+      purpose: 'Retrieve one supplier report',
+      workflow_definition_id: 'workflow-1',
+      workflow_definition_version_id: 'version-1',
+      workflow_version: 'v1',
+      input_schema: { type: 'object' },
+      output_schema: { type: 'object' },
+    };
+    const { calls, fetchImpl } = createFetch(
+      jsonResponse({ endpoint_key: 'supplier-report', state: 'draft' }, 201),
+      jsonResponse({ workflow_endpoints: [] }),
+      jsonResponse({ endpoint_key: 'supplier-report', state: 'draft' }),
+      jsonResponse({ endpoint_key: 'supplier-report', state: 'draft', execution_timeout_seconds: 45 }),
+      jsonResponse({ endpoint_key: 'supplier-report', state: 'active' }),
+      jsonResponse({ endpoint_key: 'supplier-report', state: 'disabled' }),
+      jsonResponse({ id: 'grant-1' }),
+      jsonResponse(null, 204),
+      jsonResponse({ id: 'invocation-1', state: 'pending' }, 202),
+      jsonResponse({ id: 'invocation-1', state: 'running' }),
+      jsonResponse({ id: 'invocation-1', state: 'cancelled' }),
+      binaryResponse(artifactBytes, 'text/plain'),
+    );
+    const env = { BPANE_ACCESS_TOKEN: 'machine-or-owner-token' };
+    const projectId = 'project/with space';
+    const endpointKey = 'supplier-report';
+
+    try {
+      const commands = [
+        [
+          'workflow', 'endpoint', 'create', projectId, endpointKey,
+          '--body-json', JSON.stringify(endpointBody),
+          '--endpoint-purpose', 'Supplier report activity',
+          '--execution-timeout-sec', '30',
+          '--inline-result-max-bytes', '4096',
+          '--artifact-retention-sec', '600',
+        ],
+        ['workflow', 'endpoint', 'list', projectId],
+        ['workflow', 'endpoint', 'get', projectId, endpointKey],
+        [
+          'workflow', 'endpoint', 'update', projectId, endpointKey,
+          '--body-json', JSON.stringify(endpointBody),
+          '--execution-timeout-sec', '45',
+        ],
+        ['workflow', 'endpoint', 'activate', projectId, endpointKey],
+        ['workflow', 'endpoint', 'disable', projectId, endpointKey],
+        [
+          'workflow', 'endpoint', 'grant', projectId, endpointKey,
+          '--service-principal-id', 'principal-1',
+          '--operation', 'invoke',
+          '--operation', 'read,cancel,artifact.read',
+        ],
+        ['workflow', 'endpoint', 'revoke', projectId, endpointKey, 'grant/1'],
+        [
+          'workflow', 'endpoint', 'invoke', projectId, endpointKey,
+          '--idempotency-key', 'process-42-activity-1',
+          '--input-json', '{"reporting_period":"2026-Q3"}',
+          '--source-system', 'fake-bpm',
+          '--source-reference', 'process/42',
+        ],
+        ['workflow', 'endpoint', 'status', projectId, endpointKey, 'invocation/1'],
+        ['workflow', 'endpoint', 'cancel', projectId, endpointKey, 'invocation/1'],
+        [
+          'workflow', 'endpoint', 'download-artifact', projectId, endpointKey,
+          'invocation/1', 'file/1', '--output', outputPath,
+        ],
+      ];
+      for (const args of commands) {
+        const io = createIo();
+        expect(await runBpaneCli(args, env, io.io, fetchImpl)).toBe(EXIT_CODES.ok);
+        expect(io.stderr()).toBe('');
+        expect(io.stdout()).not.toContain(env.BPANE_ACCESS_TOKEN);
+      }
+
+      const base = 'http://localhost:8080/api/v1/projects/project%2Fwith%20space/workflow-endpoints';
+      const endpoint = `${base}/supplier-report`;
+      expect(calls.map((call) => [call.url, call.init.method])).toEqual([
+        [base, 'POST'],
+        [base, undefined],
+        [endpoint, undefined],
+        [endpoint, 'PUT'],
+        [`${endpoint}/activate`, 'POST'],
+        [`${endpoint}/disable`, 'POST'],
+        [`${endpoint}/grants`, 'POST'],
+        [`${endpoint}/grants/grant%2F1`, 'DELETE'],
+        [`${endpoint}/invocations`, 'POST'],
+        [`${endpoint}/invocations/invocation%2F1`, undefined],
+        [`${endpoint}/invocations/invocation%2F1/cancel`, 'POST'],
+        [`${endpoint}/invocations/invocation%2F1/artifacts/file%2F1/content`, 'GET'],
+      ]);
+      expect(JSON.parse(calls[0].init.body)).toMatchObject({
+        endpoint_key: endpointKey,
+        purpose: 'Supplier report activity',
+        execution_timeout_seconds: 30,
+        inline_result_max_bytes: 4096,
+        artifact_behavior: {
+          mode: 'authorized_references',
+          retention_seconds: 600,
+        },
+      });
+      expect(JSON.parse(calls[6].init.body)).toEqual({
+        service_principal_id: 'principal-1',
+        operations: ['invoke', 'read', 'cancel', 'artifact.read'],
+      });
+      expect(calls[8].init.headers).toMatchObject({
+        Authorization: 'Bearer machine-or-owner-token',
+        'Idempotency-Key': 'process-42-activity-1',
+      });
+      expect(JSON.parse(calls[8].init.body)).toEqual({
+        input: { reporting_period: '2026-Q3' },
+        source_system: 'fake-bpm',
+        source_reference: 'process/42',
+      });
+      expect(await fs.readFile(outputPath)).toEqual(artifactBytes);
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it('keeps the workflow compatibility entrypoint on canonical profiles and structured errors', async () => {
     await withConfig(
       {
@@ -1915,6 +2037,17 @@ describe('bpane operator CLI', () => {
         {
           args: ['workflow', 'run', 'download-produced-file', 'run-1', 'file-1'],
           expected: 'requires --output',
+        },
+        {
+          args: ['workflow', 'endpoint', 'invoke', 'project-1', 'endpoint-1', '--input-json', '{}'],
+          expected: 'requires --idempotency-key',
+        },
+        {
+          args: [
+            'workflow', 'endpoint', 'grant', 'project-1', 'endpoint-1',
+            '--service-principal-id', 'principal-1', '--operation', 'admin',
+          ],
+          expected: 'operations are invoke, read, cancel, or artifact.read',
         },
       ];
       for (const testCase of cases) {

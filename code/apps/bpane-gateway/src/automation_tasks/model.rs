@@ -47,9 +47,17 @@ impl AutomationTaskState {
             (current, target) if current == target => true,
             (
                 Self::Pending,
-                Self::Queued | Self::Starting | Self::Running | Self::Cancelled | Self::Failed,
+                Self::Queued
+                | Self::Starting
+                | Self::Running
+                | Self::Cancelled
+                | Self::Failed
+                | Self::TimedOut,
             )
-            | (Self::Queued, Self::Starting | Self::Running | Self::Cancelled | Self::Failed)
+            | (
+                Self::Queued,
+                Self::Starting | Self::Running | Self::Cancelled | Self::Failed | Self::TimedOut,
+            )
             | (
                 Self::Starting,
                 Self::Running

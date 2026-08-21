@@ -47,6 +47,8 @@ tags:
     description: Reusable file workspace and artifact resources.
   - name: Workflows
     description: Workflow definitions, runs, events, files, and controls.
+  - name: Workflow Endpoints
+    description: Project-scoped asynchronous workflow activities for registered machine callers.
 security:
   - bearerAuth: []
 paths:
@@ -826,6 +828,339 @@ paths:
           $ref: '#/components/responses/NotFound'
         '503':
           $ref: '#/components/responses/BackendUnavailable'
+  /api/v1/projects/{project_id}/workflow-endpoints:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      tags: [Workflow Endpoints]
+      summary: List owner-managed workflow endpoints in a project
+      operationId: listWorkflowEndpoints
+      responses:
+        '200':
+          description: Project workflow endpoint catalog
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowEndpointListResponse'
+        '401':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+        '404':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+        '503':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+    post:
+      tags: [Workflow Endpoints]
+      summary: Create a draft project workflow endpoint
+      operationId: createWorkflowEndpoint
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpsertWorkflowEndpointRequest'
+      responses:
+        '201':
+          description: Draft workflow endpoint created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowEndpointResource'
+        '400':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+        '401':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+        '404':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+        '409':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+        '503':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+  /api/v1/projects/{project_id}/workflow-endpoints/{endpoint_key}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/WorkflowEndpointKey'
+    get:
+      tags: [Workflow Endpoints]
+      summary: Fetch one owner-managed workflow endpoint
+      operationId: getWorkflowEndpoint
+      responses:
+        '200':
+          description: Workflow endpoint
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowEndpointResource'
+        '401':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+        '404':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+        '503':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+    put:
+      tags: [Workflow Endpoints]
+      summary: Replace a draft or disabled workflow endpoint
+      operationId: updateWorkflowEndpoint
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpsertWorkflowEndpointRequest'
+      responses:
+        '200':
+          description: Updated workflow endpoint
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowEndpointResource'
+        '400':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+        '401':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+        '404':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+        '409':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+        '503':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+  /api/v1/projects/{project_id}/workflow-endpoints/{endpoint_key}/activate:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/WorkflowEndpointKey'
+    post:
+      tags: [Workflow Endpoints]
+      summary: Activate an approved workflow endpoint
+      description: Validates the project, immutable workflow package, Draft 2020-12 schemas, and at least one eligible invocation grant without starting a browser.
+      operationId: activateWorkflowEndpoint
+      responses:
+        '200':
+          description: Active workflow endpoint
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowEndpointResource'
+        '400':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+        '401':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+        '404':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+        '409':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+        '503':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+  /api/v1/projects/{project_id}/workflow-endpoints/{endpoint_key}/disable:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/WorkflowEndpointKey'
+    post:
+      tags: [Workflow Endpoints]
+      summary: Disable new invocations while retaining polling and cancellation
+      operationId: disableWorkflowEndpoint
+      responses:
+        '200':
+          description: Disabled workflow endpoint
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowEndpointResource'
+        '401':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+        '404':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+        '503':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+  /api/v1/projects/{project_id}/workflow-endpoints/{endpoint_key}/grants:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/WorkflowEndpointKey'
+    get:
+      tags: [Workflow Endpoints]
+      summary: List narrow machine-caller grants for an endpoint
+      operationId: listWorkflowEndpointGrants
+      responses:
+        '200':
+          description: Endpoint grant list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowEndpointGrantListResponse'
+        '401':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+        '404':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+        '503':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+    post:
+      tags: [Workflow Endpoints]
+      summary: Create or replace a service-principal endpoint grant
+      operationId: upsertWorkflowEndpointGrant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpsertWorkflowEndpointGrantRequest'
+      responses:
+        '200':
+          description: Endpoint grant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowEndpointGrantResource'
+        '400':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+        '401':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+        '404':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+        '503':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+  /api/v1/projects/{project_id}/workflow-endpoints/{endpoint_key}/grants/{grant_id}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/WorkflowEndpointKey'
+      - $ref: '#/components/parameters/WorkflowEndpointGrantId'
+    delete:
+      tags: [Workflow Endpoints]
+      summary: Revoke a service-principal endpoint grant
+      operationId: deleteWorkflowEndpointGrant
+      responses:
+        '204':
+          description: Endpoint grant revoked
+        '401':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+        '404':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+        '503':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+  /api/v1/projects/{project_id}/workflow-endpoints/{endpoint_key}/invocations:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/WorkflowEndpointKey'
+    post:
+      tags: [Workflow Endpoints]
+      summary: Invoke an active endpoint as a registered confidential machine caller
+      operationId: invokeWorkflowEndpoint
+      security:
+        - machineBearer: []
+      parameters:
+        - $ref: '#/components/parameters/WorkflowEndpointIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvokeWorkflowEndpointRequest'
+      responses:
+        '200':
+          description: Identical idempotent invocation replay
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowEndpointInvocationResource'
+        '202':
+          description: New asynchronous invocation accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowEndpointInvocationResource'
+        '400':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+        '401':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+        '403':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+        '404':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+        '409':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+        '422':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+        '503':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+  /api/v1/projects/{project_id}/workflow-endpoints/{endpoint_key}/invocations/{invocation_id}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/WorkflowEndpointKey'
+      - $ref: '#/components/parameters/WorkflowEndpointInvocationId'
+    get:
+      tags: [Workflow Endpoints]
+      summary: Poll one invocation as its original registered caller
+      operationId: getWorkflowEndpointInvocation
+      security:
+        - machineBearer: []
+      responses:
+        '200':
+          description: Restricted asynchronous invocation projection
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowEndpointInvocationResource'
+        '401':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+        '403':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+        '404':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+        '503':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+  /api/v1/projects/{project_id}/workflow-endpoints/{endpoint_key}/invocations/{invocation_id}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/WorkflowEndpointKey'
+      - $ref: '#/components/parameters/WorkflowEndpointInvocationId'
+    post:
+      tags: [Workflow Endpoints]
+      summary: Request cancellation of one invocation
+      operationId: cancelWorkflowEndpointInvocation
+      security:
+        - machineBearer: []
+      responses:
+        '200':
+          description: Invocation after cancellation propagation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowEndpointInvocationResource'
+        '401':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+        '403':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+        '404':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+        '503':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+  /api/v1/projects/{project_id}/workflow-endpoints/{endpoint_key}/invocations/{invocation_id}/artifacts/{file_id}/content:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/WorkflowEndpointKey'
+      - $ref: '#/components/parameters/WorkflowEndpointInvocationId'
+      - $ref: '#/components/parameters/FileId'
+    get:
+      tags: [Workflow Endpoints]
+      summary: Download one authorized retained invocation artifact
+      operationId: getWorkflowEndpointArtifactContent
+      security:
+        - machineBearer: []
+      responses:
+        '200':
+          description: Artifact content
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+        '403':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+        '404':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+        '410':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
+        '503':
+          $ref: '#/components/responses/WorkflowEndpointProblem'
   /api/v1/egress-profiles:
     get:
       tags: [Egress Profiles]
@@ -3257,6 +3592,15 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+    machineBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        External OIDC/OAuth 2.0 client-credentials token resolved to an active
+        registered service principal and a narrow project endpoint grant. This
+        credential is not an interactive owner token and is never stored on a
+        Workflow Endpoint resource.
     sessionAutomationAccessToken:
       type: apiKey
       in: header
@@ -3291,6 +3635,38 @@ components:
       schema:
         type: string
         format: uuid
+    WorkflowEndpointKey:
+      name: endpoint_key
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$'
+        minLength: 1
+        maxLength: 64
+    WorkflowEndpointGrantId:
+      name: grant_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    WorkflowEndpointInvocationId:
+      name: invocation_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    WorkflowEndpointIdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Scoped to the endpoint and resolved service principal; changed normalized input under the same key conflicts.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
     ServicePrincipalId:
       name: service_principal_id
       in: path
@@ -3479,6 +3855,12 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
+    WorkflowEndpointProblem:
+      description: RFC 9457 workflow endpoint request failure
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/WorkflowEndpointProblemDetails'
   schemas:
     AdminEventAccessTokenResponse:
       type: object
@@ -4371,6 +4753,425 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SessionFileBindingResource'
+    WorkflowEndpointProblemDetails:
+      type: object
+      additionalProperties: false
+      required: [type, title, status, detail, code]
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+          minimum: 400
+          maximum: 599
+        detail:
+          type: string
+        code:
+          type: string
+        instance:
+          type: string
+        errors:
+          type: array
+          maxItems: 8
+          items:
+            $ref: '#/components/schemas/WorkflowSchemaViolation'
+    WorkflowSchemaViolation:
+      type: object
+      additionalProperties: false
+      required: [pointer, message]
+      properties:
+        pointer:
+          type: string
+          maxLength: 256
+        message:
+          type: string
+          maxLength: 512
+    WorkflowEndpointState:
+      type: string
+      enum: [draft, active, disabled]
+    WorkflowEndpointGrantOperation:
+      type: string
+      enum: [invoke, read, cancel, artifact.read]
+    WorkflowSideEffectState:
+      type: string
+      enum: [none, confirmed, uncertain]
+      description: Uncertain external browser effects always suppress whole-run retry guidance.
+    WorkflowOutcomeCategory:
+      type: string
+      enum:
+        - success
+        - validation_failure
+        - policy_denial
+        - business_failure
+        - retryable_technical_failure
+        - permanent_technical_failure
+        - timeout
+        - cancellation
+        - external_intervention_required
+    WorkflowRunOutcome:
+      type: object
+      additionalProperties: false
+      required:
+        - category
+        - code
+        - message
+        - details
+        - retryable
+        - retry_after_seconds
+        - caused_by
+      properties:
+        category:
+          $ref: '#/components/schemas/WorkflowOutcomeCategory'
+        code:
+          type: string
+          maxLength: 128
+        message:
+          type: string
+          maxLength: 512
+        details:
+          nullable: true
+        retryable:
+          type: boolean
+        retry_after_seconds:
+          type: integer
+          minimum: 1
+          nullable: true
+        caused_by:
+          type: string
+          nullable: true
+    WorkflowEndpointArtifactBehavior:
+      type: object
+      additionalProperties: false
+      required: [mode, retention_seconds]
+      properties:
+        mode:
+          type: string
+          enum: [authorized_references]
+        retention_seconds:
+          type: integer
+          minimum: 1
+          maximum: 2592000
+    UpsertWorkflowEndpointRequest:
+      type: object
+      required:
+        - endpoint_key
+        - purpose
+        - workflow_definition_id
+        - workflow_definition_version_id
+        - workflow_version
+        - input_schema
+        - output_schema
+      properties:
+        endpoint_key:
+          type: string
+          pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$'
+          minLength: 1
+          maxLength: 64
+        purpose:
+          type: string
+          minLength: 1
+          maxLength: 512
+        workflow_definition_id:
+          type: string
+          format: uuid
+        workflow_definition_version_id:
+          type: string
+          format: uuid
+        workflow_version:
+          type: string
+        input_schema: {}
+        output_schema: {}
+        execution_timeout_seconds:
+          type: integer
+          minimum: 1
+          maximum: 86400
+          default: 900
+        inline_result_max_bytes:
+          type: integer
+          minimum: 1
+          maximum: 1048576
+          default: 65536
+        artifact_behavior:
+          $ref: '#/components/schemas/WorkflowEndpointArtifactBehavior'
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+    WorkflowEndpointResource:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - project_id
+        - endpoint_key
+        - purpose
+        - workflow_definition_id
+        - workflow_definition_version_id
+        - workflow_version
+        - input_schema
+        - output_schema
+        - execution_timeout_seconds
+        - inline_result_max_bytes
+        - artifact_behavior
+        - supported_controls
+        - labels
+        - state
+        - grants_path
+        - invocations_path
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        endpoint_key:
+          type: string
+        purpose:
+          type: string
+        workflow_definition_id:
+          type: string
+          format: uuid
+        workflow_definition_version_id:
+          type: string
+          format: uuid
+        workflow_version:
+          type: string
+        input_schema: {}
+        output_schema: {}
+        execution_timeout_seconds:
+          type: integer
+        inline_result_max_bytes:
+          type: integer
+        artifact_behavior:
+          $ref: '#/components/schemas/WorkflowEndpointArtifactBehavior'
+        supported_controls:
+          type: array
+          items:
+            type: string
+            enum: [poll, cancel]
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        state:
+          $ref: '#/components/schemas/WorkflowEndpointState'
+        grants_path:
+          type: string
+        invocations_path:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    WorkflowEndpointListResponse:
+      type: object
+      additionalProperties: false
+      required: [workflow_endpoints]
+      properties:
+        workflow_endpoints:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowEndpointResource'
+    UpsertWorkflowEndpointGrantRequest:
+      type: object
+      additionalProperties: false
+      required: [service_principal_id, operations]
+      properties:
+        service_principal_id:
+          type: string
+          format: uuid
+        operations:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/WorkflowEndpointGrantOperation'
+    WorkflowEndpointGrantResource:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - endpoint_id
+        - project_id
+        - service_principal_id
+        - operations
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        endpoint_id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        service_principal_id:
+          type: string
+          format: uuid
+        operations:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowEndpointGrantOperation'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    WorkflowEndpointGrantListResponse:
+      type: object
+      additionalProperties: false
+      required: [grants]
+      properties:
+        grants:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowEndpointGrantResource'
+    InvokeWorkflowEndpointRequest:
+      type: object
+      additionalProperties: false
+      required: [input]
+      properties:
+        input: {}
+        source_system:
+          type: string
+          nullable: true
+        source_reference:
+          type: string
+          nullable: true
+    WorkflowEndpointArtifactResource:
+      type: object
+      additionalProperties: false
+      required:
+        - file_id
+        - file_name
+        - media_type
+        - byte_count
+        - sha256_hex
+        - provenance
+        - retention_seconds
+        - expires_at
+        - content_path
+      properties:
+        file_id:
+          type: string
+          format: uuid
+        file_name:
+          type: string
+        media_type:
+          type: string
+        byte_count:
+          type: integer
+          format: int64
+          minimum: 0
+        sha256_hex:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+        provenance:
+          nullable: true
+        retention_seconds:
+          type: integer
+          minimum: 1
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        content_path:
+          type: string
+    WorkflowEndpointInvocationLinks:
+      type: object
+      additionalProperties: false
+      required: [self_path, cancel_path]
+      properties:
+        self_path:
+          type: string
+        cancel_path:
+          type: string
+    WorkflowEndpointInvocationResource:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - project_id
+        - endpoint_key
+        - run_id
+        - state
+        - source_system
+        - source_reference
+        - execution_deadline_at
+        - started_at
+        - completed_at
+        - outcome
+        - side_effect_state
+        - result
+        - artifacts
+        - links
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        endpoint_key:
+          type: string
+        run_id:
+          type: string
+          format: uuid
+          nullable: true
+        state:
+          type: string
+          enum: [accepted, pending, queued, starting, running, succeeded, failed, cancelled, timed_out]
+        source_system:
+          type: string
+          nullable: true
+        source_reference:
+          type: string
+          nullable: true
+        execution_deadline_at:
+          type: string
+          format: date-time
+          nullable: true
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        outcome:
+          allOf:
+            - $ref: '#/components/schemas/WorkflowRunOutcome'
+          nullable: true
+        side_effect_state:
+          $ref: '#/components/schemas/WorkflowSideEffectState'
+        result:
+          nullable: true
+        artifacts:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowEndpointArtifactResource'
+        links:
+          $ref: '#/components/schemas/WorkflowEndpointInvocationLinks'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
     WorkflowRunState:
       type: string
       enum:
@@ -5256,6 +6057,12 @@ components:
         - source_system
         - source_reference
         - client_request_id
+        - endpoint_id
+        - endpoint_invocation_id
+        - endpoint_key
+        - outcome
+        - side_effect_state
+        - execution_deadline_at
         - state
         - session_id
         - automation_task_id
@@ -5309,6 +6116,29 @@ components:
           nullable: true
         client_request_id:
           type: string
+          nullable: true
+        endpoint_id:
+          type: string
+          format: uuid
+          nullable: true
+        endpoint_invocation_id:
+          type: string
+          format: uuid
+          nullable: true
+        endpoint_key:
+          type: string
+          nullable: true
+        outcome:
+          allOf:
+            - $ref: '#/components/schemas/WorkflowRunOutcome'
+          nullable: true
+        side_effect_state:
+          allOf:
+            - $ref: '#/components/schemas/WorkflowSideEffectState'
+          nullable: true
+        execution_deadline_at:
+          type: string
+          format: date-time
           nullable: true
         state:
           $ref: '#/components/schemas/WorkflowRunState'

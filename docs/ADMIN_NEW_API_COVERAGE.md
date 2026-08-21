@@ -18,15 +18,15 @@ handwritten API truth.
 
 Current generated and contract-tested baseline:
 
-- OpenAPI operations: 131
-- OpenAPI operations recognized by the Axum router contract: 131
-- schema-validated request/response examples: 19
+- OpenAPI operations: 144
+- OpenAPI operations recognized by the Axum router contract: 144
+- schema-validated request/response examples: 22
 - separately governed non-v1 compatibility surfaces: 14
 - OpenAPI component schemas: 202
 - OpenAPI ref names: 231
 - reusable component parameters: 23
 - reusable component responses: 6
-- security schemes: 2
+- security schemes: 3
 - schema properties audited: 1017
 - required schema entries audited: 853
 - content types: `application/json`, `application/octet-stream`,
@@ -162,7 +162,11 @@ The API companion and coverage view must include these families:
   `getWorkflowRunWorkspaceInputContent`,
   `listWorkflowEventSubscriptions`, `createWorkflowEventSubscription`,
   `getWorkflowEventSubscription`, `deleteWorkflowEventSubscription`,
-  `listWorkflowEventDeliveries`
+  `listWorkflowEventDeliveries`, `listWorkflowEndpoints`,
+  `createWorkflowEndpoint`, `getWorkflowEndpoint`,
+  `updateWorkflowEndpoint`, `activateWorkflowEndpoint`,
+  `disableWorkflowEndpoint`, `listWorkflowEndpointGrants`,
+  `upsertWorkflowEndpointGrant`, `deleteWorkflowEndpointGrant`
 
 ### `ui-evidence`
 
@@ -177,6 +181,10 @@ The API companion and coverage view must include these families:
   `cancelAutomationTask`
 - API-backed recording controls that are not current operator controls:
   `createSessionRecording`, `stopSessionRecording`
+- Confidential machine polling operations documented with a distinct
+  `machine-bearer` auth class: `invokeWorkflowEndpoint`,
+  `getWorkflowEndpointInvocation`, `cancelWorkflowEndpointInvocation`, and
+  `getWorkflowEndpointArtifactContent`
 
 ### `internal-worker`
 
@@ -348,7 +356,10 @@ Representative schema families to keep in mapper/view-model tests:
   `WorkflowRunSourceSnapshotResource`, `WorkflowRunWorkspaceInputResource`,
   `WorkflowRunEventResource`, `WorkflowRunLogResource`,
   `WorkflowEventSubscriptionResource`, `WorkflowEventDeliveryResource`,
-  and `WorkflowObservabilitySnapshot`
+  `WorkflowEndpointResource`, `WorkflowEndpointGrantResource`,
+  `WorkflowEndpointInvocationResource`, `WorkflowEndpointOutcome`,
+  `WorkflowEndpointArtifactResource`, `WorkflowEndpointProblem`, and
+  `WorkflowObservabilitySnapshot`
 - generic/worker evidence: `AutomationTaskResource`,
   `AutomationTaskEventResource`, `AutomationTaskLogResource`, and
   `OkResponse`
@@ -392,10 +403,10 @@ fields:
 - extension versions: `install_path`
 - workspace upload helper metadata such as `x-bpane-file-provenance`
 
-Workflow Endpoint fields must be added to the frozen API and this coverage
-matrix before UI implementation. The bounded Phase 0 subset belongs to `#172`;
-advanced lifecycle and integration fields belong to `#240`. The combined
-inventory includes:
+The bounded Phase 0 Workflow Endpoint fields and routes are present in the
+frozen API, generated classification evidence, API companion, and route-backed
+operator UI. Advanced lifecycle and integration fields remain `#240`. The
+combined implemented/planned inventory is:
 
 - endpoint key, project, lifecycle state, immutable version binding, contract
   version, immutable revision, environment, compatibility status, schema
@@ -532,5 +543,6 @@ The current #158 route acceptance is:
 6. The coverage manifest is tested against `openapi/bpane-control-v1.yaml`.
 7. #179 conformance and compatibility checks are visible from the route rather
    than inferred from operation counts alone.
-8. Planned Workflow Endpoint or Teach Mode operations are labeled as Planned
-   until their public contract is implemented and passes conformance.
+8. Implemented Workflow Endpoint operations retain their owner-versus-machine
+   auth distinction; planned Teach Mode and #240 operations remain labeled as
+   Planned until their public contract is implemented and passes conformance.

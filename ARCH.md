@@ -448,6 +448,10 @@ service.
     and preserve automation-read access before runtime materialization
   - session-scoped recording routes expose segment lifecycle, playback/export, and artifact download
   - workflow routes expose definitions, immutable versions, runs, logs, events, and run-scoped automation access
+  - project-scoped Workflow Endpoint routes bind one approved immutable
+    version to a stable key, enforce narrow registered-service-principal
+    invoke/read/cancel/artifact grants, and persist endpoint/caller idempotency
+    plus typed outcome and side-effect evidence without broadening owner APIs
   - reusable workflow input routes expose file workspaces, credential bindings, and approved extensions
   - `GET /api/session/status` — client counts, resolution, telemetry
   - `POST /api/session/mcp-owner` — claim session, lock resolution
@@ -492,6 +496,19 @@ service.
   - persists run logs, events, outputs, produced files, linked recordings, and correlation metadata
   - reconciles runtime hold/release semantics for paused runs
   - returns structured workflow-source failures with machine-readable `code`, `category`, and `recovery_hint` fields that the admin app can surface directly
+- **Workflow endpoints** (`workflow_endpoints/`, `api/workflow_endpoints/`,
+  `session_control/*/workflow_endpoints.rs`):
+  - keep endpoint identity project-scoped and endpoint keys immutable
+  - validate Draft 2020-12 input before runtime creation and output before a
+    terminal success can be persisted
+  - converge concurrent identical endpoint/caller idempotency reservations on
+    one invocation and reject changed normalized requests
+  - expose a restricted machine projection with RFC 9457 request failures,
+    typed terminal outcomes, side-effect certainty, and authorized artifact
+    references; owner-only labels, logs, credentials, and unrelated artifacts
+    do not cross this boundary
+  - record bounded endpoint operation/outcome metrics without endpoint,
+    principal, project, request, URL, or input labels
 - **Workflow event delivery** (`workflow_event_delivery/`):
   - persists owner-scoped outbound webhook subscriptions
   - signs lifecycle deliveries and records attempt diagnostics
@@ -718,6 +735,7 @@ The default imported local realm contains:
 - browser client: `bpane-web`
 - gateway audience client: `bpane-gateway`
 - service-account client: `bpane-mcp-bridge`
+- fake-BPM service-account client: `bpane-fake-bpm` (local conformance only)
 - example user: `demo / demo-demo`
 
 ### Workflow Control Plane
@@ -758,6 +776,16 @@ The workflow layer sits on top of the owner-scoped session APIs.
 - the gateway persists run logs, events, outputs, produced files, linked recordings, and retention metadata
 - owner actions now include durable `submit-input`, `resume`, `reject`, and `cancel` transitions on workflow runs
 - workflow lifecycle subscriptions provide signed outbound delivery plus persisted delivery diagnostics for external systems
+- project Workflow Endpoints expose one approved immutable version through a
+  stable asynchronous invoke/status/cancel contract. Machine access requires
+  an active external-OIDC service principal, project membership, a matching
+  narrow endpoint grant, and the operation scope; it grants no workflow edit,
+  session, credential, or project-catalog authority.
+- endpoint invocation validates input before runtime creation, validates output
+  before success, scopes idempotency to endpoint/caller, and retains typed
+  outcome, timeout/cancellation, side-effect certainty, and authorized artifact
+  evidence. Challenges are terminal `external_intervention_required`; no
+  BrowserPane Human Handoff resource is created.
 - canonical local workflow CLI commands use `./scripts/bpane workflow` and
   exercise the same v1 HTTP routes as the browser UI; the package-level
   `workflow-cli.mjs` entrypoint is a temporary compatibility wrapper around the

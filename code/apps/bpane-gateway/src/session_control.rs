@@ -42,6 +42,13 @@ use crate::workflow::{
     StoredWorkflowRunLog, WorkflowRunProducedFile, WorkflowRunSourceSnapshot, WorkflowRunState,
     WorkflowRunTransitionRequest, WorkflowRunWorkspaceInput,
 };
+use crate::workflow_endpoints::{
+    PersistWorkflowEndpointGrantRequest, PersistWorkflowEndpointRequest,
+    ReserveWorkflowEndpointInvocationRequest, ReserveWorkflowEndpointInvocationResult,
+    StoredWorkflowEndpoint, StoredWorkflowEndpointGrant, StoredWorkflowEndpointInvocation,
+    WorkflowEndpointRunEvidence, WorkflowEndpointState, WorkflowRunOutcome,
+    WorkflowSideEffectState,
+};
 use crate::workflow_event_delivery::{
     build_workflow_event_delivery_payload, validate_workflow_event_subscription_request,
     workflow_event_type_matches, PersistWorkflowEventSubscriptionRequest,

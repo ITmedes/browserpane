@@ -167,6 +167,22 @@ pub(crate) fn test_router() -> (Router, String) {
     (router, token)
 }
 
+pub(crate) fn test_router_with_principal(
+    principal: AuthenticatedPrincipal,
+) -> (Router, String, Arc<ApiState>) {
+    let auth_validator = Arc::new(AuthValidator::from_test_principal(principal));
+    let token = auth_validator
+        .generate_token()
+        .expect("fixed test auth validator should generate a token");
+    let state = base_api_state(
+        auth_validator,
+        None,
+        Arc::new(crate::workflow_event_delivery::WorkflowEventDestinationPolicy::default()),
+        Default::default(),
+    );
+    (build_api_router(state.clone()), token, state)
+}
+
 pub(crate) fn recording_lifecycle_test_config() -> RecordingWorkerConfig {
     RecordingWorkerConfig {
         bin: std::path::PathBuf::from("/bin/sh"),

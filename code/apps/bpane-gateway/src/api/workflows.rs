@@ -1,6 +1,8 @@
 mod create;
 mod read;
 
+pub(super) use create::create_workflow_run_for_principal;
+
 use axum::routing::get;
 
 use super::*;

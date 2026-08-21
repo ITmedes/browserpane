@@ -7,6 +7,8 @@ export function apiContractEvidenceFixture(): ApiContractEvidence {
     operation('issueSessionAccessToken', 'POST', '/api/v1/sessions/{session_id}/access-tokens', 'Session Runtime', 'owner-bearer', 'ui-evidence', ['200', '401']),
     operation('createWorkflowRun', 'POST', '/api/v1/workflow-runs', 'Workflows', 'owner-bearer', 'ui-primary', ['201', '401']),
     operation('listWorkflowDefinitions', 'GET', '/api/v1/workflows', 'Workflows', 'owner-bearer', 'ui-primary', ['200', '401']),
+    operation('listWorkflowEndpoints', 'GET', '/api/v1/projects/{project_id}/workflow-endpoints', 'Workflow Endpoints', 'owner-bearer', 'ui-primary', ['200', '401']),
+    operation('invokeWorkflowEndpoint', 'POST', '/api/v1/projects/{project_id}/workflow-endpoints/{endpoint_key}/invocations', 'Workflow Endpoints', 'machine-bearer', 'api-companion', ['202', '409']),
     operation('createFileWorkspace', 'POST', '/api/v1/file-workspaces', 'File Workspaces', 'owner-bearer', 'ui-primary', ['201', '401']),
     operation('listFileWorkspaces', 'GET', '/api/v1/file-workspaces', 'File Workspaces', 'owner-bearer', 'ui-primary', ['200', '401']),
     operation('cancelAutomationTask', 'POST', '/api/v1/automation-tasks/{task_id}/cancel', 'Automation Tasks', 'owner-bearer', 'api-companion', ['200', '401']),
@@ -16,9 +18,9 @@ export function apiContractEvidenceFixture(): ApiContractEvidence {
   return {
     operations,
     classifications: {
-      'ui-primary': ['createProject', 'createSession', 'createWorkflowRun', 'listWorkflowDefinitions', 'createFileWorkspace', 'listFileWorkspaces'],
+      'ui-primary': ['createProject', 'createSession', 'createWorkflowRun', 'listWorkflowDefinitions', 'listWorkflowEndpoints', 'createFileWorkspace', 'listFileWorkspaces'],
       'ui-evidence': ['issueSessionAccessToken', 'openAdminEvents'],
-      'api-companion': ['cancelAutomationTask'],
+      'api-companion': ['cancelAutomationTask', 'invokeWorkflowEndpoint'],
       'internal-worker': ['appendWorkflowRunLog'],
     },
     examples: [
@@ -27,6 +29,22 @@ export function apiContractEvidenceFixture(): ApiContractEvidence {
       example('companion-session-connect-ticket', 'issueSessionAccessToken', '/api/v1/sessions/22222222-2222-4222-8222-222222222222/access-tokens'),
       example('companion-workflow-run-create', 'createWorkflowRun', '/api/v1/workflow-runs', { workflow_id: '33333333-3333-4333-8333-333333333333' }),
       getExample('workflow-definitions-empty-list', 'listWorkflowDefinitions', '/api/v1/workflows'),
+      getExample('workflow-endpoints-empty-list', 'listWorkflowEndpoints', '/api/v1/projects/11111111-1111-4111-8111-111111111111/workflow-endpoints'),
+      {
+        ...example(
+          'workflow-endpoint-idempotency-conflict',
+          'invokeWorkflowEndpoint',
+          '/api/v1/projects/11111111-1111-4111-8111-111111111111/workflow-endpoints/retrieve-supplier-report/invocations',
+          { input: { reporting_period: '2026-Q3' } },
+        ),
+        request: {
+          method: 'POST',
+          path: '/api/v1/projects/11111111-1111-4111-8111-111111111111/workflow-endpoints/retrieve-supplier-report/invocations',
+          headers: { 'Idempotency-Key': 'process-42-activity-7' },
+          body: { input: { reporting_period: '2026-Q3' } },
+        },
+        response: { status: 409, body: { code: 'idempotency_conflict' } },
+      },
       example('companion-file-workspace-create', 'createFileWorkspace', '/api/v1/file-workspaces', { project_id: '11111111-1111-4111-8111-111111111111' }),
       getExample('file-workspaces-empty-list', 'listFileWorkspaces', '/api/v1/file-workspaces'),
     ],

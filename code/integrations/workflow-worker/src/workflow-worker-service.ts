@@ -221,7 +221,7 @@ export class WorkflowWorkerService {
     const runnerPath = fileURLToPath(new URL("./entrypoint-runner.ts", import.meta.url));
     const child = spawn(
       process.execPath,
-      ["--import", "tsx/esm", runnerPath, contextPath],
+      ["--import", "tsx", runnerPath, contextPath],
       {
         stdio: ["ignore", "pipe", "pipe"],
       },

@@ -146,6 +146,14 @@ export function parseExampleCatalog(input: unknown): ApiExampleCatalog {
     const request = {
       method: requiredEnum(requestObject.method, API_METHODS, `${name} request method`),
       path: requiredPath(requestObject.path, `${name} request path`, '/api/v1/'),
+      ...(Object.hasOwn(requestObject, 'headers')
+        ? {
+            headers: Object.fromEntries(
+              Object.entries(requiredObject(requestObject.headers, `${name} request headers`))
+                .map(([key, value]) => [key, requiredString(value, `${name} request header ${key}`)]),
+            ),
+          }
+        : {}),
       ...(Object.hasOwn(requestObject, 'body') ? { body: safeExampleValue(requestObject.body, `${name} request body`) } : {}),
     };
     const status = requiredInteger(responseObject.status, `${name} response status`, 100, 599);

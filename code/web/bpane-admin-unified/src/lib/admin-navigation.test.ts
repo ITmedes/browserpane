@@ -58,7 +58,10 @@ describe('admin navigation model', () => {
       })),
     ).toEqual([
       { group: null, ids: ['dashboard'] },
-      { group: 'Operate', ids: ['sessions', 'recordings', 'workflows', 'runs'] },
+      {
+        group: 'Operate',
+        ids: ['sessions', 'recordings', 'workflows', 'workflow-endpoints', 'runs'],
+      },
       {
         group: 'Resources',
         ids: ['projects', 'contexts', 'egress', 'workspaces', 'extensions', 'credentials'],

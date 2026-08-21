@@ -78,6 +78,9 @@ export class OpenApiContract {
     if (security.some((requirement) => 'recordingWorkerAccessToken' in requirement)) {
       return 'recording-worker';
     }
+    if (security.some((requirement) => 'machineBearer' in requirement)) {
+      return 'machine-bearer';
+    }
     if (security.some((requirement) => 'bearerAuth' in requirement)) return 'owner-bearer';
     return 'other';
   }

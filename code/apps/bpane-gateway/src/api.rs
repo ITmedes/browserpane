@@ -84,6 +84,16 @@ use crate::workflow::{
     WorkflowRunWorkspaceInput,
 };
 use crate::workflow::{WorkflowObservabilitySnapshot, WorkflowSourceArchive};
+use crate::workflow_endpoints::{
+    PersistWorkflowEndpointGrantRequest, PersistWorkflowEndpointRequest,
+    ReserveWorkflowEndpointInvocationRequest, StoredWorkflowEndpoint,
+    StoredWorkflowEndpointInvocation, WorkflowEndpointArtifactResource,
+    WorkflowEndpointGrantListResponse, WorkflowEndpointGrantOperation,
+    WorkflowEndpointGrantResource, WorkflowEndpointInvocationLinks,
+    WorkflowEndpointInvocationResource, WorkflowEndpointListResponse, WorkflowEndpointResource,
+    WorkflowEndpointRunContext, WorkflowEndpointState, WorkflowOutcomeCategory, WorkflowRunOutcome,
+    WorkflowSideEffectState,
+};
 use crate::workflow_event_delivery::{
     group_attempts_by_delivery, validate_workflow_event_subscription_request,
     PersistWorkflowEventSubscriptionRequest, WorkflowEventDeliveryListResponse,
@@ -122,6 +132,7 @@ mod session_templates;
 mod sessions;
 mod types;
 mod workflow_definitions;
+mod workflow_endpoints;
 mod workflow_events;
 mod workflow_files;
 mod workflow_run_operations;

@@ -222,6 +222,7 @@ async fn in_memory_store_persists_workflow_run_worker_assignments() {
                 source_reference: None,
                 client_request_id: None,
                 create_request_fingerprint: None,
+                endpoint: None,
                 source_snapshot: None,
                 extensions: Vec::new(),
                 credential_bindings: Vec::new(),

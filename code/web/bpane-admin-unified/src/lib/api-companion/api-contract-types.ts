@@ -3,6 +3,7 @@ export const API_AUTH_MODES = [
   'owner-bearer',
   'session-automation',
   'recording-worker',
+  'machine-bearer',
   'unauthenticated',
 ] as const;
 export const API_METHODS = ['DELETE', 'GET', 'POST', 'PUT'] as const;
@@ -36,6 +37,7 @@ export type ApiClassificationCatalog = {
 export type ApiExampleRequest = {
   readonly method: ApiMethod;
   readonly path: string;
+  readonly headers?: Readonly<Record<string, string>>;
   readonly body?: unknown;
 };
 

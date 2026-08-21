@@ -2,14 +2,17 @@
 
 Issue: [#172](https://github.com/ITmedes/browserpane/issues/172)
 
-Status: Qualified; `#47` is complete through PR #242 and this issue is the next
-Pilot Value qualification candidate
+Status: Review
 
 Lane: Pilot Value
 
 Target gate: Phase 0 Operational Proof
 
-Last reviewed: 2026-08-20
+Last reviewed: 2026-08-21
+
+Verified baseline: `ab9dc5648df01b166d4eccde7a2aeffaa40675b2`
+
+Review candidate: `1148fc468c6541c09e89b8435727574f2efc5467`
 
 ## Business Outcome
 
@@ -315,3 +318,74 @@ Missing:
   generalized `#176` authorization model.
 - Migration, activation, rollback, deployment, OpenAPI, Admin-New, CLI,
   documentation, regression, and negative security evidence are recorded.
+
+## Implementation Evidence
+
+Recorded: 2026-08-21
+
+Implemented:
+
+- Added project-scoped workflow endpoint, grant, invocation, result, and
+  artifact resources with matching in-memory and Postgres persistence.
+- Added confidential machine-caller authentication, exact endpoint grants,
+  Draft 2020-12 input/output validation, caller-scoped idempotency, stable
+  terminal outcomes, side-effect certainty, timeout reconciliation, and
+  cancellation.
+- Added the owner and machine HTTP routes, bounded metrics, OpenAPI inventory
+  and examples, Admin-New catalog/detail surfaces, CLI operations, fake-BPM
+  conformance runner, and the real Compose polling smoke.
+- Updated README, architecture, security, operator, validation, delivery, and
+  capability documentation. The BrowserPane media protocol and a generated SDK
+  remain N/A for this HTTP control-plane slice as decided above.
+
+Passed local validation:
+
+- `node scripts/validate.mjs --profile fast` — PASS, all 44 stages, including
+  repository policy, Rust formatting/clippy/tests/coverage, Admin/Auth/Admin-New
+  checks/tests/coverage/builds, browser-client checks/tests/coverage/build,
+  integration packages, OpenAPI compatibility, and egress-observer tests.
+- `cargo clippy -p bpane-gateway --all-targets --all-features -- -D warnings`
+  — PASS.
+- `cargo test -p bpane-gateway` — PASS (488 passed, 1 ignored in the gateway
+  unit suite; gateway integration tests also passed).
+- `cargo test --workspace` — PASS.
+- `BPANE_SESSION_STORE_CONTRACT_POSTGRES_URL=postgresql://browserpane:browserpane-dev@localhost:5433/browserpane cargo test -p bpane-gateway session_store_contract_postgres -- --ignored --test-threads=1`
+  — PASS.
+- `node scripts/run-rust-coverage.mjs` — PASS; report written to
+  `target/llvm-cov/coverage-summary.json`.
+- `npm run check && npm run test:coverage && npm run build` in
+  `code/web/bpane-admin-unified` — PASS (201 files, 638 tests, coverage baseline,
+  and production build).
+- `npm run check && npm run test:coverage && npm run build` in
+  `code/web/bpane-client` — PASS (87 files, 677 tests, coverage baseline, and
+  production build).
+- `npm test && npm run build` in `code/integrations/workflow-worker` — PASS
+  (27 tests and TypeScript build).
+- `npm test && npm run check` in `scripts/openapi` — PASS (29 tests, 144
+  operations, 22 examples, and 14 compatibility surfaces).
+- `npm run compatibility -- --base-ref origin/main` in `scripts/openapi` —
+  PASS (19 additive, 0 unclassified changes).
+- `node scripts/check-repository-documents.mjs && node scripts/check-production-security-baseline.mjs && node scripts/check-dependency-safety.mjs`
+  — PASS.
+- `npm run smoke:workflow-endpoint-compose -- --headless --connect-timeout-ms 120000`
+  in `code/web/bpane-client` — PASS against real Keycloak client credentials,
+  Postgres, the workflow worker, and a docker-backed browser session. The smoke
+  proved success/polling, identical replay, changed-payload conflict,
+  pre-runtime input denial, invalid-output rejection, cancellation, timeout,
+  external intervention, typed failures, uncertain side effects, artifact
+  authorization, and authorization denials.
+
+Deferred or environment-qualified evidence:
+
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings` does
+  not pass in the unchanged `bpane-host` optional-feature configuration because
+  that crate cannot resolve `ffmpeg_next` with every feature enabled and also
+  contains existing warnings. `cargo clippy --workspace --all-targets -- -D warnings`
+  likewise stops on existing `bpane-host` warnings. The changed gateway passes
+  the standards-required strict all-target/all-feature clippy command above,
+  and the repository fast profile's workspace clippy stage passes without
+  weakening any gate.
+- Pull-request Validation remains CI evidence for the shell driver. The Compose
+  workflow is manual/post-merge rather than a pull-request trigger; this review
+  record does not claim otherwise or substitute mocks for the completed real
+  Compose smoke.

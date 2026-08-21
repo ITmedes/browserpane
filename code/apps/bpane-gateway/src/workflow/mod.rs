@@ -47,6 +47,9 @@ use uuid::Uuid;
 use crate::automation_tasks::AutomationTaskLogStream;
 use crate::credentials::WorkflowRunCredentialBinding;
 use crate::extensions::AppliedExtension;
+use crate::workflow_endpoints::{
+    WorkflowEndpointRunContext, WorkflowRunOutcome, WorkflowSideEffectState,
+};
 
 #[derive(Debug, Clone)]
 pub struct PersistWorkflowDefinitionRequest {
@@ -83,6 +86,7 @@ pub struct PersistWorkflowRunRequest {
     pub source_reference: Option<String>,
     pub client_request_id: Option<String>,
     pub create_request_fingerprint: Option<String>,
+    pub endpoint: Option<WorkflowEndpointRunContext>,
     pub source_snapshot: Option<WorkflowRunSourceSnapshot>,
     pub extensions: Vec<AppliedExtension>,
     pub credential_bindings: Vec<WorkflowRunCredentialBinding>,
@@ -172,6 +176,15 @@ pub struct StoredWorkflowRun {
     pub source_reference: Option<String>,
     pub client_request_id: Option<String>,
     pub create_request_fingerprint: Option<String>,
+    pub endpoint_id: Option<Uuid>,
+    pub endpoint_invocation_id: Option<Uuid>,
+    pub endpoint_key: Option<String>,
+    pub caller_service_principal_id: Option<Uuid>,
+    pub endpoint_idempotency_key: Option<String>,
+    pub endpoint_request_fingerprint: Option<String>,
+    pub execution_deadline_at: Option<DateTime<Utc>>,
+    pub outcome: Option<WorkflowRunOutcome>,
+    pub side_effect_state: Option<WorkflowSideEffectState>,
     pub source_snapshot: Option<WorkflowRunSourceSnapshot>,
     pub extensions: Vec<AppliedExtension>,
     pub credential_bindings: Vec<WorkflowRunCredentialBinding>,

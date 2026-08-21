@@ -519,6 +519,30 @@ BPM Workflow Endpoint issue `#172` additionally requires:
 - polling, canonical OpenAPI, Admin-New, CLI, and deterministic
   fake-orchestrator conformance smokes.
 
+The focused local commands for that bounded contract are:
+
+```bash
+cargo test -p bpane-gateway workflow_endpoints --no-fail-fast
+cargo test -p bpane-gateway api::tests::workflow_endpoints --no-fail-fast
+cargo test -p bpane-gateway session_store_contract_in_memory
+BPANE_SESSION_STORE_CONTRACT_POSTGRES_URL=postgresql://browserpane:browserpane-dev@localhost:5433/browserpane \
+  cargo test -p bpane-gateway session_store_contract_postgres -- --ignored --test-threads=1
+npm test --prefix scripts/openapi
+npm run check --prefix scripts/openapi
+npm run compatibility --prefix scripts/openapi -- --base-ref origin/main
+cd code/web/bpane-admin-unified && npm run check && npm run test:coverage && npm run build
+cd code/web/bpane-client && npx vitest run \
+  js/__tests__/bpane-cli.test.ts \
+  js/__tests__/workflow-endpoint-conformance.test.ts
+cd code/web/bpane-client && npm run smoke:workflow-endpoint-compose -- \
+  --headless --connect-timeout-ms 120000
+```
+
+The last command is the real-stack gate: it uses the imported local Keycloak
+confidential caller, Postgres persistence, gateway-launched workflow worker,
+docker-backed browser session, and fake-BPM polling fixture. A mocked token,
+in-memory store, or owner-token `POST /api/v1/workflow-runs` is not equivalent.
+
 Deferred Workflow Endpoint productization issue `#240` additionally requires:
 
 - immutable endpoint revision, compatibility, environment promotion, rollback,

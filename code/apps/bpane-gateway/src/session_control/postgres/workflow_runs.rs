@@ -53,6 +53,15 @@ impl PostgresSessionStore {
             .await
     }
 
+    pub(in crate::session_control) async fn get_workflow_run_by_automation_task_id(
+        &self,
+        automation_task_id: Uuid,
+    ) -> Result<Option<StoredWorkflowRun>, SessionStoreError> {
+        self.workflow_run_repository()
+            .get_workflow_run_by_automation_task_id(automation_task_id)
+            .await
+    }
+
     pub(in crate::session_control) async fn list_dispatchable_workflow_runs(
         &self,
     ) -> Result<Vec<StoredWorkflowRun>, SessionStoreError> {

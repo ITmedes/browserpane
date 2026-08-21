@@ -126,6 +126,7 @@ impl WorkflowRunRepository<'_> {
             json_workflow_run_credential_bindings(&request.credential_bindings)?;
         let workspace_inputs = json_workflow_run_workspace_inputs(&request.workspace_inputs)?;
         let produced_files = json_workflow_run_produced_files(&Vec::new())?;
+        let endpoint = request.endpoint.as_ref();
         if let Some(client_request_id) = request.client_request_id.as_deref() {
             let existing_row = transaction
                 .query_opt(
@@ -217,6 +218,15 @@ impl WorkflowRunRepository<'_> {
                     error,
                     artifact_refs,
                     labels,
+                    endpoint_id,
+                    endpoint_invocation_id,
+                    endpoint_key,
+                    caller_service_principal_id,
+                    endpoint_idempotency_key,
+                    endpoint_request_fingerprint,
+                    execution_deadline_at,
+                    endpoint_outcome,
+                    endpoint_side_effect_state,
                     started_at,
                     completed_at,
                     created_at,
@@ -225,7 +235,9 @@ impl WorkflowRunRepository<'_> {
                 VALUES (
                     $1, $2, $3, $4, $5, $6, $23, $7, $8, $9,
                     $10, $11, $12, $13,
-                    $14::jsonb, $15::jsonb, $16::jsonb, $17::jsonb, $18::jsonb, $19::jsonb, NULL, NULL, $20::jsonb, $21::jsonb, NULL, NULL, $22, $22
+                    $14::jsonb, $15::jsonb, $16::jsonb, $17::jsonb, $18::jsonb, $19::jsonb, NULL, NULL, $20::jsonb, $21::jsonb,
+                    $24, $25, $26, $27, $28, $29, $30, NULL, $31,
+                    NULL, NULL, $22, $22
                 )
                 RETURNING
                     id,
@@ -252,6 +264,15 @@ impl WorkflowRunRepository<'_> {
                     error,
                     artifact_refs,
                     labels,
+                    endpoint_id,
+                    endpoint_invocation_id,
+                    endpoint_key,
+                    caller_service_principal_id,
+                    endpoint_idempotency_key,
+                    endpoint_request_fingerprint,
+                    execution_deadline_at,
+                    endpoint_outcome,
+                    endpoint_side_effect_state,
                     started_at,
                     completed_at,
                     created_at,
@@ -281,6 +302,14 @@ impl WorkflowRunRepository<'_> {
                     &json_labels(&request.labels),
                     &now,
                     &request.project_id,
+                    &endpoint.map(|context| context.endpoint_id),
+                    &endpoint.map(|context| context.invocation_id),
+                    &endpoint.map(|context| context.endpoint_key.as_str()),
+                    &endpoint.map(|context| context.caller_service_principal_id),
+                    &endpoint.map(|context| context.idempotency_key.as_str()),
+                    &endpoint.map(|context| context.request_fingerprint.as_str()),
+                    &endpoint.map(|context| context.execution_deadline_at),
+                    &endpoint.map(|_| WorkflowSideEffectState::None.as_str()),
                 ],
             )
             .await
