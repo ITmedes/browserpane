@@ -67,6 +67,12 @@ closed merge loop explicitly:
 AUTO_MERGE=1 ./dev_loop/loop.sh
 ```
 
+`AUTO_MERGE=1` does not bypass branch protection. A green/current PR that
+still needs approval, has requested changes, or is blocked by another branch
+policy remains open and stops with a specific journal outcome. Restart the
+loop after an authorized reviewer or repository administrator resolves that
+gate.
+
 Stop cleanly between phases from another shell:
 
 ```bash
@@ -189,6 +195,19 @@ The driver leaves branches and PRs intact for diagnosis:
 - `qualification-awaiting-specification`: a gap set was identified and STOP
   was consumed before the specification session started.
 - `green-awaiting-review`: checks passed and automatic merge was disabled.
+- `review-required`: checks passed and automatic merge was enabled, but branch
+  protection still requires an authorized approval.
+- `changes-requested`: checks passed, but review feedback blocks the merge.
+- `merge-policy-blocked`: checks passed, but another branch policy blocks the
+  merge; inspect the PR without starting a code repair.
+- `base-state-stale`: local ancestry is current while GitHub still reports the
+  PR behind; wait for merge-state convergence and rerun.
+- `merge-state-unavailable` or `merge-state-unknown`: GitHub merge state could
+  not be read or classified safely.
+- `merge-command-failed`: GitHub still reports the PR ready after a failed
+  merge command; inspect the command/policy response directly.
+- `update-branch-failed`: the PR is behind but GitHub could not update it and
+  did not report a content conflict; inspect the live update response.
 - `draft-pr`: an interrupted proposal left an incomplete draft.
 - `ci-timeout`: the PR check set did not conclude in time.
 - `repairs-exhausted`: the bounded repair budget was consumed.
