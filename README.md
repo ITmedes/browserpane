@@ -142,9 +142,11 @@ Current support and scope:
 - Teach Mode: prose/demonstration-to-workflow authoring and controlled repair
   are planned under [issue #171](https://github.com/ITmedes/browserpane/issues/171)
   and are not current capabilities.
-- Remote protocol: the integrated BrowserPane protocol is implemented, while
-  its public specification, version negotiation, conformance, fuzzing, and
-  compatibility policy remain planned under
+- Remote protocol: the integrated BrowserPane protocol is implemented and its
+  normative v1 wire contract plus 15-vector current baseline are published in
+  [docs/REMOTE_PROTOCOL_V1.md](docs/REMOTE_PROTOCOL_V1.md). Runtime version
+  negotiation, expanded conformance/fuzz evidence, and real rolling-
+  compatibility qualification remain sequenced under
   [issue #175](https://github.com/ITmedes/browserpane/issues/175).
 - Platform telemetry: the gateway exposes aggregate OpenMetrics request and
   runtime-capacity signals at `/metrics`, together with label-free workflow,
@@ -233,8 +235,15 @@ The BrowserPane wire contract is a compact binary protocol implemented by the
 Rust `bpane-protocol` crate and the corresponding TypeScript client codec.
 
 - Reliable typed channels are used for control, input, cursor, clipboard, file transfer, and tiles.
-- Raw media channels are used for video, desktop audio, microphone, and camera payloads.
-- The interoperating Rust and TypeScript implementations are the current code-level contract. A language-neutral public specification, explicit version negotiation, and conformance suite remain planned in [issue #175](https://github.com/ITmedes/browserpane/issues/175).
+- Desktop audio, microphone, camera, and H.264 keyframes also use the reliable
+  envelope; H.264 delta fragments use raw WebTransport datagrams.
+- [The normative BrowserPane v1 contract](docs/REMOTE_PROTOCOL_V1.md) freezes
+  channel/message IDs, framing, limits, future negotiation assignments, and
+  the legacy compatibility vocabulary. Both languages exhaustively consume the
+  same versioned 15-vector current seed catalog. This is a contract baseline,
+  not deployed runtime negotiation or broad interoperability evidence; those
+  remaining gates stay under
+  [issue #175](https://github.com/ITmedes/browserpane/issues/175).
 
 ## Local Development
 

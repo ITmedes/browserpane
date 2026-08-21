@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, sync::OnceLock};
+use std::{collections::BTreeSet, sync::OnceLock};
 
 use bpane_protocol::{
     channel::ChannelId,
@@ -6,16 +6,68 @@ use bpane_protocol::{
     AudioFrame, ClipboardMessage, ControlMessage, CursorMessage, FileMessage, InputMessage,
     Modifiers, SessionFlags, TileMessage, VideoDatagram, VideoTileInfo,
 };
+use serde::Deserialize;
 
-fn fixtures() -> &'static BTreeMap<String, String> {
-    static FIXTURES: OnceLock<BTreeMap<String, String>> = OnceLock::new();
-    FIXTURES.get_or_init(|| {
+const EXPECTED_FIXTURE_COUNT: usize = 15;
+const KNOWN_CAPABILITIES: &[&str] = &[
+    "audio_adpcm_ima_stereo",
+    "audio_opus",
+    "audio_pcm_s16le",
+    "camera_h264_annex_b",
+    "client_access_state",
+    "clipboard_text",
+    "extended_keyboard",
+    "file_transfer",
+    "h264_video",
+    "microphone_opus",
+    "roi_video",
+    "tile_cache",
+    "tile_scroll",
+    "tile_zstd",
+];
+
+#[derive(Debug, Deserialize)]
+struct FixtureCatalog {
+    schema_version: u8,
+    catalog: String,
+    vectors: Vec<WireFixture>,
+}
+
+#[derive(Debug, Deserialize)]
+struct WireFixture {
+    name: String,
+    direction: String,
+    transport: String,
+    channel: String,
+    capabilities: Vec<String>,
+    wire_hex: String,
+    expected: FixtureExpectation,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "outcome", rename_all = "snake_case")]
+enum FixtureExpectation {
+    Valid { message: String },
+    Invalid { error: String },
+}
+
+fn catalog() -> &'static FixtureCatalog {
+    static CATALOG: OnceLock<FixtureCatalog> = OnceLock::new();
+    CATALOG.get_or_init(|| {
         serde_json::from_str(include_str!("fixtures/wire-fixtures.json")).expect("fixture json")
     })
 }
 
+fn fixture(name: &str) -> &'static WireFixture {
+    catalog()
+        .vectors
+        .iter()
+        .find(|fixture| fixture.name == name)
+        .expect("fixture exists")
+}
+
 fn wire(name: &str) -> Vec<u8> {
-    hex_to_bytes(fixtures().get(name).expect("fixture exists"))
+    hex_to_bytes(&fixture(name).wire_hex)
 }
 
 fn hex_to_bytes(hex: &str) -> Vec<u8> {
@@ -34,6 +86,165 @@ fn fixed<const N: usize>(text: &str) -> [u8; N] {
     let mut out = [0u8; N];
     out[..bytes.len()].copy_from_slice(bytes);
     out
+}
+
+#[test]
+fn shared_catalog_schema_and_every_vector_are_consumed() {
+    let catalog = catalog();
+    assert_eq!(catalog.schema_version, 1);
+    assert_eq!(catalog.catalog, "browserpane-current-seed");
+    assert_eq!(catalog.vectors.len(), EXPECTED_FIXTURE_COUNT);
+
+    let mut names = BTreeSet::new();
+    for fixture in &catalog.vectors {
+        assert!(
+            names.insert(fixture.name.as_str()),
+            "duplicate fixture name"
+        );
+        validate_metadata(fixture);
+
+        let actual = classify_fixture(fixture);
+        match &fixture.expected {
+            FixtureExpectation::Valid { message } => {
+                assert_eq!(actual, Ok(message.as_str()), "fixture {}", fixture.name);
+            }
+            FixtureExpectation::Invalid { error } => {
+                assert_eq!(actual, Err(error.as_str()), "fixture {}", fixture.name);
+            }
+        }
+    }
+}
+
+fn validate_metadata(fixture: &WireFixture) {
+    assert!(
+        matches!(
+            fixture.direction.as_str(),
+            "client_to_server" | "server_to_client" | "bidirectional"
+        ),
+        "invalid direction for {}",
+        fixture.name
+    );
+    assert!(
+        matches!(
+            fixture.transport.as_str(),
+            "reliable_frame" | "datagram_payload"
+        ),
+        "invalid transport for {}",
+        fixture.name
+    );
+    assert!(
+        matches!(
+            fixture.channel.as_str(),
+            "video"
+                | "audio_out"
+                | "audio_in"
+                | "video_in"
+                | "input"
+                | "cursor"
+                | "clipboard"
+                | "file_up"
+                | "file_down"
+                | "control"
+                | "tiles"
+        ),
+        "invalid channel for {}",
+        fixture.name
+    );
+    assert!(
+        fixture
+            .capabilities
+            .windows(2)
+            .all(|pair| pair[0] < pair[1]),
+        "capabilities must be sorted and unique for {}",
+        fixture.name
+    );
+    assert!(
+        fixture
+            .capabilities
+            .iter()
+            .all(|capability| KNOWN_CAPABILITIES.contains(&capability.as_str())),
+        "unknown capability for {}",
+        fixture.name
+    );
+    assert!(fixture.wire_hex.len().is_multiple_of(2));
+    assert!(fixture
+        .wire_hex
+        .bytes()
+        .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)));
+}
+
+fn classify_fixture(fixture: &WireFixture) -> Result<&'static str, &'static str> {
+    let bytes = hex_to_bytes(&fixture.wire_hex);
+    if fixture.transport == "datagram_payload" {
+        return VideoDatagram::decode(&bytes)
+            .map(|_| "video_datagram")
+            .map_err(frame_error_class);
+    }
+
+    if channel_name(bytes.first().copied()) != Some(fixture.channel.as_str()) {
+        return Err("channel_metadata_mismatch");
+    }
+
+    let (frame, consumed) = Frame::decode(&bytes).map_err(frame_error_class)?;
+    if consumed != bytes.len() {
+        return Err("trailing_data");
+    }
+
+    match frame.channel {
+        ChannelId::AudioOut | ChannelId::AudioIn => AudioFrame::decode(&frame.payload)
+            .map(|_| "audio_frame")
+            .map_err(frame_error_class),
+        ChannelId::Video => VideoDatagram::decode(&frame.payload)
+            .map(|_| "video_datagram")
+            .map_err(frame_error_class),
+        _ => Message::from_frame(&frame)
+            .map(message_class)
+            .map_err(frame_error_class),
+    }
+}
+
+fn message_class(message: Message) -> &'static str {
+    match message {
+        Message::Control(ControlMessage::SessionReady { .. }) => "control_session_ready",
+        Message::Input(InputMessage::KeyEventEx { .. }) => "input_key_event_ex",
+        Message::Cursor(CursorMessage::CursorShape { .. }) => "cursor_shape",
+        Message::Clipboard(ClipboardMessage::Text { .. }) => "clipboard_text",
+        Message::FileUp(FileMessage::FileHeader { .. }) => "file_header",
+        Message::FileDown(FileMessage::FileChunk { .. }) => "file_chunk",
+        Message::FileDown(FileMessage::FileComplete { .. }) => "file_complete",
+        Message::Tiles(TileMessage::GridConfig { .. }) => "tile_grid_config",
+        Message::Tiles(TileMessage::ScrollStats { .. }) => "tile_scroll_stats",
+        Message::Tiles(TileMessage::Zstd { .. }) => "tile_zstd",
+        _ => "unsupported_catalog_message",
+    }
+}
+
+fn channel_name(channel: Option<u8>) -> Option<&'static str> {
+    match channel.and_then(ChannelId::from_u8) {
+        Some(ChannelId::Video) => Some("video"),
+        Some(ChannelId::AudioOut) => Some("audio_out"),
+        Some(ChannelId::AudioIn) => Some("audio_in"),
+        Some(ChannelId::VideoIn) => Some("video_in"),
+        Some(ChannelId::Input) => Some("input"),
+        Some(ChannelId::Cursor) => Some("cursor"),
+        Some(ChannelId::Clipboard) => Some("clipboard"),
+        Some(ChannelId::FileUp) => Some("file_up"),
+        Some(ChannelId::FileDown) => Some("file_down"),
+        Some(ChannelId::Control) => Some("control"),
+        Some(ChannelId::Tiles) => Some("tiles"),
+        None => None,
+    }
+}
+
+fn frame_error_class(error: FrameError) -> &'static str {
+    match error {
+        FrameError::BufferTooShort { .. } => "buffer_too_short",
+        FrameError::UnknownChannel(_) => "unknown_channel",
+        FrameError::UnknownMessageType { .. } => "unknown_message_type",
+        FrameError::InvalidFieldValue { .. } => "invalid_field_value",
+        FrameError::PayloadTooLarge(_) => "payload_too_large",
+        FrameError::TrailingData(_) => "trailing_data",
+    }
 }
 
 #[test]

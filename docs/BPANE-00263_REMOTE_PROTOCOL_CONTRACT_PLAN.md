@@ -3,13 +3,13 @@
 ## Metadata
 
 - Issue: `#263`
-- State: Qualified
+- State: Review
 - Owner: BrowserPane maintainers
 - Lane: Production
 - Target gate: Production Baseline protocol contract checkpoint
 - Depends on: accepted ADR 0003, merged `#151` validation floor
 - Parent program: `#175`; protocol slice 1 of 6
-- Last verified commit/date: `ff34162431db` / 2026-08-21
+- Last verified commit/date: `5dc1c3f839ce` / 2026-08-21
 
 ## Business Outcome
 
@@ -158,6 +158,47 @@ R-007, and ADR references only to that evidence level.
 
 ## Evidence Record
 
-Record PR/commit, spec/vector schema versions, fixture enumeration counts,
-commands/results, coverage, mutation checks, reviewed claims, and residual
-links. Do not attach sensitive or production protocol payloads.
+- Branch: `codex/BPANE-00263-remote-protocol-contract` from
+  `ac3a5d5f27f5`; implementation commit `ad77af1e`.
+- PR: [#270](https://github.com/ITmedes/browserpane/pull/270)
+- Contract/catalog: BrowserPane protocol v1 is normative in
+  `REMOTE_PROTOCOL_V1.md`; fixture schema version `1`, catalog
+  `browserpane-current-seed`, with all 15 original vectors retained (12 valid,
+  3 invalid). Rust and TypeScript enumerate and classify every entry.
+- Focused Rust validation passed:
+  - `cargo fmt --all -- --check`
+  - `cargo test -p bpane-protocol` (125 unit, integration, property, vector,
+    and doc tests passed)
+  - `cargo clippy -p bpane-protocol --all-targets --all-features -- -D warnings`
+  - `cargo check -p bpane-protocol --no-default-features`
+  - `cargo doc -p bpane-protocol --no-deps`
+- Browser-client validation from `code/web/bpane-client` passed:
+  - `npx tsc --noEmit`
+  - `npm test` (88 files and 679 tests passed)
+  - `npm run test:coverage` (92.91% statements, 87.65% branches, 93.19%
+    functions, 92.91% lines; baseline passed)
+  - `npm run build`
+- Repository validation passed:
+  - `node scripts/check-repository-documents.mjs` (113 Markdown, 19 YAML,
+    and 3 workflow files)
+  - `node scripts/validate.mjs --stage repository-documents`
+  - `node scripts/validate.mjs --profile fast` (all 44 local stages passed,
+    including Rust workspace coverage at 60.98% lines, 63.77% functions, and
+    64.84% regions)
+  - `git diff --check`
+- Controlled mutation evidence: in a detached temporary worktree, changing one
+  valid `SessionReady` tag byte made both the focused Rust and TypeScript
+  catalog tests fail. After explicit restoration, changing the expected error
+  for the invalid unknown-tile-tag seed made both fail. The catalog was restored
+  cleanly and the temporary worktree was removed.
+- Contract/claim review: README, ARCH, validation, maturity, roadmap, and R-007
+  distinguish this published BrowserPane-specific contract/current seed
+  baseline from deployed negotiation, broad conformance, Production, scale, or
+  third-party compatibility. API/OpenAPI, persistence, Admin-New, CLI/SDK,
+  deployment, and runtime behavior are N/A for this slice; the fast profile
+  still proved zero OpenAPI compatibility changes and all unaffected package
+  gates.
+- Residual work remains explicitly owned by #264-#268: negotiation codecs,
+  gateway/browser enforcement, expanded conformance/fuzzing, real Compose
+  rolling compatibility, diagnostics, and #175 closure. No #263 runtime smoke
+  is deferred because #263 intentionally changes no runtime path.

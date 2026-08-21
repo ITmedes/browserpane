@@ -4,9 +4,10 @@ Status: Canonical execution roadmap
 
 Governance issue: [#173](https://github.com/ITmedes/browserpane/issues/173)
 
-Last requirements audit: 2026-08-21 after the #175 protocol program was split
-into six focused, dependency-ordered issues `#263` through `#268` from `main`
-at `e21e2206`. The Workflow Endpoint has passing focused, contract, and
+Last requirements audit: 2026-08-21 for the #263 normative contract and shared
+vector baseline, first in the six focused, dependency-ordered #175 protocol
+issues `#263` through `#268`, based on `main` at `ac3a5d5f`. The Workflow
+Endpoint has passing focused, contract, and
 real-Compose fake-BPM evidence. #174 remains the next Pilot Value outcome but
 waits for real candidate and stakeholder decisions. #180 is specified but
 waits for reviewed legal/business decisions. #175 is a blocked non-executable

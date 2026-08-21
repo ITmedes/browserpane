@@ -851,9 +851,13 @@ support boundary and local decision path are maintained in
 The Rust crate defines typed message and binary-frame behavior for native
 services and supports `no_std` with `alloc`. The browser client implements the
 corresponding codec in TypeScript; it does not consume a Rust/WASM build of the
-crate. Issue #175 owns a language-neutral specification, version negotiation,
-shared conformance vectors, fuzzing, and the gateway/client compatibility
-policy. See ADR 0003.
+crate. [The BrowserPane v1 wire contract](docs/REMOTE_PROTOCOL_V1.md) is the
+normative language-neutral definition of framing, current messages, numeric
+registries, limits, future negotiation, failure, and legacy compatibility
+rules. The current 15-vector seed catalog is schema-versioned and exhaustively
+classified by both languages. Runtime negotiation, expanded conformance,
+fuzzing, and real gateway/client compatibility qualification remain sequenced
+under issue #175. See ADR 0003.
 
 **Frame envelope:**
 ```
@@ -867,7 +871,7 @@ All integers little-endian. Max payload 16 MiB. No JSON, no protobuf, no serde.
 
 | ID | Channel | Transport | Direction | Purpose |
 |----|---------|-----------|-----------|---------|
-| 0x01 | Video | Datagrams | S->C | H.264 NAL fragments |
+| 0x01 | Video | Datagram / stream | S->C | H.264 delta fragments / reliable keyframe fragments |
 | 0x02 | AudioOut | Stream | S->C | Desktop audio (Opus/ADPCM/PCM) |
 | 0x03 | AudioIn | Stream | C->S | Microphone (Opus) |
 | 0x04 | VideoIn | Stream | C->S | Webcam (H.264) |
@@ -879,19 +883,27 @@ All integers little-endian. Max payload 16 MiB. No JSON, no protobuf, no serde.
 | 0x0A | Control | Stream | Bidi | Resize, ping, session, bitrate hints |
 | 0x0B | Tiles | Stream | S->C | Tile rendering commands |
 
-**Control message types (8 variants):**
+**Current control message types (9 variants):**
 ResolutionRequest, ResolutionAck, SessionReady, Ping, Pong,
-KeyboardLayoutInfo, BitrateHint, ResolutionLocked.
+KeyboardLayoutInfo, BitrateHint, ResolutionLocked, ClientAccessState. The v1
+contract additionally reserves ClientHello, ServerSelection, and ProtocolReject
+tags for the later negotiation implementation.
 
 **Tile message types (12 variants):**
 GridConfig, CacheHit, CacheMiss, Fill, Qoi, Zstd, VideoRegion, BatchEnd,
 ScrollCopy, GridOffset, TileDrawMode, ScrollStats.
 
-**Video datagram format:**
+**Video fragment format:**
 ```
 nal_id(u32) + fragment_seq(u16) + fragment_total(u16) + is_keyframe(u8)
 + pts_us(u64) + data_len(u32) + data + [flags(u8) + tile_info(12 bytes)]
 ```
+
+Delta fragments carry that payload directly in WebTransport datagrams.
+Keyframe fragments carry it inside reliable Video-channel envelopes. This
+documented v1 contract is published, but the current runtime remains on its
+pre-contract profile until the #264-#268 negotiation and qualification slices
+land.
 
 ---
 

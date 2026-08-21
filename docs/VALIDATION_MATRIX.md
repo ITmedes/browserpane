@@ -292,17 +292,16 @@ implementation target. Focused issues #263-#268 own, in order, the normative
 contract/current-vector baseline, negotiation codecs/vectors, gateway
 enforcement, browser enforcement, malformed/fuzz evidence, and final Compose/
 Admin-New compatibility qualification. The current tree already has 15 shared
-JSON seeds: Rust's shared-fixture tests reference all 15 current entries, while
-TypeScript tests reference 13 distinct entries across control,
-input/clipboard, file, tile, and video paths. Only `audio_out_frame` and
-`cursor_shape_small` are not consumed by TypeScript. Neither language has
-catalog-level exhaustive enumeration, so a newly added unreferenced entry can
-still be ignored silently. Rust has property round trips, but no parser fuzz
-target exists and the browser ignores
-`SessionReady.version`. `BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md` is the program
-contract and the six child plans define executable validation boundaries. Until
-#268 passes, current seeds and connection smokes are not a broad compatibility
-promise.
+JSON seeds in schema version 1. Rust and TypeScript now enumerate all 15,
+validate the same catalog metadata, route every entry through production parser
+boundaries, and assert the same stable valid/invalid outcome classification.
+The normative assignments and legacy claim boundary are published in
+`REMOTE_PROTOCOL_V1.md`. The Rust crate retains property round trips, but no
+parser fuzz target or runtime handshake exists yet and the current browser
+still ignores `SessionReady.version`. `BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md`
+is the program contract and the six child plans define executable validation
+boundaries. Until #268 passes, the v1 contract and current seeds are not a broad
+compatibility promise.
 
 ## Current Admin-New Smoke Coverage
 
