@@ -404,6 +404,27 @@ MOCK_GH_JSON='[{"name":"Validation","bucket":"pass","state":"SUCCESS","link":"ht
 wait_for_checks 999 || fail "green check set is accepted"
 pass "green check set is accepted"
 
+clean_merge='{"mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","reviewDecision":null}'
+required_review='{"mergeable":"MERGEABLE","mergeStateStatus":"BLOCKED","reviewDecision":"REVIEW_REQUIRED"}'
+requested_changes='{"mergeable":"MERGEABLE","mergeStateStatus":"BLOCKED","reviewDecision":"CHANGES_REQUESTED"}'
+policy_blocked='{"mergeable":"MERGEABLE","mergeStateStatus":"BLOCKED","reviewDecision":null}'
+content_conflict='{"mergeable":"CONFLICTING","mergeStateStatus":"DIRTY","reviewDecision":"REVIEW_REQUIRED"}'
+base_behind='{"mergeable":"MERGEABLE","mergeStateStatus":"BEHIND","reviewDecision":null}'
+unknown_merge='{"mergeable":"UNKNOWN","mergeStateStatus":"UNKNOWN","reviewDecision":null}'
+
+assert_eq "ready" "$(merge_gate_from_json <<< "$clean_merge")" "mergeable PR is ready"
+assert_eq "review-required" "$(merge_gate_from_json <<< "$required_review")" "required review is a governance stop"
+assert_eq "changes-requested" "$(merge_gate_from_json <<< "$requested_changes")" "requested changes are a governance stop"
+assert_eq "merge-policy-blocked" "$(merge_gate_from_json <<< "$policy_blocked")" "generic branch policy is not a merge conflict"
+assert_eq "merge-conflict" "$(merge_gate_from_json <<< "$content_conflict")" "content conflict takes precedence over review"
+assert_eq "base-behind" "$(merge_gate_from_json <<< "$base_behind")" "base-behind state is explicit"
+assert_eq "merge-state-unknown" "$(merge_gate_from_json <<< "$unknown_merge")" "unknown merge state fails closed"
+
+if printf '%s\n' '{"mergeable":' | merge_gate_from_json >/dev/null 2>&1; then
+  fail "malformed merge snapshot is rejected"
+fi
+pass "malformed merge snapshot is rejected"
+
 MOCK_GH_JSON='[{"name":"Validation","bucket":"fail","state":"FAILURE","link":"https://github.com/ITmedes/browserpane/actions/runs/2"}]'
 MOCK_GH_RC=1
 check_rc=0
