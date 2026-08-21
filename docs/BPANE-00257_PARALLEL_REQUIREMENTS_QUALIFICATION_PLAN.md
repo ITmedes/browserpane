@@ -3,7 +3,7 @@
 ## Metadata
 
 - Issue: `#257`
-- State: In Progress
+- State: Implemented through PR `#258`
 - Owner: BrowserPane maintainers / Codex
 - Lane: Foundation
 - Target gate: Repeatable, bounded contributor delivery
@@ -232,4 +232,7 @@ security, production, API, Admin-New, or investor claims. `README.md`,
 - `./dev_loop/tests/loop_test.sh` passed all 96 contract and driver tests.
 - `node scripts/validate.mjs --stage repository-baseline --stage
   repository-documents` passed both stages.
-- PR, commit, and post-merge supervised qualifier smoke: pending.
+- Commit `11f27420` merged through PR `#258` as `b7d7bddd`.
+- Post-merge supervised run `dev_loop/runs/20260821-180307` deferred `#174`,
+  selected `#180`, and created the focused governance-plan PR `#259` without
+  mutating the deferred issue.

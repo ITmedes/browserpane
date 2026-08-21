@@ -192,12 +192,29 @@ unset -f gh
 
 qualify_routine="$test_dir/../routines/qualify.md"
 specify_routine="$test_dir/../routines/specify.md"
+delivery_roadmap="$test_dir/../../docs/DELIVERY_ROADMAP.md"
 
-grep -Fq 'roadmap explicitly identifies it as parallel work or as the fallback' "$qualify_routine" \
-  || fail "qualification contract permits only documented parallel or fallback work"
-pass "qualification contract permits only documented parallel or fallback work"
+grep -Fq 'finite ordered fallback queue' "$qualify_routine" \
+  || fail "qualification contract permits only the documented fallback queue"
+pass "qualification contract permits only the documented fallback queue"
 
-grep -Fq 'do not mutate or promote the deferred issue' "$qualify_routine" \
+grep -Fq 'continue through the finite ordered fallback' "$qualify_routine" \
+  || fail "qualification contract traverses multiple deferred candidates"
+pass "qualification contract traverses multiple deferred candidates"
+
+grep -Fq 'Select the first eligible candidate' "$qualify_routine" \
+  || fail "qualification contract preserves fallback order"
+pass "qualification contract preserves fallback order"
+
+grep -Fq 'When every candidate in the documented queue' "$qualify_routine" \
+  || fail "qualification contract stops after documented queue exhaustion"
+pass "qualification contract stops after documented queue exhaustion"
+
+grep -Fq '`#174` -> `#180` -> `#175` -> `#124`' "$delivery_roadmap" \
+  || fail "canonical roadmap defines the finite fallback queue"
+pass "canonical roadmap defines the finite fallback queue"
+
+grep -Fq 'Do not mutate or promote a deferred issue' "$qualify_routine" \
   || fail "qualification contract preserves deferred candidates"
 pass "qualification contract preserves deferred candidates"
 

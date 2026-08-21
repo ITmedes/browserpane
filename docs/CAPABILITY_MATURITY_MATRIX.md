@@ -2,8 +2,8 @@
 
 Governance issue: [#173](https://github.com/ITmedes/browserpane/issues/173)
 
-Last verified: 2026-08-21 for the #172 review candidate based on `main` at
-`ab9dc564`
+Last verified: 2026-08-21 after #180 specification merged through PR #259 based
+on `main` at `5f022af7`
 
 ## Maturity Definitions
 
@@ -38,7 +38,7 @@ capability.
 | Browser extensions | Prototype | approved extension metadata and docker workflow/session support | #159, #72 |
 | MCP session delegation | Prototype | explicit session endpoint, bridge proxy, smoke coverage | #69, #70, #176 |
 | Workflow publishing and execution | Prototype | supported commit-pinned Playwright TypeScript package contract, Draft 2020-12 schemas, reviewed resource/regression evidence, compatibility state, worker lifecycle, runs/events/logs/files, finite worker request deadlines, bounded process output, and Compose package/workspace evidence | #174 selected-workflow proof |
-| Phase 0 BPM Workflow Endpoint | Prototype | #172 review candidate implements project endpoint lifecycle, exact service-principal grants, Draft 2020-12 input/output enforcement, endpoint/caller idempotency, typed outcomes, cancellation, artifact authorization, Admin-New/CLI/OpenAPI, and a passing real Keycloak/Postgres/worker/browser fake-BPM smoke | #174 real activity and #180 Pilot governance gate |
+| Phase 0 BPM Workflow Endpoint | Prototype | #172 merged through PR #250 with project endpoint lifecycle, exact service-principal grants, Draft 2020-12 input/output enforcement, endpoint/caller idempotency, typed outcomes, cancellation, artifact authorization, Admin-New/CLI/OpenAPI, and a passing real Keycloak/Postgres/worker/browser fake-BPM smoke | #174 real activity and #180 Pilot governance gate |
 | Production Workflow Endpoint lifecycle | Planned | Revisions, callbacks, replay, trace, throttling, and connector expansion isolated in #240 | #240 |
 | Workflow Teach Mode | Planned and deferred | Demonstration-to-candidate specification in #171; explicitly not Phase 0 | #171 |
 | Workflow Human Handoff | Partial prototype and deferred | run input/hold/resume primitives exist; explicitly not Phase 0 | #71 |

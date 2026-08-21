@@ -853,6 +853,13 @@ The following cross-cutting gaps have focused owners:
    candidate while `#174` waits. It must complete before an external Pilot
    relies on BrowserPane's open-source posture; engineering consistency and
    legal approval must remain separately stated.
+5. While both `#174` and `#180` wait for external decisions, `#175` is the first
+   engineering fallback. ADR 0003 fixes its product direction, so a focused
+   protocol specification/conformance plan may be prepared from code and
+   repository evidence.
+6. If `#175` is blocked, exhausted, or complete, `#124` is the final current
+   fallback for the bounded Admin-New session-template catalog. No other issue
+   is implicitly eligible.
 
 BrowserPane subprocesses, Human Handoff, Teach Mode, workflow training or
 generation, and automatic repair are not Phase 0 requirements. Challenges end

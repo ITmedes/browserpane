@@ -1,6 +1,6 @@
 # BrowserPane Current Context
 
-Last synchronized: 2026-08-21 after #172 merged through PR #250
+Last synchronized: 2026-08-21 after #180 specification merged through PR #259
 
 This is the first local document to read when starting a clean BrowserPane
 session. It records current product decisions, delivery order, and repository
@@ -8,8 +8,9 @@ state. Detailed requirements remain in the linked domain and plan documents.
 
 ## Current Baseline
 
-- Canonical base: `main` at `07a2ff44`; #172 is merged through PR #250 and its
-  follow-up smoke stabilization is merged through PR #256.
+- Canonical base: `main` at `5f022af7`; #172 is merged through PR #250, its
+  smoke stabilization is merged through PR #256, and #180 requirements are
+  specified through PR #259 without resolving the external legal decision.
 - `/admin-new/` is the default operator console. `/admin/` is a compatibility
   fallback pending a separate removal decision.
 - The gateway uses the typed runtime launch broker for the production-like
@@ -91,11 +92,19 @@ blindly retry the complete activity.
    owners, deployment, and data/threat profile are selected; automation must
    not infer those external decisions.
 
-In parallel, `#180` is the next eligible requirements candidate. It resolves
-AGPL/Cargo/Node metadata and contribution-governance inconsistency before an
-external Pilot relies on the open-source posture. Engineering consistency can
-be specified from repository evidence while explicit legal approval remains an
-external-use gate.
+In parallel, `#180` resolves AGPL/Cargo/Node metadata and
+contribution-governance inconsistency before an external Pilot relies on the
+open-source posture. Its engineering contract is specified, but implementation
+waits for an accountable maintainer and legal/business reviewer to record the
+decision.
+
+When both `#174` and `#180` are externally deferred, the finite qualification
+fallback is `#175` and then `#124`. `#175` specifies and conformance-tests the
+BrowserPane remote protocol; ADR 0003 already accepts that product direction,
+so the missing focused plan can be created from repository evidence. `#124`
+adds the Admin-New session-template catalog and is considered only after
+`#175` is blocked, exhausted, or complete. The loop may not select work outside
+this roadmap-owned order.
 
 `#240` owns later endpoint revisions, promotion/rollback, callbacks, replay,
 trace expansion, throttling, and connector compatibility. `#71` Human Handoff
@@ -143,16 +152,12 @@ Use `PRODUCT_PHASES_AND_RELEASE_GATES.md` for exact gate evidence and
 
 ## Current Material Gaps
 
-The current code has immutable workflow versions, runs, session bindings,
-owner-scoped idempotency, logs/events/files, OIDC validation, service-principal
-registry metadata, and Admin-New run detail. It does not yet have:
-
-- a stable project-scoped Workflow Endpoint resource/key,
-- enforced endpoint invocation/read/cancel grants for service principals,
-- runtime enforcement of workflow input and output schemas,
-- endpoint/caller-scoped idempotency with request fingerprinting,
-- a stable machine-readable terminal outcome and side-effect certainty model,
-- the dedicated external polling API and fake-BPM conformance fixture.
+The #172 Workflow Endpoint gaps previously listed here are implemented and
+validated. The immediate missing outcomes are now external Pilot selection and
+operation under #174, the reviewed governance decision and repository alignment
+under #180, the durable remote-protocol product contract under #175, and the
+Admin-New session-template catalog under #124. Later production and Phase N
+gaps remain owned by the issues listed above and in `DELIVERY_ROADMAP.md`.
 
 ## Working Tree Guardrail
 
