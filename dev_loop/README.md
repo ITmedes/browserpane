@@ -73,6 +73,18 @@ policy remains open and stops with a specific journal outcome. Restart the
 loop after an authorized reviewer or repository administrator resolves that
 gate.
 
+When the approved project identity has repository `ADMIN` permission and is
+explicitly authorized to land green/current PRs directly, opt into GitHub's
+admin merge path separately:
+
+```bash
+AUTO_MERGE=1 ADMIN_MERGE=1 ./dev_loop/loop.sh
+```
+
+This mode still waits for green checks, requires a current branch, and refuses
+content conflicts or `CHANGES_REQUESTED`. It only bypasses a remaining required
+review or generic branch-policy block.
+
 Stop cleanly between phases from another shell:
 
 ```bash
@@ -120,6 +132,7 @@ diagnostic data.
 | `MIN_FREE_DISK_GB` | `50` | Minimum binary GiB available on the repository filesystem before local work; `0` explicitly disables the minimum. |
 | `AUTO_QUALIFY` | `1` | `1` audits and promotes one Qualified issue when the Ready queue is empty. |
 | `AUTO_MERGE` | `0` | `1` enables merge after green/current verification. |
+| `ADMIN_MERGE` | `0` | `1` explicitly permits `gh pr merge --admin` for a green/current review- or policy-blocked PR; requires `AUTO_MERGE=1` and repository `ADMIN` permission. |
 | `MERGE_METHOD` | `squash` | `squash`, `merge`, or `rebase`. |
 | `DEFAULT_BRANCH` | `main` | Published base branch. |
 | `BRANCH_PREFIX` | `codex/BPANE-` | Cross-process PR lock prefix. |
@@ -206,6 +219,8 @@ The driver leaves branches and PRs intact for diagnosis:
   not be read or classified safely.
 - `merge-command-failed`: GitHub still reports the PR ready after a failed
   merge command; inspect the command/policy response directly.
+- `admin-merge-failed`: explicit admin merge was requested, but GitHub still
+  refused the green/current PR; inspect identity and branch bypass policy.
 - `update-branch-failed`: the PR is behind but GitHub could not update it and
   did not report a content conflict; inspect the live update response.
 - `draft-pr`: an interrupted proposal left an incomplete draft.

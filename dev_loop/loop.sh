@@ -26,6 +26,7 @@ POST_MERGE_TIMEOUT_SECONDS="${POST_MERGE_TIMEOUT_SECONDS:-7200}"
 MIN_FREE_DISK_GB="${MIN_FREE_DISK_GB:-50}"
 AUTO_QUALIFY="${AUTO_QUALIFY:-1}"
 AUTO_MERGE="${AUTO_MERGE:-0}"
+ADMIN_MERGE="${ADMIN_MERGE:-0}"
 MERGE_METHOD="${MERGE_METHOD:-squash}"
 DEFAULT_BRANCH="${DEFAULT_BRANCH:-main}"
 BRANCH_PREFIX="${BRANCH_PREFIX:-codex/BPANE-}"
@@ -78,10 +79,13 @@ validate_config() {
     value="${!name}"
     is_positive_uint "$value" || die "$name must be a positive integer, got '$value'."
   done
-  for name in FAIL_FAST AUTO_QUALIFY AUTO_MERGE; do
+  for name in FAIL_FAST AUTO_QUALIFY AUTO_MERGE ADMIN_MERGE; do
     value="${!name}"
     [[ "$value" == "0" || "$value" == "1" ]] || die "$name must be 0 or 1, got '$value'."
   done
+  if [[ "$ADMIN_MERGE" == "1" && "$AUTO_MERGE" != "1" ]]; then
+    die "ADMIN_MERGE=1 requires AUTO_MERGE=1."
+  fi
   case "$MERGE_METHOD" in squash|merge|rebase) ;; *) die "MERGE_METHOD must be squash, merge, or rebase." ;; esac
   [[ -n "$DEFAULT_BRANCH" ]] || die "DEFAULT_BRANCH must not be empty."
   [[ -n "$BRANCH_PREFIX" ]] || die "BRANCH_PREFIX must not be empty."
@@ -137,6 +141,8 @@ github_identity_allowed() {
 github_permission_allowed() {
   case "$1" in ADMIN|MAINTAIN|WRITE) return 0 ;; *) return 1 ;; esac
 }
+
+admin_merge_permission_allowed() { [[ "$1" == "ADMIN" ]]; }
 
 acquire_lock() {
   if mkdir "$LOCK_DIR" 2>/dev/null; then
@@ -408,6 +414,9 @@ preflight_tools() {
   github_identity_allowed "$GITHUB_LOGIN" || die "GitHub identity '$GITHUB_LOGIN' is forbidden for this loop"
   GITHUB_PERMISSION="$(gh repo view --json viewerPermission --jq .viewerPermission 2>/dev/null || true)"
   github_permission_allowed "$GITHUB_PERMISSION" || die "GitHub identity '$GITHUB_LOGIN' has insufficient repository permission '${GITHUB_PERMISSION:-unknown}'"
+  if [[ "$ADMIN_MERGE" == "1" ]] && ! admin_merge_permission_allowed "$GITHUB_PERMISSION"; then
+    die "ADMIN_MERGE=1 requires GitHub repository permission ADMIN, got '${GITHUB_PERMISSION:-unknown}'."
+  fi
 }
 
 repo_ready_report() {
@@ -425,6 +434,7 @@ repo_ready_report() {
   say "Codex: $($CODEX_BIN --version)"
   say "GitHub identity: $GITHUB_LOGIN"
   say "GitHub repository permission: $GITHUB_PERMISSION"
+  say "Admin merge: $ADMIN_MERGE"
   local active
   active="$(automation_pr || true)"
   if [[ -n "$active" ]]; then
@@ -832,7 +842,8 @@ propose() {
     printf 'Live Ready issues:\n\n%s\n\n' "$(ready_issues || printf unavailable)"
     printf 'Open non-Codex pull requests:\n\n%s\n\n' "$(human_prs || printf unavailable)"
     printf 'The shell driver owns all CI polling, branch updates, and merging. '
-    printf 'Automatic merge is `%s`. Exit immediately after returning the structured result.\n' "$AUTO_MERGE"
+    printf 'Automatic merge is `%s`; admin merge is `%s`. ' "$AUTO_MERGE" "$ADMIN_MERGE"
+    printf 'Exit immediately after returning the structured result.\n'
   } > "$context"
   build_prompt "$here/routines/propose.md" "$context" "$prompt"
   step "iteration $number | Codex proposal"
@@ -901,9 +912,26 @@ pr_merge_gate() {
     | merge_gate_from_json
 }
 
+merge_mode_for_gate() {
+  case "$1" in
+    ready) printf '%s\n' "normal" ;;
+    review-required|merge-policy-blocked)
+      [[ "$ADMIN_MERGE" == "1" ]] || return 1
+      printf '%s\n' "admin"
+      ;;
+    *) return 1 ;;
+  esac
+}
+
 land() {
-  local pr_number="$1"
-  gh pr merge "$pr_number" "--$MERGE_METHOD" --delete-branch
+  local pr_number="$1" merge_mode="${2:-normal}"
+  local -a args=(pr merge "$pr_number" "--$MERGE_METHOD" --delete-branch)
+  case "$merge_mode" in
+    normal) ;;
+    admin) args+=(--admin) ;;
+    *) err "unknown merge mode: $merge_mode"; return 2 ;;
+  esac
+  gh "${args[@]}"
 }
 
 usage() {
@@ -959,7 +987,7 @@ trap on_exit EXIT
 trap 'printf "\n"; warn "interrupted"; exit 130' INT TERM
 
 printf '%sBrowserPane Codex development loop | run %s%s\n' "$c_b" "$RUN_ID" "$c_reset"
-say "iterations=$ITERATIONS repairs=$MAX_REPAIRS specification_cycles=$MAX_SPECIFICATION_CYCLES min_free_disk_gb=$MIN_FREE_DISK_GB auto_qualify=$AUTO_QUALIFY auto_merge=$AUTO_MERGE logs=dev_loop/runs/$RUN_ID"
+say "iterations=$ITERATIONS repairs=$MAX_REPAIRS specification_cycles=$MAX_SPECIFICATION_CYCLES min_free_disk_gb=$MIN_FREE_DISK_GB auto_qualify=$AUTO_QUALIFY auto_merge=$AUTO_MERGE admin_merge=$ADMIN_MERGE logs=dev_loop/runs/$RUN_ID"
 
 specification_cycles=0
 while :; do
@@ -1125,10 +1153,15 @@ while :; do
           record_outcome "merge-state-unavailable"
           die "could not read the live merge gate for #$pr"
         fi
-        if [[ "$merge_gate" == "ready" ]]; then
-          step "iteration $n | merge PR #$pr"
+        merge_mode="$(merge_mode_for_gate "$merge_gate" || true)"
+        if [[ -n "$merge_mode" ]]; then
+          if [[ "$merge_mode" == "admin" ]]; then
+            step "iteration $n | admin merge PR #$pr"
+          else
+            step "iteration $n | merge PR #$pr"
+          fi
           required_post_merge_workflows="$(post_merge_workflows_for_pr "$pr")"
-          if land "$pr"; then
+          if land "$pr" "$merge_mode"; then
             merge_sha="$(gh pr view "$pr" --json mergeCommit --jq '.mergeCommit.oid // empty')"
             [[ -n "$merge_sha" ]] || { record_outcome "merge-sha-missing"; die "#${pr} merged but its merge SHA is unavailable"; }
             good "#${pr} merged at ${merge_sha:0:12}; validating published main"
@@ -1152,6 +1185,10 @@ while :; do
             situation="merge-conflict"
             ;;
           review-required|changes-requested|merge-policy-blocked)
+            if [[ "$merge_mode" == "admin" ]]; then
+              record_outcome "admin-merge-failed"
+              die "admin merge failed for #$pr and GitHub still reports $merge_gate"
+            fi
             record_outcome "$merge_gate"
             good "#${pr} is green and current but stopped by $merge_gate; leaving it open"
             exit 0
@@ -1161,6 +1198,10 @@ while :; do
             die "GitHub reports #$pr behind even though origin/$DEFAULT_BRANCH is an ancestor; rerun after merge state settles"
             ;;
           ready)
+            if [[ "$merge_mode" == "admin" ]]; then
+              record_outcome "admin-merge-failed"
+              die "admin merge command failed for #$pr although its refreshed merge gate is ready"
+            fi
             record_outcome "merge-command-failed"
             die "merge command failed for #$pr although its refreshed merge gate is ready"
             ;;
