@@ -3,13 +3,31 @@
 ## Metadata
 
 - Issue: `#175`
-- State: Qualified
+- State: Blocked program tracker; executable work is split into `#263`-`#268`
 - Owner: BrowserPane maintainers
 - Lane: Production
 - Target gate: Production Baseline protocol compatibility checkpoint
-- Depends on: accepted ADR 0003 and the existing `#151` validation floor
+- Depends on: accepted ADR 0003, the existing `#151` validation floor, and the
+  ordered completion of `#263` through `#268`
 - Coordinates with: `#20`, `#72`, `#75`, `#168`, and `#169`
 - Last verified commit/date: `e21e2206a93a` / 2026-08-21
+
+## Execution Rule
+
+This document is the complete program contract, not an implementation plan for
+one pull request. Direct implementation against `#175` is prohibited. The six
+focused issues and plans below are the canonical shippable units; each must
+close before its successor can enter Ready. Only `#268` may close `#175` after
+the complete evidence set passes.
+
+| Order | Issue | Focused plan | Outcome |
+| --- | --- | --- | --- |
+| 1 | `#263` | `BPANE-00263_REMOTE_PROTOCOL_CONTRACT_PLAN.md` | Normative wire contract and current vector baseline. |
+| 2 | `#264` | `BPANE-00264_PROTOCOL_NEGOTIATION_CODECS_PLAN.md` | Rust/TypeScript negotiation codecs and vectors. |
+| 3 | `#265` | `BPANE-00265_GATEWAY_PROTOCOL_NEGOTIATION_PLAN.md` | Gateway pre-session enforcement and old-client overlap. |
+| 4 | `#266` | `BPANE-00266_BROWSER_PROTOCOL_NEGOTIATION_PLAN.md` | Browser enforcement, old-gateway overlap, and typed SDK errors. |
+| 5 | `#267` | `BPANE-00267_PROTOCOL_FUZZING_PLAN.md` | Parser fuzzing, malformed-state, and isolation evidence. |
+| 6 | `#268` | `BPANE-00268_PROTOCOL_COMPATIBILITY_QUALIFICATION_PLAN.md` | Compose compatibility, Admin-New diagnostics, rollback, and program closure. |
 
 ## Business Outcome
 
@@ -327,25 +345,22 @@ peer-controlled labels.
 
 ## Implementation Slices
 
-1. Publish the normative v1 document, vector schema, capability registry,
-   error vocabulary, and support matrix; expand the current 15-entry seed set
-   without changing runtime behavior.
-2. Add Rust and TypeScript negotiation types/codecs plus complete shared-vector,
-   boundary, property, and mutation tests.
-3. Add the gateway pre-hub handshake state machine, highest-common selection,
-   legacy profile, host `SessionReady` normalization, typed close behavior,
-   bounded diagnostics, and policy/late-join regressions.
-4. Add client hello/selection enforcement, delayed ready signal, capability
-   gating, recognized legacy fallback, typed errors, and SDK diagnostics.
-5. Add malformed-state integration tests and Rust fuzz targets for envelope,
-   typed dispatch, negotiation, and video/file fragmentation/reassembly.
-6. Add the compatibility smoke, Admin-New live feedback, deployment/operator
-   documentation, validation-stage wiring, release note, maturity/risk update,
-   and final rollback evidence.
+1. `#263`: publish the normative contract and complete current-vector parity.
+2. `#264`: implement negotiation codecs and conformance vectors without runtime
+   integration.
+3. `#265`: enforce negotiation at the gateway before session side effects.
+4. `#266`: enforce negotiation in the browser client and expose typed SDK
+   compatibility feedback.
+5. `#267`: add deterministic malformed-state, fuzz, sanitizer, and isolation
+   evidence.
+6. `#268`: run the full rolling matrix, integrate Admin-New diagnostics, finish
+   operator/docs evidence, and close the program.
 
-Each slice must keep current same-version behavior green. No slice may claim
-v1 support until gateway and client enforcement plus shared conformance and the
-compatibility smoke are present together.
+The focused child plan owns code boundaries, rollback, tests, and evidence for
+its pull request. Every child must keep the branch consistent and current
+same-version behavior green. No child may claim complete v1 support until
+`#268` has passed gateway/client enforcement, shared conformance, fuzzing, and
+the real compatibility smoke together.
 
 ## Acceptance Criteria
 

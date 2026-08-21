@@ -4,13 +4,13 @@ Status: Canonical execution roadmap
 
 Governance issue: [#173](https://github.com/ITmedes/browserpane/issues/173)
 
-Last requirements audit: 2026-08-21 after the #175 focused protocol contract
-was prepared from `main` at `e21e2206`. The Workflow Endpoint has passing
-focused, contract, and real-Compose fake-BPM evidence. #174 remains the next
-Pilot Value outcome but waits for real candidate and stakeholder decisions.
-#180 is specified but waits for reviewed legal/business decisions. #175 remains
-Qualified until its specification merges and a later qualification pass
-reassesses it.
+Last requirements audit: 2026-08-21 after the #175 protocol program was split
+into six focused, dependency-ordered issues `#263` through `#268` from `main`
+at `e21e2206`. The Workflow Endpoint has passing focused, contract, and
+real-Compose fake-BPM evidence. #174 remains the next Pilot Value outcome but
+waits for real candidate and stakeholder decisions. #180 is specified but
+waits for reviewed legal/business decisions. #175 is a blocked non-executable
+tracker; #263 is the first engineering qualification candidate.
 
 ## How To Use This Document
 
@@ -87,7 +87,7 @@ Qualified until a later post-merge audit passes.
 | 12 | #253 | Done | #251 merge gates | Explicit admin merge remains opt-in and constrained; merged through PR #254. |
 | 13 | #255 | Done | #172 main smoke evidence | Admin promotion-gate smokes stabilized through PR #256. |
 | 14 | #257 | Done | #246 requirements loop | Defer external decisions and evaluate only documented parallel/fallback requirements work; merged through PR #258. |
-| 15 | #260 | In Progress | #257 deferred-candidate contract | Traverse a finite roadmap-owned fallback queue without inferring external decisions. |
+| 15 | #260 | Done | #257 deferred-candidate contract | Finite roadmap-owned fallback traversal merged through PR #261. |
 
 #241, #244, #246, #248, #251, #253, #255, #257, and #260 are contributor
 tooling or validation reliability and do not supersede the Pilot sequence.
@@ -110,17 +110,17 @@ reviewed legal/business decision.
 
 When no Ready work exists, use this finite order:
 
-`#174` -> `#180` -> `#175` -> `#124`
+`#174` -> `#180` -> `#263` -> `#264` -> `#265` -> `#266` -> `#267` -> `#268` -> `#124`
 
-The qualifier must preserve the blockers on `#174` and `#180`, then assess
-`#175` as the first engineering fallback. `#175` has an accepted product
-direction in ADR 0003 and a focused Qualified contract in
-`BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md`; implementation requires a later
-post-merge qualification pass. `#124` is the final current fallback and may be
-considered only if `#175` is blocked, exhausted, or complete. This queue does
-not make `#175` or `#124` an external-Pilot dependency and does not authorize
-selecting any other backlog issue. If all four candidates are blocked, the loop
-stops and reports the complete blocker chain.
+The qualifier must preserve the external blockers on `#174` and `#180`, then
+assess `#263` as the first engineering fallback. Issues `#263` through `#268`
+are independently shippable protocol slices with focused plans; each successor
+depends on closure of its predecessor. `#175` retains the complete contract as
+a blocked program tracker and is never a direct implementation target. `#124`
+is the final current fallback and may be considered only if the protocol chain
+is blocked, exhausted, or complete. This queue does not make protocol work or
+`#124` an external-Pilot dependency and does not authorize any other backlog
+issue. If all candidates are blocked, the loop stops with the complete chain.
 
 ### Current Production Slice
 
@@ -269,8 +269,8 @@ bounded Pilot:
 #240 provides later production endpoint lifecycle, callback, and connector
 semantics after the bounded #172 polling contract.
 #171 Teach Mode follows stable publishing and endpoint semantics by default.
-#175 productizes the BrowserPane protocol independently of either feature and
-must be complete before broad compatibility claims.
+#263-#268 productize the BrowserPane protocol under tracker #175 independently
+of either feature and must be complete before broad compatibility claims.
 
 ## Issue And Plan Rules
 

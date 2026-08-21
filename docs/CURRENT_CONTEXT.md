@@ -1,8 +1,8 @@
 # BrowserPane Current Context
 
-Last synchronized: 2026-08-21 after the #175 requirements contract was
-prepared from `main` at `e21e2206`; #175 remains Qualified pending merge and a
-new qualification pass
+Last synchronized: 2026-08-21 after the #175 protocol program was split into
+six dependency-ordered implementation issues `#263` through `#268` from
+`main` at `e21e2206`
 
 This is the first local document to read when starting a clean BrowserPane
 session. It records current product decisions, delivery order, and repository
@@ -10,7 +10,7 @@ state. Detailed requirements remain in the linked domain and plan documents.
 
 ## Current Baseline
 
-- Canonical base: `main` at `5f022af7`; #172 is merged through PR #250, its
+- Canonical base: `main` at `e21e2206`; #172 is merged through PR #250, its
   smoke stabilization is merged through PR #256, and #180 requirements are
   specified through PR #259 without resolving the external legal decision.
 - `/admin-new/` is the default operator console. `/admin/` is a compatibility
@@ -101,14 +101,13 @@ waits for an accountable maintainer and legal/business reviewer to record the
 decision.
 
 When both `#174` and `#180` are externally deferred, the finite qualification
-fallback is `#175` and then `#124`. `#175` specifies and conformance-tests the
-BrowserPane remote protocol; ADR 0003 already accepts that product direction,
-and its focused Qualified contract is
-`BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md`. A later post-merge qualification pass
-must reassess it before implementation. `#124` adds the Admin-New
-session-template catalog and is considered only after `#175` is blocked,
-exhausted, or complete. The loop may not select work outside this roadmap-owned
-order.
+fallback is the ordered protocol sequence `#263` -> `#264` -> `#265` -> `#266`
+-> `#267` -> `#268`, followed by `#124`. `#175` is now the non-executable
+program tracker and `BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md` is the program
+contract. Each child has a focused plan and must close before its successor can
+enter Ready. `#124` adds the Admin-New session-template catalog and is
+considered only after the protocol sequence is blocked, exhausted, or complete.
+The loop may not select work outside this roadmap-owned order.
 
 `#240` owns later endpoint revisions, promotion/rollback, callbacks, replay,
 trace expansion, throttling, and connector compatibility. `#71` Human Handoff
@@ -157,9 +156,9 @@ Use `PRODUCT_PHASES_AND_RELEASE_GATES.md` for exact gate evidence and
 ## Current Material Gaps
 
 The #172 Workflow Endpoint gaps previously listed here are implemented and
-validated. The immediate missing outcomes are now external Pilot selection and
+validated. The immediate missing outcomes are external Pilot selection and
 operation under #174, the reviewed governance decision and repository alignment
-under #180, the durable remote-protocol product contract under #175, and the
+under #180, ordered remote-protocol delivery under #263-#268/#175, and the
 Admin-New session-template catalog under #124. Later production and Phase N
 gaps remain owned by the issues listed above and in `DELIVERY_ROADMAP.md`.
 

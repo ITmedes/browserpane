@@ -1,9 +1,9 @@
 # Open GitHub Issues Context
 
 Created: 2026-07-10
-Revalidated: 2026-08-21 after #180 specification merged through PR #259 based
-on `main` at `5f022af7`; #174 and #180 are externally deferred, with #175 then
-#124 as the finite engineering fallback
+Revalidated: 2026-08-21 after the #175 program was decomposed from `main` at
+`e21e2206`; #174 and #180 are externally deferred, with ordered protocol
+issues #263-#268 then #124 as the finite engineering fallback
 
 This document maps the current `docs/` workspace to the live open GitHub
 issues for `ITmedes/browserpane`. It is the bridge between the consolidated
@@ -12,7 +12,7 @@ local planning docs and the public issue tracker.
 Source check:
 
 - fetched and updated through the GitHub API on 2026-08-21,
-- open issue range: `#6` through `#260`,
+- open issue range: `#6` through `#268`,
 - focused docs-derived implementation issues created on 2026-07-10: `#145`
   through `#170`,
 - focused Phase N Teach Mode issue created on 2026-07-31: `#171`,
@@ -104,6 +104,12 @@ Source check:
 | `#173` Executable delivery roadmap, capability maturity, and release gates | `BPANE-00173_DELIVERY_GOVERNANCE_PLAN.md`, `DELIVERY_ROADMAP.md`, `CAPABILITY_MATURITY_MATRIX.md`, `PRODUCT_PHASES_AND_RELEASE_GATES.md`, `RISK_REGISTER.md` | Governance baseline | Canonical owner for delivery structure and cross-reference integrity. No runtime scope. |
 | `#174` Bounded Phase 0 BPM browser activity | `BPANE-00174_PHASE_0_REFERENCE_WORKFLOW_PLAN.md`, `DELIVERY_ROADMAP.md`, `PRODUCT_PHASES_AND_RELEASE_GATES.md` | Third Pilot Value slice after #47/#172 | Canonical owner for candidate qualification, one real activity, operating evidence, and Stop/Operate/Phase 1 exit. No subprocess, Human Handoff, or Teach Mode. |
 | `#175` Remote protocol specification and conformance | `BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md`, ADR 0003 | Production lane | Canonical owner for wire spec, version negotiation, shared vectors, fuzzing, and gateway/client compatibility. |
+| `#263` Remote protocol contract and vector baseline | `BPANE-00263_REMOTE_PROTOCOL_CONTRACT_PLAN.md`, `BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md`, `VALIDATION_MATRIX.md` | Protocol slice 1 | Publish the normative contract and complete current Rust/TypeScript vector consumption. |
+| `#264` Protocol negotiation codecs | `BPANE-00264_PROTOCOL_NEGOTIATION_CODECS_PLAN.md`, `BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md`, `VALIDATION_MATRIX.md` | Protocol slice 2 after #263 | Add pure Rust/TypeScript codecs, selection, and complete negotiation vectors without runtime wiring. |
+| `#265` Gateway protocol negotiation | `BPANE-00265_GATEWAY_PROTOCOL_NEGOTIATION_PLAN.md`, `BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md`, `VALIDATION_MATRIX.md` | Protocol slice 3 after #264 | Enforce negotiation before runtime/session side effects and preserve checked old clients. |
+| `#266` Browser protocol negotiation | `BPANE-00266_BROWSER_PROTOCOL_NEGOTIATION_PLAN.md`, `BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md`, `VALIDATION_MATRIX.md` | Protocol slice 4 after #265 | Delay browser readiness, gate capabilities, preserve checked old gateways, and expose typed SDK errors. |
+| `#267` Protocol fuzzing and malformed-state coverage | `BPANE-00267_PROTOCOL_FUZZING_PLAN.md`, `BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md`, `VALIDATION_MATRIX.md` | Protocol slice 5 after #266 | Add deterministic corpus replay, four Rust fuzz targets, sanitizer evidence, and isolation tests. |
+| `#268` Protocol compatibility qualification | `BPANE-00268_PROTOCOL_COMPATIBILITY_QUALIFICATION_PLAN.md`, `BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md`, `VALIDATION_MATRIX.md` | Protocol slice 6 after #267 | Prove rolling upgrade/rollback, current features, Admin-New diagnostics, and close #175. |
 | `#176` Organization/project-role/service-principal grant enforcement | `IDENTITY_ACCESS_REQUIREMENTS.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md` | Enterprise lane | Canonical owner for enforceable authorization and migration from owner-scoped deployments. |
 | `#177` Provisioning/deprovisioning and break-glass lifecycle | `IDENTITY_ACCESS_REQUIREMENTS.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md` | Enterprise lane | Canonical owner for remaining identity lifecycle scope from closed #52. |
 | `#178` Platform telemetry, SLOs, and capacity evidence | `BPANE-00178_PLATFORM_TELEMETRY_PLAN.md`, `PLATFORM_TELEMETRY.md`, `DELIVERY_ROADMAP.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md` | Production lane | Metrics, traces, rules/runbooks, and Grafana baseline merged through PRs #222, #228, #230, #232, and #234. Broader traces/metrics, calibrated SLOs, alert routing, synthetics, and tested envelopes remain. |
@@ -168,6 +174,7 @@ dedicated open issue ownership.
 | Delivery governance | `#173` Establish executable delivery roadmap, capability maturity, and release gates | `BPANE-00173_DELIVERY_GOVERNANCE_PLAN.md`, `DELIVERY_ROADMAP.md`, `CAPABILITY_MATURITY_MATRIX.md`, `PRODUCT_PHASES_AND_RELEASE_GATES.md`, `RISK_REGISTER.md` |
 | Phase 0 BPM browser activity | `#174` Qualify and deliver one bounded Phase 0 BPM browser activity | `BPANE-00174_PHASE_0_REFERENCE_WORKFLOW_PLAN.md`, `DELIVERY_ROADMAP.md`, `PRODUCT_PHASES_AND_RELEASE_GATES.md` |
 | Remote protocol product contract | `#175` Specify and conformance-test the BrowserPane remote protocol | `BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md`, `adr/0003-remote-protocol-product-contract.md` |
+| Remote protocol implementation sequence | `#263` -> `#264` -> `#265` -> `#266` -> `#267` -> `#268` | `BPANE-00263_REMOTE_PROTOCOL_CONTRACT_PLAN.md`, `BPANE-00264_PROTOCOL_NEGOTIATION_CODECS_PLAN.md`, `BPANE-00265_GATEWAY_PROTOCOL_NEGOTIATION_PLAN.md`, `BPANE-00266_BROWSER_PROTOCOL_NEGOTIATION_PLAN.md`, `BPANE-00267_PROTOCOL_FUZZING_PLAN.md`, `BPANE-00268_PROTOCOL_COMPATIBILITY_QUALIFICATION_PLAN.md` |
 | Organization/project authorization | `#176` Enforce organization, project-role, and service-principal grants | `IDENTITY_ACCESS_REQUIREMENTS.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md` |
 | Identity lifecycle | `#177` Add identity provisioning, deprovisioning, and break-glass lifecycle | `IDENTITY_ACCESS_REQUIREMENTS.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md` |
 | Platform telemetry and SLOs | `#178` Add platform telemetry, SLOs, and capacity evidence | `BPANE-00178_PLATFORM_TELEMETRY_PLAN.md`, `PLATFORM_TELEMETRY.md`, `CAPABILITY_MATURITY_MATRIX.md`, `PRODUCT_PHASES_AND_RELEASE_GATES.md`, `RISK_REGISTER.md` |
@@ -183,11 +190,10 @@ consolidated docs. The first pass covered the original 19 open issues; the
 reverse docs-to-issues pass created focused issues `#145` through `#170`; the
 delivery-governance pass created `#173` through `#180`.
 
-The current live result is 55 open issues: 19 broad/focused pre-existing
-issues, the 26 work-order issues `#145` through `#170`, focused Phase N issues
-`#171` and `#172`, governance issue `#173`, and seven focused cross-product
-issues `#174` through `#180`. Every open issue is represented in this document
-and links back to the consolidated docs.
+The current live issue set includes broad roadmap owners, focused work-order and
+governance issues, and the six protocol implementation children `#263` through
+`#268`. Every open issue remains represented in this document and links back to
+the consolidated docs.
 
 The original 19 open issues remain relevant. None should be closed only
 because of the docs consolidation or because `#142` is closed. The focused
@@ -201,7 +207,8 @@ The cross-reference pass also updated the issue bodies in both directions:
   applicable,
 - every focused work-order issue from `#145` through `#170` has both `Docs
   source` and `Docs cross-reference` sections,
-- focused implementation issues `#124`, `#145` through `#180` include an
+- focused implementation issues `#124`, `#145` through `#180`, and `#263`
+  through `#268` include an
   explicit example use case and post-implementation smoke sequence,
 - every open issue links back to `docs/OPEN_ISSUES_CONTEXT.md`,
 - stale wording that told slices to stay on broad issues was removed from the
@@ -232,7 +239,13 @@ The cross-reference pass also updated the issue bodies in both directions:
 | `#172` | Required Phase 0 polling endpoint. | Refocused on GitHub 2026-08-20 and backed by a bounded plan. | One endpoint, machine grant, schemas, idempotency, typed outcomes, side-effect certainty, artifacts, and polling; advanced lifecycle moved to #240. |
 | `#173` | Current governance slice. | Created on GitHub 2026-07-31 with business case, use case, scope, acceptance, and smoke. | No runtime UI. It governs roadmap, maturity, gates, risks, and claim traceability. |
 | `#174` | Qualified bounded Pilot Value slice. | Refocused on GitHub and locally on 2026-08-20. | One external BPM activity and normally one session; no subprocess, internal handoff, or training. |
-| `#175` | Qualified protocol productization gap with a focused v1 contract. | Created on GitHub 2026-07-31; `BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md` reconciles the 2026-08-21 code/vector audit. | Diagnostics may expose safe live version/capability metadata; no standalone admin catalog is required, and implementation awaits a later qualification pass. |
+| `#175` | Blocked non-executable protocol program tracker. | Reframed on GitHub 2026-08-21 to delegate implementation to ordered children #263-#268. | Final child #268 adds diagnostics to existing session surfaces and is the only child that may close #175. |
+| `#263` | First focused protocol slice. | Created on GitHub 2026-08-21 with complete business, scope, acceptance, smoke, and plan contract. | No Admin-New impact; freezes the normative contract/current vectors. |
+| `#264` | Second focused protocol slice after #263. | Created on GitHub 2026-08-21 with complete codec/conformance boundaries. | No Admin-New impact; no runtime wiring. |
+| `#265` | Third focused protocol slice after #264. | Created on GitHub 2026-08-21 with gateway enforcement and rollback boundaries. | Diagnostics are runtime inputs only; presentation waits for #268. |
+| `#266` | Fourth focused protocol slice after #265. | Created on GitHub 2026-08-21 with browser enforcement and SDK boundaries. | Produces typed errors/snapshot consumed by #268. |
+| `#267` | Fifth focused protocol slice after #266. | Created on GitHub 2026-08-21 with bounded fuzz/sanitizer evidence. | No Admin-New change. |
+| `#268` | Final focused protocol qualification slice after #267. | Created on GitHub 2026-08-21 as the #175 closure owner. | Integrates safe live diagnostics into existing session preview/observability surfaces. |
 | `#176` | Relevant authorization enforcement gap. | Created on GitHub 2026-07-31 to own organization/project roles and enforced service-principal grants. | Admin-new identity/project views must eventually show effective grants and denial reasons. |
 | `#177` | Relevant later identity-lifecycle gap. | Created on GitHub 2026-07-31 to own provisioning/deprovisioning and safeguarded break-glass controls. | Admin-new identity/access review becomes the operator surface when implemented. |
 | `#178` | Relevant production observability gap. | Created on GitHub 2026-07-31 to separate platform telemetry/SLOs from per-session inspection and readiness. | Admin-new observability consumes the common telemetry contract; it does not define a separate model. |
@@ -332,8 +345,8 @@ issue and capture the exact slice boundary in a checked-in `docs/*_PLAN.md`:
 | Active Operator Product work | none; `#124` qualified | Admin-new is promoted; select #124 only when session-template catalog work outranks the current Production slice. |
 | Items 10-19: admin-new parity and promotion work | `#154`-`#163`, with session templates still tracked by `#124` | Use the matching focused issue and keep old admin regression scope explicit. |
 | Items 20-26: scalability, runtime hygiene, docs, performance, and refactors | `#164`-`#170` | Use the matching focused issue and require validation evidence before broad refactors. |
-| Pilot Value | closed `#47` and `#172`; `#174` is externally deferred; `#180` is a parallel external-use gate | Select and deliver one real activity after stakeholder decisions. While waiting, follow the finite engineering fallback `#175` then `#124`. |
-| Production/Enterprise and Innovation | #233 completed; broad issues plus `#175`-`#178`, `#240`, and `#171` qualified | Reassess after Phase 0 evidence; #240 and #171 must not displace the current Pilot sequence. |
+| Pilot Value | closed `#47` and `#172`; `#174` is externally deferred; `#180` is a parallel external-use gate | Select and deliver one real activity after stakeholder decisions. While waiting, follow `#263`-`#268`, then `#124`. |
+| Production/Enterprise and Innovation | #233 completed; #175 tracks focused children #263-#268; other broad issues plus `#176`-`#178`, `#240`, and `#171` remain qualified | Reassess after Phase 0 evidence; #240 and #171 must not displace the current Pilot/fallback sequence. |
 
 ## Issue Hygiene Notes
 
