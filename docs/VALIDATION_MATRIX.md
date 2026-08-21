@@ -1,6 +1,6 @@
 # Consolidated Validation Matrix
 
-Revalidated against current package scripts: 2026-08-16
+Revalidated against current package scripts: 2026-08-21
 
 This matrix defines the available validation surfaces for product slices. Use
 `PRODUCT_PHASES_AND_RELEASE_GATES.md` to decide which evidence is required for
@@ -292,9 +292,13 @@ implementation target. Focused issues #263-#268 own, in order, the normative
 contract/current-vector baseline, negotiation codecs/vectors, gateway
 enforcement, browser enforcement, malformed/fuzz evidence, and final Compose/
 Admin-New compatibility qualification. The current tree already has 15 shared
-JSON seeds: Rust validates the represented families, while TypeScript consumes
-only control-ready and oversized-frame entries. Rust has property round trips,
-but no parser fuzz target exists and the browser ignores
+JSON seeds: Rust's shared-fixture tests reference all 15 current entries, while
+TypeScript tests reference 13 distinct entries across control,
+input/clipboard, file, tile, and video paths. Only `audio_out_frame` and
+`cursor_shape_small` are not consumed by TypeScript. Neither language has
+catalog-level exhaustive enumeration, so a newly added unreferenced entry can
+still be ignored silently. Rust has property round trips, but no parser fuzz
+target exists and the browser ignores
 `SessionReady.version`. `BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md` is the program
 contract and the six child plans define executable validation boundaries. Until
 #268 passes, current seeds and connection smokes are not a broad compatibility

@@ -9,7 +9,7 @@
 - Target gate: Production Baseline protocol contract checkpoint
 - Depends on: accepted ADR 0003, merged `#151` validation floor
 - Parent program: `#175`; protocol slice 1 of 6
-- Last verified commit/date: `e21e2206a93a` / 2026-08-21
+- Last verified commit/date: `ff34162431db` / 2026-08-21
 
 ## Business Outcome
 
@@ -30,8 +30,12 @@ limit, direction, or error-classification drift before rollout.
   and mixed-channel tests.
 - The host emits `SessionReady.version = 2`; the browser ignores that byte and
   the existing control fixture contains `1`. Neither is a published version.
-- The shared JSON catalog has 15 valid/invalid seeds. Rust covers represented
-  families, while TypeScript reads only two entries.
+- The shared JSON catalog has 15 valid/invalid seeds. Rust's shared-fixture
+  tests reference all 15 current entries. TypeScript tests reference 13
+  distinct entries across control, input/clipboard, file, tile, and video
+  paths; only `audio_out_frame` and `cursor_shape_small` are not consumed.
+  Neither language has catalog-level exhaustive enumeration, so a newly added
+  unreferenced entry can still be ignored silently.
 - No normative wire document, frozen capability registry, complete shared
   consumer contract, or published compatibility matrix exists.
 

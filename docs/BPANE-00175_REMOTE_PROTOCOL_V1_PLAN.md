@@ -10,7 +10,7 @@
 - Depends on: accepted ADR 0003, the existing `#151` validation floor, and the
   ordered completion of `#263` through `#268`
 - Coordinates with: `#20`, `#72`, `#75`, `#168`, and `#169`
-- Last verified commit/date: `e21e2206a93a` / 2026-08-21
+- Last verified commit/date: `ff34162431db` / 2026-08-21
 
 ## Execution Rule
 
@@ -69,10 +69,12 @@ wire vectors for both outcomes.
   published compatibility meaning.
 - `code/shared/bpane-protocol/tests/fixtures/wire-fixtures.json` already has 15
   language-neutral seed entries across control, input, cursor, clipboard,
-  files, tiles, audio, video, and three invalid cases. Rust validates all of
-  the relevant entries; the TypeScript protocol suite currently reads only the
-  control and oversized-frame entries. Golden vectors are therefore partial,
-  not wholly absent.
+  files, tiles, audio, video, and three invalid cases. Rust's shared-fixture
+  tests reference all 15 current entries. TypeScript tests reference 13
+  distinct entries; only `audio_out_frame` and `cursor_shape_small` are not
+  consumed. Neither language has catalog-level exhaustive enumeration, so a
+  newly added unreferenced entry can still be ignored silently. Golden vectors
+  are therefore broad but incomplete, not wholly absent.
 - Rust property tests cover envelope and typed-message round trips and video
   fragmentation. The TypeScript parser covers chunking and oversized lengths.
   No parser fuzz target, negotiated handshake, published capability registry,
