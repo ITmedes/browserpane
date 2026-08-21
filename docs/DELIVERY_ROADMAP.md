@@ -4,12 +4,13 @@ Status: Canonical execution roadmap
 
 Governance issue: [#173](https://github.com/ITmedes/browserpane/issues/173)
 
-Last implementation audit: 2026-08-21 after #180 requirements specification
-merged through PR #259 based on `main` at `5f022af7`. The Workflow Endpoint has
-passing focused, contract, and real-Compose fake-BPM evidence. #174 remains the
-next Pilot Value outcome but waits for real candidate and stakeholder
-decisions. #180 is specified but waits for reviewed legal/business decisions.
-The ordered engineering fallback begins with #175.
+Last requirements audit: 2026-08-21 after the #175 focused protocol contract
+was prepared from `main` at `e21e2206`. The Workflow Endpoint has passing
+focused, contract, and real-Compose fake-BPM evidence. #174 remains the next
+Pilot Value outcome but waits for real candidate and stakeholder decisions.
+#180 is specified but waits for reviewed legal/business decisions. #175 remains
+Qualified until its specification merges and a later qualification pass
+reassesses it.
 
 ## How To Use This Document
 
@@ -113,12 +114,13 @@ When no Ready work exists, use this finite order:
 
 The qualifier must preserve the blockers on `#174` and `#180`, then assess
 `#175` as the first engineering fallback. `#175` has an accepted product
-direction in ADR 0003; its missing focused plan is an evidence-backed
-specification task. `#124` is the final current fallback and may be considered
-only if `#175` is blocked, exhausted, or complete. This queue does not make
-`#175` or `#124` an external-Pilot dependency and does not authorize selecting
-any other backlog issue. If all four candidates are blocked, the loop stops and
-reports the complete blocker chain.
+direction in ADR 0003 and a focused Qualified contract in
+`BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md`; implementation requires a later
+post-merge qualification pass. `#124` is the final current fallback and may be
+considered only if `#175` is blocked, exhausted, or complete. This queue does
+not make `#175` or `#124` an external-Pilot dependency and does not authorize
+selecting any other backlog issue. If all four candidates are blocked, the loop
+stops and reports the complete blocker chain.
 
 ### Current Production Slice
 

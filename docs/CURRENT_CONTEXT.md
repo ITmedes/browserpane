@@ -1,6 +1,8 @@
 # BrowserPane Current Context
 
-Last synchronized: 2026-08-21 after #180 specification merged through PR #259
+Last synchronized: 2026-08-21 after the #175 requirements contract was
+prepared from `main` at `e21e2206`; #175 remains Qualified pending merge and a
+new qualification pass
 
 This is the first local document to read when starting a clean BrowserPane
 session. It records current product decisions, delivery order, and repository
@@ -101,10 +103,12 @@ decision.
 When both `#174` and `#180` are externally deferred, the finite qualification
 fallback is `#175` and then `#124`. `#175` specifies and conformance-tests the
 BrowserPane remote protocol; ADR 0003 already accepts that product direction,
-so the missing focused plan can be created from repository evidence. `#124`
-adds the Admin-New session-template catalog and is considered only after
-`#175` is blocked, exhausted, or complete. The loop may not select work outside
-this roadmap-owned order.
+and its focused Qualified contract is
+`BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md`. A later post-merge qualification pass
+must reassess it before implementation. `#124` adds the Admin-New
+session-template catalog and is considered only after `#175` is blocked,
+exhausted, or complete. The loop may not select work outside this roadmap-owned
+order.
 
 `#240` owns later endpoint revisions, promotion/rollback, callbacks, replay,
 trace expansion, throttling, and connector compatibility. `#71` Human Handoff

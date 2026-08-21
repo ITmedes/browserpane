@@ -289,8 +289,14 @@ every documented path and method is registered by the in-memory Axum router.
 
 Issue #175 owns the BrowserPane remote protocol specification, version/
 capability negotiation, shared Rust/TypeScript vectors, malformed-input tests,
-and fuzzing. Until that issue passes its gate, successful current-client
-connection smokes do not constitute a broad compatibility promise.
+and fuzzing. The current tree already has 15 shared JSON seed vectors: Rust
+validates the represented valid/invalid families, while the TypeScript protocol
+suite consumes only the control-ready and oversized-frame entries. Rust also
+has property round trips, but no parser fuzz target exists and the browser
+client does not enforce `SessionReady.version`. The complete v1 validation
+contract is `BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md`. Until that issue passes
+its gate, the seed vectors and successful current-client connection smokes do
+not constitute a broad compatibility promise.
 
 ## Current Admin-New Smoke Coverage
 

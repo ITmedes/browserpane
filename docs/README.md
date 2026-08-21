@@ -147,6 +147,8 @@ specifications and still require a bounded slice plan before coding.
 - `BPANE-00174_PHASE_0_REFERENCE_WORKFLOW_PLAN.md`: process qualification,
   bounded BPM browser-activity delivery, operating evidence, and Stop/Operate/
   Phase 1 exit plan.
+- `BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md`: Qualified v1 wire specification,
+  negotiation, legacy overlap, conformance, fuzzing, and compatibility contract.
 - `DOMAIN_REQUIREMENTS.md`: standalone control-plane and product-domain
   requirements that remain relevant to the admin app and future slices.
 - `IDENTITY_ACCESS_REQUIREMENTS.md`: current principal, access review,
