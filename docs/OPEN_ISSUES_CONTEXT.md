@@ -234,7 +234,7 @@ The cross-reference pass also updated the issue bodies in both directions:
 | `#177` | Relevant later identity-lifecycle gap. | Created on GitHub 2026-07-31 to own provisioning/deprovisioning and safeguarded break-glass controls. | Admin-new identity/access review becomes the operator surface when implemented. |
 | `#178` | Relevant production observability gap. | Created on GitHub 2026-07-31 to separate platform telemetry/SLOs from per-session inspection and readiness. | Admin-new observability consumes the common telemetry contract; it does not define a separate model. |
 | `#179` | Merged public API governance baseline. | 131-operation inventory, pinned lint, executable examples, Axum route recognition, semantic compatibility, policy, and CI enforcement merged through PR #194. | #158 consumes the canonical generated evidence in admin-new without creating a second API truth. |
-| `#180` | P0 open-source trust/governance gate. | Promoted on GitHub 2026-08-20 after reconfirming AGPL root versus MIT Cargo metadata and missing Node license metadata. | Resolve before external Pilot reliance; no dedicated admin route. |
+| `#180` | P0 open-source trust/governance gate. | Qualified against `BPANE-00180_OPEN_SOURCE_GOVERNANCE_PLAN.md`; the reviewed legal/business decision remains an external input before implementation. | Resolve metadata, notices, contribution/IP governance, and claim consistency before external Pilot reliance; no dedicated admin route. |
 | `#214` | Implemented production-like runtime authorization boundary. | Typed browser/worker/storage operations and the gateway-isolated broker topology merged through PRs #220-#221. | Supplies runtime-boundary evidence to #223/#72/#66; it is not a supported production package by itself. |
 | `#223` | Implemented and closed Production checkpoint. | Merged through PR #224 on 2026-08-14. | Durable threat model, responsibility baseline, composed static contract, negative-evidence audit, and synchronized security docs. |
 | `#225` | Implemented and closed Production deployment checkpoint. | Independent broker-only single-node package and local qualification merged through PR #226 on 2026-08-14. | Target acceptance, Kubernetes/Fargate, HA, and broader production controls remain with #66 and focused owners. |
@@ -284,6 +284,7 @@ shown as `closed #142`.
 | `BPANE-00246_REQUIREMENTS_SPECIFICATION_LOOP_PLAN.md` | `#246`, local contributor requirements-specification cycle; no product capability claim |
 | `BPANE-00173_DELIVERY_GOVERNANCE_PLAN.md` | `#173` |
 | `BPANE-00174_PHASE_0_REFERENCE_WORKFLOW_PLAN.md` | `#174`, after `#47` and `#172`, with `#180` and selected conditional controls; explicitly excludes `#71` and `#171` |
+| `BPANE-00180_OPEN_SOURCE_GOVERNANCE_PLAN.md` | `#180`, open-source license, contribution, third-party notice, and IP-governance contract; reviewed approval remains an external gate |
 | `DELIVERY_ROADMAP.md` | all open issues organized into Foundation, Pilot Value, Operator Product, Production, Enterprise, and Innovation lanes |
 | `CAPABILITY_MATURITY_MATRIX.md` | all product capability owners, especially `#163`, `#171`-`#180`, and `#240` |
 | `PRODUCT_PHASES_AND_RELEASE_GATES.md` | `#151`, `#145`-`#150`, `#152`, `#47`, `#172`, `#174`, `#153`-`#163`, `#180`, `#240`, and other Production/Phase N owners |
