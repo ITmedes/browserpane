@@ -3,13 +3,13 @@
 ## Metadata
 
 - Issue: `#264`
-- State: Qualified
+- State: In Progress
 - Owner: BrowserPane maintainers
 - Lane: Production
 - Target gate: Production Baseline codec/conformance checkpoint
 - Depends on: closed `#263`
 - Parent program: `#175`; protocol slice 2 of 6
-- Last verified commit/date: `e21e2206a93a` / 2026-08-21
+- Last verified commit/date: `9f5ce6dd29e5` / 2026-08-22
 
 ## Business Outcome
 
@@ -24,9 +24,10 @@ capability or downgrade offer maps to the same typed rejection.
 
 ## Current Evidence
 
-#263 will freeze the numeric and semantic contract. Current code has envelope
-and typed-message codecs but no `ClientHello`, selection, rejection, capability
-registry implementation, or shared negotiation vectors.
+#263 froze the numeric and semantic contract through PR #270. At this slice's
+`9f5ce6dd29e5` base, code has envelope and typed-message codecs but no
+`ClientHello`, selection, rejection, capability-registry implementation, or
+shared negotiation vectors.
 
 ## Scope
 

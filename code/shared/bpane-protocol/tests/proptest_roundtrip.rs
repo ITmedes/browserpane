@@ -422,4 +422,58 @@ proptest! {
             prop_assert_eq!(&decoded, msg);
         }
     }
+
+    #[test]
+    fn client_hello_round_trip_and_selection_is_a_mutual_subset(
+        required in proptest::collection::btree_set(1u16..=4, 0..=4),
+        optional in proptest::collection::btree_set(1u16..=4, 0..=4),
+    ) {
+        let required = required.into_iter().collect::<Vec<_>>();
+        let optional = optional
+            .into_iter()
+            .filter(|id| required.binary_search(id).is_err())
+            .collect::<Vec<_>>();
+        let hello = ClientHello::new(vec![1], required.clone(), optional.clone()).unwrap();
+        let decoded = ClientHello::decode(&hello.encode()).unwrap();
+        prop_assert_eq!(&decoded, &hello);
+
+        let support = ProtocolSupport::new(
+            vec![1],
+            vec![
+                ProtocolCapability::TileZstd,
+                ProtocolCapability::TileCache,
+                ProtocolCapability::TileScroll,
+                ProtocolCapability::H264Video,
+                ProtocolCapability::RoiVideo,
+            ],
+        ).unwrap();
+        let selection = ProtocolNegotiator::select(&hello, &support).unwrap();
+        for capability in selection.capabilities() {
+            prop_assert!(required.binary_search(capability).is_ok()
+                || optional.binary_search(capability).is_ok());
+            prop_assert!(support.capabilities().iter().any(|item| item.id() == *capability));
+        }
+        ProtocolNegotiator::validate_selection(&hello, &support, &selection).unwrap();
+    }
+
+    #[test]
+    fn server_selection_round_trip(
+        include_tile in any::<bool>(),
+        include_video in any::<bool>(),
+        include_roi in any::<bool>(),
+    ) {
+        let mut capabilities = Vec::new();
+        if include_tile {
+            capabilities.push(ProtocolCapability::TileZstd.id());
+        }
+        if include_video || include_roi {
+            capabilities.push(ProtocolCapability::H264Video.id());
+        }
+        if include_roi {
+            capabilities.push(ProtocolCapability::RoiVideo.id());
+        }
+        let selection = ServerSelection::new(1, capabilities).unwrap();
+        let decoded = ServerSelection::decode(&selection.encode()).unwrap();
+        prop_assert_eq!(decoded, selection);
+    }
 }

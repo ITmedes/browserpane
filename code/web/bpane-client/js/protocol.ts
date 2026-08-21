@@ -43,6 +43,29 @@ export const CLIP_TEXT = 0x01;
 // Audio frame header size: seq(4) + timestamp_us(8) + data_len(4) = 16
 export const AUDIO_FRAME_HEADER_SIZE = 16;
 
+export {
+  CTRL_CLIENT_HELLO,
+  CTRL_PROTOCOL_REJECT,
+  CTRL_SERVER_SELECTION,
+  ProtocolNegotiationCodec,
+} from './protocol-negotiation-codec.js';
+export {
+  PROTOCOL_CAPABILITY,
+  PROTOCOL_FAILURE_ID,
+  ProtocolNegotiationError,
+  ProtocolNegotiationRegistry,
+  ProtocolSupportError,
+} from './protocol-negotiation-types.js';
+export type {
+  ClientHello,
+  NegotiationMessage,
+  ProtocolCapability,
+  ProtocolFailureCode,
+  ProtocolSupport,
+  ServerSelection,
+} from './protocol-negotiation-types.js';
+export { ProtocolNegotiator } from './protocol-negotiator.js';
+
 /**
  * Encode a frame: channel(1) + payload_length(4 LE) + payload.
  */

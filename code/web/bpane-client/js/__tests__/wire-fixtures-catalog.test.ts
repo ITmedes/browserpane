@@ -62,8 +62,8 @@ type Classification =
 describe('shared wire fixture catalog', () => {
   it('validates schema metadata and consumes every vector', () => {
     const catalog = wireFixtureCatalog();
-    expect(catalog.schema_version).toBe(1);
-    expect(catalog.catalog).toBe('browserpane-current-seed');
+    expect(catalog.schema_version).toBe(2);
+    expect(catalog.catalog).toBe('browserpane-v1-conformance');
     expect(catalog.vectors).toHaveLength(EXPECTED_FIXTURE_COUNT);
     expect(new Set(catalog.vectors.map((fixture) => fixture.name)).size).toBe(
       EXPECTED_FIXTURE_COUNT,
