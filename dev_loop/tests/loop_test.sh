@@ -190,6 +190,29 @@ grep -q 'migration and rollback are omitted' "$proposal_log_dir/01-specify.conte
 pass "specification setup is nounset-safe"
 unset -f gh
 
+qualify_routine="$test_dir/../routines/qualify.md"
+specify_routine="$test_dir/../routines/specify.md"
+
+grep -Fq 'roadmap explicitly identifies it as parallel work or as the fallback' "$qualify_routine" \
+  || fail "qualification contract permits only documented parallel or fallback work"
+pass "qualification contract permits only documented parallel or fallback work"
+
+grep -Fq 'do not mutate or promote the deferred issue' "$qualify_routine" \
+  || fail "qualification contract preserves deferred candidates"
+pass "qualification contract preserves deferred candidates"
+
+grep -Fq 'creating that one missing plan is the reported gap' "$qualify_routine" \
+  || fail "qualification contract routes a missing focused plan"
+pass "qualification contract routes a missing focused plan"
+
+grep -Fq 'create exactly one descriptive' "$specify_routine" \
+  || fail "specification contract creates one missing focused plan"
+pass "specification contract creates one missing focused plan"
+
+grep -Fq 'Do not fill it with invented names or' "$specify_routine" \
+  || fail "specification contract preserves external decision gates"
+pass "specification contract preserves external decision gates"
+
 MOCK_SESSION_RESULT="$valid"
 propose "01" || fail "proposal setup is nounset-safe"
 [[ -f "$proposal_log_dir/01-propose.context.md" ]] || fail "proposal context uses the iteration number"

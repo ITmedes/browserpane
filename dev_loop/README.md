@@ -163,6 +163,15 @@ setup still supports the required work.
   one issue to a fresh specification session. That session may reconcile the
   canonical issue and directly related planning docs in one PR, but it cannot
   implement product code or change lifecycle labels.
+- A genuinely external decision on the first candidate does not make the whole
+  queue executable or empty. Qualification may defer it and assess another
+  issue only when the canonical roadmap explicitly marks that issue as
+  parallel or fallback work; the deferred issue and blocker remain visible in
+  the result evidence and are not mutated.
+- A missing focused plan may itself route to specification when exactly one
+  issue owns the scope and its issue plus canonical repository evidence are
+  sufficient to create the complete plan without inventing product, legal,
+  security, commercial, or external-stakeholder policy.
 - Qualification never edits Git, creates a PR, implements code, waits for CI,
   or merges. Unresolved product/security/legal decisions, unmet dependencies,
   ambiguous ordering, or ownership conflicts stop without mutation.

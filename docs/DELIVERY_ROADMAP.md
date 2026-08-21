@@ -4,10 +4,11 @@ Status: Canonical execution roadmap
 
 Governance issue: [#173](https://github.com/ITmedes/browserpane/issues/173)
 
-Last implementation audit: 2026-08-21 for the #172 review candidate based on
-`main` at `ab9dc564`. The Workflow Endpoint implementation has passing focused,
-contract, and real-Compose fake-BPM evidence; #174 remains next only after #172
-review and merge.
+Last implementation audit: 2026-08-21 after #172 merged through PR #250 based
+on `main` at `07a2ff44`. The Workflow Endpoint has passing focused, contract,
+and real-Compose fake-BPM evidence. #174 remains the next Pilot Value outcome
+but waits for real candidate and stakeholder decisions; #180 is explicitly
+eligible in parallel.
 
 ## How To Use This Document
 
@@ -44,17 +45,19 @@ lanes may contain Qualified work, but starting them requires an explicit gate
 or capacity decision. The optional `dev_loop/` qualifier may execute that gate
 for exactly one documented next slice when its dependencies, focused plan,
 risks, acceptance criteria, and test evidence are already complete; it may not
-choose a different lane or infer a missing decision. If current evidence can
-resolve concrete issue/plan omissions without changing product direction, the
-loop may create one documentation-only specification PR under #246; the issue
-remains Qualified until a later post-merge audit passes.
+choose a different lane or infer a missing decision. If the first candidate is
+externally gated, the loop may evaluate another only when this roadmap names it
+as parallel or fallback work. If current evidence can resolve concrete
+issue/plan omissions without changing product direction, the loop may create
+one documentation-only specification PR under #246/#257; the issue remains
+Qualified until a later post-merge audit passes.
 
 ## Delivery Lanes
 
 | Lane | Outcome | Current entry point | Promotion target |
 | --- | --- | --- | --- |
 | Foundation | Trusted build, auth, contracts, storage, and lifecycle baseline. | Complete through #179 plus #235 Compose reliability | Foundation Gate |
-| Pilot Value | One bounded reusable BPM browser activity with accepted evidence and runbook. | #172 in review, then #174 | Phase 0 Gate |
+| Pilot Value | One bounded reusable BPM browser activity with accepted evidence and runbook. | #172 merged; #174 awaits real candidate selection | Phase 0 Gate |
 | Operator Product | Complete and promote `/admin-new/` as the default operator console. | Default promoted through #163; #124 is the next focused catalog gap | Phase 1 Gate |
 | Production | Harden deployment, security, recovery, supply chain, and telemetry. | #233 dashboard baseline merged; #178 retains broader telemetry scope | Production Baseline |
 | Enterprise | Organization controls, policy, residency, HA, and governed integrations. | #176 / #70 / #79 | Phase N Gate |
@@ -75,23 +78,30 @@ remains Qualified until a later post-merge audit passes.
 | 6 | #179 | Done | #152 persistent behavior baseline | Control API lint, conformance, examples, compatibility policy, and CI enforcement merged through PR #194. |
 | 7 | #241 | Done | #173 delivery governance | Bounded Codex qualification/proposal/repair delivery loop merged through PR #243. |
 | 8 | #244 | Done | #241 local delivery loop | 50 GiB default repository-filesystem capacity guard merged through PR #245. |
-| 9 | #246 | In Progress | #241 qualification loop | Route one evidence-backed requirements gap set through a separate documentation PR before later requalification. |
+| 9 | #246 | Done | #241 qualification loop | Requirements gaps route through a separate documentation PR before later requalification; merged through PR #247. |
+| 10 | #248 | Done | #246 structured qualification | Optional successful-qualification rationale accepted through PR #249. |
+| 11 | #251 | Done | #241 merge convergence | Review-required and branch-policy states stop cleanly through PR #252. |
+| 12 | #253 | Done | #251 merge gates | Explicit admin merge remains opt-in and constrained; merged through PR #254. |
+| 13 | #255 | Done | #172 main smoke evidence | Admin promotion-gate smokes stabilized through PR #256. |
+| 14 | #257 | In Progress | #246 requirements loop | Defer external decisions and evaluate only documented parallel/fallback requirements work. |
 
-#241, #244, and #246 are contributor tooling and do not block or supersede the
-Pilot sequence. #172 passed its separate readiness audit and is now the active
-review candidate; #174 must not begin before that candidate merges and its own
-remaining gates pass.
+#241, #244, #246, #248, #251, #253, #255, and #257 are contributor tooling or
+validation reliability and do not supersede the Pilot sequence. #172 is
+complete. #174 remains externally gated; #180 is explicitly eligible as
+parallel requirements and governance work.
 
 ### Next Three Pilot Value Slices
 
 | Order | Issue | State | Dependency | Outcome |
 | --- | --- | --- | --- | --- |
 | 1 | #47 | Done | Foundation and workflow baseline merged | Supported immutable Git-backed Playwright workflow package and regression contract merged through PR #242. |
-| 2 | #172 | Review candidate | #47 contract complete | Project-scoped, service-principal-authorized polling endpoint implemented with real-Compose conformance evidence. |
-| 3 | #174 | Qualified | #47, #172, #180 and selected conditional controls | Select, deliver, operate, and review one real bounded activity. |
+| 2 | #172 | Done | #47 contract complete | Project-scoped, service-principal-authorized polling endpoint merged through PR #250 with real-Compose conformance evidence. |
+| 3 | #174 | Qualified / externally deferred | #47 and #172 complete; real candidate selection, #180 external-use gate, and selected conditional controls remain | Select, deliver, operate, and review one real bounded activity without inferring stakeholder decisions. |
 
-#180 is parallel P0 Foundation/governance work and must complete before an
-external Pilot relies on the repository's open-source posture.
+#180 is the next eligible parallel P0 Foundation/governance requirements
+candidate and must complete before an external Pilot relies on the
+repository's open-source posture. Its engineering contract may be prepared
+without claiming that external legal approval is complete.
 
 ### Current Production Slice
 

@@ -38,8 +38,9 @@ Read all of the following before making a change:
    `docs/IMPLEMENTATION_WORK_ORDER.md`, and `docs/PLAN_TEMPLATE.md`;
 2. the selected live issue, its complete comments, labels, milestone, linked
    PRs, and dependencies;
-3. exactly one focused
-   `docs/BPANE-<five-digit-issue>_*_PLAN.md`;
+3. exactly one focused `docs/BPANE-<five-digit-issue>_*_PLAN.md`, or no such
+   file only when the qualification gap explicitly authorizes creation of the
+   one missing focused plan;
 4. directly related canonical requirements, validation, architecture, runtime,
    security, identity, API, and domain documents;
 5. current code, tests, OpenAPI, manifests, and package scripts as read-only
@@ -56,7 +57,10 @@ authorize changing decided product scope without evidence.
 2. Verify the approved GitHub identity and sufficient repository permission.
 3. Verify the selected issue is open, still has exactly `state:qualified`
    among lifecycle labels, and is the issue named in the run context.
-4. Verify the focused plan exists exactly once and names the selected issue.
+4. Verify the focused plan exists exactly once and names the selected issue. If
+   no focused plan exists, proceed only when the qualification reason names
+   that exact omission and the issue plus canonical evidence are sufficient to
+   create one without inventing policy. Multiple matching plans always halt.
 5. Recheck human PRs and issue ownership for overlap.
 6. Reproduce each qualification gap against live evidence. Classify it as:
    - an evidence-backed omission or stale statement that this session may fix;
@@ -78,6 +82,11 @@ Allowed repository edits are limited to:
 - contributor-facing documentation only when the selected issue itself owns
   contributor tooling.
 
+When qualification selected a missing-plan gap, create exactly one descriptive
+`docs/BPANE-<five-digit-issue>_<TOPIC>_PLAN.md` using `docs/PLAN_TEMPLATE.md`.
+The new plan must name the selected issue and satisfy the complete requirements
+contract below. Do not create a placeholder plan or more than one candidate.
+
 Do not edit broad documents merely to create churn. Keep the issue Qualified
 and the plan status Qualified. Resolve the reported gaps explicitly, including
 N/A decisions where a surface is genuinely unaffected. A complete contract
@@ -91,6 +100,13 @@ normally addresses:
 - objectively reviewable acceptance criteria and Definition of Done;
 - proportional unit, integration, validation-error, regression, smoke/E2E,
   coverage, and manual test evidence.
+
+An explicitly deferred real customer/Pilot activity, named stakeholder,
+production acceptance, target credential, legal approval, or security/data
+acceptance remains outside this routine. Do not fill it with invented names or
+assumptions. A focused plan may separate an evidence-backed internal
+engineering scope from such a later external-use gate only when the selected
+issue and canonical documents already establish that boundary.
 
 Inspect the final documentation diff for internal consistency and unsupported
 claims. Product code and executable contracts remain read-only evidence.
