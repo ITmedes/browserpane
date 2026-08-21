@@ -46,6 +46,10 @@ services:
       - "8932"
       - --max-viewers
       - ${BPANE_MAX_VIEWERS:-10}
+      - --protocol-handshake-timeout-ms
+      - ${BPANE_PROTOCOL_HANDSHAKE_TIMEOUT_MS:-3000}
+      - --protocol-legacy-compatibility
+      - ${BPANE_PROTOCOL_LEGACY_COMPATIBILITY:-true}
       - --max-active-runtimes
       - ${BPANE_MAX_ACTIVE_RUNTIMES:-4}
       - --max-starting-runtimes

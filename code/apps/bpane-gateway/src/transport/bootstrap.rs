@@ -7,26 +7,45 @@ use tokio::io::{AsyncWrite, AsyncWriteExt};
 use tokio::sync::Mutex;
 use tracing::debug;
 
+use super::negotiation::ConnectionProtocol;
 use super::policy::{
-    adapt_control_message_for_client, adapt_frame_for_client_with_policy, SessionTransportPolicy,
+    adapt_control_message_for_client, adapt_frame_for_client_with_protocol, SessionTransportPolicy,
 };
+
+pub(super) struct InitialFramesContext {
+    pub joined_as_owner: bool,
+    pub initial_access_state: Option<ControlMessage>,
+    pub policy: SessionTransportPolicy,
+    pub protocol: ConnectionProtocol,
+    pub session_id: u64,
+    pub client_id: u64,
+}
 
 pub(super) async fn send_initial_frames<S>(
     send_stream: &Arc<Mutex<S>>,
     initial_frames: &[Arc<Frame>],
-    joined_as_owner: bool,
-    initial_access_state: Option<ControlMessage>,
-    policy: SessionTransportPolicy,
-    session_id: u64,
-    client_id: u64,
+    context: InitialFramesContext,
 ) -> anyhow::Result<()>
 where
     S: AsyncWrite + Unpin + Send + 'static,
 {
+    let InitialFramesContext {
+        joined_as_owner,
+        initial_access_state,
+        policy,
+        protocol,
+        session_id,
+        client_id,
+    } = context;
     let mut stream = send_stream.lock().await;
 
     for frame in initial_frames {
-        let encoded = adapt_frame_for_client_with_policy(frame, joined_as_owner, &policy).encode();
+        if !protocol.allows_server_frame(frame) {
+            continue;
+        }
+        let encoded =
+            adapt_frame_for_client_with_protocol(frame, joined_as_owner, &policy, &protocol)
+                .encode();
         stream
             .write_all(&encoded)
             .await
@@ -41,11 +60,29 @@ where
     });
     let access_state = adapt_control_message_for_client(access_state, &policy);
     if had_initial_access_state || client_access_state_has_flags(&access_state) {
-        let encoded = access_state.to_frame().encode();
-        stream
-            .write_all(&encoded)
-            .await
-            .context("failed to send ClientAccessState")?;
+        let access_frame = access_state.to_frame();
+        if protocol.allows_server_frame(&access_frame) {
+            stream
+                .write_all(&access_frame.encode())
+                .await
+                .context("failed to send ClientAccessState")?;
+        } else if let ControlMessage::ClientAccessState {
+            flags,
+            width,
+            height,
+        } = access_state
+        {
+            if flags.contains(ClientAccessFlags::RESIZE_LOCKED) {
+                stream
+                    .write_all(
+                        &ControlMessage::ResolutionLocked { width, height }
+                            .to_frame()
+                            .encode(),
+                    )
+                    .await
+                    .context("failed to send ResolutionLocked")?;
+            }
+        }
         debug!(
             session_id,
             client_id, "sent initial client access state to browser client"
@@ -70,8 +107,9 @@ mod tests {
 
     use crate::session_control::SessionCapabilities;
 
+    use super::super::negotiation::ConnectionProtocol;
     use super::super::policy::{SessionFileTransportPolicy, SessionTransportPolicy};
-    use super::send_initial_frames;
+    use super::{send_initial_frames, InitialFramesContext};
 
     #[tokio::test]
     async fn non_owner_receives_adapted_ready_and_initial_access_state() {
@@ -92,15 +130,18 @@ mod tests {
         send_initial_frames(
             &send_stream,
             &initial_frames,
-            false,
-            Some(ControlMessage::ClientAccessState {
-                flags: ClientAccessFlags::VIEW_ONLY | ClientAccessFlags::RESIZE_LOCKED,
-                width: 1280,
-                height: 720,
-            }),
-            SessionTransportPolicy::default(),
-            7,
-            11,
+            InitialFramesContext {
+                joined_as_owner: false,
+                initial_access_state: Some(ControlMessage::ClientAccessState {
+                    flags: ClientAccessFlags::VIEW_ONLY | ClientAccessFlags::RESIZE_LOCKED,
+                    width: 1280,
+                    height: 720,
+                }),
+                policy: SessionTransportPolicy::default(),
+                protocol: ConnectionProtocol::Legacy,
+                session_id: 7,
+                client_id: 11,
+            },
         )
         .await
         .unwrap();
@@ -146,15 +187,18 @@ mod tests {
         send_initial_frames(
             &send_stream,
             &initial_frames,
-            true,
-            Some(ControlMessage::ClientAccessState {
-                flags: ClientAccessFlags::RESIZE_LOCKED,
-                width: 1440,
-                height: 900,
-            }),
-            SessionTransportPolicy::default(),
-            8,
-            13,
+            InitialFramesContext {
+                joined_as_owner: true,
+                initial_access_state: Some(ControlMessage::ClientAccessState {
+                    flags: ClientAccessFlags::RESIZE_LOCKED,
+                    width: 1440,
+                    height: 900,
+                }),
+                policy: SessionTransportPolicy::default(),
+                protocol: ConnectionProtocol::Legacy,
+                session_id: 8,
+                client_id: 13,
+            },
         )
         .await
         .unwrap();
@@ -199,11 +243,14 @@ mod tests {
         send_initial_frames(
             &send_stream,
             &initial_frames,
-            true,
-            None,
-            SessionTransportPolicy::default(),
-            3,
-            5,
+            InitialFramesContext {
+                joined_as_owner: true,
+                initial_access_state: None,
+                policy: SessionTransportPolicy::default(),
+                protocol: ConnectionProtocol::Legacy,
+                session_id: 3,
+                client_id: 5,
+            },
         )
         .await
         .unwrap();
@@ -248,9 +295,20 @@ mod tests {
             },
         );
 
-        send_initial_frames(&send_stream, &initial_frames, true, None, policy, 4, 6)
-            .await
-            .unwrap();
+        send_initial_frames(
+            &send_stream,
+            &initial_frames,
+            InitialFramesContext {
+                joined_as_owner: true,
+                initial_access_state: None,
+                policy,
+                protocol: ConnectionProtocol::Legacy,
+                session_id: 4,
+                client_id: 6,
+            },
+        )
+        .await
+        .unwrap();
 
         let mut buf = vec![0u8; 512];
         let n = reader.read(&mut buf).await.unwrap();
@@ -287,14 +345,19 @@ mod tests {
         send_initial_frames(
             &send_stream,
             &initial_frames,
-            true,
-            None,
-            SessionTransportPolicy::with_file_transfer_policy(SessionFileTransportPolicy {
-                allow_browser_uploads: false,
-                allow_browser_downloads: true,
-            }),
-            3,
-            5,
+            InitialFramesContext {
+                joined_as_owner: true,
+                initial_access_state: None,
+                policy: SessionTransportPolicy::with_file_transfer_policy(
+                    SessionFileTransportPolicy {
+                        allow_browser_uploads: false,
+                        allow_browser_downloads: true,
+                    },
+                ),
+                protocol: ConnectionProtocol::Legacy,
+                session_id: 3,
+                client_id: 5,
+            },
         )
         .await
         .unwrap();

@@ -3,13 +3,13 @@
 ## Metadata
 
 - Issue: `#265`
-- State: Qualified
+- State: In Progress
 - Owner: BrowserPane maintainers
 - Lane: Production
 - Target gate: Production Baseline gateway enforcement checkpoint
 - Depends on: closed `#264`
 - Parent program: `#175`; protocol slice 3 of 6
-- Last verified commit/date: `e21e2206a93a` / 2026-08-21
+- Last verified commit/date: `b537e0c0fc68` / 2026-08-22
 
 ## Business Outcome
 

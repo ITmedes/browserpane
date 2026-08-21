@@ -297,9 +297,19 @@ the original 15 current seeds and adds 41 exact negotiation-message frames plus
 reject unsupported schemas and outcomes, reproduce valid bytes, and assert the
 same stable selections and failures. The normative assignments and legacy
 claim boundary are published in `REMOTE_PROTOCOL_V1.md`. The Rust crate retains
-property round trips and both languages now implement the isolated bounded
-negotiation codec and selector, but no parser fuzz target or runtime handshake
-exists yet and the current browser still ignores `SessionReady.version`.
+property round trips and both languages implement the bounded negotiation codec
+and selector. The gateway now enforces the runtime handshake before runtime/hub
+side effects, normalizes selected v1 readiness, gates direction/capabilities,
+and preserves the explicit checked-client legacy path. The current browser
+still ignores `SessionReady.version`; browser enforcement, parser fuzzing, and
+the final rolling matrix remain #266-#268.
+
+Gateway negotiation validation includes `cargo test -p bpane-gateway
+transport::negotiation`, the complete gateway suite, the affected Rust
+workspace suite, and the real Compose protocol smoke for negotiated success,
+typed rejection/no-side-effect isolation, and legacy disable/recovery.
+Run the Compose evidence from `code/web/bpane-client` with
+`npm run smoke:gateway-protocol -- --headless --connect-timeout-ms 60000`.
 `BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md` is the program contract and the six
 child plans define executable validation boundaries. Until #268 passes, the v1
 contract and conformance corpus are not a broad compatibility promise.
@@ -363,6 +373,7 @@ npm run smoke:automation-tasks -- --headless
 npm run smoke:bpane-cli -- --headless
 npm run smoke:browser-policy -- --headless
 npm run smoke:file-workspaces -- --headless
+npm run smoke:gateway-protocol -- --headless --connect-timeout-ms 60000
 npm run smoke:mcp-session-endpoints -- --headless --connect-timeout-ms 60000
 npm run smoke:multisession -- --headless
 npm run smoke:recording -- --headless

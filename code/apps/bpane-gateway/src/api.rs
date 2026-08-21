@@ -161,10 +161,7 @@ pub async fn run_api_server(
     shutdown_readiness_grace: std::time::Duration,
 ) -> anyhow::Result<()> {
     let bind_addr = config.bind_addr;
-    let metrics = Arc::new(crate::metrics::GatewayMetrics::with_observability(
-        &config.recording_observability,
-        &config.workflow_observability,
-    ));
+    let metrics = config.metrics;
     let state = Arc::new(ApiState {
         registry: config.registry,
         auth_validator: config.auth_validator,

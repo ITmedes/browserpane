@@ -2,15 +2,16 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use bpane_protocol::channel::ChannelId;
-use bpane_protocol::frame::Frame;
+use bpane_protocol::frame::{Frame, ProtocolFailure};
 use tokio::sync::{broadcast, Mutex};
 use tokio::task::JoinHandle;
-use tracing::warn;
+use tracing::{debug, warn};
 use wtransport::{Connection, SendStream};
 
 use super::bitrate::DatagramStats;
+use super::negotiation::ConnectionProtocol;
 use super::policy::{
-    adapt_frame_for_client_with_policy, client_can_receive_frame, SessionTransportPolicy,
+    adapt_frame_for_client_with_protocol, client_can_receive_frame, SessionTransportPolicy,
 };
 use crate::session_hub::SessionHub;
 
@@ -25,18 +26,23 @@ pub(super) struct EgressTaskContext {
     pub connection: Connection,
     pub dgram_stats: Arc<DatagramStats>,
     pub transport_policy: SessionTransportPolicy,
+    pub protocol: ConnectionProtocol,
 }
 
 pub(super) fn spawn_agent_to_browser_task(
     ctx: EgressTaskContext,
     mut from_host: broadcast::Receiver<Arc<Frame>>,
-) -> JoinHandle<()> {
+) -> JoinHandle<Option<ProtocolFailure>> {
     tokio::spawn(async move {
         while ctx.session.is_active() {
             match from_host.recv().await {
                 Ok(frame) => {
                     let is_owner = ctx.hub.is_browser_owner(ctx.client_id);
                     if !client_can_receive_frame(&frame, is_owner, &ctx.transport_policy) {
+                        continue;
+                    }
+                    if !ctx.protocol.allows_server_frame(&frame) {
+                        debug!("suppressed host frame outside negotiated protocol upper bound");
                         continue;
                     }
 
@@ -48,7 +54,7 @@ pub(super) fn spawn_agent_to_browser_task(
                             ctx.hub
                                 .record_egress_send_stream_lock_wait(lock_started.elapsed());
                             if stream.write_all(&encoded).await.is_err() {
-                                break;
+                                return None;
                             }
                         } else {
                             match ctx.connection.send_datagram(&frame.payload) {
@@ -57,10 +63,11 @@ pub(super) fn spawn_agent_to_browser_task(
                             };
                         }
                     } else {
-                        let encoded = adapt_frame_for_client_with_policy(
+                        let encoded = adapt_frame_for_client_with_protocol(
                             &frame,
                             is_owner,
                             &ctx.transport_policy,
+                            &ctx.protocol,
                         )
                         .encode();
                         let lock_started = Instant::now();
@@ -68,7 +75,7 @@ pub(super) fn spawn_agent_to_browser_task(
                         ctx.hub
                             .record_egress_send_stream_lock_wait(lock_started.elapsed());
                         if stream.write_all(&encoded).await.is_err() {
-                            break;
+                            return None;
                         }
                     }
                 }
@@ -80,9 +87,10 @@ pub(super) fn spawn_agent_to_browser_task(
                     );
                     continue;
                 }
-                Err(broadcast::error::RecvError::Closed) => break,
+                Err(broadcast::error::RecvError::Closed) => return None,
             }
         }
+        None
     })
 }
 

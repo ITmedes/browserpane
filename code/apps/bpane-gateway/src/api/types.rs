@@ -15,6 +15,7 @@ use crate::credentials::{
     CredentialBindingProvider, CredentialInjectionMode, CredentialProvider, CredentialTotpMetadata,
 };
 use crate::extensions::ExtensionVersionResource;
+use crate::metrics::GatewayMetrics;
 use crate::recording::{
     RecordingArtifactStore, RecordingObservability, SessionRecordingPlaybackResource,
 };
@@ -74,6 +75,7 @@ pub(crate) struct ApiServerConfig {
     pub default_owner_mode: SessionOwnerMode,
     pub browser_context_import: BrowserContextImportService,
     pub mcp_bridge_control: Option<McpBridgeControlConfig>,
+    pub metrics: Arc<GatewayMetrics>,
 }
 
 /// Shared state for the HTTP API.

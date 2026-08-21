@@ -18,6 +18,7 @@
     "smoke:file-workspaces": "node scripts/run-file-workspace-smoke.mjs",
     "smoke:session-files": "node scripts/run-session-files-smoke.mjs",
     "smoke:browser-policy": "node scripts/run-browser-policy-smoke.mjs",
+    "smoke:gateway-protocol": "node scripts/run-gateway-protocol-smoke.mjs",
     "smoke:bpane-cli": "node scripts/run-bpane-cli-smoke.mjs",
     "smoke:admin-session": "node scripts/run-admin-session-smoke.mjs",
     "smoke:admin-auth-security": "node scripts/run-admin-auth-security-smoke.mjs",

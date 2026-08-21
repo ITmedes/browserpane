@@ -44,6 +44,10 @@ Current product shape:
 - Shared sessions: supported for small curated groups, not broadcast-scale delivery.
 - Exclusive browser-owner mode: optional in `bpane-gateway` via `--exclusive-browser-owner`; default is disabled.
 - Viewer cap: configurable in `bpane-gateway` via `--max-viewers`, default `10` for restricted browser viewers.
+- Gateway protocol v1 negotiation runs after authentication/visibility and
+  before runtime resolution or session-hub activity. The handshake timeout
+  defaults to 3,000 ms and the checked current-client legacy profile is
+  initially enabled through explicit deployment configuration.
 - MCP automation: supported via `mcp-bridge` and gateway ownership APIs.
 - Service-principal registry: owner-scoped external OIDC client metadata is supported through `/api/v1/service-principals`; disabled registered principals cannot be assigned as new automation delegates.
 - Workflow endpoints: Phase 0 project-scoped polling endpoints bind one
@@ -92,12 +96,14 @@ Current product shape:
   - `lifecycle.rs`: shared starting/running/draining state, signal handling, and bounded listener/task drain coordination.
   - `readiness.rs`: concurrent, timeout-bounded readiness checks for the configured session store, runtime manager, credential provider, and artifact stores.
   - `metrics.rs`: gateway-owned OpenMetrics registry, bounded HTTP RED labels,
-    aggregate runtime-capacity gauges, and label-free workflow/recording
+    aggregate runtime-capacity gauges, bounded protocol negotiation counters and
+    duration outcomes, and label-free workflow/recording
     subsystem counters exposed at `/metrics`. Subsystem metrics reuse the
     observability instances behind authenticated operations snapshots. Never
     add resource ids, raw paths, URLs, credentials, browser content, or egress
     data as metric labels.
-  - `transport.rs`: browser connection loop, per-client policy, relay behavior.
+  - `transport.rs`: browser connection loop, authenticated pre-runtime protocol
+    negotiation, per-client capability/policy enforcement, and relay behavior.
   - `session_hub.rs`: fan-out, late-join bootstrap, viewer cap, telemetry.
   - `session_control.rs`: versioned session-control store and Postgres integration, including projects with admission quotas and template/egress/extension/context/file-workspace policy bindings, service principals, session templates, browser contexts, workflows, credential bindings, file workspaces, and approved extension metadata.
   - `workflow_endpoints/` and `api/workflow_endpoints/`: project endpoint,
@@ -180,7 +186,8 @@ Current product shape:
     attributes stay fixed and must not contain resource ids, URLs, credentials,
     browser content, baggage, or raw errors.
 - `code/shared/bpane-protocol`
-  - Shared wire protocol, frame envelope, channel IDs, and message types.
+  - Shared wire protocol, frame envelope, channel IDs, negotiation codecs and
+    selection, and message types.
 - `deploy/examples/observability`
   - Private Prometheus scrape example plus bounded gateway/runtime/workflow/
     recording SLI rules and conservative starter alerts. Rules are validated
@@ -332,6 +339,7 @@ Run these in `code/web/bpane-client`:
 - `npm run smoke:admin-unified-api-companion -- --headless`
 - `npm run smoke:admin-unified-file-workspaces -- --headless`
 - `npm run smoke:file-workspaces -- --headless`
+- `npm run smoke:gateway-protocol -- --headless --connect-timeout-ms 60000`
 - `npm test`
 - `npm run build`
 - `../../../scripts/bpane workflow --help`

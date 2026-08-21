@@ -193,6 +193,8 @@ services:
       --runtime-backend ${BPANE_GATEWAY_RUNTIME_BACKEND:-docker_pool}
       --port 4433
       --max-viewers 10
+      --protocol-handshake-timeout-ms ${BPANE_GATEWAY_PROTOCOL_HANDSHAKE_TIMEOUT_MS:-3000}
+      --protocol-legacy-compatibility ${BPANE_GATEWAY_PROTOCOL_LEGACY_COMPATIBILITY:-true}
       --max-active-runtimes ${BPANE_GATEWAY_MAX_ACTIVE_RUNTIMES:-2}
       --max-starting-runtimes ${BPANE_GATEWAY_MAX_STARTING_RUNTIMES:-1}
       --runtime-cdp-endpoint ${BPANE_GATEWAY_RUNTIME_CDP_ENDPOINT:-http://host:9223}

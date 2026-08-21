@@ -857,8 +857,11 @@ registries, limits, negotiation, failure, and legacy compatibility rules. Rust
 and TypeScript now expose separate bounded `ClientHello`, `ServerSelection`,
 and `ProtocolReject` codecs plus pure highest-common selection. Their shared
 schema-v2 corpus retains 15 current seeds and adds 41 exact negotiation frames
-and 10 selection cases. Runtime negotiation, fuzzing, and real gateway/client
-compatibility qualification remain sequenced under issue #175. See ADR 0003.
+and 10 selection cases. After authentication and visibility checks, the gateway
+opens the reliable stream and requires selected v1 or the explicit checked
+legacy profile before runtime resolution, hub membership, ownership, resize, or
+forwarding. Browser enforcement, fuzzing, and real gateway/client compatibility
+qualification remain sequenced under issue #175. See ADR 0003.
 
 **Frame envelope:**
 ```
@@ -882,14 +885,14 @@ All integers little-endian. Max payload 16 MiB. No JSON, no protobuf, no serde.
 | 0x08 | FileUp | Stream | C->S | Upload chunks |
 | 0x09 | FileDown | Stream | S->C | Download chunks |
 | 0x0A | Control | Stream | Bidi | Resize, ping, session, bitrate hints |
-| 0x0B | Tiles | Stream | S->C | Tile rendering commands |
+| 0x0B | Tiles | Stream | Bidi | Tile rendering commands and client cache misses |
 
 **Current runtime control message types (9 variants):**
 ResolutionRequest, ResolutionAck, SessionReady, Ping, Pong,
 KeyboardLayoutInfo, BitrateHint, ResolutionLocked, ClientAccessState. The
-isolated v1 negotiation codec additionally implements ClientHello,
-ServerSelection, and ProtocolReject on the control channel. Runtime dispatch
-does not consume those messages until #265 and #266.
+v1 negotiation codec additionally implements ClientHello, ServerSelection, and
+ProtocolReject on the control channel. The gateway consumes these messages and
+never forwards them to the host; browser-side state integration remains #266.
 
 **Tile message types (12 variants):**
 GridConfig, CacheHit, CacheMiss, Fill, Qoi, Zstd, VideoRegion, BatchEnd,
@@ -902,10 +905,11 @@ nal_id(u32) + fragment_seq(u16) + fragment_total(u16) + is_keyframe(u8)
 ```
 
 Delta fragments carry that payload directly in WebTransport datagrams.
-Keyframe fragments carry it inside reliable Video-channel envelopes. This
-documented v1 contract and isolated negotiation codecs are published, but the
-current runtime remains on its pre-contract profile until the #265-#268
-enforcement and qualification slices land.
+Keyframe fragments carry it inside reliable Video-channel envelopes. The
+gateway normalizes host `SessionReady.version` to selected v1 and bounds frames
+to negotiated capabilities while retaining host compatibility. The checked
+current browser still uses explicit legacy mode until #266; fuzz and final
+rolling qualification remain #267-#268.
 
 ---
 
