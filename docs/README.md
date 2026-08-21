@@ -147,6 +147,21 @@ specifications and still require a bounded slice plan before coding.
 - `BPANE-00174_PHASE_0_REFERENCE_WORKFLOW_PLAN.md`: process qualification,
   bounded BPM browser-activity delivery, operating evidence, and Stop/Operate/
   Phase 1 exit plan.
+- `BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md`: non-executable v1 protocol program
+  contract. Delivery is split into the six focused plans for issues `#263`
+  through `#268`.
+- `BPANE-00263_REMOTE_PROTOCOL_CONTRACT_PLAN.md`: normative v1 wire contract
+  and complete current-vector baseline.
+- `BPANE-00264_PROTOCOL_NEGOTIATION_CODECS_PLAN.md`: Rust/TypeScript negotiation
+  codecs, pure selection, and shared conformance vectors.
+- `BPANE-00265_GATEWAY_PROTOCOL_NEGOTIATION_PLAN.md`: gateway pre-session
+  enforcement, host normalization, and checked old-client overlap.
+- `BPANE-00266_BROWSER_PROTOCOL_NEGOTIATION_PLAN.md`: browser handshake,
+  capability gating, checked old-gateway overlap, and typed SDK feedback.
+- `BPANE-00267_PROTOCOL_FUZZING_PLAN.md`: deterministic malformed-state,
+  parser fuzzing, sanitizer, and healthy-session isolation evidence.
+- `BPANE-00268_PROTOCOL_COMPATIBILITY_QUALIFICATION_PLAN.md`: final Compose
+  compatibility matrix, Admin-New diagnostics, rollback, and #175 closure.
 - `DOMAIN_REQUIREMENTS.md`: standalone control-plane and product-domain
   requirements that remain relevant to the admin app and future slices.
 - `IDENTITY_ACCESS_REQUIREMENTS.md`: current principal, access review,

@@ -287,10 +287,18 @@ operation inventory, one classification per operation, representative success
 and error examples, and semantic compatibility. The Rust contract proves that
 every documented path and method is registered by the in-memory Axum router.
 
-Issue #175 owns the BrowserPane remote protocol specification, version/
-capability negotiation, shared Rust/TypeScript vectors, malformed-input tests,
-and fuzzing. Until that issue passes its gate, successful current-client
-connection smokes do not constitute a broad compatibility promise.
+Issue #175 owns the BrowserPane remote protocol program contract but is not an
+implementation target. Focused issues #263-#268 own, in order, the normative
+contract/current-vector baseline, negotiation codecs/vectors, gateway
+enforcement, browser enforcement, malformed/fuzz evidence, and final Compose/
+Admin-New compatibility qualification. The current tree already has 15 shared
+JSON seeds: Rust validates the represented families, while TypeScript consumes
+only control-ready and oversized-frame entries. Rust has property round trips,
+but no parser fuzz target exists and the browser ignores
+`SessionReady.version`. `BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md` is the program
+contract and the six child plans define executable validation boundaries. Until
+#268 passes, current seeds and connection smokes are not a broad compatibility
+promise.
 
 ## Current Admin-New Smoke Coverage
 

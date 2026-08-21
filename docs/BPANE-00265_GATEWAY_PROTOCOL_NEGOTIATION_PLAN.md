@@ -1,0 +1,153 @@
+# BPANE-00265 Gateway Protocol Negotiation Plan
+
+## Metadata
+
+- Issue: `#265`
+- State: Qualified
+- Owner: BrowserPane maintainers
+- Lane: Production
+- Target gate: Production Baseline gateway enforcement checkpoint
+- Depends on: closed `#264`
+- Parent program: `#175`; protocol slice 3 of 6
+- Last verified commit/date: `e21e2206a93a` / 2026-08-21
+
+## Business Outcome
+
+The gateway rejects incompatible or malformed browser peers before they affect
+runtime or shared-session state, while preserving a bounded gateway-first
+upgrade path for the checked current pre-contract client.
+
+## Example Use Case
+
+An unsupported future client targets a busy shared session. The gateway returns
+a typed error and closes only that connection; runtime, owner, viewer capacity,
+and healthy clients are unchanged. A checked old client can use explicit legacy
+mode during rollout.
+
+## Current Evidence
+
+The gateway authenticates WebTransport and decodes bounded frames, but resolves
+runtime/session-hub behavior without protocol negotiation. It caches and
+filters `SessionReady`; the host emits the pre-contract version marker `2`.
+
+## Scope
+
+- Add authenticated pre-session negotiation before runtime resolution, hub
+  join, viewer-slot use, ownership, resize, or forwarding.
+- Enforce timeout, pending bytes, list limits, ordering/direction, highest-common
+  selection, immutable capability upper bound, and typed rejection.
+- Normalize browser-facing `SessionReady.version` to v1 while preserving host
+  compatibility and late-join/session-policy behavior.
+- Add the checked old-client legacy profile with explicit initial enablement,
+  warnings, diagnostics, reversible disablement, and no malformed-hello fallback.
+- Add no-side-effect, isolation, policy, replay, reconnect, and viewer tests.
+
+## Non-Goals
+
+- New browser negotiation/fallback, Admin-New, fuzz campaign, final Compose
+  matrix, persistent history, legacy removal, auth/policy redesign, or API work.
+
+## Decisions And Dependencies
+
+- Authentication and session visibility precede protocol detail disclosure.
+- Negotiation frames are gateway-owned and never forwarded to the host.
+- Successful selection is immutable. Effective features remain the intersection
+  of negotiation, runtime, policy, browser support, and role.
+- #266 owns the browser side; #268 owns final compatibility qualification.
+
+## Contract Changes
+
+- API/OpenAPI: N/A; WebTransport contract only.
+- Protocol/event schemas: consume #264 messages at a pre-session state boundary.
+- Database/migrations: N/A; diagnostics are connection-local.
+- Admin-new: N/A in this slice.
+- CLI/SDK: N/A.
+- Deployment/configuration: bounded handshake timeout and gateway legacy flag;
+  spell out the initial enabled value in local/production-like manifests.
+- README/ARCH/AGENTS/operator docs: gateway ordering, flags, safe diagnostics,
+  and rollback notes.
+
+## Security And Data Impact
+
+Bound bytes, counts, pending state, parser work, and time. Malformed/downgrade
+attempts fail closed and never fall back. Close only the offender. Logs/metrics
+contain fixed outcomes and bounded modes, never credentials, URLs, claims,
+browser data, raw frames/errors, paths, or resource IDs as labels.
+
+## Migration, Compatibility, And Rollback
+
+Deploy gateway first with legacy enabled. Checked current clients continue via
+the explicit profile. Rollback to the previous gateway remains valid because
+#266 has not changed the client. Disablement is reversible and tested.
+
+## Observability And Operator Feedback
+
+Add label-bounded attempts/success/legacy/failure counters, handshake duration,
+and sanitized connection diagnostics. Warnings identify temporary legacy mode
+without exposing session or identity data.
+
+## Implementation Slices
+
+1. Gateway state machine and pure selection integration.
+2. SessionReady normalization, capability/direction enforcement, and legacy.
+3. Metrics/logs/config plus no-side-effect and shared-session regressions.
+
+## Test Strategy
+
+### Unit
+
+Cover all state transitions, timeout/limits, duplicate/order/direction errors,
+selection, legacy eligibility, no malformed fallback, and immutable selection.
+
+### Integration
+
+Prove rejected peers do not resolve/start runtime, join hub, use viewer slots,
+claim owner, resize, or forward data; verify existing clients stay healthy.
+
+### Smoke And E2E
+
+Use supported Compose with the checked old-client fixture, valid v1 test peer,
+legacy disable/recovery, restricted viewer, late join, owner promotion,
+reconnect, and cleanup.
+
+### Coverage And Quality
+
+Run gateway/protocol/host-focused tests, Rust workspace affected tests, clippy,
+coverage evidence for negotiation branches, Compose checks, repository
+validation, and `git diff --check` without lowering floors.
+
+## Manual Test Sequence
+
+1. Start Compose with gateway legacy mode explicitly enabled.
+2. Connect the checked old client and verify legacy warning plus normal use.
+3. Negotiate v1 with two optional-capability subsets.
+4. Send every fixed malformed/unsupported/order/limit case while another client
+   remains active; verify offender-only cleanup and no state side effects.
+5. Disable legacy, verify typed old-client rejection, restore it, and reconnect.
+6. Exercise late join, owner promotion, restricted viewer, and reconnect.
+
+## Documentation And Claim Impact
+
+This slice may claim gateway-side v1 enforcement and an initial old-client
+overlap. It cannot claim new-browser enforcement or complete rolling support.
+
+## Definition Of Done
+
+- Pre-session enforcement and no-side-effect evidence pass.
+- Legacy enable/disable/rollback and diagnostics are tested and documented.
+- Shared-session, policy, replay, and existing-client behavior remain green.
+- Configuration, issue, plan, architecture, validation, and claims agree.
+
+## Post-Implementation Smoke Sequence
+
+1. Run focused gateway/protocol/host tests and coverage.
+2. Run valid v1 and checked old-client Compose connections.
+3. Run the complete typed rejection/no-side-effect set.
+4. Run viewer, late-join, promotion, reconnect, and cleanup checks.
+5. Run repository validation and inspect log/metric redaction.
+
+## Evidence Record
+
+Record PR/commit, config/defaults, state/no-side-effect assertions, test and
+coverage results, Compose logs/metrics review, rollback result, and residual
+links without credentials or client content.
