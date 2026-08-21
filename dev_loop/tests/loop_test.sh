@@ -33,20 +33,24 @@ valid="$tmp/valid.json"
 invalid="$tmp/invalid.json"
 invalid_proposed="$tmp/invalid-proposed.json"
 valid_qualified="$tmp/valid-qualified.json"
+valid_qualified_rationale="$tmp/valid-qualified-rationale.json"
 valid_needs_specification="$tmp/valid-needs-specification.json"
 valid_no_qualification="$tmp/valid-no-qualification.json"
 valid_specified="$tmp/valid-specified.json"
 invalid_qualified="$tmp/invalid-qualified.json"
+invalid_qualified_empty_reason="$tmp/invalid-qualified-empty-reason.json"
 invalid_needs_specification="$tmp/invalid-needs-specification.json"
 invalid_specified="$tmp/invalid-specified.json"
 printf '%s\n' '{"status":"PROPOSED","issue_number":239,"pr_url":"https://github.com/ITmedes/browserpane/pull/999","commit_sha":"abc1234","run_id":null,"reason":null,"summary":"opened"}' > "$valid"
 printf '%s\n' '{"status":"UNKNOWN","summary":"bad"}' > "$invalid"
 printf '%s\n' '{"status":"PROPOSED","issue_number":239,"pr_url":null,"commit_sha":null,"run_id":null,"reason":null,"summary":"incomplete"}' > "$invalid_proposed"
 printf '%s\n' '{"status":"QUALIFIED","issue_number":172,"pr_url":null,"commit_sha":null,"run_id":null,"reason":null,"summary":"promoted"}' > "$valid_qualified"
+printf '%s\n' '{"status":"QUALIFIED","issue_number":172,"pr_url":null,"commit_sha":null,"run_id":null,"reason":"Issue #172 is the documented next slice, its required dependency is merged, and no overlapping active work was found.","summary":"Inspected the readiness contract, promoted #172, and verified the live state."}' > "$valid_qualified_rationale"
 printf '%s\n' '{"status":"NEEDS_SPECIFICATION","issue_number":172,"pr_url":null,"commit_sha":null,"run_id":null,"reason":"migration and rollback are omitted","summary":"selected one resolvable gap set without mutation"}' > "$valid_needs_specification"
 printf '%s\n' '{"status":"NO_QUALIFICATION","issue_number":null,"pr_url":null,"commit_sha":null,"run_id":null,"reason":"dependency remains","summary":"no mutation"}' > "$valid_no_qualification"
 printf '%s\n' '{"status":"SPECIFIED","issue_number":172,"pr_url":"https://github.com/ITmedes/browserpane/pull/999","commit_sha":"abc1234","run_id":null,"reason":null,"summary":"reconciled issue and plan"}' > "$valid_specified"
 printf '%s\n' '{"status":"QUALIFIED","issue_number":null,"pr_url":null,"commit_sha":null,"run_id":null,"reason":null,"summary":"missing issue"}' > "$invalid_qualified"
+printf '%s\n' '{"status":"QUALIFIED","issue_number":172,"pr_url":null,"commit_sha":null,"run_id":null,"reason":"","summary":"empty rationale"}' > "$invalid_qualified_empty_reason"
 printf '%s\n' '{"status":"NEEDS_SPECIFICATION","issue_number":172,"pr_url":null,"commit_sha":null,"run_id":null,"reason":null,"summary":"missing gaps"}' > "$invalid_needs_specification"
 printf '%s\n' '{"status":"SPECIFIED","issue_number":172,"pr_url":"https://github.com/ITmedes/browserpane/pull/999","commit_sha":null,"run_id":null,"reason":null,"summary":"missing commit"}' > "$invalid_specified"
 
@@ -66,6 +70,9 @@ pass "status-specific result requirements are enforced"
 validate_result "$valid_qualified" || fail "valid qualification result"
 pass "valid qualification result"
 
+validate_result "$valid_qualified_rationale" || fail "qualification rationale is accepted"
+pass "qualification rationale is accepted"
+
 validate_result "$valid_needs_specification" || fail "valid needs-specification result"
 pass "valid needs-specification result"
 
@@ -79,6 +86,18 @@ if validate_result "$invalid_qualified" >/dev/null 2>&1; then
   fail "qualification requires an issue number"
 fi
 pass "qualification requires an issue number"
+
+if validate_result "$invalid_qualified_empty_reason" >/dev/null 2>&1; then
+  fail "empty qualification rationale is rejected"
+fi
+pass "empty qualification rationale is rejected"
+
+diagnostic="$(result_contract_diagnostic "$invalid_qualified_empty_reason")"
+[[ "$diagnostic" == *"status=QUALIFIED"* && "$diagnostic" == *"reason=string(empty)"* ]] \
+  || fail "invalid result diagnostic identifies safe field shape"
+[[ "$diagnostic" != *"empty rationale"* ]] \
+  || fail "invalid result diagnostic does not expose result contents"
+pass "invalid result diagnostic is actionable and redacted"
 
 if validate_result "$invalid_needs_specification" >/dev/null 2>&1; then
   fail "needs-specification requires an actionable reason"

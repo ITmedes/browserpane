@@ -188,7 +188,8 @@ validate_result() {
     ((.reason == null) or ((.reason | type) == "string")) and
     ((.summary | type) == "string" and (.summary | length) > 0) and
     (if .status == "QUALIFIED" then
-       .issue_number != null and .pr_url == null and .commit_sha == null and .run_id == null and .reason == null
+       .issue_number != null and .pr_url == null and .commit_sha == null and .run_id == null and
+       (.reason == null or ((.reason | type) == "string" and (.reason | length) > 0))
      elif .status == "NO_QUALIFICATION" then
        .pr_url == null and .commit_sha == null and .run_id == null and
        (.reason | type) == "string" and (.reason | length) > 0
@@ -209,6 +210,39 @@ validate_result() {
        (.reason | type) == "string" and (.reason | length) > 0
      else false end)
   ' "$file" >/dev/null 2>&1
+}
+
+result_contract_diagnostic() {
+  local file="$1"
+  if [[ ! -f "$file" ]]; then
+    printf '%s\n' 'result-file=missing'
+    return
+  fi
+  if ! jq -e . "$file" >/dev/null 2>&1; then
+    printf '%s\n' 'result-json=invalid'
+    return
+  fi
+  jq -r '
+    def shape($name):
+      .[$name] as $value |
+      $name + "=" +
+      (if $value == null then "null"
+       elif ($value | type) == "string" then
+         "string(" + (if ($value | length) > 0 then "non-empty" else "empty" end) + ")"
+       else ($value | type)
+       end);
+    "status=" + (if (.status | type) == "string" then .status else (.status | type) end) +
+    " issue_number=" +
+      (if .issue_number == null then "null"
+       elif (.issue_number | type) == "number" then (.issue_number | tostring)
+       else (.issue_number | type)
+       end) +
+    " " + shape("pr_url") +
+    " " + shape("commit_sha") +
+    " " + shape("run_id") +
+    " " + shape("reason") +
+    " " + shape("summary")
+  ' "$file" 2>/dev/null || printf '%s\n' 'result-shape=unavailable'
 }
 
 routine_field() { jq -r --arg field "$2" '.[$field] // empty' "$1"; }
@@ -288,6 +322,7 @@ run_session() {
 
   if ! validate_result "$final"; then
     err "Codex did not produce a valid structured result at $final."
+    err "result contract: $(result_contract_diagnostic "$final")"
     return 2
   fi
   return "$rc"

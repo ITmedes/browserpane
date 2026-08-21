@@ -131,7 +131,8 @@ Return exactly one object matching
 `dev_loop/schemas/routine-result.schema.json`:
 
 - `QUALIFIED`: one issue was verified and is visibly `state:ready`; include its
-  issue number.
+  issue number. `reason` may be null or a concise non-empty qualification
+  rationale.
 - `NEEDS_SPECIFICATION`: one correctly ordered Qualified issue has a decided,
   bounded direction but needs an evidence-backed issue/plan reconciliation;
   include its issue number and actionable gap list.
