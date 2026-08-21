@@ -3,13 +3,13 @@
 ## Metadata
 
 - Issue: `#263`
-- State: Qualified
+- State: In Progress
 - Owner: BrowserPane maintainers
 - Lane: Production
 - Target gate: Production Baseline protocol contract checkpoint
 - Depends on: accepted ADR 0003, merged `#151` validation floor
 - Parent program: `#175`; protocol slice 1 of 6
-- Last verified commit/date: `ff34162431db` / 2026-08-21
+- Last verified commit/date: `ac3a5d5f27f5` / 2026-08-21
 
 ## Business Outcome
 

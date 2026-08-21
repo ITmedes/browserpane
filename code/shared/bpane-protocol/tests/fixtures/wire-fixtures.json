@@ -1,17 +1,141 @@
 {
-  "audio_out_frame": "02170000000700000040e20100000000000700000057524131020102",
-  "clipboard_text": "0714000000010f00000068656c6c6f20636c6970626f617264",
-  "control_session_ready": "0a03000000030135",
-  "cursor_shape_small": "060f0000000210001800030504000000deadbeef",
-  "file_chunk_download": "0911000000022a000000030000000400000000ff1020",
-  "file_complete_download": "0905000000032a000000",
-  "file_header_upload": "084d010000012a000000696e766f6963652e706466000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000015cd5b07000000006170706c69636174696f6e2f70646600000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
-  "input_key_event_ex": "050b000000051e000000010061000000",
-  "invalid_file_chunk_truncated": "090f000000022a000000030000000400000000ff",
-  "invalid_frame_oversized_length": "0101000080",
-  "invalid_tile_unknown_tag": "0b01000000ff",
-  "tile_grid_config": "0b0b0000000100010c00080080073804",
-  "tile_scroll_stats": "0b5d0000000a0b00000002000000e8030000da02000001000000010000000100000000000000000000000000000003000000070000000500000080020000800000006000000000000000000000000000000000000000000000000000000000000000",
-  "tile_zstd": "0b160000000c020005008877665544332211050000000102030405",
-  "video_single_fragment_tile": "63000000000001000188130000000000000600000000000165aabb016400c8004001b40080073804"
+  "schema_version": 1,
+  "catalog": "browserpane-current-seed",
+  "vectors": [
+    {
+      "name": "audio_out_frame",
+      "direction": "server_to_client",
+      "transport": "reliable_frame",
+      "channel": "audio_out",
+      "capabilities": ["audio_opus"],
+      "wire_hex": "02170000000700000040e20100000000000700000057524131020102",
+      "expected": { "outcome": "valid", "message": "audio_frame" }
+    },
+    {
+      "name": "clipboard_text",
+      "direction": "bidirectional",
+      "transport": "reliable_frame",
+      "channel": "clipboard",
+      "capabilities": ["clipboard_text"],
+      "wire_hex": "0714000000010f00000068656c6c6f20636c6970626f617264",
+      "expected": { "outcome": "valid", "message": "clipboard_text" }
+    },
+    {
+      "name": "control_session_ready",
+      "direction": "server_to_client",
+      "transport": "reliable_frame",
+      "channel": "control",
+      "capabilities": [],
+      "wire_hex": "0a03000000030135",
+      "expected": { "outcome": "valid", "message": "control_session_ready" }
+    },
+    {
+      "name": "cursor_shape_small",
+      "direction": "server_to_client",
+      "transport": "reliable_frame",
+      "channel": "cursor",
+      "capabilities": [],
+      "wire_hex": "060f0000000210001800030504000000deadbeef",
+      "expected": { "outcome": "valid", "message": "cursor_shape" }
+    },
+    {
+      "name": "file_chunk_download",
+      "direction": "server_to_client",
+      "transport": "reliable_frame",
+      "channel": "file_down",
+      "capabilities": ["file_transfer"],
+      "wire_hex": "0911000000022a000000030000000400000000ff1020",
+      "expected": { "outcome": "valid", "message": "file_chunk" }
+    },
+    {
+      "name": "file_complete_download",
+      "direction": "server_to_client",
+      "transport": "reliable_frame",
+      "channel": "file_down",
+      "capabilities": ["file_transfer"],
+      "wire_hex": "0905000000032a000000",
+      "expected": { "outcome": "valid", "message": "file_complete" }
+    },
+    {
+      "name": "file_header_upload",
+      "direction": "client_to_server",
+      "transport": "reliable_frame",
+      "channel": "file_up",
+      "capabilities": ["file_transfer"],
+      "wire_hex": "084d010000012a000000696e766f6963652e706466000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000015cd5b07000000006170706c69636174696f6e2f70646600000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "expected": { "outcome": "valid", "message": "file_header" }
+    },
+    {
+      "name": "input_key_event_ex",
+      "direction": "client_to_server",
+      "transport": "reliable_frame",
+      "channel": "input",
+      "capabilities": ["extended_keyboard"],
+      "wire_hex": "050b000000051e000000010061000000",
+      "expected": { "outcome": "valid", "message": "input_key_event_ex" }
+    },
+    {
+      "name": "invalid_file_chunk_truncated",
+      "direction": "server_to_client",
+      "transport": "reliable_frame",
+      "channel": "file_down",
+      "capabilities": ["file_transfer"],
+      "wire_hex": "090f000000022a000000030000000400000000ff",
+      "expected": { "outcome": "invalid", "error": "buffer_too_short" }
+    },
+    {
+      "name": "invalid_frame_oversized_length",
+      "direction": "server_to_client",
+      "transport": "reliable_frame",
+      "channel": "video",
+      "capabilities": ["h264_video"],
+      "wire_hex": "0101000080",
+      "expected": { "outcome": "invalid", "error": "payload_too_large" }
+    },
+    {
+      "name": "invalid_tile_unknown_tag",
+      "direction": "server_to_client",
+      "transport": "reliable_frame",
+      "channel": "tiles",
+      "capabilities": [],
+      "wire_hex": "0b01000000ff",
+      "expected": { "outcome": "invalid", "error": "unknown_message_type" }
+    },
+    {
+      "name": "tile_grid_config",
+      "direction": "server_to_client",
+      "transport": "reliable_frame",
+      "channel": "tiles",
+      "capabilities": [],
+      "wire_hex": "0b0b0000000100010c00080080073804",
+      "expected": { "outcome": "valid", "message": "tile_grid_config" }
+    },
+    {
+      "name": "tile_scroll_stats",
+      "direction": "server_to_client",
+      "transport": "reliable_frame",
+      "channel": "tiles",
+      "capabilities": ["tile_scroll"],
+      "wire_hex": "0b5d0000000a0b00000002000000e8030000da02000001000000010000000100000000000000000000000000000003000000070000000500000080020000800000006000000000000000000000000000000000000000000000000000000000000000",
+      "expected": { "outcome": "valid", "message": "tile_scroll_stats" }
+    },
+    {
+      "name": "tile_zstd",
+      "direction": "server_to_client",
+      "transport": "reliable_frame",
+      "channel": "tiles",
+      "capabilities": ["tile_zstd"],
+      "wire_hex": "0b160000000c020005008877665544332211050000000102030405",
+      "expected": { "outcome": "valid", "message": "tile_zstd" }
+    },
+    {
+      "name": "video_single_fragment_tile",
+      "direction": "server_to_client",
+      "transport": "datagram_payload",
+      "channel": "video",
+      "capabilities": ["h264_video", "roi_video"],
+      "wire_hex": "63000000000001000188130000000000000600000000000165aabb016400c8004001b40080073804",
+      "expected": { "outcome": "valid", "message": "video_datagram" }
+    }
+  ]
 }
