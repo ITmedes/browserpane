@@ -11,6 +11,7 @@ import {
   joinSelectedSession,
   openAdminTab,
 } from './admin-smoke-lib.mjs';
+import { resolveNewSessionId } from './new-session-selection.mjs';
 import { waitForManagedSessionClients } from './support/mcp-health-assertions.mjs';
 import { McpStreamableClient } from './support/mcp-streamable-client.mjs';
 import { DEFAULTS, createLogger, fetchAuthConfig, fetchJson, launchChrome, parseSmokeArgs, poll } from './workflow-smoke-lib.mjs';
@@ -89,9 +90,21 @@ async function resolveMcpBridge(options) {
 
 async function createConnectedSession(page, options) {
   await openAdminTab(page, 'sessions');
-  const previous = await readSelectedSessionId(page);
+  await poll(
+    'admin new session enabled',
+    () => page.getByTestId('session-new').isEnabled().catch(() => false),
+    Boolean,
+    options.connectTimeoutMs,
+  );
+  const previousSessionIds = await readVisibleSessionIds(page);
   await page.getByTestId('session-new').click();
-  const sessionId = await poll('new selected session', () => readSelectedSessionId(page), (id) => id && id !== previous, options.connectTimeoutMs);
+  const sessionId = await poll(
+    'new admin session row',
+    async () => resolveNewSessionId(previousSessionIds, await readVisibleSessionIds(page)),
+    Boolean,
+    options.connectTimeoutMs,
+  );
+  await selectSession(page, options, sessionId);
   await joinSelectedSession(page, options);
   await page.locator('[data-testid="browser-viewport"] canvas').first().waitFor({ state: 'visible', timeout: options.connectTimeoutMs });
   return sessionId;
@@ -100,6 +113,24 @@ async function createConnectedSession(page, options) {
 async function readSelectedSessionId(page) {
   const row = page.locator('[data-testid="session-row"][aria-pressed="true"]').first();
   return await row.getAttribute('data-session-id').catch(() => '') ?? '';
+}
+
+async function readVisibleSessionIds(page) {
+  return await page.locator('[data-testid="session-row"]').evaluateAll((rows) => rows
+    .map((row) => row.getAttribute('data-session-id'))
+    .filter((sessionId) => typeof sessionId === 'string' && sessionId.length > 0));
+}
+
+async function selectSession(page, options, sessionId) {
+  if (await readSelectedSessionId(page) !== sessionId) {
+    await page.locator(`[data-testid="session-row"][data-session-id="${sessionId}"]`).click();
+  }
+  await poll(
+    'selected admin session',
+    () => readSelectedSessionId(page),
+    (selectedSessionId) => selectedSessionId === sessionId,
+    options.connectTimeoutMs,
+  );
 }
 
 async function delegateSession(accessToken, options, bridge, sessionId) {

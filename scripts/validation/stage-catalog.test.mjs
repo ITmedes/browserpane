@@ -52,6 +52,7 @@ test('promotion surface runner remains part of validation tooling tests', () => 
   assert.ok(tooling.args.includes('scripts/observability/grafana-api-probe.test.mjs'));
   assert.ok(tooling.args.includes('scripts/observability/grafana-dashboard-contract.test.mjs'));
   assert.ok(tooling.args.includes('scripts/observability/grafana-validation-stack.test.mjs'));
+  assert.ok(tooling.args.includes('code/web/bpane-client/scripts/new-session-selection.test.mjs'));
 });
 
 test('catalog selects requested stages in caller order and rejects out-of-profile ids', () => {
