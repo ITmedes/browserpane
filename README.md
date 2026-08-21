@@ -146,8 +146,10 @@ Current support and scope:
   normative v1 wire contract plus schema-v2 66-case shared corpus are published
   in [docs/REMOTE_PROTOCOL_V1.md](docs/REMOTE_PROTOCOL_V1.md). Rust and
   TypeScript expose byte-identical bounded negotiation codecs and pure
-  selection without changing connections. Runtime negotiation, fuzz evidence,
-  and real rolling-compatibility qualification remain sequenced under
+  selection. The gateway enforces authenticated negotiation before runtime or
+  session-hub side effects and retains one explicit, disableable checked-client
+  legacy profile for gateway-first rollout. Browser-side enforcement, fuzz
+  evidence, and real rolling-compatibility qualification remain sequenced under
   [issue #175](https://github.com/ITmedes/browserpane/issues/175).
 - Platform telemetry: the gateway exposes aggregate OpenMetrics request and
   runtime-capacity signals at `/metrics`, together with label-free workflow,
@@ -243,10 +245,20 @@ Rust `bpane-protocol` crate and the corresponding TypeScript client codec.
   compatibility vocabulary. Both languages exhaustively consume the same
   schema-v2 corpus: 15 retained current seeds, 41 negotiation frames, and 10
   selection cases. The TypeScript public facade intentionally exports the
-  isolated codec, selector, data types, and typed errors. This is not deployed
-  runtime negotiation or broad interoperability evidence; those remaining
-  gates stay under
+  isolated codec, selector, data types, and typed errors. Gateway-side runtime
+  negotiation is deployed, but browser-side enforcement and broad
+  interoperability evidence remain under
   [issue #175](https://github.com/ITmedes/browserpane/issues/175).
+
+Gateway protocol negotiation starts only after connect-ticket/bearer
+authentication and session visibility checks. It defaults to a 3,000 ms
+handshake deadline (`--protocol-handshake-timeout-ms`, bounded to 100–10,000)
+and initially enables the checked current-client overlap through
+`--protocol-legacy-compatibility=true`. A valid v1 hello receives the immutable
+v1 capability intersection before `SessionReady`; malformed, oversized,
+unsupported, downgrade, duplicate, and wrong-order peers receive a fixed typed
+rejection without starting or joining the target runtime. Operators can reverse
+legacy disablement without changing credentials, APIs, or stored resources.
 
 ## Local Development
 
@@ -1687,7 +1699,7 @@ npm run smoke:workflow-queued-cancel -- --headless
 
 Admin and browser-harness smokes are also script-backed. Run the focused
 `smoke:admin-*`, `smoke:workflow-*`, `smoke:test-embed-*`,
-`smoke:browser-policy`, and `smoke:multisession` commands from
+`smoke:browser-policy`, `smoke:gateway-protocol`, and `smoke:multisession` commands from
 `code/web/bpane-client/package.json` when touching those areas.
 The `smoke:admin-unified-*` scripts cover the implemented `/admin-new/`
 dashboard, primary resource flows, identity route, and API/coverage/docs

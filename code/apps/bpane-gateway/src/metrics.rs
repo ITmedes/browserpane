@@ -15,6 +15,8 @@ use prometheus_client::metrics::histogram::Histogram;
 use prometheus_client::registry::Registry;
 use tracing::Instrument;
 
+use bpane_protocol::frame::ProtocolFailure;
+
 use crate::recording::RecordingObservability;
 use crate::session_manager::SessionManager;
 use crate::workflow::WorkflowObservability;
@@ -29,6 +31,16 @@ struct HttpRequestLabels {
     status_class: &'static str,
 }
 
+#[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
+struct ProtocolFailureLabels {
+    reason: &'static str,
+}
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, EncodeLabelSet)]
+struct ProtocolDurationLabels {
+    outcome: &'static str,
+}
+
 pub(crate) struct GatewayMetrics {
     registry: Registry,
     http_requests: Family<HttpRequestLabels, Counter>,
@@ -37,6 +49,11 @@ pub(crate) struct GatewayMetrics {
     runtime_active_assignments: Gauge,
     runtime_starting_assignments: Gauge,
     runtime_assignment_limit: Gauge,
+    protocol_negotiation_attempts: Counter,
+    protocol_negotiation_successes: Counter,
+    protocol_legacy_selections: Counter,
+    protocol_negotiation_failures: Family<ProtocolFailureLabels, Counter>,
+    protocol_handshake_duration_seconds: Family<ProtocolDurationLabels, Histogram>,
 }
 
 impl Default for GatewayMetrics {
@@ -52,6 +69,14 @@ impl Default for GatewayMetrics {
         let runtime_active_assignments = Gauge::default();
         let runtime_starting_assignments = Gauge::default();
         let runtime_assignment_limit = Gauge::default();
+        let protocol_negotiation_attempts = Counter::default();
+        let protocol_negotiation_successes = Counter::default();
+        let protocol_legacy_selections = Counter::default();
+        let protocol_negotiation_failures = Family::<ProtocolFailureLabels, Counter>::default();
+        let protocol_handshake_duration_seconds =
+            Family::<ProtocolDurationLabels, Histogram>::new_with_constructor(|| {
+                Histogram::new([0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 3.0, 5.0, 10.0])
+            });
         let mut registry = Registry::default();
 
         registry.register(
@@ -84,6 +109,31 @@ impl Default for GatewayMetrics {
             "Configured maximum number of runtime assignments",
             runtime_assignment_limit.clone(),
         );
+        registry.register(
+            "browserpane_gateway_protocol_negotiation_attempts",
+            "Authenticated browser protocol negotiation attempts",
+            protocol_negotiation_attempts.clone(),
+        );
+        registry.register(
+            "browserpane_gateway_protocol_negotiation_successes",
+            "Successful protocol-v1 browser negotiations",
+            protocol_negotiation_successes.clone(),
+        );
+        registry.register(
+            "browserpane_gateway_protocol_legacy_selections",
+            "Checked current-browser legacy protocol selections",
+            protocol_legacy_selections.clone(),
+        );
+        registry.register(
+            "browserpane_gateway_protocol_negotiation_failures",
+            "Rejected browser protocol negotiations by fixed failure reason",
+            protocol_negotiation_failures.clone(),
+        );
+        registry.register(
+            "browserpane_gateway_protocol_handshake_duration_seconds",
+            "Browser protocol handshake duration by fixed outcome",
+            protocol_handshake_duration_seconds.clone(),
+        );
 
         Self {
             registry,
@@ -93,6 +143,11 @@ impl Default for GatewayMetrics {
             runtime_active_assignments,
             runtime_starting_assignments,
             runtime_assignment_limit,
+            protocol_negotiation_attempts,
+            protocol_negotiation_successes,
+            protocol_legacy_selections,
+            protocol_negotiation_failures,
+            protocol_handshake_duration_seconds,
         }
     }
 }
@@ -133,6 +188,48 @@ impl GatewayMetrics {
         self.http_requests.get_or_create(&labels).inc();
         self.http_request_duration_seconds
             .get_or_create(&labels)
+            .observe(started_at.elapsed().as_secs_f64());
+    }
+
+    pub(crate) fn begin_protocol_negotiation(&self) -> Instant {
+        self.protocol_negotiation_attempts.inc();
+        Instant::now()
+    }
+
+    pub(crate) fn record_protocol_negotiation_success(&self, started_at: Instant) {
+        self.protocol_negotiation_successes.inc();
+        self.observe_protocol_handshake("negotiated", started_at);
+    }
+
+    pub(crate) fn record_protocol_legacy_selection(&self, started_at: Instant) {
+        self.protocol_legacy_selections.inc();
+        self.observe_protocol_handshake("legacy", started_at);
+    }
+
+    pub(crate) fn record_protocol_negotiation_failure(
+        &self,
+        failure: ProtocolFailure,
+        started_at: Instant,
+    ) {
+        self.protocol_negotiation_failures
+            .get_or_create(&ProtocolFailureLabels {
+                reason: failure.code(),
+            })
+            .inc();
+        self.observe_protocol_handshake("rejected", started_at);
+    }
+
+    pub(crate) fn record_protocol_violation(&self, failure: ProtocolFailure) {
+        self.protocol_negotiation_failures
+            .get_or_create(&ProtocolFailureLabels {
+                reason: failure.code(),
+            })
+            .inc();
+    }
+
+    fn observe_protocol_handshake(&self, outcome: &'static str, started_at: Instant) {
+        self.protocol_handshake_duration_seconds
+            .get_or_create(&ProtocolDurationLabels { outcome })
             .observe(started_at.elapsed().as_secs_f64());
     }
 
@@ -311,6 +408,17 @@ mod tests {
             StatusCode::OK,
             started_at,
         );
+        let protocol_started = Instant::now()
+            .checked_sub(Duration::from_millis(10))
+            .unwrap();
+        let _ = metrics.begin_protocol_negotiation();
+        metrics.record_protocol_negotiation_success(protocol_started);
+        metrics.record_protocol_legacy_selection(protocol_started);
+        metrics.record_protocol_negotiation_failure(
+            ProtocolFailure::UnsupportedProtocolVersion,
+            protocol_started,
+        );
+        metrics.record_protocol_violation(ProtocolFailure::UnexpectedProtocolFrame);
 
         let output = metrics.encode(&session_manager).await.unwrap();
         assert!(output.contains("browserpane_gateway_http_requests_total"));
@@ -322,6 +430,14 @@ mod tests {
         assert!(output.contains("browserpane_gateway_runtime_active_assignments 1"));
         assert!(output.contains("browserpane_gateway_runtime_starting_assignments 0"));
         assert!(output.contains("browserpane_gateway_runtime_assignment_limit 1"));
+        assert!(output.contains("browserpane_gateway_protocol_negotiation_attempts_total 1"));
+        assert!(output.contains("browserpane_gateway_protocol_negotiation_successes_total 1"));
+        assert!(output.contains("browserpane_gateway_protocol_legacy_selections_total 1"));
+        assert!(output.contains("reason=\"unsupported_protocol_version\""));
+        assert!(output.contains("reason=\"unexpected_protocol_frame\""));
+        assert!(output.contains("outcome=\"negotiated\""));
+        assert!(output.contains("outcome=\"legacy\""));
+        assert!(output.contains("outcome=\"rejected\""));
         assert!(output.ends_with("# EOF\n"));
         assert!(!output.contains(&secret_session_id.to_string()));
     }

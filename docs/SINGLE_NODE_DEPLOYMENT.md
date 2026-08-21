@@ -47,6 +47,10 @@ artifact volumes are single-host storage, not shared or HA storage.
    tags are rejected.
 4. Set the public URLs, internal dependency URLs, client IDs, runtime limits,
    and secret-file paths.
+   Keep `BPANE_PROTOCOL_HANDSHAKE_TIMEOUT_MS` between 100 and 10,000. The
+   initial gateway-first rollout explicitly sets
+   `BPANE_PROTOCOL_LEGACY_COMPATIBILITY=true`; disabling it rejects the checked
+   current pre-negotiation browser and is reversible without a data migration.
 5. Create the four required secret files with owner-only permissions:
 
 ```bash
@@ -161,6 +165,8 @@ Alert at minimum on:
 - Postgres/Vault latency or unavailability;
 - host CPU, memory, PID, inode, filesystem, and volume capacity;
 - recording/workspace retention failures and backup age.
+- protocol negotiation rejections and continued legacy selections; failure
+  metrics use fixed reasons and contain no resource or peer-controlled labels.
 
 The current metrics are a foundation, not a complete SLO or capacity envelope.
 Set conservative admission limits and qualify the intended workload before

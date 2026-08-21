@@ -11,6 +11,7 @@ use crate::api::{
 };
 use crate::config::Config;
 use crate::lifecycle::GatewayLifecycle;
+use crate::metrics::GatewayMetrics;
 use crate::readiness::GatewayReadiness;
 use crate::transport::{TransportServer, TransportServerConfig};
 use crate::worker_runtime_control::WorkerRuntimeControl;
@@ -94,6 +95,10 @@ impl GatewayApp {
             worker_control,
         )
         .await?;
+        let metrics = Arc::new(GatewayMetrics::with_observability(
+            &recording_services.observability,
+            &workflow_services.observability,
+        ));
         let RuntimeServices {
             bind_addr,
             api_bind_addr,
@@ -114,8 +119,16 @@ impl GatewayApp {
             recording_lifecycle: recording_services.lifecycle.clone(),
             idle_stop_timeout: Duration::from_secs(config.runtime.idle_timeout_secs),
             heartbeat_timeout: Duration::from_secs(config.gateway.heartbeat_timeout_secs),
+            protocol_handshake_timeout: Duration::from_millis(
+                config.gateway.protocol_handshake_timeout_ms,
+            ),
+            protocol_legacy_compatibility: config.gateway.protocol_legacy_compatibility,
+            runtime_startup_capacity_wait: Duration::from_secs(
+                config.runtime.docker_start_timeout_secs,
+            ),
             registry: registry.clone(),
             lifecycle: lifecycle.clone(),
+            metrics: metrics.clone(),
         });
 
         let readiness = Arc::new(GatewayReadiness::new(
@@ -155,6 +168,7 @@ impl GatewayApp {
             default_owner_mode: default_owner_mode(&config),
             browser_context_import,
             mcp_bridge_control: mcp_bridge_control_config(&config)?,
+            metrics,
         };
 
         Ok(Self {
@@ -251,6 +265,9 @@ impl GatewayApp {
 }
 
 fn validate_operational_timeouts(config: &Config) -> anyhow::Result<()> {
+    if !(100..=10_000).contains(&config.gateway.protocol_handshake_timeout_ms) {
+        bail!("--protocol-handshake-timeout-ms must be between 100 and 10000");
+    }
     if config.gateway.readiness_check_timeout_secs == 0 {
         bail!("--readiness-check-timeout-secs must be greater than zero");
     }

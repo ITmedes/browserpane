@@ -32,6 +32,20 @@ pub struct GatewayConfig {
     #[arg(long, default_value_t = 15)]
     pub heartbeat_timeout_secs: u64,
 
+    /// Maximum time allowed for protocol negotiation after opening the
+    /// reliable browser stream.
+    #[arg(long = "protocol-handshake-timeout-ms", default_value_t = 3_000)]
+    pub protocol_handshake_timeout_ms: u64,
+
+    /// Permit the checked current pre-negotiation browser profile during the
+    /// initial gateway-first protocol-v1 rollout.
+    #[arg(
+        long = "protocol-legacy-compatibility",
+        action = clap::ArgAction::Set,
+        default_value_t = true
+    )]
+    pub protocol_legacy_compatibility: bool,
+
     /// Maximum number of non-owner browser viewers allowed in a shared session.
     #[arg(long, default_value_t = 10)]
     pub max_viewers: u32,

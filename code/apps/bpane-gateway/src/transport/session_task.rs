@@ -1,24 +1,30 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use tracing::debug;
+use anyhow::Context;
+use tracing::{debug, warn};
+use uuid::Uuid;
 
 use super::bitrate::DatagramStats;
-use super::bootstrap::send_initial_frames;
+use super::bootstrap::{send_initial_frames, InitialFramesContext};
 use super::egress::{spawn_agent_to_browser_task, EgressTaskContext};
-use super::ingress::spawn_browser_to_agent_task;
+use super::ingress::{spawn_browser_to_agent_task, IngressTaskContext};
+use super::negotiation::{
+    negotiate_connection, reject_active_connection, ProtocolNegotiationConfig,
+};
 use super::request::ValidatedConnectRequest;
 use super::tasks::{
     recorder_role_suppresses_bitrate_feedback, spawn_bitrate_hint_task, spawn_direct_control_task,
     spawn_gateway_pinger,
 };
 use crate::idle_stop::schedule_idle_session_stop;
+use crate::metrics::GatewayMetrics;
 use crate::recording_lifecycle::RecordingLifecycleManager;
 use crate::session_control::SessionRecordingTerminationReason;
 use crate::session_control::SessionStore;
 use crate::session_files::{SessionFileRecorder, SessionFileSource};
 use crate::session_hub::{BrowserClientRole, SessionTerminationReason};
-use crate::session_manager::SessionManager;
+use crate::session_manager::{SessionManager, SessionManagerError, SessionRuntime};
 use crate::session_registry::SessionRegistry;
 use crate::workspaces::WorkspaceFileStore;
 
@@ -32,10 +38,13 @@ pub(super) struct SessionTaskContext {
     pub session_store: SessionStore,
     pub workspace_file_store: Arc<WorkspaceFileStore>,
     pub idle_stop_timeout: Duration,
-    pub agent_socket_path: String,
     pub heartbeat_timeout: Duration,
+    pub protocol_handshake_timeout: Duration,
+    pub protocol_legacy_compatibility: bool,
+    pub runtime_startup_capacity_wait: Duration,
     pub registry: Arc<SessionRegistry>,
     pub recording_lifecycle: Arc<RecordingLifecycleManager>,
+    pub metrics: Arc<GatewayMetrics>,
 }
 
 pub(super) async fn handle_session(context: SessionTaskContext) -> anyhow::Result<()> {
@@ -47,17 +56,42 @@ pub(super) async fn handle_session(context: SessionTaskContext) -> anyhow::Resul
         session_store,
         workspace_file_store,
         idle_stop_timeout,
-        agent_socket_path,
         heartbeat_timeout,
+        protocol_handshake_timeout,
+        protocol_legacy_compatibility,
+        runtime_startup_capacity_wait,
         registry,
         recording_lifecycle,
+        metrics,
     } = context;
     let routed_session_id = connect_request.session_id;
     let transport_policy = connect_request.transport_policy;
+    let negotiation_config = ProtocolNegotiationConfig {
+        timeout: protocol_handshake_timeout,
+        legacy_compatibility: protocol_legacy_compatibility,
+    };
+    let Some(negotiated) = negotiate_connection(&connection, &negotiation_config, &metrics).await?
+    else {
+        return Ok(());
+    };
+    let Some(runtime) = resolve_runtime_after_negotiation(
+        &connection,
+        &session_manager,
+        routed_session_id,
+        runtime_startup_capacity_wait,
+    )
+    .await?
+    else {
+        return Ok(());
+    };
+    session_manager.mark_session_active(routed_session_id).await;
+    if let Err(error) = session_store.mark_session_active(routed_session_id).await {
+        warn!("failed to mark negotiated session active in store: {error}");
+    }
     let (client_handle, hub) = registry
         .join_with_role(
             routed_session_id,
-            &agent_socket_path,
+            &runtime.agent_socket_path,
             connect_request.client_role,
             transport_policy.allow_browser_downloads(),
         )
@@ -86,17 +120,21 @@ pub(super) async fn handle_session(context: SessionTaskContext) -> anyhow::Resul
         session_clone.run_heartbeat_monitor().await;
     });
 
-    let (send_stream, recv_stream) = connection.open_bi().await?.await?;
-    let send_stream = Arc::new(tokio::sync::Mutex::new(send_stream));
+    let send_stream = negotiated.send_stream;
+    let recv_stream = negotiated.recv_stream;
+    let protocol = negotiated.protocol;
 
     send_initial_frames(
         &send_stream,
         &initial_frames,
-        joined_as_owner,
-        initial_access_state,
-        transport_policy.clone(),
-        session_id,
-        client_id,
+        InitialFramesContext {
+            joined_as_owner,
+            initial_access_state,
+            policy: transport_policy.clone(),
+            protocol: protocol.clone(),
+            session_id,
+            client_id,
+        },
     )
     .await?;
 
@@ -111,30 +149,34 @@ pub(super) async fn handle_session(context: SessionTaskContext) -> anyhow::Resul
             connection: connection.clone(),
             dgram_stats: dgram_stats.clone(),
             transport_policy: transport_policy.clone(),
+            protocol: protocol.clone(),
         },
         from_host,
     );
 
-    let browser_to_agent = spawn_browser_to_agent_task(
-        session.clone(),
-        hub.clone(),
+    let browser_to_agent = spawn_browser_to_agent_task(IngressTaskContext {
+        session: session.clone(),
+        hub: hub.clone(),
         client_id,
         recv_stream,
+        initial_frames: negotiated.initial_client_frames,
         to_host,
-        SessionFileRecorder::new(
+        file_recorder: SessionFileRecorder::new(
             routed_session_id,
             SessionFileSource::BrowserUpload,
             session_store.clone(),
             workspace_file_store,
         ),
-        transport_policy.clone(),
-    );
+        transport_policy: transport_policy.clone(),
+        protocol: protocol.clone(),
+    });
 
     let direct_control_task = spawn_direct_control_task(
         session.clone(),
         send_stream.clone(),
         control_rx,
         transport_policy,
+        protocol,
     );
 
     let gateway_pinger = spawn_gateway_pinger(session.clone(), send_stream.clone());
@@ -142,12 +184,17 @@ pub(super) async fn handle_session(context: SessionTaskContext) -> anyhow::Resul
     let mut should_transition_to_idle = true;
     let mut recording_termination_reason =
         Some(SessionRecordingTerminationReason::ClientDisconnect);
+    let mut protocol_failure = None;
     let mut termination_rx = termination_rx;
 
     if recorder_role_suppresses_bitrate_feedback(client_role) {
         tokio::select! {
-            _ = agent_to_browser => {}
-            _ = browser_to_agent => {}
+            result = agent_to_browser => {
+                protocol_failure = joined_protocol_failure(result);
+            }
+            result = browser_to_agent => {
+                protocol_failure = joined_protocol_failure(result);
+            }
             _ = direct_control_task => {}
             _ = gateway_pinger => {}
             reason = &mut termination_rx => {
@@ -168,8 +215,12 @@ pub(super) async fn handle_session(context: SessionTaskContext) -> anyhow::Resul
             send_stream.clone(),
         );
         tokio::select! {
-            _ = agent_to_browser => {}
-            _ = browser_to_agent => {}
+            result = agent_to_browser => {
+                protocol_failure = joined_protocol_failure(result);
+            }
+            result = browser_to_agent => {
+                protocol_failure = joined_protocol_failure(result);
+            }
             _ = direct_control_task => {}
             _ = gateway_pinger => {}
             _ = bitrate_hint_task => {}
@@ -185,6 +236,10 @@ pub(super) async fn handle_session(context: SessionTaskContext) -> anyhow::Resul
     }
 
     session.deactivate();
+    if let Some(failure) = protocol_failure {
+        metrics.record_protocol_violation(failure);
+        reject_active_connection(&connection, &send_stream, failure).await;
+    }
     registry.leave(routed_session_id, client_id).await;
     if should_transition_to_idle {
         if let Some(snapshot) = registry.telemetry_snapshot_if_live(routed_session_id).await {
@@ -228,9 +283,44 @@ pub(super) async fn handle_session(context: SessionTaskContext) -> anyhow::Resul
         }
     }
 
-    connection.close(wtransport::VarInt::from_u32(0), close_reason);
+    if protocol_failure.is_none() {
+        connection.close(wtransport::VarInt::from_u32(0), close_reason);
+    }
 
     Ok(())
+}
+
+async fn resolve_runtime_after_negotiation(
+    connection: &wtransport::Connection,
+    session_manager: &SessionManager,
+    session_id: Uuid,
+    startup_capacity_wait: Duration,
+) -> anyhow::Result<Option<SessionRuntime>> {
+    const RETRY_INTERVAL: Duration = Duration::from_millis(100);
+
+    let deadline = tokio::time::Instant::now() + startup_capacity_wait;
+    loop {
+        match session_manager.resolve(session_id).await {
+            Ok(runtime) => return Ok(Some(runtime)),
+            Err(error @ SessionManagerError::RuntimeStartupCapacityReached { .. }) => {
+                let now = tokio::time::Instant::now();
+                if now >= deadline {
+                    return Err(error).context("runtime startup-capacity wait expired");
+                }
+                tokio::select! {
+                    _ = connection.closed() => return Ok(None),
+                    _ = tokio::time::sleep_until((now + RETRY_INTERVAL).min(deadline)) => {}
+                }
+            }
+            Err(error) => return Err(error.into()),
+        }
+    }
+}
+
+fn joined_protocol_failure(
+    result: Result<Option<bpane_protocol::frame::ProtocolFailure>, tokio::task::JoinError>,
+) -> Option<bpane_protocol::frame::ProtocolFailure> {
+    result.ok().flatten()
 }
 
 fn recording_reason_for_termination(

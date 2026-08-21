@@ -2,6 +2,7 @@ use bpane_protocol::channel::ChannelId;
 use bpane_protocol::frame::Frame;
 use bpane_protocol::{ClientAccessFlags, ControlMessage, SessionFlags};
 
+use super::negotiation::ConnectionProtocol;
 use crate::session_control::{ProjectPolicy, SessionCapabilities};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -74,27 +75,39 @@ pub(super) fn adapt_frame_for_client(frame: &Frame, is_owner: bool) -> Frame {
     adapt_frame_for_client_with_policy(frame, is_owner, &SessionTransportPolicy::default())
 }
 
+#[cfg(test)]
 pub(super) fn adapt_frame_for_client_with_policy(
     frame: &Frame,
     is_owner: bool,
     policy: &SessionTransportPolicy,
 ) -> Frame {
-    if is_owner
+    adapt_frame_for_client_with_protocol(frame, is_owner, policy, &ConnectionProtocol::Legacy)
+}
+
+pub(super) fn adapt_frame_for_client_with_protocol(
+    frame: &Frame,
+    is_owner: bool,
+    policy: &SessionTransportPolicy,
+    protocol: &ConnectionProtocol,
+) -> Frame {
+    let role_adapted = if is_owner
         || frame.channel != ChannelId::Control
         || frame.payload.len() < 3
         || frame.payload[0] != 0x03
     {
-        return adapt_session_ready_for_policy(frame, policy);
-    }
-
-    let mut payload = frame.payload.to_vec();
-    let restricted = SessionFlags::CLIPBOARD
-        | SessionFlags::FILE_TRANSFER
-        | SessionFlags::MICROPHONE
-        | SessionFlags::CAMERA
-        | SessionFlags::KEYBOARD_LAYOUT;
-    payload[2] &= !restricted.bits();
-    adapt_session_ready_for_policy(&Frame::new(frame.channel, payload), policy)
+        frame.clone()
+    } else {
+        let mut payload = frame.payload.to_vec();
+        let restricted = SessionFlags::CLIPBOARD
+            | SessionFlags::FILE_TRANSFER
+            | SessionFlags::MICROPHONE
+            | SessionFlags::CAMERA
+            | SessionFlags::KEYBOARD_LAYOUT;
+        payload[2] &= !restricted.bits();
+        Frame::new(frame.channel, payload)
+    };
+    let policy_adapted = adapt_session_ready_for_policy(&role_adapted, policy);
+    protocol.normalize_session_ready(&policy_adapted)
 }
 
 pub(super) fn adapt_control_message_for_client(

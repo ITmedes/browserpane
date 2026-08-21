@@ -11,6 +11,7 @@ mod bitrate;
 mod bootstrap;
 mod egress;
 mod ingress;
+mod negotiation;
 mod policy;
 mod request;
 mod session;
@@ -26,6 +27,7 @@ use self::request::{
 use self::session_task::handle_session;
 use crate::auth::AuthValidator;
 use crate::lifecycle::GatewayLifecycle;
+use crate::metrics::GatewayMetrics;
 use crate::recording_lifecycle::RecordingLifecycleManager;
 use crate::session_access::SessionConnectTicketManager;
 use crate::session_control::SessionStore;
@@ -44,8 +46,12 @@ pub struct TransportServerConfig {
     pub recording_lifecycle: Arc<RecordingLifecycleManager>,
     pub idle_stop_timeout: Duration,
     pub heartbeat_timeout: Duration,
+    pub protocol_handshake_timeout: Duration,
+    pub protocol_legacy_compatibility: bool,
+    pub runtime_startup_capacity_wait: Duration,
     pub registry: Arc<SessionRegistry>,
     pub lifecycle: Arc<GatewayLifecycle>,
+    pub metrics: Arc<GatewayMetrics>,
 }
 
 pub struct TransportServer {
@@ -59,8 +65,12 @@ pub struct TransportServer {
     recording_lifecycle: Arc<RecordingLifecycleManager>,
     idle_stop_timeout: Duration,
     heartbeat_timeout: Duration,
+    protocol_handshake_timeout: Duration,
+    protocol_legacy_compatibility: bool,
+    runtime_startup_capacity_wait: Duration,
     registry: Arc<SessionRegistry>,
     lifecycle: Arc<GatewayLifecycle>,
+    metrics: Arc<GatewayMetrics>,
 }
 
 impl TransportServer {
@@ -76,8 +86,12 @@ impl TransportServer {
             recording_lifecycle: config.recording_lifecycle,
             idle_stop_timeout: config.idle_stop_timeout,
             heartbeat_timeout: config.heartbeat_timeout,
+            protocol_handshake_timeout: config.protocol_handshake_timeout,
+            protocol_legacy_compatibility: config.protocol_legacy_compatibility,
+            runtime_startup_capacity_wait: config.runtime_startup_capacity_wait,
             registry: config.registry,
             lifecycle: config.lifecycle,
+            metrics: config.metrics,
         }
     }
 
@@ -170,35 +184,6 @@ impl TransportServer {
                 }
             };
 
-            let runtime = match self
-                .session_manager
-                .resolve(validated_request.session_id)
-                .await
-            {
-                Ok(runtime) => runtime,
-                Err(error) => {
-                    warn!(
-                        session_id = %validated_request.session_id,
-                        "runtime resolution failed: {error}"
-                    );
-                    session_request.not_found().await;
-                    continue;
-                }
-            };
-            self.session_manager
-                .mark_session_active(validated_request.session_id)
-                .await;
-            if let Err(error) = self
-                .session_store
-                .mark_session_active(validated_request.session_id)
-                .await
-            {
-                warn!(
-                    session_id = %validated_request.session_id,
-                    "failed to mark session active in store: {error}"
-                );
-            }
-
             let connection = match session_request.accept().await {
                 Ok(conn) => conn,
                 Err(e) => {
@@ -209,14 +194,17 @@ impl TransportServer {
 
             session_counter += 1;
             let session_id = session_counter;
-            let agent_path = runtime.agent_socket_path.clone();
             let heartbeat_timeout = self.heartbeat_timeout;
+            let protocol_handshake_timeout = self.protocol_handshake_timeout;
+            let protocol_legacy_compatibility = self.protocol_legacy_compatibility;
+            let runtime_startup_capacity_wait = self.runtime_startup_capacity_wait;
             let active_sessions_clone = active_sessions.clone();
             let registry = self.registry.clone();
             let session_manager = self.session_manager.clone();
             let session_store = self.session_store.clone();
             let workspace_file_store = self.workspace_file_store.clone();
             let recording_lifecycle = self.recording_lifecycle.clone();
+            let metrics = self.metrics.clone();
             let idle_stop_timeout = self.idle_stop_timeout;
             active_sessions.fetch_add(1, Ordering::Relaxed);
 
@@ -235,10 +223,13 @@ impl TransportServer {
                     session_store,
                     workspace_file_store,
                     idle_stop_timeout,
-                    agent_socket_path: agent_path,
                     heartbeat_timeout,
+                    protocol_handshake_timeout,
+                    protocol_legacy_compatibility,
+                    runtime_startup_capacity_wait,
                     registry: registry.clone(),
                     recording_lifecycle,
+                    metrics,
                 })
                 .await
                 {

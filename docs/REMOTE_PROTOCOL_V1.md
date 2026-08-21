@@ -402,11 +402,13 @@ bytes. No protocol error is echoed back as unbounded data.
 
 ## 13. Compatibility and rollout
 
-Issue #263 published the contract and original vector baseline. Issue #264 adds
-the bounded codecs, pure selector, and negotiation vectors without wiring them
-into a connection. Current gateway and browser binaries therefore still do
-**not** perform the v1 handshake. Gateway state, browser state, fuzzing, and
-real-stack rollout remain sequenced in issues #265–#268 under program #175.
+Issue #263 published the contract and original vector baseline. Issue #264
+added the bounded codecs, pure selector, and negotiation vectors. Issue #265
+wires the gateway state machine after authentication/visibility and before
+runtime or hub side effects, with explicit checked-client legacy overlap. The
+current browser binary still does **not** initiate or validate the v1 handshake;
+browser state, fuzzing, and real rolling qualification remain sequenced in
+issues #266–#268 under program #175.
 
 | Gateway | Client | Required result |
 | --- | --- | --- |

@@ -3,13 +3,13 @@
 ## Metadata
 
 - Issue: `#265`
-- State: Qualified
+- State: Review
 - Owner: BrowserPane maintainers
 - Lane: Production
 - Target gate: Production Baseline gateway enforcement checkpoint
 - Depends on: closed `#264`
 - Parent program: `#175`; protocol slice 3 of 6
-- Last verified commit/date: `e21e2206a93a` / 2026-08-21
+- Last verified commit/date: `93804b7c` / 2026-08-22
 
 ## Business Outcome
 
@@ -148,6 +148,39 @@ overlap. It cannot claim new-browser enforcement or complete rolling support.
 
 ## Evidence Record
 
-Record PR/commit, config/defaults, state/no-side-effect assertions, test and
-coverage results, Compose logs/metrics review, rollback result, and residual
-links without credentials or client content.
+- Implementation commit: `93804b7c`, based on `b537e0c0fc68`.
+- Configuration: 3,000 ms default with a validated 100–10,000 ms range;
+  checked legacy compatibility is explicit and initially enabled in local and
+  single-node Compose. API/OpenAPI, database, Admin-New, CLI, and SDK changes
+  are N/A because this is a WebTransport gateway boundary.
+- `cargo test -p bpane-gateway transport::negotiation -- --nocapture`: pass,
+  10 negotiation/capability/direction/timeout/limit tests.
+- `cargo test -p bpane-gateway`: pass, 499 passed and 1 ignored; shared-session
+  owner promotion, restricted viewer, late-join, reconnect, policy, and replay
+  regressions are included in the suite.
+- `cargo test -p bpane-protocol`: pass, including 98 unit, 17 integration, 3
+  negotiation-fixture, 16 property, 4 wire-fixture, and 1 doc test.
+- `cargo test -p bpane-host`: pass, 371 tests. `cargo test --workspace`: pass.
+- `cargo clippy -p bpane-gateway --all-targets --all-features -- -D warnings`:
+  pass. `node scripts/run-rust-coverage.mjs`: pass and report written.
+- In `code/web/bpane-client`, `npm run check && npm test && npm run build`:
+  pass, 695 tests and production build. `npm run test:coverage`: pass, coverage
+  baseline accepted at 93.21% statements and 88.32% branches.
+- `docker compose -f deploy/compose.yml config --quiet`: pass.
+  `docker compose -f deploy/compose.yml up -d --build gateway`: pass with the
+  final release gateway image.
+- In `code/web/bpane-client`, `npm run smoke:gateway-protocol -- --headless
+  --connect-timeout-ms 60000`: pass for two selected capability subsets,
+  selection/readiness ordering, typed malformed/unsupported/order/limit/
+  timeout rejection, no pre-handshake runtime or client effects, offender-only
+  rejection, checked current-client overlap, legacy disablement, restoration,
+  reconnect, and cleanup.
+- In `code/web/bpane-client`, `npm run smoke:multisession -- --headless`: pass
+  for two live runtimes, shared-session late join, MCP routing, and cleanup.
+- `node scripts/validate.mjs --profile fast`: pass, all 44 stages on the final
+  tree. `git diff --check`: pass.
+- Live `/metrics` and bounded gateway log review showed only fixed outcome/
+  reason labels and the fixed legacy warning; no resource IDs, credentials,
+  URLs, claims, content, raw frames, or raw errors were emitted.
+- Residual work remains intentionally owned by #266 (browser enforcement),
+  #267 (fuzzing), and #268 (final rolling compatibility qualification).

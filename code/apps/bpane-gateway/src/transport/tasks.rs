@@ -8,6 +8,7 @@ use tokio::task::JoinHandle;
 use tracing::debug;
 
 use super::bitrate::{compute_adapted_bitrate, DatagramStats};
+use super::negotiation::ConnectionProtocol;
 use super::policy::{adapt_control_message_for_client, SessionTransportPolicy};
 use crate::session_hub::BrowserClientRole;
 
@@ -119,6 +120,7 @@ pub(super) fn spawn_direct_control_task<S>(
     send_stream: Arc<Mutex<S>>,
     mut control_rx: tokio::sync::mpsc::Receiver<ControlMessage>,
     policy: SessionTransportPolicy,
+    protocol: ConnectionProtocol,
 ) -> JoinHandle<()>
 where
     S: AsyncWrite + Unpin + Send + 'static,
@@ -129,9 +131,26 @@ where
                 break;
             }
 
-            let encoded = adapt_control_message_for_client(message, &policy)
-                .to_frame()
-                .encode();
+            let message = adapt_control_message_for_client(message, &policy);
+            let frame = protocol.normalize_session_ready(&message.to_frame());
+            let frame = if protocol.allows_server_frame(&frame) {
+                Some(frame)
+            } else if let ControlMessage::ClientAccessState {
+                flags,
+                width,
+                height,
+            } = message
+            {
+                flags
+                    .contains(bpane_protocol::ClientAccessFlags::RESIZE_LOCKED)
+                    .then(|| ControlMessage::ResolutionLocked { width, height }.to_frame())
+            } else {
+                None
+            };
+            let Some(frame) = frame else {
+                continue;
+            };
+            let encoded = frame.encode();
             let mut stream = send_stream.lock().await;
             if stream.write_all(&encoded).await.is_err() {
                 break;

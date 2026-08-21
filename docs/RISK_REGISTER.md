@@ -2,7 +2,7 @@
 
 Governance issue: [#173](https://github.com/ITmedes/browserpane/issues/173)
 
-Last reviewed: 2026-08-21
+Last reviewed: 2026-08-22
 
 ## Scale
 
@@ -17,7 +17,7 @@ Last reviewed: 2026-08-21
 | R-002 | Open critical/high dependency advisories affect build or runtime dependencies. | High | Critical | #151 / #75 | Upgrade, reachability review, bounded exception with owner/expiry, recurring scan. | Foundation |
 | R-004 | Application auth/header controls exist, but a deployment could still expose admin, MCP, metrics, or internal surfaces without the required TLS, origin, ingress, and network policy. | Medium | Critical | #223 / #72 / #66 | Executable application/header baseline plus target-specific ingress, exact-origin, private-network, and MCP transport controls. | Production |
 | R-005 | Webhook delivery can reach unsafe destinations or redirect targets. | Low | Critical | #147 | Mitigated and merged through PR #191: URL/DNS/IP validation, pinned delivery, no redirects/proxies, exact-origin exceptions, negative and compose tests. | Foundation |
-| R-007 | Protocol version is not enforced and runtime compatibility is not qualified. | Medium | Critical | #175 | #263 publishes the normative v1 contract and #264 adds bounded byte-identical Rust/TypeScript codecs, pure selection, and a schema-v2 66-case shared corpus. Runtime enforcement, fuzzing, and the real rolling compatibility matrix remain #265-#268. | Production |
+| R-007 | Protocol version enforcement is incomplete across both peers and runtime compatibility is not qualified. | Medium | Critical | #175 | #263 publishes the normative v1 contract, #264 adds bounded byte-identical Rust/TypeScript codecs and a 66-case corpus, and #265 enforces authenticated gateway negotiation before runtime/hub effects with typed isolation and explicit legacy overlap. Browser enforcement, fuzzing, and the real rolling matrix remain #266-#268. | Production |
 | R-010 | Platform failures and saturation are not yet observable end to end through standard telemetry/SLOs. | High | High | #178 | Gateway OpenMetrics RED/runtime capacity merged through PR #222, bounded W3C/OTLP gateway-to-broker traces through PR #228, workflow/recording counters through PR #230, Prometheus rules/alerts/runbooks through PR #232, and the Grafana dashboard through PR #234. Broader worker/store coverage, queue/state and latency signals, calibrated SLOs/error budgets, synthetics, alert routing, and load evidence remain. | Phase 1 / Production |
 | R-011 | Organization/project mappings are descriptive rather than a complete enforced authorization model. | High | Critical | #176 | Role/grant matrix, enforcement, migration, denial/audit tests. | Phase N |
 | R-012 | Deprovisioned identities or emergency access lack deterministic lifecycle controls. | Medium | Critical | #177 | Lifecycle API/SCIM path, stale review, break-glass controls. | Phase N |

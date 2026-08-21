@@ -330,6 +330,31 @@ fn operational_timeouts_must_be_nonzero() {
 }
 
 #[test]
+fn protocol_rollout_defaults_and_handshake_bounds_are_explicit() {
+    let mut config = test_config();
+    assert_eq!(config.gateway.protocol_handshake_timeout_ms, 3_000);
+    assert!(config.gateway.protocol_legacy_compatibility);
+    assert!(super::validate_operational_timeouts(&config).is_ok());
+
+    config.gateway.protocol_handshake_timeout_ms = 99;
+    assert!(super::validate_operational_timeouts(&config)
+        .unwrap_err()
+        .to_string()
+        .contains("--protocol-handshake-timeout-ms"));
+
+    config.gateway.protocol_handshake_timeout_ms = 10_001;
+    assert!(super::validate_operational_timeouts(&config)
+        .unwrap_err()
+        .to_string()
+        .contains("--protocol-handshake-timeout-ms"));
+
+    config.gateway.protocol_handshake_timeout_ms = 100;
+    assert!(super::validate_operational_timeouts(&config).is_ok());
+    config.gateway.protocol_handshake_timeout_ms = 10_000;
+    assert!(super::validate_operational_timeouts(&config).is_ok());
+}
+
+#[test]
 fn browser_context_import_limits_are_validated_and_materialized() {
     let mut config = test_config();
     let service = super::build_browser_context_import_service(&config).unwrap();
