@@ -91,8 +91,8 @@ fn fixed<const N: usize>(text: &str) -> [u8; N] {
 #[test]
 fn shared_catalog_schema_and_every_vector_are_consumed() {
     let catalog = catalog();
-    assert_eq!(catalog.schema_version, 1);
-    assert_eq!(catalog.catalog, "browserpane-current-seed");
+    assert_eq!(catalog.schema_version, 2);
+    assert_eq!(catalog.catalog, "browserpane-v1-conformance");
     assert_eq!(catalog.vectors.len(), EXPECTED_FIXTURE_COUNT);
 
     let mut names = BTreeSet::new();

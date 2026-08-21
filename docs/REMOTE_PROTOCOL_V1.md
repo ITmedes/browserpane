@@ -1,8 +1,9 @@
 # BrowserPane Remote Protocol Version 1
 
 Status: normative BrowserPane wire contract baseline, published 2026-08-21.
-Runtime negotiation and strict v1 enforcement are not implemented by this
-slice; see [Compatibility and rollout](#compatibility-and-rollout).
+Bounded Rust and TypeScript negotiation codecs and pure selection are
+implemented, but runtime negotiation and strict v1 enforcement are not; see
+[Compatibility and rollout](#compatibility-and-rollout).
 
 ## 1. Scope and language
 
@@ -101,8 +102,8 @@ download messages even if those wire capabilities were negotiated.
 
 ## 5. Negotiation
 
-Version 1 reserves three control tags for negotiation. The later runtime
-negotiation slices MUST use these exact assignments and layouts.
+Version 1 assigns three control tags to the shared negotiation codecs. Later
+runtime negotiation slices MUST use these exact assignments and layouts.
 
 | Tag | Message | Direction | Layout and length |
 | --- | --- | --- | --- |
@@ -401,10 +402,11 @@ bytes. No protocol error is echoed back as unbounded data.
 
 ## 13. Compatibility and rollout
 
-Issue #263 publishes the contract and vector baseline only. It does **not**
-claim that current gateway or browser binaries perform the v1 handshake. The
-codec, state-machine, browser, fuzz, and real-stack rollout work is sequenced in
-issues #264–#268 under program #175.
+Issue #263 published the contract and original vector baseline. Issue #264 adds
+the bounded codecs, pure selector, and negotiation vectors without wiring them
+into a connection. Current gateway and browser binaries therefore still do
+**not** perform the v1 handshake. Gateway state, browser state, fuzzing, and
+real-stack rollout remain sequenced in issues #265–#268 under program #175.
 
 | Gateway | Client | Required result |
 | --- | --- | --- |
@@ -439,19 +441,30 @@ failure names only and contains no resource IDs or payload-derived labels.
 
 The checked-in catalog at
 `code/shared/bpane-protocol/tests/fixtures/wire-fixtures.json` has schema version
-`1` and catalog name `browserpane-current-seed`. It contains exactly the 15
-original synthetic byte sequences. Each vector records a unique name,
-direction, transport, channel, sorted capability list, exact lowercase wire
-hex, and one expected outcome:
+`2` and catalog name `browserpane-v1-conformance`. It retains all 15 original
+synthetic byte sequences and adds 41 negotiation-message vectors plus 10 pure
+selection/selection-validation vectors. The 41 negotiation frames cover the
+three message families, all nine rejection values, exact minimum and maximum
+boundaries, and fixed malformed, truncated, trailing, oversized, canonical,
+dependency, and registry outcomes. The selection cases cover highest-common
+selection, deterministic capability intersection, unknown optional tolerance,
+required capability rejection, downgrade refusal, and reply mismatch.
+
+Each original vector records a unique name, direction, transport, channel,
+sorted capability list, exact lowercase wire hex, and one expected outcome:
 
 - `valid` plus a stable message classification; or
 - `invalid` plus a stable error classification.
 
-Rust and TypeScript tests enumerate the entire catalog, reject duplicate or
-malformed metadata, route every vector through production parsing boundaries,
-and compare the same outcome classes. Adding an entry without teaching both
-consumers to classify it fails both suites. These 15 seeds are a regression
-baseline, not complete protocol coverage or interoperability proof.
+Each negotiation vector records a unique name, direction, exact complete
+control-frame hex, and either exact decoded fields or a stable failure. Each
+selection vector records the offer, local support, operation, optional reply,
+and exact selection or rejection. Rust and TypeScript enumerate the entire
+66-case catalog, reject unsupported schema versions and unknown outcomes, route
+wire entries through the reliable-frame boundary, reproduce every valid byte
+sequence, and compare the same selection and error results. The 15 retained
+seeds remain a current-profile regression baseline; the expanded corpus and
+isolated codecs are not deployed negotiation or broad interoperability proof.
 
 ## 15. Change and deprecation policy
 

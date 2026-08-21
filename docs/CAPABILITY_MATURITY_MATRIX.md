@@ -26,7 +26,7 @@ capability.
 | --- | --- | --- | --- |
 | Linux/Chromium browser runtime | Prototype | `bpane-host`, typed broker contract/policy, gateway-isolated Docker-host topology, restart/storage/compose/session smokes | #66 deployment packaging, #168 |
 | Tile-first remote rendering and ROI H.264 | Prototype | `bpane-protocol`, host capture, TypeScript compositors, media tests | #175, #168, #169 |
-| BrowserPane remote protocol | Prototype | Normative v1 contract, schema-versioned 15-vector current baseline exhaustively classified by Rust and TypeScript, and existing local connection smokes | #264-#268 negotiation, enforcement, fuzzing, and compatibility qualification under #175 |
+| BrowserPane remote protocol | Prototype | Normative v1 contract; schema-v2 66-case shared current/negotiation/selection corpus; byte-identical bounded Rust/TypeScript negotiation codecs and pure selector; existing legacy connection smokes | #265-#268 runtime enforcement, fuzzing, and compatibility qualification under #175 |
 | Shared live sessions and reconnect | Prototype | gateway session hub, client session tests, multisession/reconnect smokes | #169, #178 |
 | Owner-scoped control API | Prototype | 144 governed OpenAPI operations, generated classification inventory, 22 executable examples, Axum route recognition, semantic diff, and contract-derived admin-new API/coverage/docs companions | #75 release compatibility; domain and production gates |
 | Projects and policy bindings | Prototype | API/store resources and admin-new project views | #161, #176, #79 |
@@ -84,6 +84,7 @@ Claims must use the exact maturity language. In particular:
   are deferred and are not Phase 0 claims.
 - Autonomous self-healing and autonomous high-impact decisions remain
   Hypotheses/non-goals rather than current promises.
-- The custom protocol and its BrowserPane-specific v1 contract baseline are
-  implemented, but deployed negotiation, conformance, broad compatibility, or
-  standard claims require the remaining #264-#268 work under #175.
+- The custom protocol, BrowserPane-specific v1 contract, isolated negotiation
+  codecs, selector, and shared conformance corpus are implemented, but deployed
+  negotiation, broad compatibility, or standard claims require the remaining
+  #265-#268 work under #175.

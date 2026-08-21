@@ -291,17 +291,18 @@ Issue #175 owns the BrowserPane remote protocol program contract but is not an
 implementation target. Focused issues #263-#268 own, in order, the normative
 contract/current-vector baseline, negotiation codecs/vectors, gateway
 enforcement, browser enforcement, malformed/fuzz evidence, and final Compose/
-Admin-New compatibility qualification. The current tree already has 15 shared
-JSON seeds in schema version 1. Rust and TypeScript now enumerate all 15,
-validate the same catalog metadata, route every entry through production parser
-boundaries, and assert the same stable valid/invalid outcome classification.
-The normative assignments and legacy claim boundary are published in
-`REMOTE_PROTOCOL_V1.md`. The Rust crate retains property round trips, but no
-parser fuzz target or runtime handshake exists yet and the current browser
-still ignores `SessionReady.version`. `BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md`
-is the program contract and the six child plans define executable validation
-boundaries. Until #268 passes, the v1 contract and current seeds are not a broad
-compatibility promise.
+Admin-New compatibility qualification. The schema-v2 shared JSON corpus retains
+the original 15 current seeds and adds 41 exact negotiation-message frames plus
+10 pure selection/validation cases. Rust and TypeScript enumerate all 66 cases,
+reject unsupported schemas and outcomes, reproduce valid bytes, and assert the
+same stable selections and failures. The normative assignments and legacy
+claim boundary are published in `REMOTE_PROTOCOL_V1.md`. The Rust crate retains
+property round trips and both languages now implement the isolated bounded
+negotiation codec and selector, but no parser fuzz target or runtime handshake
+exists yet and the current browser still ignores `SessionReady.version`.
+`BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md` is the program contract and the six
+child plans define executable validation boundaries. Until #268 passes, the v1
+contract and conformance corpus are not a broad compatibility promise.
 
 ## Current Admin-New Smoke Coverage
 

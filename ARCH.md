@@ -853,11 +853,12 @@ services and supports `no_std` with `alloc`. The browser client implements the
 corresponding codec in TypeScript; it does not consume a Rust/WASM build of the
 crate. [The BrowserPane v1 wire contract](docs/REMOTE_PROTOCOL_V1.md) is the
 normative language-neutral definition of framing, current messages, numeric
-registries, limits, future negotiation, failure, and legacy compatibility
-rules. The current 15-vector seed catalog is schema-versioned and exhaustively
-classified by both languages. Runtime negotiation, expanded conformance,
-fuzzing, and real gateway/client compatibility qualification remain sequenced
-under issue #175. See ADR 0003.
+registries, limits, negotiation, failure, and legacy compatibility rules. Rust
+and TypeScript now expose separate bounded `ClientHello`, `ServerSelection`,
+and `ProtocolReject` codecs plus pure highest-common selection. Their shared
+schema-v2 corpus retains 15 current seeds and adds 41 exact negotiation frames
+and 10 selection cases. Runtime negotiation, fuzzing, and real gateway/client
+compatibility qualification remain sequenced under issue #175. See ADR 0003.
 
 **Frame envelope:**
 ```
@@ -883,11 +884,12 @@ All integers little-endian. Max payload 16 MiB. No JSON, no protobuf, no serde.
 | 0x0A | Control | Stream | Bidi | Resize, ping, session, bitrate hints |
 | 0x0B | Tiles | Stream | S->C | Tile rendering commands |
 
-**Current control message types (9 variants):**
+**Current runtime control message types (9 variants):**
 ResolutionRequest, ResolutionAck, SessionReady, Ping, Pong,
-KeyboardLayoutInfo, BitrateHint, ResolutionLocked, ClientAccessState. The v1
-contract additionally reserves ClientHello, ServerSelection, and ProtocolReject
-tags for the later negotiation implementation.
+KeyboardLayoutInfo, BitrateHint, ResolutionLocked, ClientAccessState. The
+isolated v1 negotiation codec additionally implements ClientHello,
+ServerSelection, and ProtocolReject on the control channel. Runtime dispatch
+does not consume those messages until #265 and #266.
 
 **Tile message types (12 variants):**
 GridConfig, CacheHit, CacheMiss, Fill, Qoi, Zstd, VideoRegion, BatchEnd,
@@ -901,9 +903,9 @@ nal_id(u32) + fragment_seq(u16) + fragment_total(u16) + is_keyframe(u8)
 
 Delta fragments carry that payload directly in WebTransport datagrams.
 Keyframe fragments carry it inside reliable Video-channel envelopes. This
-documented v1 contract is published, but the current runtime remains on its
-pre-contract profile until the #264-#268 negotiation and qualification slices
-land.
+documented v1 contract and isolated negotiation codecs are published, but the
+current runtime remains on its pre-contract profile until the #265-#268
+enforcement and qualification slices land.
 
 ---
 

@@ -18,6 +18,8 @@ export type WireFixtureCatalog = {
   schema_version: number;
   catalog: string;
   vectors: WireFixture[];
+  negotiation_vectors: unknown[];
+  selection_vectors: unknown[];
 };
 
 const FIXTURE_PATH = `${process.cwd()}/../../shared/bpane-protocol/tests/fixtures/wire-fixtures.json`;
@@ -25,7 +27,9 @@ let cache: WireFixtureCatalog | null = null;
 
 export function wireFixtureCatalog(): WireFixtureCatalog {
   if (!cache) {
-    cache = parseCatalog(JSON.parse(readFileSync(FIXTURE_PATH, 'utf8')) as unknown);
+    cache = new WireFixtureCatalogParser().parse(
+      JSON.parse(readFileSync(FIXTURE_PATH, 'utf8')) as unknown,
+    );
   }
   return cache;
 }
@@ -38,19 +42,25 @@ export function wireFixture(name: string): Uint8Array {
   return decodeHex(fixture.name, fixture.wire_hex);
 }
 
-function parseCatalog(input: unknown): WireFixtureCatalog {
-  if (!isRecord(input)
-    || input.schema_version !== 1
-    || input.catalog !== 'browserpane-current-seed'
-    || !Array.isArray(input.vectors)) {
-    throw new Error('invalid wire fixture catalog header');
-  }
+export class WireFixtureCatalogParser {
+  public parse(input: unknown): WireFixtureCatalog {
+    if (!isRecord(input)
+      || input.schema_version !== 2
+      || input.catalog !== 'browserpane-v1-conformance'
+      || !Array.isArray(input.vectors)
+      || !Array.isArray(input.negotiation_vectors)
+      || !Array.isArray(input.selection_vectors)) {
+      throw new Error('invalid wire fixture catalog header');
+    }
 
-  return {
-    schema_version: input.schema_version,
-    catalog: input.catalog,
-    vectors: input.vectors.map(parseVector),
-  };
+    return {
+      schema_version: input.schema_version,
+      catalog: input.catalog,
+      vectors: input.vectors.map(parseVector),
+      negotiation_vectors: input.negotiation_vectors,
+      selection_vectors: input.selection_vectors,
+    };
+  }
 }
 
 function parseVector(input: unknown, index: number): WireFixture {

@@ -9,6 +9,7 @@
 //! - channel identifiers in [`ChannelId`]
 //! - typed protocol messages in [`types`]
 //! - frame envelope parsing and serialization in [`frame`]
+//! - bounded negotiation codecs and pure selection in [`NegotiationMessage`]
 //!
 //! # Compatibility policy
 //!
@@ -68,5 +69,9 @@ pub mod frame;
 pub mod types;
 
 pub use channel::ChannelId;
-pub use frame::{Frame, FrameDecoder, FrameDecoderError, FrameError};
+pub use frame::{
+    ClientHello, Frame, FrameDecoder, FrameDecoderError, FrameError, NegotiationCodecError,
+    NegotiationMessage, ProtocolCapability, ProtocolFailure, ProtocolNegotiator, ProtocolSupport,
+    ProtocolSupportError, ServerSelection,
+};
 pub use types::*;

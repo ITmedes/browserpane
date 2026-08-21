@@ -28,9 +28,25 @@ export { fnvHash } from './hash.js';
 export { domCodeToEvdev, buildModifiers, normalizeScroll, createScrollState } from './input-map.js';
 export { NalReassembler, parseTileInfo, getNalType } from './nal.js';
 export { encodeFrame, parseFrames } from './protocol.js';
+export {
+  PROTOCOL_CAPABILITY,
+  PROTOCOL_FAILURE_ID,
+  ProtocolNegotiationCodec,
+  ProtocolNegotiationError,
+  ProtocolNegotiator,
+  ProtocolSupportError,
+} from './protocol.js';
 export type { TileInfo, ReassembledNal } from './nal.js';
 export type { ScrollState } from './input-map.js';
 export type { ParsedFrame } from './protocol.js';
+export type {
+  ClientHello,
+  NegotiationMessage,
+  ProtocolCapability,
+  ProtocolFailureCode,
+  ProtocolSupport,
+  ServerSelection,
+} from './protocol.js';
 export { TileCompositor } from './tile-compositor.js';
 export { TileCache, parseTileMessage, CH_TILES } from './tile-cache.js';
 export type { TileCommand, TileGridConfig } from './tile-cache.js';

@@ -3,13 +3,13 @@
 ## Metadata
 
 - Issue: `#264`
-- State: Qualified
+- State: Review
 - Owner: BrowserPane maintainers
 - Lane: Production
 - Target gate: Production Baseline codec/conformance checkpoint
 - Depends on: closed `#263`
 - Parent program: `#175`; protocol slice 2 of 6
-- Last verified commit/date: `e21e2206a93a` / 2026-08-21
+- Last verified commit/date: `7364e6a4` / 2026-08-22
 
 ## Business Outcome
 
@@ -24,9 +24,10 @@ capability or downgrade offer maps to the same typed rejection.
 
 ## Current Evidence
 
-#263 will freeze the numeric and semantic contract. Current code has envelope
-and typed-message codecs but no `ClientHello`, selection, rejection, capability
-registry implementation, or shared negotiation vectors.
+#263 froze the numeric and semantic contract through PR #270. At this slice's
+`9f5ce6dd29e5` base, code has envelope and typed-message codecs but no
+`ClientHello`, selection, rejection, capability-registry implementation, or
+shared negotiation vectors.
 
 ## Scope
 
@@ -138,5 +139,38 @@ not that deployed gateway/client negotiation or rolling compatibility exists.
 
 ## Evidence Record
 
-Record PR/commit, codec API review, vector counts, cross-language bytes/errors,
-coverage, commands/results, public-export decision, and residual gaps.
+- Branch `codex/BPANE-00264-protocol-negotiation-codecs`; implementation commit
+  `7364e6a4`.
+- Rust and TypeScript expose strict bounded codecs, typed payload-free failures,
+  and the pure highest-common selector. The TypeScript codec and selector are
+  intentional public protocol exports; neither runtime connection path consumes
+  them in this slice.
+- Shared schema v2 contains 66 enumerated cases: the 15 preserved envelope/
+  current-message vectors, 41 negotiation wire vectors, and 10 pure selection
+  vectors. Both languages reproduce valid bytes and fixed invalid outcomes.
+- `cargo fmt --all -- --check`: PASS.
+- `cargo clippy -p bpane-protocol --all-targets --all-features -- -D warnings`:
+  PASS.
+- `cargo check -p bpane-protocol --no-default-features`: PASS.
+- `RUSTDOCFLAGS='-D warnings' cargo doc -p bpane-protocol --no-deps`: PASS.
+- `cargo test -p bpane-protocol`: PASS, 139 tests including unit, integration,
+  shared-vector, property, and documentation tests.
+- `npx tsc --noEmit`: PASS in `code/web/bpane-client`.
+- `npm test`: PASS in `code/web/bpane-client`, 91 files / 695 tests.
+- `npm run test:coverage`: PASS in `code/web/bpane-client`; 93.21% statements,
+  88.32% branches, 93.56% functions, and 93.21% lines.
+- `npm run build`: PASS in `code/web/bpane-client`.
+- `npm run smoke:test-embed-lifecycle -- --headless --connect-timeout-ms 60000`:
+  PASS against the local Compose stack, including cleanup.
+- `node scripts/check-repository-documents.mjs`: PASS, 114 Markdown files,
+  19 YAML files, and 3 workflow files.
+- `node scripts/validate.mjs --stage repository-documents`: PASS.
+- `node scripts/validate.mjs --profile fast`: PASS, all 44 selected stages.
+- `git diff --check`: PASS.
+- API/OpenAPI, persistence, Admin-New, deployment, runtime behavior, and
+  authorization are N/A for this isolated codec slice. README, architecture,
+  protocol, validation, maturity, and risk documentation are aligned. No
+  dependency manifest changed.
+- No #264-required validation is deferred. Runtime negotiation integration,
+  fuzz campaigns, and real rolling-compatibility matrices remain accepted
+  non-goals owned by #265 through #268.

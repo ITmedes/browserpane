@@ -143,10 +143,11 @@ Current support and scope:
   are planned under [issue #171](https://github.com/ITmedes/browserpane/issues/171)
   and are not current capabilities.
 - Remote protocol: the integrated BrowserPane protocol is implemented and its
-  normative v1 wire contract plus 15-vector current baseline are published in
-  [docs/REMOTE_PROTOCOL_V1.md](docs/REMOTE_PROTOCOL_V1.md). Runtime version
-  negotiation, expanded conformance/fuzz evidence, and real rolling-
-  compatibility qualification remain sequenced under
+  normative v1 wire contract plus schema-v2 66-case shared corpus are published
+  in [docs/REMOTE_PROTOCOL_V1.md](docs/REMOTE_PROTOCOL_V1.md). Rust and
+  TypeScript expose byte-identical bounded negotiation codecs and pure
+  selection without changing connections. Runtime negotiation, fuzz evidence,
+  and real rolling-compatibility qualification remain sequenced under
   [issue #175](https://github.com/ITmedes/browserpane/issues/175).
 - Platform telemetry: the gateway exposes aggregate OpenMetrics request and
   runtime-capacity signals at `/metrics`, together with label-free workflow,
@@ -238,11 +239,13 @@ Rust `bpane-protocol` crate and the corresponding TypeScript client codec.
 - Desktop audio, microphone, camera, and H.264 keyframes also use the reliable
   envelope; H.264 delta fragments use raw WebTransport datagrams.
 - [The normative BrowserPane v1 contract](docs/REMOTE_PROTOCOL_V1.md) freezes
-  channel/message IDs, framing, limits, future negotiation assignments, and
-  the legacy compatibility vocabulary. Both languages exhaustively consume the
-  same versioned 15-vector current seed catalog. This is a contract baseline,
-  not deployed runtime negotiation or broad interoperability evidence; those
-  remaining gates stay under
+  channel/message IDs, framing, limits, negotiation assignments, and the legacy
+  compatibility vocabulary. Both languages exhaustively consume the same
+  schema-v2 corpus: 15 retained current seeds, 41 negotiation frames, and 10
+  selection cases. The TypeScript public facade intentionally exports the
+  isolated codec, selector, data types, and typed errors. This is not deployed
+  runtime negotiation or broad interoperability evidence; those remaining
+  gates stay under
   [issue #175](https://github.com/ITmedes/browserpane/issues/175).
 
 ## Local Development
