@@ -841,14 +841,18 @@ The following cross-cutting gaps have focused owners:
 1. `#47` freezes Playwright TypeScript, Git commit-pinned source, entrypoint,
    schemas, resource bindings, credential behavior, and regression evidence as
    one supported workflow package.
-2. `#172` exposes that package as one project-scoped, service-principal-
-   authorized asynchronous BPM activity using polling, schema enforcement,
-   idempotency, typed outcomes, timeout/cancel, side-effect certainty, and
-   bounded results/artifacts.
+2. `#172` is complete through PR #250 and exposes that package as one
+   project-scoped, service-principal-authorized asynchronous BPM activity using
+   polling, schema enforcement, idempotency, typed outcomes, timeout/cancel,
+   side-effect certainty, and bounded results/artifacts.
 3. `#174` selects and operates one real process under a bounded agreement and
-   records Stop, bounded Operate, or Phase 1.
-4. `#180` runs in parallel and must complete before an external Pilot relies on
-   BrowserPane's open-source posture.
+   records Stop, bounded Operate, or Phase 1. It remains externally deferred
+   until the real activity, accountable owners, deployment, and data/threat
+   profile are selected; automation must not infer them.
+4. `#180` is explicitly eligible in parallel and is the next requirements
+   candidate while `#174` waits. It must complete before an external Pilot
+   relies on BrowserPane's open-source posture; engineering consistency and
+   legal approval must remain separately stated.
 
 BrowserPane subprocesses, Human Handoff, Teach Mode, workflow training or
 generation, and automatic repair are not Phase 0 requirements. Challenges end

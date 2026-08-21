@@ -24,6 +24,11 @@ separate bounded requirements-specification session.
   dependencies, broad scope, and overlapping active work as blockers, not
   details to infer. Distinguish them from evidence-backed omissions or stale
   issue/plan statements that a separate specification session can resolve.
+- A blocker on the first documented candidate does not authorize arbitrary
+  backlog skipping. You may evaluate another candidate only when the canonical
+  roadmap explicitly identifies it as parallel work or as the fallback while
+  the first candidate waits. Retain the deferred issue and exact blocker in
+  the result reason and summary; do not mutate or promote the deferred issue.
 - Do not expose credentials, local tokens, private run logs, or sensitive
   environment data in comments or output.
 
@@ -48,13 +53,18 @@ separate bounded requirements-specification session.
 2. Prefer the documented next slice, not the easiest or newest issue.
 3. Read the complete live issue body, labels, comments, linked pull requests,
    and named dependencies.
-4. Find exactly one focused plan matching
-   `docs/BPANE-<five-digit-issue>_*_PLAN.md`. Historical or umbrella plans do
-   not satisfy this requirement.
+4. Find focused plans matching `docs/BPANE-<five-digit-issue>_*_PLAN.md`.
+   Exactly one is required for promotion. Zero plans may qualify only for
+   `NEEDS_SPECIFICATION` when the missing focused plan is itself the concrete
+   omission and the issue plus canonical repository evidence are sufficient to
+   create it without inventing policy. Multiple plans remain an ambiguity.
 5. Confirm no open issue or pull request owns materially overlapping scope.
-6. If ordering is ambiguous, a decision or dependency remains unresolved, or
-   no candidate can safely progress, return `NO_QUALIFICATION` with the
-   concrete blocker.
+6. If the first candidate is blocked, inspect another only when current
+   canonical documents explicitly call it parallel or fallback work. Do not
+   infer that relationship from labels, issue number, or convenience.
+7. If ordering is ambiguous, a decision or dependency remains unresolved for
+   every explicitly eligible candidate, or no candidate can safely progress,
+   return `NO_QUALIFICATION` with the concrete blocker.
 
 ## Phase 3: Apply The Readiness Contract
 
@@ -83,20 +93,32 @@ stale or missing requirement in this session.
 Classify a failed readiness check as `NEEDS_SPECIFICATION` only when all of the
 following are true:
 
-- exactly one correctly ordered Qualified issue and focused plan own the slice;
+- exactly one correctly ordered Qualified issue owns the slice, and either one
+  focused plan exists or creating that one missing plan is the reported gap;
 - the business direction, product boundary, and implementation dependencies
   are decided;
 - current code, issues, dependency outcomes, and canonical documents provide
   enough evidence to close the gaps without inventing policy;
 - the gaps are concrete documentation/requirements omissions, stale facts,
   missing explicit N/A decisions, or unclear boundaries to later owner issues;
-- one documentation PR can reconcile the issue and directly related plans
-  without product implementation or roadmap reprioritization.
+- one documentation PR can reconcile the issue and directly related plans, or
+  create the one missing focused plan, without product implementation or
+  roadmap reprioritization.
 
-Return `NO_QUALIFICATION`, not `NEEDS_SPECIFICATION`, when the missing material
-requires a maintainer or stakeholder decision, target selection, legal or
-security judgment, dependency implementation, issue split/merge, ownership
-change, or roadmap ordering decision.
+Target selection is not automatically a specification gap. A real customer or
+Pilot activity, named stakeholder, production deployment acceptance, target
+credential, legal approval, or security/data acceptance remains external and
+must not be invented. Defer that candidate when the decision is required to
+begin it. A separate, explicitly documented parallel candidate may still be
+assessed, and its internal engineering scope may proceed while a clearly
+separated external-use gate remains open.
+
+Return `NO_QUALIFICATION`, not `NEEDS_SPECIFICATION`, when the selected
+candidate's missing material requires a maintainer or stakeholder decision,
+real target selection, legal or security acceptance, dependency
+implementation, issue split/merge, ownership change, or roadmap ordering
+decision. This does not prevent assessment of a different candidate that the
+canonical roadmap explicitly authorizes in parallel or as fallback work.
 
 For `NEEDS_SPECIFICATION`, return the selected issue number and a concise but
 complete actionable reason naming each gap and its evidence source. Do not
