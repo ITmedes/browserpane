@@ -336,6 +336,20 @@ if AUTO_MERGE=invalid bash -c "source '$loop'; validate_config" >/dev/null 2>&1;
 fi
 pass "invalid boolean configuration is rejected"
 
+if ADMIN_MERGE=invalid bash -c "source '$loop'; validate_config" >/dev/null 2>&1; then
+  fail "invalid admin-merge configuration is rejected"
+fi
+pass "invalid admin-merge configuration is rejected"
+
+if AUTO_MERGE=0 ADMIN_MERGE=1 bash -c "source '$loop'; validate_config" >/dev/null 2>&1; then
+  fail "admin merge without automatic merge is rejected"
+fi
+pass "admin merge requires automatic merge"
+
+AUTO_MERGE=1 ADMIN_MERGE=1 bash -c "source '$loop'; validate_config" \
+  || fail "valid admin-merge configuration is accepted"
+pass "valid admin-merge configuration is accepted"
+
 if AUTO_QUALIFY=invalid bash -c "source '$loop'; validate_config" >/dev/null 2>&1; then
   fail "invalid auto-qualification configuration is rejected"
 fi
@@ -377,6 +391,14 @@ pass "approved GitHub identity is accepted"
 
 github_permission_allowed ADMIN || fail "admin repository permission is accepted"
 pass "admin repository permission is accepted"
+
+admin_merge_permission_allowed ADMIN || fail "admin merge accepts admin permission"
+pass "admin merge accepts admin permission"
+
+if admin_merge_permission_allowed WRITE; then
+  fail "admin merge rejects write permission"
+fi
+pass "admin merge rejects write permission"
 
 if github_permission_allowed READ; then
   fail "read-only repository permission is rejected"
@@ -420,6 +442,27 @@ assert_eq "merge-conflict" "$(merge_gate_from_json <<< "$content_conflict")" "co
 assert_eq "base-behind" "$(merge_gate_from_json <<< "$base_behind")" "base-behind state is explicit"
 assert_eq "merge-state-unknown" "$(merge_gate_from_json <<< "$unknown_merge")" "unknown merge state fails closed"
 
+original_admin_merge="$ADMIN_MERGE"
+ADMIN_MERGE=0
+assert_eq "normal" "$(merge_mode_for_gate ready)" "ready gate selects normal merge"
+if merge_mode_for_gate review-required >/dev/null; then
+  fail "required review does not select admin merge by default"
+fi
+pass "required review does not select admin merge by default"
+
+ADMIN_MERGE=1
+assert_eq "admin" "$(merge_mode_for_gate review-required)" "required review selects explicit admin merge"
+assert_eq "admin" "$(merge_mode_for_gate merge-policy-blocked)" "policy block selects explicit admin merge"
+if merge_mode_for_gate changes-requested >/dev/null; then
+  fail "requested changes cannot select admin merge"
+fi
+pass "requested changes cannot select admin merge"
+if merge_mode_for_gate merge-conflict >/dev/null; then
+  fail "content conflict cannot select admin merge"
+fi
+pass "content conflict cannot select admin merge"
+ADMIN_MERGE="$original_admin_merge"
+
 if printf '%s\n' '{"mergeable":' | merge_gate_from_json >/dev/null 2>&1; then
   fail "malformed merge snapshot is rejected"
 fi
@@ -457,6 +500,15 @@ if printf '%s\n' '["README.md","docs/CURRENT_CONTEXT.md"]' | ci_builder_paths_ch
 fi
 pass "unrelated paths do not trigger the CI Rust builder"
 
+unset -f gh
+
+gh() { printf '%s\n' "$*"; }
+assert_eq "pr merge 999 --squash --delete-branch" "$(land 999 normal)" "normal land omits admin bypass"
+assert_eq "pr merge 999 --squash --delete-branch --admin" "$(land 999 admin)" "admin land is explicit"
+if land 999 invalid >/dev/null 2>&1; then
+  fail "unknown land mode is rejected"
+fi
+pass "unknown land mode is rejected"
 unset -f gh
 
 original_lock="$LOCK_DIR"
