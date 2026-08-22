@@ -23,7 +23,9 @@ will watch the next check set.
 - If the PR handoff declares `kind: specification`, preserve the specification
   boundary: repair documentation and issue/plan consistency only, do not edit
   product code, promote the issue, or convert the PR into implementation.
-- Do not claim post-merge Compose evidence as PR evidence.
+- Treat a manually dispatched Compose run as PR evidence only when the appended
+  context and live Actions metadata both bind it to the exact current PR head.
+  Do not claim post-merge Compose evidence as PR evidence.
 
 ## Inspect Before Changing
 
@@ -33,9 +35,11 @@ will watch the next check set.
    it is not explicitly approved or cannot be established.
 3. Run `git status --short --branch`. Check out the PR branch only if the tree
    is clean. Pull it with fast-forward only.
-4. Inspect live check metadata and failing logs with `gh pr checks`,
+4. Inspect live check metadata and failing logs with `gh pr checks`, the exact
+   pre-merge Compose run named in the context when present,
    `gh run view <id> --log-failed`, annotations, and uploaded diagnostics where
-   useful. Do not rely only on the appended snapshot.
+   useful. Verify that any branch Compose run still matches the current PR head;
+   do not rely only on the appended snapshot.
 5. Reproduce with the narrowest faithful repository command before changing
    code whenever the environment allows.
 6. Classify the failure:

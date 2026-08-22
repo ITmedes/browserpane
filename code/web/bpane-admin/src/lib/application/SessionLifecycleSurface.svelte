@@ -260,7 +260,7 @@
   }
 
   function syncEmbeddedBrowserAfterDisconnect(nextStatus: SessionStatus): void {
-    if (connected && nextStatus.connection_counts.total_clients === 0) {
+    if (connected && nextStatus.connection_counts.interactive_clients === 0) {
       onDisconnectEmbeddedBrowser();
     }
   }

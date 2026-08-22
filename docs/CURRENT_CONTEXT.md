@@ -1,8 +1,9 @@
 # BrowserPane Current Context
 
-Last synchronized: 2026-08-21 after the #175 protocol program was split into
-six dependency-ordered implementation issues `#263` through `#268` from
-`main` at `e21e2206`
+Last synchronized: 2026-08-22 after protocol slices `#263` through `#265`
+merged and the Codex loop's exact-head Compose gate entered implementation as
+`#273` from `main` at `6dd4838c`. Its first branch run exposed the inherited
+session-readiness smoke regression now tracked by `#275`.
 
 This is the first local document to read when starting a clean BrowserPane
 session. It records current product decisions, delivery order, and repository
@@ -10,7 +11,7 @@ state. Detailed requirements remain in the linked domain and plan documents.
 
 ## Current Baseline
 
-- Canonical base: `main` at `e21e2206`; #172 is merged through PR #250, its
+- Canonical base: `main` at `6dd4838c`; #172 is merged through PR #250, its
   smoke stabilization is merged through PR #256, and #180 requirements are
   specified through PR #259 without resolving the external legal decision.
 - `/admin-new/` is the default operator console. `/admin/` is a compatibility
@@ -22,8 +23,10 @@ state. Detailed requirements remain in the linked domain and plan documents.
   Prometheus starter alerts/runbook, and Grafana operations dashboard are
   merged through PRs #224, #226, #228, #230, #232, and #234.
 - Compose CI reliability was restored through PR #236. The post-merge main run
-  passed gateway default, gateway docker-pool, browser/integration, unified
-  admin, and compatibility admin jobs.
+  established the five-lane baseline. Main commit `6dd4838c` subsequently
+  exposed transport-versus-application readiness races in browser/CLI,
+  compatibility admin, session-file, and MCP smokes; #275 owns that bounded
+  correction while #273 keeps the repair on an open PR.
 - The supported immutable Playwright workflow package contract is frozen
   through #47/PR #242, including publication compatibility, Admin-New/CLI
   visibility, worker evidence redaction, and live package regression evidence.
@@ -101,8 +104,9 @@ waits for an accountable maintainer and legal/business reviewer to record the
 decision.
 
 When both `#174` and `#180` are externally deferred, the finite qualification
-fallback is the ordered protocol sequence `#263` -> `#264` -> `#265` -> `#266`
--> `#267` -> `#268`, followed by `#124`. `#175` is now the non-executable
+fallback is the ordered protocol sequence `#263` (complete) -> `#264`
+(complete) -> `#265` (complete) -> `#266` -> `#267` -> `#268`, followed by
+`#124`. `#175` is now the non-executable
 program tracker and `BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md` is the program
 contract. Each child has a focused plan and must close before its successor can
 enter Ready. `#124` adds the Admin-New session-template catalog and is
@@ -202,7 +206,9 @@ code.
   Qualified and a later post-merge iteration must reassess it before product
   implementation. The loop never creates product issues or reprioritizes the
   roadmap. Start it only from clean, synchronized `main` with an approved
-  project GitHub identity; automatic merging remains opt-in. Local work stops
+  project GitHub identity; automatic merging remains opt-in. In automatic mode,
+  exact-head Compose must pass while the PR is still open and repairable, and
+  the exact merge SHA is validated again after publication. Local work stops
   below `MIN_FREE_DISK_GB` (50 GiB by default) without deleting operator data.
 
 ## Fresh Session Checklist

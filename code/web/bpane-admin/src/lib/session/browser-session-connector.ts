@@ -18,6 +18,11 @@ export type BrowserSessionConnectorOptions = {
   readonly certHashUrl?: string;
 };
 
+export type BrowserSessionConnectionCallbacks = {
+  readonly onDisconnect?: (reason: string) => void;
+  readonly onError?: (error: Error) => void;
+};
+
 export class BrowserSessionConnector {
   readonly #controlClient: ControlClient;
   readonly #sdkProvider: BrowserSessionSdkProvider;
@@ -33,6 +38,7 @@ export class BrowserSessionConnector {
     session: SessionResource,
     container: HTMLElement,
     preferences: BrowserSessionConnectPreferences = DEFAULT_BROWSER_SESSION_CONNECT_PREFERENCES,
+    callbacks: BrowserSessionConnectionCallbacks = {},
   ): Promise<LiveBrowserSessionConnection> {
     resetSessionContainer(container);
     const access = await this.#controlClient.issueSessionAccessToken(session.id);
@@ -51,6 +57,8 @@ export class BrowserSessionConnector {
         clientRole: 'interactive',
         certHashUrl: this.#certHashUrl,
         ...preferences,
+        ...(callbacks.onDisconnect ? { onDisconnect: callbacks.onDisconnect } : {}),
+        ...(callbacks.onError ? { onError: callbacks.onError } : {}),
       });
     } catch (error) {
       throw browserSessionConnectError(error, gatewayUrl);

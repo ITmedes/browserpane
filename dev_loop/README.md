@@ -16,7 +16,9 @@ qualify one Qualified issue
                                            driver watches checks
                                              | red -> repair -> watch (bounded)
                                              | green/current -> review (default)
-                                             |                 or opt-in merge
+                                             | opt-in merge -> exact-head Compose
+                                             |                 | red -> repair
+                                             |                 | green -> merge
                                              + merged -> next iteration requalifies
 ```
 
@@ -71,7 +73,12 @@ AUTO_MERGE=1 ./dev_loop/loop.sh
 still needs approval, has requested changes, or is blocked by another branch
 policy remains open and stops with a specific journal outcome. Restart the
 loop after an authorized reviewer or repository administrator resolves that
-gate.
+gate. Once the merge gate is otherwise open, the driver manually dispatches
+the full `Compose` workflow against the exact PR head and merges only after it
+passes. A failed branch run enters the same bounded repair cycle as an ordinary
+PR check. Any repair, branch update, or concurrent head change invalidates the
+old Compose evidence. The merge API call also carries the tested head SHA, so a
+last-moment head change is rejected by GitHub rather than published unchecked.
 
 When the approved project identity has repository `ADMIN` permission and is
 explicitly authorized to land green/current PRs directly, opt into GitHub's
@@ -128,6 +135,7 @@ diagnostic data.
 | `AUTO_RERUN_CANCELLED` | `2` | Driver reruns for cancelled Actions runs. |
 | `SETTLE_SECONDS` | `180` | Wait for a new check set after a push/update. |
 | `SESSION_TIMEOUT_SECONDS` | `10800` | Watchdog for one Codex session. |
+| `PRE_MERGE_TIMEOUT_SECONDS` | `7200` | Maximum wait for exact-head Compose before an automatic merge. |
 | `POST_MERGE_TIMEOUT_SECONDS` | `7200` | Maximum wait per post-merge main workflow. |
 | `MIN_FREE_DISK_GB` | `50` | Minimum binary GiB available on the repository filesystem before local work; `0` explicitly disables the minimum. |
 | `AUTO_QUALIFY` | `1` | `1` audits and promotes one Qualified issue when the Ready queue is empty. |
@@ -136,6 +144,7 @@ diagnostic data.
 | `MERGE_METHOD` | `squash` | `squash`, `merge`, or `rebase`. |
 | `DEFAULT_BRANCH` | `main` | Published base branch. |
 | `BRANCH_PREFIX` | `codex/BPANE-` | Cross-process PR lock prefix. |
+| `PRE_MERGE_WORKFLOW` | `compose.yml` | Manually dispatched exact-head workflow required before automatic merge. |
 | `POST_MERGE_WORKFLOWS` | `auto` | Main workflows that must pass before the next issue; `auto` adds the Rust builder when its paths changed. |
 | `CODEX_BIN` | `codex` | Codex executable. |
 | `CODEX_SANDBOX` | `danger-full-access` | Sandbox passed to unattended `codex exec`. |
@@ -186,13 +195,18 @@ setup still supports the required work.
 - Proposal PRs use `Closes #N` only after the full bounded issue is complete.
 - Local validation uses `scripts/validate.mjs` and the repository's package and
   Compose wrappers. Exact evidence is recorded.
-- `Validation` runs on pull requests. Full `Compose` currently runs on `main`,
-  schedules, or manual dispatch, so it must be run locally when required or
-  declared as deferred/post-merge evidence.
-- In automatic-merge mode, the driver waits for `Validation` and `Compose` on
-  the exact merge SHA before it starts another issue. It also waits for the CI
-  Rust builder publication when that workflow's path filter matches the PR. A
-  failed or timed-out published-main workflow stops the loop.
+- `Validation` runs automatically on pull requests. Full `Compose` remains a
+  `main`, schedule, or manual-dispatch workflow instead of consuming runner
+  capacity for every human PR.
+- In automatic-merge mode, the driver dispatches full `Compose` against the
+  exact current PR head before merge. It adopts an existing exact-head run on
+  restart, routes red evidence to bounded repair while the PR remains open, and
+  rejects evidence from an older head.
+- After merge, the driver still waits for `Validation` and `Compose` on the
+  exact merge SHA before it starts another issue. It also waits for the CI Rust
+  builder publication when that workflow's path filter matches the PR. A
+  failed or timed-out published-main workflow remains a fail-closed stop because
+  the published commit must not be silently rewritten.
 - README, ARCH, AGENTS, OpenAPI, Admin-New, CLI, and operator documentation stay
   aligned when an implementation changes their contract.
 
@@ -235,6 +249,8 @@ The driver leaves branches and PRs intact for diagnosis:
   did not report a content conflict; inspect the live update response.
 - `draft-pr`: an interrupted proposal left an incomplete draft.
 - `ci-timeout`: the PR check set did not conclude in time.
+- `pre-merge-compose-failed`: exact-head Compose could not converge within the
+  bounded repair budget; the PR remains open and unmerged.
 - `repairs-exhausted`: the bounded repair budget was consumed.
 - `base-keeps-moving`: `main` moved repeatedly under a green PR.
 - `halted`: Codex found an ambiguous or unsafe state.
