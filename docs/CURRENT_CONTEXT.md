@@ -1,8 +1,8 @@
 # BrowserPane Current Context
 
-Last synchronized: 2026-08-22 after protocol slices `#263` through `#265` and
-the Codex loop exact-head Compose/readiness correction `#273`/`#275` merged
-through PR `#274` on `main` at `7a2fb413`.
+Last synchronized: 2026-08-22 after protocol slices `#263` through `#265`, the
+Codex loop exact-head Compose/readiness correction `#273`/`#275` merged through
+PR `#274`, and post-merge retry gap `#277` was isolated from main-run evidence.
 
 This is the first local document to read when starting a clean BrowserPane
 session. It records current product decisions, delivery order, and repository
@@ -10,7 +10,8 @@ state. Detailed requirements remain in the linked domain and plan documents.
 
 ## Current Baseline
 
-- Canonical base: `main` at `7a2fb413`; #172 is merged through PR #250, its
+- Canonical base: `main` includes documentation refresh PR #276; the latest
+  product/tooling implementation baseline is `7a2fb413`. #172 is merged through PR #250, its
   smoke stabilization is merged through PR #256, and #180 requirements are
   specified through PR #259 without resolving the external legal decision.
 - `/admin-new/` is the default operator console. `/admin/` is a compatibility
@@ -25,6 +26,10 @@ state. Detailed requirements remain in the linked domain and plan documents.
   exact-head Compose evidence before automatic merge and corrected the
   transport-versus-application readiness races in browser/CLI, compatibility
   admin, session-file, and MCP smokes. `#273` and `#275` are complete.
+- PR #274's exact-head Compose passed, but its first main Compose run failed one
+  Admin-New authenticated-route timeout. `#277` owns one bounded exact-SHA
+  post-merge failed-job retry; repeated failure remains fail-closed. This is the
+  immediate Foundation slice before protocol work resumes.
 - The supported immutable Playwright workflow package contract is frozen
   through #47/PR #242, including publication compatibility, Admin-New/CLI
   visibility, worker evidence redaction, and live package regression evidence.
@@ -102,9 +107,9 @@ waits for an accountable maintainer and legal/business reviewer to record the
 decision.
 
 When both `#174` and `#180` are externally deferred, the finite qualification
-fallback is the ordered protocol sequence `#263` (complete) -> `#264`
-(complete) -> `#265` (complete) -> `#266` -> `#267` -> `#268`, followed by
-`#124`. `#175` is the open, blocked, non-executable
+fallback is `#277`, then the ordered protocol sequence `#263` (complete) ->
+`#264` (complete) -> `#265` (complete) -> `#266` -> `#267` -> `#268`, followed
+by `#124`. `#175` is the open, blocked, non-executable
 program tracker and `BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md` is the program
 contract. Each child has a focused plan and must close before its successor can
 enter Ready. `#124` adds the Admin-New session-template catalog and is

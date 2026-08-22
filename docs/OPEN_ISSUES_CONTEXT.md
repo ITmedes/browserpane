@@ -1,9 +1,10 @@
 # Open GitHub Issues Context
 
 Created: 2026-07-10
-Revalidated: 2026-08-22 from `main` at `7a2fb413` after #273/#275 merged through
-PR #274; #174 and #180 are externally deferred, with ordered protocol issues
-#266-#268 then #124 as the finite engineering fallback
+Revalidated: 2026-08-22 after #273/#275 merged through PR #274 and #277 was
+isolated from post-merge main evidence; #174 and #180 are externally deferred,
+with #277, ordered protocol issues #266-#268, then #124 as the finite
+engineering fallback
 
 This document maps the current `docs/` workspace to the live open GitHub
 issues for `ITmedes/browserpane`. It is the bridge between the consolidated
@@ -12,7 +13,7 @@ local planning docs and the public issue tracker.
 Source check:
 
 - fetched and updated through the GitHub API on 2026-08-22,
-- 34 open issues after restoring the #175 tracker, all represented in this
+- 35 open issues after restoring the #175 tracker and adding #277, all represented in this
   documentation workspace,
 - open issue range: `#6` through `#268`,
 - focused docs-derived implementation issues created on 2026-07-10: `#145`
@@ -112,6 +113,7 @@ Source check:
 | `#266` Browser protocol negotiation | `BPANE-00266_BROWSER_PROTOCOL_NEGOTIATION_PLAN.md`, `BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md`, `VALIDATION_MATRIX.md` | Protocol slice 4 after #265 | Delay browser readiness, gate capabilities, preserve checked old gateways, and expose typed SDK errors. |
 | `#267` Protocol fuzzing and malformed-state coverage | `BPANE-00267_PROTOCOL_FUZZING_PLAN.md`, `BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md`, `VALIDATION_MATRIX.md` | Protocol slice 5 after #266 | Add deterministic corpus replay, four Rust fuzz targets, sanitizer evidence, and isolation tests. |
 | `#268` Protocol compatibility qualification | `BPANE-00268_PROTOCOL_COMPATIBILITY_QUALIFICATION_PLAN.md`, `BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md`, `VALIDATION_MATRIX.md` | Protocol slice 6 after #267 | Prove rolling upgrade/rollback, current features, Admin-New diagnostics, and close #175. |
+| `#277` Exact-SHA post-merge workflow retry | `BPANE-00277_POST_MERGE_WORKFLOW_RETRY_PLAN.md`, `BPANE-00273_EXACT_HEAD_COMPOSE_GATE_PLAN.md`, `DELIVERY_ROADMAP.md` | Immediate Foundation slice | Retry failed post-merge jobs once by default for the exact merge SHA after successful pre-merge evidence; repeated failure remains terminal. |
 | `#176` Organization/project-role/service-principal grant enforcement | `IDENTITY_ACCESS_REQUIREMENTS.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md` | Enterprise lane | Canonical owner for enforceable authorization and migration from owner-scoped deployments. |
 | `#177` Provisioning/deprovisioning and break-glass lifecycle | `IDENTITY_ACCESS_REQUIREMENTS.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md` | Enterprise lane | Canonical owner for remaining identity lifecycle scope from closed #52. |
 | `#178` Platform telemetry, SLOs, and capacity evidence | `BPANE-00178_PLATFORM_TELEMETRY_PLAN.md`, `PLATFORM_TELEMETRY.md`, `DELIVERY_ROADMAP.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md` | Production lane | Metrics, traces, rules/runbooks, and Grafana baseline merged through PRs #222, #228, #230, #232, and #234. Broader traces/metrics, calibrated SLOs, alert routing, synthetics, and tested envelopes remain. |
@@ -248,6 +250,7 @@ The cross-reference pass also updated the issue bodies in both directions:
 | `#266` | Fourth focused protocol slice after #265. | Created on GitHub 2026-08-21 with browser enforcement and SDK boundaries. | Produces typed errors/snapshot consumed by #268. |
 | `#267` | Fifth focused protocol slice after #266. | Created on GitHub 2026-08-21 with bounded fuzz/sanitizer evidence. | No Admin-New change. |
 | `#268` | Final focused protocol qualification slice after #267. | Created on GitHub 2026-08-21 as the #175 closure owner. | Integrates safe live diagnostics into existing session preview/observability surfaces. |
+| `#277` | Focused Foundation reliability slice before #266. | Created from exact-head success run `32559531743` and failed main run `32560886312`. | Adds one bounded exact-SHA failed-job rerun after merge; no product behavior or gate suppression. |
 | `#176` | Relevant authorization enforcement gap. | Created on GitHub 2026-07-31 to own organization/project roles and enforced service-principal grants. | Admin-new identity/project views must eventually show effective grants and denial reasons. |
 | `#177` | Relevant later identity-lifecycle gap. | Created on GitHub 2026-07-31 to own provisioning/deprovisioning and safeguarded break-glass controls. | Admin-new identity/access review becomes the operator surface when implemented. |
 | `#178` | Relevant production observability gap. | Created on GitHub 2026-07-31 to separate platform telemetry/SLOs from per-session inspection and readiness. | Admin-new observability consumes the common telemetry contract; it does not define a separate model. |
