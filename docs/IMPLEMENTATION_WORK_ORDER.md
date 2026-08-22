@@ -51,11 +51,12 @@ Priority is based on:
 6. testability and smoke coverage,
 7. how much future work the slice unlocks.
 
-The 2026-07-31 audit moved #151 ahead of #145 because the repository has no
-required CI status checks and has open critical/high dependency findings. The
-current Foundation sequence is #151, #145, #146, #147, #150, #152, with #148
-and #149 selected when the target Pilot uses imported contexts or recording
-evidence.
+The original 2026-07-31 Foundation sequence #151, #145, #146, #147, #150,
+#152, and #179 is complete. The current Foundation maintenance sequence is
+#283 -> #284 -> #285 -> #286 -> #287: structured Compose evidence,
+deterministic harness isolation, immutable test images, fail-closed
+affected-area qualification, and exact-tree post-merge reuse. #283 is the
+single Ready issue; the remaining slices are dependency-gated.
 
 The Admin-New promotion gate completed through PRs #210 and #211.
 `/admin-new/` is the default console; `/admin/` remains a compatibility fallback
@@ -930,35 +931,18 @@ The step-by-step plan and smoke sequence are in
 
 ## Suggested Immediate Next Issue
 
-Use focused issue `#151` as the first product implementation slice after the
-`#173` governance update:
+Use focused issue `#283` and
+`BPANE-00283_COMPOSE_STAGE_EVIDENCE_PLAN.md`.
 
-Title: `Add minimal CI, dependency safety, and validation ratchet`
+Why now:
 
-Business case:
+- Recent Compose failures mixed real product defects, state/readiness races,
+  harness timeouts, and cancellations in coarse job logs.
+- More retries or path-based skipping would be unsafe before every stage emits
+  structured bounded evidence and cleanup status.
+- #283 is independently shippable and supplies the contract consumed by all
+  later Compose Qualification v2 slices.
 
-- BrowserPane already has meaningful tests and smokes, but they are not enforced
-  on pull requests.
-- Main branch protection has no required status checks.
-- Open critical/high dependency advisories include runtime transport/TLS and
-  MCP HTTP/routing packages as well as development tooling.
-- Auth and security changes should be judged on a trusted repeatable baseline.
-
-Acceptance criteria:
-
-- critical/high findings are remediated or have reviewed bounded exceptions,
-- Rust, Node, admin-new, worker, API-contract, and docs checks run in CI,
-- coverage baselines and regression rules are recorded,
-- controlled failures prove each major CI stage fails visibly,
-- the required checks are configured in branch protection,
-- a local wrapper mirrors the CI commands.
-
-Smoke sequence:
-
-1. follow the Ready plan in `BPANE-00151_MINIMAL_CI_VALIDATION_PLAN.md`,
-2. run the local CI wrapper on a clean checkout,
-3. verify every required stage executes and reports failures clearly,
-4. exercise controlled Rust, Node, contract, docs, and dependency failures,
-5. restore the fixtures and confirm the complete required path is green,
-6. verify branch protection requires the resulting checks,
-7. record coverage and any time-bounded dependency exception evidence.
+Acceptance and smoke evidence are canonical in the focused issue and plan. Do
+not begin #284-#287 in the same branch; promote each successor only after its
+predecessor closes and the live issue/plan contract is revalidated.

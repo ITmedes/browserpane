@@ -1,7 +1,7 @@
 # BrowserPane Consolidated Planning Workspace
 
 Created: 2026-07-07
-Revalidated: 2026-08-20
+Revalidated: 2026-08-22
 
 This folder is the standalone planning workspace for the active BrowserPane
 plan set. It consolidates the still-valid information from the old plan files
@@ -29,7 +29,8 @@ Legacy inputs that were consolidated:
 
 Current branch context:
 
-- `main` is synchronized through PR `#236` at `2adbfdee`.
+- `main` is synchronized through protocol bootstrap repair PR `#281` and its
+  documentation follow-up at `e79164cc3a84`.
 - `/admin-new/` is the standard route-backed operator console and the default
   web-root target after promotion through PR `#211`.
 - `/admin/` remains directly addressable only as a compatibility fallback
@@ -108,6 +109,18 @@ specifications and still require a bounded slice plan before coding.
 - `BPANE-00185_CI_RUST_BUILDER_PLAN.md`: deterministic GHCR Rust builder,
   trusted publication, digest-based compose consumption, cold fallback, and
   timing evidence for the measured #184 image-build bottleneck.
+- `BPANE-00283_COMPOSE_STAGE_EVIDENCE_PLAN.md`: Ready first Compose
+  Qualification v2 slice for bounded timing, failure taxonomy, input identity,
+  diagnostics, and cleanup evidence.
+- `BPANE-00284_COMPOSE_SMOKE_HARNESS_PLAN.md`: dependency-gated shared typed
+  readiness, CI namespacing, cancellation, and cleanup invariants.
+- `BPANE-00285_COMPOSE_TEST_IMAGE_BUNDLE_PLAN.md`: dependency-gated build-once
+  immutable qualification images and digest manifest fan-out.
+- `BPANE-00286_AFFECTED_COMPOSE_QUALIFICATION_PLAN.md`: dependency-gated,
+  fail-closed canary/affected/full selection, including the lightweight
+  docs-only path.
+- `BPANE-00287_COMPOSE_QUALIFICATION_REUSE_PLAN.md`: final dependency-gated
+  exact-tree PR evidence reuse with a main canary and full fallback.
 - `BPANE-00223_THREAT_MODEL_BASELINE_PLAN.md`: focused production checkpoint
   that composes the current threat model, hardening checklist, executable
   security contract, and negative-path evidence under issue #223.

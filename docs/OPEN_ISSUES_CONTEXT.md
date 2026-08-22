@@ -2,9 +2,9 @@
 
 Created: 2026-07-10
 Revalidated: 2026-08-22 after #277 merged through PR #279 and the resulting
-protocol-bootstrap repair #280 closed through PR #281; #174 and #180 are
-externally deferred, with ordered protocol issues #266-#268, then #124 as the
-finite engineering fallback
+protocol-bootstrap repair #280 closed through PR #281. #174 and #180 are
+externally deferred. Compose Qualification v2 issues #283-#287 now precede
+ordered protocol issues #266-#268 and #124 in the finite engineering fallback.
 
 This document maps the current `docs/` workspace to the live open GitHub
 issues for `ITmedes/browserpane`. It is the bridge between the consolidated
@@ -13,9 +13,9 @@ local planning docs and the public issue tracker.
 Source check:
 
 - fetched and updated through the GitHub API on 2026-08-22,
-- 34 open issues after closing #277 and #280, all represented in this
+- 39 open issues after closing #277 and #280 and creating #283-#287, all represented in this
   documentation workspace,
-- open issue range: `#6` through `#268`,
+- open issue range: `#6` through `#287`,
 - focused docs-derived implementation issues created on 2026-07-10: `#145`
   through `#170`,
 - focused Phase N Teach Mode issue created on 2026-07-31: `#171`,
@@ -40,6 +40,9 @@ Source check:
   `#232` on 2026-08-16,
 - focused Grafana operations-dashboard slice created on 2026-08-16: `#233`,
 - focused Compose runner reliability issue `#235` merged through PR `#236`,
+- focused Compose Qualification v2 issues `#283` through `#287` created on
+  2026-08-22 for structured evidence, deterministic isolation, immutable image
+  fan-out, affected-area selection, and exact-tree post-merge reuse,
 - deferred Workflow Endpoint productization follow-up created on 2026-08-20:
   `#240`,
 - Codex-native local delivery-loop issue `#241` completed through PR `#243`;
@@ -48,8 +51,8 @@ Source check:
   deferral; `#260` owns finite ordered fallback traversal,
 - all executable open issues carry a priority, lane, state, and target-gate
   milestone; umbrella tracker `#6` intentionally carries only priority/state,
-- `#151` and `#173` are implemented and closed; `#184` is the implemented
-  bounded sharding slice and `#185` owns its measured cold-build follow-up,
+- `#151` and `#173` are implemented and closed; `#184` and `#185` are completed
+  sharding/builder foundations consumed by the new #283-#287 sequence,
 - cross-reference pass on 2026-07-31 verified that every open issue has a
   docs source or docs cross-reference section and links back to this file,
 - closed admin-redesign lineage issue: `#142`, closed as completed on
@@ -69,6 +72,7 @@ Source check:
 | Focused cross-product gaps | `#174` through `#180` | Use these for Phase 0 delivery, protocol conformance, authorization, identity lifecycle, platform telemetry, API compatibility, and open-source governance. |
 | Focused validation performance | `#184` | Preserve the #151 validation baseline while reducing hosted compose feedback time through isolated execution lanes. |
 | Focused Docker build acceleration | `#185` | Preserve #184 lane coverage while adding deterministic, supply-chain-safe Docker build reuse for trusted hosted runs. |
+| Compose Qualification v2 | `#283` through `#287` | Execute in order: evidence, deterministic harness, immutable test-image bundle, fail-closed affected-area selection, then exact-tree post-merge reuse. Only #283 is Ready. |
 | Focused runtime authorization boundary | `#214` | Complete the typed, policy-validating broker and gateway-isolated Docker-host topology beyond the #167 direct compatibility boundary. |
 | Completed threat-model baseline | closed `#223` | Durable evidence baseline merged through PR #224; #72 keeps residual security ownership. |
 | Completed single-node deployment | closed `#225` | Independent single-node package merged through PR #226; #66 keeps broader deployment ownership. |
@@ -115,6 +119,11 @@ Source check:
 | `#268` Protocol compatibility qualification | `BPANE-00268_PROTOCOL_COMPATIBILITY_QUALIFICATION_PLAN.md`, `BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md`, `VALIDATION_MATRIX.md` | Protocol slice 6 after #267 | Prove rolling upgrade/rollback, current features, Admin-New diagnostics, and close #175. |
 | closed `#277` Exact-SHA post-merge workflow retry | `BPANE-00277_POST_MERGE_WORKFLOW_RETRY_PLAN.md`, `BPANE-00273_EXACT_HEAD_COMPOSE_GATE_PLAN.md`, `DELIVERY_ROADMAP.md` | Completed Foundation slice | Same-run exact-SHA failed-job retry merged through PR #279; repeated failure remains terminal. |
 | closed `#280` Protocol bootstrap compatibility and session cleanup | `BPANE-00280_PROTOCOL_BOOTSTRAP_CLEANUP_PLAN.md`, `BPANE-00265_GATEWAY_PROTOCOL_NEGOTIATION_PLAN.md`, `VALIDATION_MATRIX.md` | Completed Foundation repair | Checked legacy bytes survive stream chunk boundaries and bootstrap write failure removes admitted registry clients; merged through PR #281. |
+| `#283` Compose stage evidence and reliability baseline | `BPANE-00283_COMPOSE_STAGE_EVIDENCE_PLAN.md`, `VALIDATION_MATRIX.md`, `DELIVERY_ROADMAP.md` | Ready Foundation maintenance slice | Add bounded per-stage timing, failure classification, input identity, diagnostics, and cleanup evidence without changing coverage or retry semantics. |
+| `#284` Deterministic Compose smoke harness | `BPANE-00284_COMPOSE_SMOKE_HARNESS_PLAN.md`, `VALIDATION_MATRIX.md`, `DELIVERY_ROADMAP.md` | Qualified after #283 | Unify typed readiness, unique CI namespaces, cancellation, and cleanup invariants across all lanes. |
+| `#285` Immutable Compose test-image bundle | `BPANE-00285_COMPOSE_TEST_IMAGE_BUNDLE_PLAN.md`, `VALIDATION_MATRIX.md`, `DELIVERY_ROADMAP.md` | Qualified after #283/#284 integration | Build required images once and fan out a tree-bound immutable digest manifest without replacing local source builds. |
+| `#286` Affected-area Compose qualification | `BPANE-00286_AFFECTED_COMPOSE_QUALIFICATION_PLAN.md`, `VALIDATION_MATRIX.md`, `DELIVERY_ROADMAP.md` | Qualified after #283-#285 | Deterministic canary/affected/full plans; docs-only changes use lightweight policy and unknown/high-risk changes select full. |
+| `#287` Exact-tree Compose qualification reuse | `BPANE-00287_COMPOSE_QUALIFICATION_REUSE_PLAN.md`, `VALIDATION_MATRIX.md`, `DELIVERY_ROADMAP.md` | Qualified after #286 | Reuse trusted exact-input PR evidence after merge with a bounded main canary and fail-closed fallback. |
 | `#176` Organization/project-role/service-principal grant enforcement | `IDENTITY_ACCESS_REQUIREMENTS.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md` | Enterprise lane | Canonical owner for enforceable authorization and migration from owner-scoped deployments. |
 | `#177` Provisioning/deprovisioning and break-glass lifecycle | `IDENTITY_ACCESS_REQUIREMENTS.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md` | Enterprise lane | Canonical owner for remaining identity lifecycle scope from closed #52. |
 | `#178` Platform telemetry, SLOs, and capacity evidence | `BPANE-00178_PLATFORM_TELEMETRY_PLAN.md`, `PLATFORM_TELEMETRY.md`, `DELIVERY_ROADMAP.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md` | Production lane | Metrics, traces, rules/runbooks, and Grafana baseline merged through PRs #222, #228, #230, #232, and #234. Broader traces/metrics, calibrated SLOs, alert routing, synthetics, and tested envelopes remain. |
@@ -196,9 +205,10 @@ reverse docs-to-issues pass created focused issues `#145` through `#170`; the
 delivery-governance pass created `#173` through `#180`.
 
 The current live issue set includes broad roadmap owners, focused work-order and
-governance issues, and the six protocol implementation children `#263` through
-`#268`. Every open issue remains represented in this document and links back to
-the consolidated docs.
+governance issues, the six protocol implementation children `#263` through
+`#268`, and the five Compose Qualification v2 slices `#283` through `#287`.
+Every open issue remains represented in this document and links back to the
+consolidated docs.
 
 The original 19 open issues remain relevant. None should be closed only
 because of the docs consolidation or because `#142` is closed. The focused
@@ -212,8 +222,8 @@ The cross-reference pass also updated the issue bodies in both directions:
   applicable,
 - every focused work-order issue from `#145` through `#170` has both `Docs
   source` and `Docs cross-reference` sections,
-- focused implementation issues `#124`, `#145` through `#180`, and `#263`
-  through `#268` include an
+- focused implementation issues `#124`, `#145` through `#180`, `#263` through
+  `#268`, and `#283` through `#287` include an
   explicit example use case and post-implementation smoke sequence,
 - every open issue links back to `docs/OPEN_ISSUES_CONTEXT.md`,
 - stale wording that told slices to stay on broad issues was removed from the
@@ -253,6 +263,11 @@ The cross-reference pass also updated the issue bodies in both directions:
 | `#268` | Final focused protocol qualification slice after #267. | Created on GitHub 2026-08-21 as the #175 closure owner. | Integrates safe live diagnostics into existing session preview/observability surfaces. |
 | `#277` | Completed Foundation reliability slice. | Merged through PR #279; run `32584253673` proved the one-retry fail-closed bound. | Adds one bounded exact-SHA failed-job rerun after merge; no product behavior or gate suppression. |
 | `#280` | Completed focused Foundation repair. | Created from both failed attempts of Compose run `32584253673` and merged through PR #281. | Corrected byte-stream handoff and post-admission cleanup without broadening legacy compatibility or absorbing browser negotiation. |
+| `#283` | Ready first Compose Qualification v2 slice. | Created and cross-referenced on GitHub 2026-08-22. | Establishes evidence and reliability baseline; no gate selection or retry change. |
+| `#284` | Qualified second Compose Qualification v2 slice. | Created and cross-referenced on GitHub 2026-08-22. | Depends on #283 and owns shared readiness/namespacing/cleanup. |
+| `#285` | Qualified third Compose Qualification v2 slice. | Created and cross-referenced on GitHub 2026-08-22. | Uses #283 identity and follows #284 integration; no selector scope. |
+| `#286` | Qualified fourth Compose Qualification v2 slice. | Created and cross-referenced on GitHub 2026-08-22. | Owns fail-closed affected-area and docs-only qualification; full scheduled/manual coverage remains. |
+| `#287` | Qualified final Compose Qualification v2 slice. | Created and cross-referenced on GitHub 2026-08-22. | Owns exact-tree reuse plus main canary; all mismatches fall back to #286. |
 | `#176` | Relevant authorization enforcement gap. | Created on GitHub 2026-07-31 to own organization/project roles and enforced service-principal grants. | Admin-new identity/project views must eventually show effective grants and denial reasons. |
 | `#177` | Relevant later identity-lifecycle gap. | Created on GitHub 2026-07-31 to own provisioning/deprovisioning and safeguarded break-glass controls. | Admin-new identity/access review becomes the operator surface when implemented. |
 | `#178` | Relevant production observability gap. | Created on GitHub 2026-07-31 to separate platform telemetry/SLOs from per-session inspection and readiness. | Admin-new observability consumes the common telemetry contract; it does not define a separate model. |
@@ -269,7 +284,7 @@ The cross-reference pass also updated the issue bodies in both directions:
 | `#241` | Closed Foundation contributor tooling. | Qualification, proposal, repair, bounded CI convergence, and opt-in merge orchestration merged through PR #243. | The loop may promote exactly one roadmap-prioritized candidate but does not alter product priority or capability maturity. |
 | `#244` | Closed Foundation contributor-safety follow-up. | Deterministic free-capacity gate merged through PR #245. | Defaults to 50 GiB, fails closed, and never deletes operator data. |
 | `#246` | Closed Foundation contributor-tooling follow-up. | Bounded specification session and structured requirements-PR transition merged through PR #247. | It may resolve evidence-backed issue/plan omissions, but cannot make product decisions, promote issues, or implement product code. |
-| `#260` | In-progress Foundation contributor-tooling follow-up. | Adds finite ordered traversal after multiple external gates. | It preserves each blocker, selects only the first eligible documented fallback, and cannot inspect arbitrary backlog work. |
+| `#260` | Closed Foundation contributor-tooling follow-up. | Finite ordered traversal merged through PR #261. | It preserves each blocker, selects only the first eligible documented fallback, and cannot inspect arbitrary backlog work. |
 
 ## Docs-To-Issue Context
 
@@ -278,7 +293,7 @@ shown as `closed #142`.
 
 | Docs file | Primary issue context |
 | --- | --- |
-| `CURRENT_CONTEXT.md` | current baseline and immediate `#47` -> `#172` -> `#174` sequence, with parallel `#180` and deferred `#240`/`#171` |
+| `CURRENT_CONTEXT.md` | current baseline, external `#174`/`#180` gates, immediate `#283`-`#287` Foundation maintenance, then `#266`-`#268`/`#124` fallback |
 | `ADMIN_INTERACTION_REQUIREMENTS.md` | `#20`, `#28`, `#153`, `#156`, closed `#142` |
 | `ADMIN_NEW_API_COVERAGE.md` | `#69`, `#70`, `#124`, `#153`, `#158`, `#172`, `#240`, closed `#142` |
 | `ADMIN_NEW_IMPLEMENTATION_GUARDRAILS.md` | `#153`, `#163`, closed `#142` |
@@ -288,7 +303,12 @@ shown as `closed #142`.
 | `BPANE-00151_MINIMAL_CI_VALIDATION_PLAN.md` | closed `#151`, implemented Foundation validation baseline |
 | `BPANE-00179_CONTROL_API_CONFORMANCE_PLAN.md` | `#179`, review-ready Foundation control-contract conformance and compatibility slice |
 | `BPANE-00184_COMPOSE_VALIDATION_PERFORMANCE_PLAN.md` | `#184`, implemented Foundation validation-performance slice; measured build-cache follow-up `#185` |
-| `BPANE-00185_CI_RUST_BUILDER_PLAN.md` | `#185`, active deterministic GHCR builder and compose-consumption slice |
+| `BPANE-00185_CI_RUST_BUILDER_PLAN.md` | closed `#185`, implemented deterministic GHCR builder and compose-consumption slice |
+| `BPANE-00283_COMPOSE_STAGE_EVIDENCE_PLAN.md` | `#283`, Ready first Compose Qualification v2 slice |
+| `BPANE-00284_COMPOSE_SMOKE_HARNESS_PLAN.md` | `#284`, qualified deterministic harness slice after #283 |
+| `BPANE-00285_COMPOSE_TEST_IMAGE_BUNDLE_PLAN.md` | `#285`, qualified immutable image fan-out slice |
+| `BPANE-00286_AFFECTED_COMPOSE_QUALIFICATION_PLAN.md` | `#286`, qualified fail-closed selection and docs-only path slice |
+| `BPANE-00287_COMPOSE_QUALIFICATION_REUSE_PLAN.md` | `#287`, qualified exact-tree post-merge reuse slice |
 | `BPANE-00167_DOCKER_RUNTIME_BOUNDARY_PLAN.md` | `#167`, merged direct compatibility proxy boundary; predecessor to `#214` |
 | `BPANE-00214_RUNTIME_LAUNCH_BROKER_PLAN.md` | `#214`, typed broker, operation adapters, gateway routing, and broker-only topology completion |
 | `BPANE-00223_THREAT_MODEL_BASELINE_PLAN.md` | `#223`, focused evidence-linked threat model and hardening-baseline checkpoint under `#72` |
@@ -347,7 +367,7 @@ issue and capture the exact slice boundary in a checked-in `docs/*_PLAN.md`:
 | Work-order item | Current issue state | Recommended action |
 | --- | --- | --- |
 | Foundation validation baseline | closed `#151` | Keep the implemented validation scope intact. |
-| Foundation validation performance | `#184` implemented; `#185` ready | Retain the measured sharding result; use #185 for deterministic Docker build acceleration without reducing coverage. |
+| Foundation validation performance | closed `#184`/`#185`; `#283` Ready and `#284`-`#287` Qualified | Preserve the sharding/builder baseline and execute Compose Qualification v2 in dependency order without reducing coverage. |
 | Remaining Foundation trust/runtime work | `#145`-`#150`, `#152`, and `#179` merged | Foundation Gate is complete; preserve its validation and compatibility evidence. |
 | Active Operator Product work | none; `#124` qualified | Admin-new is promoted; select #124 only when session-template catalog work outranks the current Production slice. |
 | Items 10-19: admin-new parity and promotion work | `#154`-`#163`, with session templates still tracked by `#124` | Use the matching focused issue and keep old admin regression scope explicit. |
@@ -364,9 +384,9 @@ issue and capture the exact slice boundary in a checked-in `docs/*_PLAN.md`:
 - A GitHub Project with dependency/evidence fields is still optional follow-up.
   Until one is configured, issue labels and milestones are the live tracker
   state and `DELIVERY_ROADMAP.md` is the canonical sequencing source.
-- Branch protection requires review/conversation resolution but no status
-  checks. #151 must add real CI checks and make the selected minimal checks
-  required before later issues treat them as evidence.
+- Branch protection uses the strict required BrowserPane validation checks
+  established by #151. #286 must preserve stable required-check aggregation
+  across docs-only, affected, and full qualification tiers.
 - `#142` is closed as completed. It remains the historical admin-new design
   lineage, and its companion-doc section was updated on 2026-07-10 to point at
   the consolidated docs instead of the removed

@@ -4,7 +4,8 @@ Last synchronized: 2026-08-22 after protocol slices `#263` through `#265`, the
 Codex loop exact-head Compose/readiness correction `#273`/`#275` merged through
 PR `#274`, the bounded post-merge retry implementation for `#277` merged
 through PR `#279`, and protocol bootstrap repair `#280` completed through PR
-`#281`.
+`#281`. Compose Qualification v2 is now split into focused issues `#283`
+through `#287`; `#283` is the single Ready implementation slice.
 
 This is the first local document to read when starting a clean BrowserPane
 session. It records current product decisions, delivery order, and repository
@@ -12,8 +13,8 @@ state. Detailed requirements remain in the linked domain and plan documents.
 
 ## Current Baseline
 
-- Canonical base: `main` includes protocol bootstrap repair PR #281 at
-  `1978b530`. #172
+- Canonical base: `main` includes protocol bootstrap repair PR #281 and the
+  subsequent documentation synchronization at `e79164cc3a84`. #172
   is merged through PR #250, its
   smoke stabilization is merged through PR #256, and #180 requirements are
   specified through PR #259 without resolving the external legal decision.
@@ -39,6 +40,14 @@ state. Detailed requirements remain in the linked domain and plan documents.
   failed bootstrap writes remove the admitted registry client. Cancelled
   retries remain independent; repeated failure, mismatched or unavailable
   evidence, rejected dispatch, and timeout remain fail-closed.
+- The next runner correction is not another retry. Issues #283-#287 define an
+  ordered Compose Qualification v2 sequence: structured stage evidence,
+  deterministic readiness/cleanup, one immutable image bundle, fail-closed
+  affected-area selection, and exact-tree evidence reuse. The current full
+  matrix remains authoritative until each dependent slice is implemented and
+  validated. Documentation-only changes may avoid expensive local/hosted
+  Compose only through explicit lightweight document policy; permanent
+  path-based selection belongs to #286.
 - The supported immutable Playwright workflow package contract is frozen
   through #47/PR #242, including publication compatibility, Admin-New/CLI
   visibility, worker evidence redaction, and live package regression evidence.
@@ -115,10 +124,13 @@ open-source posture. Its engineering contract is specified, but implementation
 waits for an accountable maintainer and legal/business reviewer to record the
 decision.
 
-When both `#174` and `#180` are externally deferred, continue the ordered
-protocol sequence `#263` (complete) -> `#264` (complete) -> `#265` (complete)
--> `#266` -> `#267` -> `#268`, followed by `#124`. `#280` is complete through
-PR #281. `#175` is the open, blocked, non-executable
+When both `#174` and `#180` are externally deferred, the maintainer-prioritized
+Foundation sequence is `#283` -> `#284` -> `#285` -> `#286` -> `#287`.
+Only `#283` is Ready; each successor remains Qualified until its predecessor
+closes and its live contract is revalidated. After that sequence, continue the
+ordered protocol work `#263` (complete) -> `#264` (complete) -> `#265`
+(complete) -> `#266` -> `#267` -> `#268`, followed by `#124`. `#280` is
+complete through PR #281. `#175` is the open, blocked, non-executable
 program tracker and `BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md` is the program
 contract. Each child has a focused plan and must close before its successor can
 enter Ready. `#124` adds the Admin-New session-template catalog and is
@@ -172,18 +184,19 @@ Use `PRODUCT_PHASES_AND_RELEASE_GATES.md` for exact gate evidence and
 ## Current Material Gaps
 
 The #172 Workflow Endpoint gaps and #280 protocol bootstrap repair previously
-listed here are implemented and validated. The immediate missing outcomes are
-external Pilot selection and operation under #174, the reviewed governance
-decision and repository alignment under #180, ordered remote-protocol delivery
-under #266-#268/#175, and the Admin-New session-template catalog under #124.
-Later production and Phase N gaps remain owned by the issues listed above and
-in `DELIVERY_ROADMAP.md`.
+listed here are implemented and validated. The immediate engineering gap is
+the Compose Qualification v2 sequence #283-#287, beginning with structured
+failure/timing evidence in #283. External Pilot selection remains #174, the
+reviewed governance decision remains #180, ordered remote-protocol delivery
+remains #266-#268/#175, and the Admin-New session-template catalog remains
+#124. Later production and Phase N gaps remain owned by the issues listed above
+and in `DELIVERY_ROADMAP.md`.
 
 ## Working Tree Guardrail
 
-At the time of this synchronization, `main` is clean and synchronized with
-`origin/main` after PR #281. The generated files below are locally ignored and
-must not be force-staged or reverted unless the user explicitly requests it:
+At the start of this synchronization, `main` was clean and synchronized with
+`origin/main` at `e79164cc3a84`. The generated files below are locally ignored
+and must not be force-staged or reverted unless the user explicitly requests it:
 
 - `dev/certs/cert-fingerprint.txt`
 - `dev/certs/cert-hash.txt`

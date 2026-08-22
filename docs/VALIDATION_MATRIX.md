@@ -1,6 +1,6 @@
 # Consolidated Validation Matrix
 
-Revalidated against current package scripts: 2026-08-21
+Revalidated against current package scripts: 2026-08-22
 
 This matrix defines the available validation surfaces for product slices. Use
 `PRODUCT_PHASES_AND_RELEASE_GATES.md` to decide which evidence is required for
@@ -86,12 +86,36 @@ artifact paths. `main` branch protection requires those nine BrowserPane jobs
 in strict mode and binds them to the GitHub Actions app.
 
 The `Compose` workflow runs on pushes to `main`, a weekday schedule, and manual
-dispatch. It is not a pull-request gate until hosted-runner reliability is
-demonstrated. Split gateway, browser-integration, unified-admin, and
-compatibility-admin jobs execute the canonical evidence journeys, capture only
-selected control-plane status/log tails after a failure, redact credential and
-identity material before upload, and always remove BrowserPane containers and
-compose volumes.
+dispatch. The optional delivery loop dispatches it for the exact pull-request
+head before automatic merge; it is not a blanket `pull_request` trigger. Split
+gateway, browser-integration, unified-admin, and compatibility-admin jobs
+execute the canonical evidence journeys, capture only selected control-plane
+status/log tails after a failure, redact credential and identity material
+before upload, and always remove BrowserPane containers and compose volumes.
+
+## Planned Compose Qualification V2
+
+Issues #283-#287 are an ordered Foundation-maintenance sequence. None of the
+following behavior is current until its focused issue closes with evidence:
+
+1. #283 adds versioned per-stage timing, failure classification, exact input
+   identity, bounded artifacts, and independent cleanup results.
+2. #284 adds shared typed readiness, unique CI namespaces, and stage cleanup
+   invariants across all five lanes.
+3. #285 builds qualification images once and fans out one immutable digest
+   manifest instead of rebuilding overlapping images per lane.
+4. #286 adds deterministic canary/affected/full selection. A strictly
+   documentation/plan-only change may run lightweight repository-document and
+   workflow policy without starting Compose; unknown, selector, shared
+   security/protocol/runtime, and broad infrastructure changes select full.
+5. #287 may reuse trusted, fresh, exact-tree PR evidence after merge only when
+   workflow/test-plan, selector, and image identities also match. Main still
+   runs a bounded canary; every mismatch falls back to #286.
+
+The complete matrix remains scheduled, release/manual-dispatchable, and the
+authoritative fallback throughout this sequence. Required-check aggregation
+must remain stable, compatibility-admin coverage remains for relevant and full
+runs, and no slice may convert `unknown` into pass or retry.
 
 ## Docker Runtime Topology Evidence
 

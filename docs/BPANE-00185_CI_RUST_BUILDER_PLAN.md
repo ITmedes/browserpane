@@ -3,12 +3,13 @@
 ## Metadata
 
 - Issue: [#185](https://github.com/ITmedes/browserpane/issues/185)
-- State: In Progress
+- State: Done
 - Owner: `thebackplane`
 - Lane: Foundation
 - Target gate: Foundation Gate
 - Depends on: #184 compose-validation lane sharding
-- Last verified: 2026-08-04 on `fix/BPANE-00185-ci-rust-builder-publish`
+- Last verified: 2026-08-22 against closed issue #185 and the active GHCR
+  builder consumed by hosted Compose jobs
 
 ## Business Outcome
 

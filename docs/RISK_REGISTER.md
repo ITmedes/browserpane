@@ -28,6 +28,7 @@ Last reviewed: 2026-08-22
 | R-017 | Large overlapping planning documents produce conflicting priorities. | High | High | #173 | Canonical roadmap; historical docs marked supporting; only bounded Ready plans are executable. | Governance |
 | R-020 | Security controls and deployment obligations can drift across code, manifests, tests, and prose, causing an unsafe topology to appear accepted. | Medium | Critical | #223 / #72 / #225 | Canonical threat model, responsibility baseline, composed fast-profile contract, single-node structured preflight, negative evidence, operator runbook, and required review on boundary changes. | Production |
 | R-021 | An external BPM could duplicate or misinterpret browser side effects because no stable endpoint grant, schema enforcement, caller-scoped idempotency, typed outcome, or side-effect certainty contract exists. | High | Critical | #47 / #172 / #174 | Freeze the immutable Playwright package, implement the bounded polling endpoint and negative conformance fixture, then qualify one real activity. | Phase 0 |
+| R-022 | Stateful Compose qualification produces slow or ambiguous failures, delaying delivery or encouraging unsafe reruns/skips. | High | High | #283-#287 | Add structured evidence, deterministic readiness/cleanup, immutable test images, fail-closed affected-area selection, and exact-tree reuse in that order; retain full scheduled/manual coverage. | Foundation maintenance |
 
 ## Closed Risks
 
