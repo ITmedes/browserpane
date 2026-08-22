@@ -200,4 +200,16 @@ evidence.
 
 - Triggering run: [Compose `32584253673`](https://github.com/ITmedes/browserpane/actions/runs/32584253673), attempts 1 and 2.
 - Issue: [#280](https://github.com/ITmedes/browserpane/issues/280).
-- PR, commits, focused output, coverage, and hosted run links: pending.
+- Implementation commit: `5252b48e`.
+- Local focused evidence, 2026-08-22:
+  - protocol decoder tests: 8 passed;
+  - gateway negotiation tests: 13 passed;
+  - gateway ingress tests: 5 passed;
+  - bootstrap cleanup regression: 1 passed;
+  - complete gateway suite: 504 passed, 1 ignored;
+  - gateway/protocol clippy with warnings denied: passed;
+  - compatibility admin lifecycle smoke: passed in 130.9 seconds;
+  - gateway protocol compatibility/refusal/recovery smoke: passed;
+  - repository fast profile: all 44 stages passed;
+  - development-loop regression suite: all 150 tests passed.
+- PR and hosted exact-head/post-merge run links: pending.
