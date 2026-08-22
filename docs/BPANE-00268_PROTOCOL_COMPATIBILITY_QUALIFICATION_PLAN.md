@@ -7,7 +7,8 @@
 - Owner: BrowserPane maintainers
 - Lane: Production
 - Target gate: Production Baseline protocol compatibility checkpoint
-- Depends on: closed `#263`, `#264`, `#265`, `#266`, and `#267`
+- Depends on: closed `#263`, `#264`, and `#265`; `#266` and `#267` must close
+  before this slice enters Ready
 - Parent program: `#175`; protocol slice 6 of 6 and closure owner
 - Last verified commit/date: `e21e2206a93a` / 2026-08-21
 

@@ -5,15 +5,14 @@ Status: Canonical execution roadmap
 Governance issue: [#173](https://github.com/ITmedes/browserpane/issues/173)
 
 Last requirements audit: 2026-08-22 after protocol slices #263 through #265
-merged and #273 entered implementation to require exact-head Compose evidence
-before Codex automatic merge. Its first exact-head run reproduced the
-main-branch readiness regression now isolated as #275. The remaining focused #175 protocol issues are
-`#266` through `#268`, based on `main` at `6dd4838c`. The Workflow
+and the #273/#275 exact-head Compose/readiness correction merged through PR
+#274. The remaining focused #175 protocol issues are `#266` through `#268`,
+based on `main` at `7a2fb413`. The Workflow
 Endpoint has passing focused, contract, and
 real-Compose fake-BPM evidence. #174 remains the next Pilot Value outcome but
 waits for real candidate and stakeholder decisions. #180 is specified but
 waits for reviewed legal/business decisions. #175 is a blocked non-executable
-tracker; #263 is the first engineering qualification candidate.
+tracker; #266 is the next engineering qualification candidate.
 
 ## How To Use This Document
 
@@ -62,7 +61,7 @@ Qualified until a later post-merge audit passes.
 
 | Lane | Outcome | Current entry point | Promotion target |
 | --- | --- | --- | --- |
-| Foundation | Trusted build, auth, contracts, storage, and lifecycle baseline. | #273 exact-head Compose gate plus #275 readiness repair in progress | Foundation Gate |
+| Foundation | Trusted build, auth, contracts, storage, and lifecycle baseline. | #273 exact-head Compose gate and #275 readiness repair complete through PR #274 | Foundation Gate |
 | Pilot Value | One bounded reusable BPM browser activity with accepted evidence and runbook. | #172 merged; #174 awaits real candidate selection | Phase 0 Gate |
 | Operator Product | Complete and promote `/admin-new/` as the default operator console. | Default promoted through #163; #124 is the next focused catalog gap | Phase 1 Gate |
 | Production | Harden deployment, security, recovery, supply chain, and telemetry. | #233 dashboard baseline merged; #178 retains broader telemetry scope | Production Baseline |
@@ -91,8 +90,8 @@ Qualified until a later post-merge audit passes.
 | 13 | #255 | Done | #172 main smoke evidence | Admin promotion-gate smokes stabilized through PR #256. |
 | 14 | #257 | Done | #246 requirements loop | Defer external decisions and evaluate only documented parallel/fallback requirements work; merged through PR #258. |
 | 15 | #260 | Done | #257 deferred-candidate contract | Finite roadmap-owned fallback traversal merged through PR #261. |
-| 16 | #273 | In Progress | #241 loop and Compose manual dispatch | Require exact-head Compose before automatic merge so failures remain repairable on the open PR. |
-| 17 | #275 | In Progress | #273 branch Compose evidence | Distinguish transport, host-capability, runtime-container, and admin disconnect readiness in compatibility smokes and UI state. |
+| 16 | #273 | Done | #241 loop and Compose manual dispatch | Exact-head Compose is required before automatic merge so failures remain repairable on the open PR; merged through PR #274. |
+| 17 | #275 | Done | #273 branch Compose evidence | Transport, host-capability, runtime-container, and admin disconnect readiness are distinguished in compatibility smokes and UI state; merged through PR #274. |
 
 #241, #244, #246, #248, #251, #253, #255, #257, #260, #273, and #275 are contributor
 tooling or validation reliability and do not supersede the Pilot sequence.
@@ -118,8 +117,8 @@ When no Ready work exists, use this finite order:
 `#174` -> `#180` -> `#263` -> `#264` -> `#265` -> `#266` -> `#267` -> `#268` -> `#124`
 
 The qualifier must preserve the external blockers on `#174` and `#180`.
-Protocol slices `#263` through `#265` are complete, so `#266` is the next
-engineering fallback after the bounded #273/#275 contributor-loop correction.
+Protocol slices `#263` through `#265` and the bounded #273/#275 contributor-loop
+correction are complete, so `#266` is the next engineering fallback.
 Issues `#263` through `#268` are independently shippable protocol slices with
 focused plans; each successor depends on closure of its predecessor. `#175`
 retains the complete contract as a blocked program tracker and is never a
