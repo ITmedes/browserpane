@@ -28,12 +28,34 @@ fn frame_decoder_waits_for_complete_payload_after_header() {
     decoder.push(&wire[..5]).unwrap();
     assert_eq!(decoder.next_frame().unwrap(), None);
     assert_eq!(decoder.pending_len(), 5);
+    assert_eq!(decoder.next_frame_size().unwrap(), Some(wire.len()));
 
     decoder.push(&wire[5..7]).unwrap();
     assert_eq!(decoder.next_frame().unwrap(), None);
 
     decoder.push(&wire[7..]).unwrap();
     assert_eq!(decoder.next_frame().unwrap(), Some(frame));
+}
+
+#[test]
+fn frame_decoder_hands_off_unconsumed_bytes_in_order() {
+    let first = Frame::new(ChannelId::Control, vec![1, 2]);
+    let second = Frame::new(ChannelId::Input, vec![3, 4, 5]);
+    let second_wire = second.encode();
+    let mut wire = first.encode().to_vec();
+    wire.extend_from_slice(&second_wire[..6]);
+
+    let mut decoder = FrameDecoder::new();
+    decoder.push(&wire).unwrap();
+    assert_eq!(decoder.next_frame().unwrap(), Some(first));
+
+    let pending = decoder.into_pending_bytes();
+    assert_eq!(pending, second_wire[..6]);
+
+    let mut resumed = FrameDecoder::new();
+    resumed.push(&pending).unwrap();
+    resumed.push(&second_wire[6..]).unwrap();
+    assert_eq!(resumed.next_frame().unwrap(), Some(second));
 }
 
 #[test]

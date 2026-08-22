@@ -99,6 +99,25 @@ impl FrameDecoder {
         self.pending.len()
     }
 
+    /// Return the declared total size of the next frame once its header is
+    /// available, even when its payload is still incomplete.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FrameDecoderError`] when the pending header is malformed.
+    pub fn next_frame_size(&self) -> Result<Option<usize>, FrameDecoderError> {
+        Ok(FrameHeader::parse_prefix(&self.pending)?.map(|header| header.total_size))
+    }
+
+    /// Consume the decoder and return bytes not yet emitted as a complete frame.
+    ///
+    /// This is intended for bounded protocol-state handoffs where the next
+    /// state must continue decoding the same byte stream without losing a
+    /// coalesced or partial frame.
+    pub fn into_pending_bytes(self) -> Vec<u8> {
+        self.pending.to_vec()
+    }
+
     /// Decode and return the next complete frame, if one is available.
     ///
     /// # Errors

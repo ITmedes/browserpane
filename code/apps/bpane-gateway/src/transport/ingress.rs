@@ -21,6 +21,7 @@ pub(super) struct IngressTaskContext {
     pub client_id: u64,
     pub recv_stream: RecvStream,
     pub initial_frames: Vec<Frame>,
+    pub initial_bytes: Vec<u8>,
     pub to_host: mpsc::Sender<Frame>,
     pub file_recorder: SessionFileRecorder,
     pub transport_policy: SessionTransportPolicy,
@@ -37,14 +38,18 @@ pub(super) fn spawn_browser_to_agent_task(
             client_id,
             mut recv_stream,
             initial_frames,
+            initial_bytes,
             to_host,
             file_recorder,
             transport_policy,
             protocol,
         } = context;
         let mut buf = vec![0u8; 64 * 1024];
-        let mut decoder = FrameDecoder::new();
-        let mut ready_frames = VecDeque::from(initial_frames);
+        let (mut decoder, mut ready_frames) =
+            match initialize_decoder(initial_frames, &initial_bytes) {
+                Ok(initialized) => initialized,
+                Err(failure) => return Some(failure),
+            };
         let mut active_file_transfers = new_active_transfer_map();
 
         loop {
@@ -127,6 +132,17 @@ pub(super) fn spawn_browser_to_agent_task(
     })
 }
 
+fn initialize_decoder(
+    initial_frames: Vec<Frame>,
+    initial_bytes: &[u8],
+) -> Result<(FrameDecoder, VecDeque<Frame>), ProtocolFailure> {
+    let mut decoder = FrameDecoder::new();
+    decoder.push(initial_bytes).map_err(map_decoder_error)?;
+    let mut ready_frames = VecDeque::from(initial_frames);
+    ready_frames.extend(decoder.drain_frames().map_err(map_decoder_error)?);
+    Ok((decoder, ready_frames))
+}
+
 fn resolution_request(frame: &Frame) -> Option<(u16, u16)> {
     if frame.channel != ChannelId::Control || frame.payload.len() < 5 || frame.payload[0] != 0x01 {
         return None;
@@ -144,7 +160,7 @@ mod tests {
     use bpane_protocol::frame::Frame;
     use bpane_protocol::ControlMessage;
 
-    use super::resolution_request;
+    use super::{initialize_decoder, resolution_request};
 
     #[test]
     fn resolution_request_extracts_dimensions() {
@@ -173,5 +189,47 @@ mod tests {
         let frame = Frame::new(ChannelId::Input, vec![0x01, 0x00, 0x05, 0x00, 0x07]);
 
         assert_eq!(resolution_request(&frame), None);
+    }
+
+    #[test]
+    fn decoder_initialization_preserves_complete_coalesced_frames() {
+        let first = ControlMessage::ResolutionRequest {
+            width: 1280,
+            height: 720,
+        }
+        .to_frame();
+        let second = ControlMessage::Ping {
+            seq: 1,
+            timestamp_ms: 2,
+        }
+        .to_frame();
+
+        let (decoder, ready) = initialize_decoder(vec![first.clone()], &second.encode()).unwrap();
+
+        assert_eq!(ready.into_iter().collect::<Vec<_>>(), vec![first, second]);
+        assert_eq!(decoder.pending_len(), 0);
+    }
+
+    #[test]
+    fn decoder_initialization_preserves_partial_coalesced_frame() {
+        let first = ControlMessage::ResolutionRequest {
+            width: 1280,
+            height: 720,
+        }
+        .to_frame();
+        let second = ControlMessage::Ping {
+            seq: 1,
+            timestamp_ms: 2,
+        }
+        .to_frame();
+        let second_wire = second.encode();
+
+        let (mut decoder, ready) =
+            initialize_decoder(vec![first.clone()], &second_wire[..6]).unwrap();
+
+        assert_eq!(ready.into_iter().collect::<Vec<_>>(), vec![first]);
+        assert_eq!(decoder.pending_len(), 6);
+        decoder.push(&second_wire[6..]).unwrap();
+        assert_eq!(decoder.next_frame().unwrap(), Some(second));
     }
 }

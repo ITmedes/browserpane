@@ -48,6 +48,25 @@ fn malformed_hello_never_falls_back_to_legacy() {
 }
 
 #[test]
+fn negotiated_hello_rejects_coalesced_application_frame() {
+    let mut bytes = encoded_hello(vec![], vec![]);
+    bytes.extend_from_slice(
+        &ControlMessage::ResolutionRequest {
+            width: 1280,
+            height: 720,
+        }
+        .to_frame()
+        .encode(),
+    );
+    let mut state = GatewayNegotiation::new(true);
+
+    assert_eq!(
+        state.ingest(&bytes),
+        Err(ProtocolFailure::UnexpectedProtocolFrame)
+    );
+}
+
+#[test]
 fn checked_legacy_resize_is_preserved_only_when_enabled() {
     let resize = ControlMessage::ResolutionRequest {
         width: 1280,
@@ -59,7 +78,7 @@ fn checked_legacy_resize_is_preserved_only_when_enabled() {
     let mut enabled = GatewayNegotiation::new(true);
     assert_eq!(
         enabled.ingest(&encoded).unwrap(),
-        Some(HandshakeDecision::Legacy(vec![resize]))
+        Some(HandshakeDecision::Legacy(resize))
     );
 
     let mut disabled = GatewayNegotiation::new(false);
@@ -67,6 +86,53 @@ fn checked_legacy_resize_is_preserved_only_when_enabled() {
         disabled.ingest(&encoded),
         Err(ProtocolFailure::ProtocolDowngradeRefused)
     );
+}
+
+#[test]
+fn checked_legacy_selection_preserves_coalesced_following_frames() {
+    let resize = ControlMessage::ResolutionRequest {
+        width: 1280,
+        height: 720,
+    }
+    .to_frame();
+    let ping = ControlMessage::Ping {
+        seq: 7,
+        timestamp_ms: 11,
+    }
+    .to_frame();
+    let mut bytes = resize.encode().to_vec();
+    bytes.extend_from_slice(&ping.encode());
+    let mut state = GatewayNegotiation::new(true);
+
+    assert_eq!(
+        state.ingest(&bytes).unwrap(),
+        Some(HandshakeDecision::Legacy(resize))
+    );
+    assert_eq!(state.into_pending_bytes(), ping.encode());
+}
+
+#[test]
+fn checked_legacy_selection_preserves_partial_following_frame() {
+    let resize = ControlMessage::ResolutionRequest {
+        width: 1280,
+        height: 720,
+    }
+    .to_frame();
+    let ping = ControlMessage::Ping {
+        seq: 7,
+        timestamp_ms: 11,
+    }
+    .to_frame();
+    let ping_wire = ping.encode();
+    let mut bytes = resize.encode().to_vec();
+    bytes.extend_from_slice(&ping_wire[..6]);
+    let mut state = GatewayNegotiation::new(true);
+
+    assert_eq!(
+        state.ingest(&bytes).unwrap(),
+        Some(HandshakeDecision::Legacy(resize))
+    );
+    assert_eq!(state.into_pending_bytes(), ping_wire[..6]);
 }
 
 #[test]
@@ -110,6 +176,20 @@ fn oversized_and_pending_limit_headers_have_fixed_outcomes() {
     bytes.extend_from_slice(&149_u32.to_le_bytes());
     assert_eq!(
         pending.ingest(&bytes),
+        Err(ProtocolFailure::ProtocolPendingBufferLimit)
+    );
+
+    let mut coalesced = GatewayNegotiation::new(true);
+    let resize = ControlMessage::ResolutionRequest {
+        width: 1280,
+        height: 720,
+    }
+    .to_frame()
+    .encode();
+    let mut bytes = resize.to_vec();
+    bytes.resize(super::MAX_NEGOTIATION_PENDING_BYTES + 1, 0);
+    assert_eq!(
+        coalesced.ingest(&bytes),
         Err(ProtocolFailure::ProtocolPendingBufferLimit)
     );
 }

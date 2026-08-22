@@ -2,8 +2,8 @@
 
 Last synchronized: 2026-08-22 after protocol slices `#263` through `#265`, the
 Codex loop exact-head Compose/readiness correction `#273`/`#275` merged through
-PR `#274`, and the bounded post-merge retry implementation for `#277` entered
-review.
+PR `#274`, the bounded post-merge retry implementation for `#277` merged
+through PR `#279`, and protocol bootstrap repair `#280` entered implementation.
 
 This is the first local document to read when starting a clean BrowserPane
 session. It records current product decisions, delivery order, and repository
@@ -11,8 +11,8 @@ state. Detailed requirements remain in the linked domain and plan documents.
 
 ## Current Baseline
 
-- Canonical base: `main` includes documentation refresh PR #276; the latest
-  product/tooling implementation baseline is `7a2fb413`. #172 is merged through PR #250, its
+- Canonical base: `main` includes post-merge retry PR #279 at `02b2c1dd`. #172
+  is merged through PR #250, its
   smoke stabilization is merged through PR #256, and #180 requirements are
   specified through PR #259 without resolving the external legal decision.
 - `/admin-new/` is the default operator console. `/admin/` is a compatibility
@@ -27,13 +27,15 @@ state. Detailed requirements remain in the linked domain and plan documents.
   exact-head Compose evidence before automatic merge and corrected the
   transport-versus-application readiness races in browser/CLI, compatibility
   admin, session-file, and MCP smokes. `#273` and `#275` are complete.
-- PR #274's exact-head Compose passed, but its first main Compose run failed one
-  Admin-New authenticated-route timeout. The in-review `#277` slice reruns
-  failed jobs once by default on the same required workflow run and exact merge
-  SHA, with a configurable `0` through `3` bound. Cancelled retries remain
+- PR #279 completed `#277`: post-merge failed jobs rerun once by default on the
+  same required workflow run and exact merge SHA, with a configurable `0`
+  through `3` bound. Its own main Compose run `32584253673` predated the loaded
+  retry functions and failed again on the manual failed-job rerun. The two
+  attempts exposed checked-legacy stream coalescing rejection and a stale
+  registry client after initial-frame write failure. `#280` is the focused
+  repair before browser-side protocol work resumes. Cancelled retries remain
   independent; repeated failure, mismatched or unavailable evidence, rejected
-  dispatch, and timeout remain fail-closed. This is the immediate Foundation
-  slice before protocol work resumes.
+  dispatch, and timeout remain fail-closed.
 - The supported immutable Playwright workflow package contract is frozen
   through #47/PR #242, including publication compatibility, Admin-New/CLI
   visibility, worker evidence redaction, and live package regression evidence.
@@ -110,8 +112,9 @@ open-source posture. Its engineering contract is specified, but implementation
 waits for an accountable maintainer and legal/business reviewer to record the
 decision.
 
-When both `#174` and `#180` are externally deferred, the finite qualification
-fallback is `#277`, then the ordered protocol sequence `#263` (complete) ->
+When both `#174` and `#180` are externally deferred, `#280` is the active
+Foundation repair. After it closes with green exact-head and post-merge
+Compose evidence, continue the ordered protocol sequence `#263` (complete) ->
 `#264` (complete) -> `#265` (complete) -> `#266` -> `#267` -> `#268`, followed
 by `#124`. `#175` is the open, blocked, non-executable
 program tracker and `BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md` is the program
@@ -167,17 +170,19 @@ Use `PRODUCT_PHASES_AND_RELEASE_GATES.md` for exact gate evidence and
 ## Current Material Gaps
 
 The #172 Workflow Endpoint gaps previously listed here are implemented and
-validated. The immediate missing outcomes are external Pilot selection and
-operation under #174, the reviewed governance decision and repository alignment
-under #180, ordered remote-protocol delivery under #263-#268/#175, and the
-Admin-New session-template catalog under #124. Later production and Phase N
-gaps remain owned by the issues listed above and in `DELIVERY_ROADMAP.md`.
+validated. The immediate missing outcomes are protocol bootstrap repair #280,
+external Pilot selection and operation under #174, the reviewed governance
+decision and repository alignment under #180, ordered remote-protocol delivery
+under #263-#268/#175, and the Admin-New session-template catalog under #124.
+Later production and Phase N gaps remain owned by the issues listed above and
+in `DELIVERY_ROADMAP.md`.
 
 ## Working Tree Guardrail
 
-At the time of this synchronization, local `main` matches `origin/main`. The
-generated files below are locally ignored and must not be force-staged or
-reverted unless the user explicitly requests it:
+At the time of this synchronization, `feature/BPANE-00280-protocol-bootstrap-cleanup`
+is the active branch on top of `origin/main`. The generated files below are
+locally ignored and must not be force-staged or reverted unless the user
+explicitly requests it:
 
 - `dev/certs/cert-fingerprint.txt`
 - `dev/certs/cert-hash.txt`

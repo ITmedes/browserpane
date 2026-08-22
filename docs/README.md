@@ -156,6 +156,8 @@ specifications and still require a bounded slice plan before coding.
   codecs, pure selection, and shared conformance vectors.
 - `BPANE-00265_GATEWAY_PROTOCOL_NEGOTIATION_PLAN.md`: gateway pre-session
   enforcement, host normalization, and checked old-client overlap.
+- `BPANE-00280_PROTOCOL_BOOTSTRAP_CLEANUP_PLAN.md`: focused repair for checked
+  legacy stream handoff and registry cleanup after bootstrap write failure.
 - `BPANE-00266_BROWSER_PROTOCOL_NEGOTIATION_PLAN.md`: browser handshake,
   capability gating, checked old-gateway overlap, and typed SDK feedback.
 - `BPANE-00267_PROTOCOL_FUZZING_PLAN.md`: deterministic malformed-state,

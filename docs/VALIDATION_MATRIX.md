@@ -308,6 +308,9 @@ Gateway negotiation validation includes `cargo test -p bpane-gateway
 transport::negotiation`, the complete gateway suite, the affected Rust
 workspace suite, and the real Compose protocol smoke for negotiated success,
 typed rejection/no-side-effect isolation, and legacy disable/recovery.
+Issue #280 adds direct regressions for complete and partial legacy frames
+coalesced behind the checked first frame, decoder-state handoff, and registry
+cleanup when initial server-frame delivery fails after admission.
 Run the Compose evidence from `code/web/bpane-client` with
 `npm run smoke:gateway-protocol -- --headless --connect-timeout-ms 60000`.
 `BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md` is the program contract and the six
