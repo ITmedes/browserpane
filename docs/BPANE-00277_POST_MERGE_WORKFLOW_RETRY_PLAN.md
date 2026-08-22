@@ -3,12 +3,12 @@
 ## Metadata
 
 - Issue: `#277`
-- State: Qualified
+- State: In Progress
 - Owner: BrowserPane maintainers
 - Lane: Foundation
 - Target gate: Contributor-loop publication reliability checkpoint
 - Depends on: closed `#273` and `#275`, merged through PR `#274`
-- Last verified commit/date: `275c136942c7` / 2026-08-22
+- Last verified commit/date: `ee941667d1c0` / 2026-08-22
 
 ## Business Outcome
 

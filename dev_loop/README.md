@@ -79,6 +79,10 @@ passes. A failed branch run enters the same bounded repair cycle as an ordinary
 PR check. Any repair, branch update, or concurrent head change invalidates the
 old Compose evidence. The merge API call also carries the tested head SHA, so a
 last-moment head change is rejected by GitHub rather than published unchecked.
+After that loop-owned merge, the first failed required workflow is eligible for
+one failed-job rerun by default. The driver stays on the same Actions run,
+required workflow, and exact merge SHA; a repeated failure, evidence mismatch,
+rerun rejection, unavailable run, or timeout remains terminal.
 
 When the approved project identity has repository `ADMIN` permission and is
 explicitly authorized to land green/current PRs directly, opt into GitHub's
@@ -133,6 +137,7 @@ diagnostic data.
 | `FAIL_FAST` | `1` | Repair after the first failure and grace period. |
 | `FAIL_FAST_GRACE` | `120` | Time to collect nearby sibling failures. |
 | `AUTO_RERUN_CANCELLED` | `2` | Driver reruns for cancelled Actions runs. |
+| `POST_MERGE_FAILED_RERUNS` | `1` | Failed-job reruns for each required exact-SHA post-merge workflow; accepts `0` through `3`. |
 | `SETTLE_SECONDS` | `180` | Wait for a new check set after a push/update. |
 | `SESSION_TIMEOUT_SECONDS` | `10800` | Watchdog for one Codex session. |
 | `PRE_MERGE_TIMEOUT_SECONDS` | `7200` | Maximum wait for exact-head Compose before an automatic merge. |
@@ -204,9 +209,12 @@ setup still supports the required work.
   rejects evidence from an older head.
 - After merge, the driver still waits for `Validation` and `Compose` on the
   exact merge SHA before it starts another issue. It also waits for the CI Rust
-  builder publication when that workflow's path filter matches the PR. A
-  failed or timed-out published-main workflow remains a fail-closed stop because
-  the published commit must not be silently rewritten.
+  builder publication when that workflow's path filter matches the PR. After a
+  successful exact-head pre-merge gate, each first failed published-main
+  workflow may rerun failed jobs on that same run and merge SHA within the
+  separately bounded `POST_MERGE_FAILED_RERUNS` budget. Cancelled-run retries
+  retain their independent budget. Exhaustion, mismatched evidence, rejected
+  dispatch, an unavailable run, or timeout remains a fail-closed stop.
 - README, ARCH, AGENTS, OpenAPI, Admin-New, CLI, and operator documentation stay
   aligned when an implementation changes their contract.
 
@@ -254,7 +262,10 @@ The driver leaves branches and PRs intact for diagnosis:
 - `repairs-exhausted`: the bounded repair budget was consumed.
 - `base-keeps-moving`: `main` moved repeatedly under a green PR.
 - `halted`: Codex found an ambiguous or unsafe state.
-- `post-merge-failed`: a required workflow on the exact merged SHA failed or
-  timed out, so no later issue was started.
+- `post-merge-failed`: a required workflow on the exact merged SHA exhausted
+  its failed/cancelled retry budget, produced mismatched or unavailable
+  evidence, rejected the rerun, or timed out, so no later issue was started.
 
-The journal is the first place to inspect after an unattended run.
+The journal is the first place to inspect after an unattended run. Its bounded
+`post_merge_workflows` column records workflow name, run id, final attempt,
+failed and cancelled rerun counts, and fixed conclusion without raw logs.
