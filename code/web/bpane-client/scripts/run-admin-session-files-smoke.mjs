@@ -4,6 +4,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { chromium } from 'playwright-core';
 import { ensureAdminLoggedIn, openAdminTab } from './admin-smoke-lib.mjs';
+import { isSessionFileTransferReady } from './session-readiness.mjs';
 import {
   cleanupWorkflowSmokeSessions,
   configurePage,
@@ -95,13 +96,18 @@ async function createConnectedSession(page, options, log) {
   const controlState = await poll(
     'connected session for admin file smoke',
     async () => await page.evaluate(() => window.__bpaneControl.getState()),
-    (state) => state?.connected === true && Boolean(state?.sessionId),
+    (state) => isSessionFileTransferReady(state),
     options.connectTimeoutMs,
   );
   return controlState;
 }
 
 async function uploadHarnessFile(page, options, uploadPath) {
+  await page.waitForFunction(
+    () => document.getElementById('btn-upload')?.disabled === false,
+    null,
+    { timeout: options.connectTimeoutMs },
+  );
   const chooserPromise = page.waitForEvent('filechooser');
   await page.click('#btn-upload');
   const chooser = await chooserPromise;

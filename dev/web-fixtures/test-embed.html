@@ -3981,11 +3981,29 @@
       lastFpsTime: 0,
       currentFps: 0,
       lastTransferSample: null,
+      applicationReady: false,
+      capabilities: {
+        audio: false,
+        microphone: false,
+        camera: false,
+        fileTransfer: false,
+        keyboardLayout: false,
+      },
       resolution: {
         width: 0,
         height: 0,
       },
     };
+    function resetLiveSessionReadiness() {
+      liveState.applicationReady = false;
+      liveState.capabilities = {
+        audio: false,
+        microphone: false,
+        camera: false,
+        fileTransfer: false,
+        keyboardLayout: false,
+      };
+    }
     const benchmarkState = {
       active: false,
       startedAtMs: 0,
@@ -5668,6 +5686,8 @@
       }
 
       if (overlay) overlay.style.display = 'none';
+      resetLiveSessionReadiness();
+      uploadBtn.disabled = true;
       setStatus('Connecting...', 'connecting');
       log('Resolving control-plane session...', 'info');
 
@@ -5726,10 +5746,10 @@
             void refreshSessionFilesForSelectedSession({ silent: true, force: true });
             cameraBtn.disabled = true;
             micBtn.disabled = false;
-            uploadBtn.disabled = false;
+            uploadBtn.disabled = true;
             setToggleButtonState(cameraBtn, false, 'Camera On', 'Camera Off');
             setToggleButtonState(micBtn, false, 'Mic On', 'Mic Off');
-            log('File transfer ready: drag/drop files onto the session or use Upload File.', 'info');
+            log('Waiting for host capabilities before enabling session operations.', 'info');
             // Poll frame counter + compute FPS
             liveState.lastFrameCount = 0;
             liveState.lastFpsTime = performance.now();
@@ -5883,6 +5903,7 @@
             transferStatsEl.textContent = 'Transfer: --';
             transferRateEl.textContent = 'Rate: --';
             liveState.lastTransferSample = null;
+            resetLiveSessionReadiness();
             liveState.resolution.width = 0;
             liveState.resolution.height = 0;
             setMetricsButtons();
@@ -5903,6 +5924,9 @@
             log(`Error: ${error.message}`, 'error');
           },
           onCapabilitiesChange: (capabilities) => {
+            liveState.applicationReady = true;
+            liveState.capabilities = { ...capabilities };
+            uploadBtn.disabled = !capabilities.fileTransfer;
             cameraBtn.disabled = !capabilities.camera;
             if (capabilities.camera) {
               setToggleButtonState(cameraBtn, false, 'Camera On', 'Camera Off');
@@ -5912,6 +5936,12 @@
               setToggleButtonState(cameraBtn, false, 'Camera On', 'Camera Off');
               log('Camera unavailable: host did not advertise a video device.', 'warn');
             }
+            log(
+              capabilities.fileTransfer
+                ? 'File transfer ready: drag/drop files onto the session or use Upload File.'
+                : 'File transfer unavailable for this session.',
+              capabilities.fileTransfer ? 'info' : 'warn',
+            );
           },
           onResolutionChange: (w, h) => {
             liveState.resolution.width = w;
@@ -5982,6 +6012,7 @@
       transferStatsEl.textContent = 'Transfer: --';
       transferRateEl.textContent = 'Rate: --';
       liveState.lastTransferSample = null;
+      resetLiveSessionReadiness();
       liveState.resolution.width = 0;
       liveState.resolution.height = 0;
       setMetricsButtons();
@@ -6272,6 +6303,8 @@
       listSessions: () => cloneValue(controlSessionState.resources) ?? [],
       getState: () => ({
         connected: Boolean(session),
+        applicationReady: liveState.applicationReady,
+        capabilities: { ...liveState.capabilities },
         selectedSessionId: controlSessionState.selectedSessionId,
         sessionId: controlSessionState.resource?.id ?? '',
         clientRole: currentClientRole,

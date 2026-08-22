@@ -2,7 +2,8 @@
 
 Last synchronized: 2026-08-22 after protocol slices `#263` through `#265`
 merged and the Codex loop's exact-head Compose gate entered implementation as
-`#273` from `main` at `6dd4838c`
+`#273` from `main` at `6dd4838c`. Its first branch run exposed the inherited
+session-readiness smoke regression now tracked by `#275`.
 
 This is the first local document to read when starting a clean BrowserPane
 session. It records current product decisions, delivery order, and repository
@@ -22,8 +23,9 @@ state. Detailed requirements remain in the linked domain and plan documents.
   Prometheus starter alerts/runbook, and Grafana operations dashboard are
   merged through PRs #224, #226, #228, #230, #232, and #234.
 - Compose CI reliability was restored through PR #236. The post-merge main run
-  passed gateway default, gateway docker-pool, browser/integration, unified
-  admin, and compatibility admin jobs.
+  established the five-lane baseline. Main commit `6dd4838c` subsequently
+  regressed browser/CLI and compatibility session-file readiness assumptions;
+  #275 owns that bounded correction while #273 keeps the repair on an open PR.
 - The supported immutable Playwright workflow package contract is frozen
   through #47/PR #242, including publication compatibility, Admin-New/CLI
   visibility, worker evidence redaction, and live package regression evidence.

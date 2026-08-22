@@ -213,4 +213,11 @@ matrix, risk-register, or investor repository update is required.
 
 ## Evidence Record
 
-Pending implementation, PR, exact test output, and branch/main workflow links.
+- Loop shell syntax and all `116/116` loop contract tests pass.
+- Repository document policy and the complete 44-stage fast validation profile
+  pass.
+- PR `#274` opened from `feature/BPANE-00273`.
+- Exact-head Compose run `32557421970` correctly targeted commit `bc1cbf1a` and
+  reproduced two failures inherited from main while the PR remained open. This
+  exercised the intended repair boundary and produced focused correction issue
+  `#275`; a new exact-head run is required after that repair commit.

@@ -6,7 +6,8 @@ Governance issue: [#173](https://github.com/ITmedes/browserpane/issues/173)
 
 Last requirements audit: 2026-08-22 after protocol slices #263 through #265
 merged and #273 entered implementation to require exact-head Compose evidence
-before Codex automatic merge. The remaining focused #175 protocol issues are
+before Codex automatic merge. Its first exact-head run reproduced the
+main-branch readiness regression now isolated as #275. The remaining focused #175 protocol issues are
 `#266` through `#268`, based on `main` at `6dd4838c`. The Workflow
 Endpoint has passing focused, contract, and
 real-Compose fake-BPM evidence. #174 remains the next Pilot Value outcome but
@@ -61,7 +62,7 @@ Qualified until a later post-merge audit passes.
 
 | Lane | Outcome | Current entry point | Promotion target |
 | --- | --- | --- | --- |
-| Foundation | Trusted build, auth, contracts, storage, and lifecycle baseline. | #273 exact-head Compose gate in progress after #235 reliability | Foundation Gate |
+| Foundation | Trusted build, auth, contracts, storage, and lifecycle baseline. | #273 exact-head Compose gate plus #275 readiness repair in progress | Foundation Gate |
 | Pilot Value | One bounded reusable BPM browser activity with accepted evidence and runbook. | #172 merged; #174 awaits real candidate selection | Phase 0 Gate |
 | Operator Product | Complete and promote `/admin-new/` as the default operator console. | Default promoted through #163; #124 is the next focused catalog gap | Phase 1 Gate |
 | Production | Harden deployment, security, recovery, supply chain, and telemetry. | #233 dashboard baseline merged; #178 retains broader telemetry scope | Production Baseline |
@@ -91,8 +92,9 @@ Qualified until a later post-merge audit passes.
 | 14 | #257 | Done | #246 requirements loop | Defer external decisions and evaluate only documented parallel/fallback requirements work; merged through PR #258. |
 | 15 | #260 | Done | #257 deferred-candidate contract | Finite roadmap-owned fallback traversal merged through PR #261. |
 | 16 | #273 | In Progress | #241 loop and Compose manual dispatch | Require exact-head Compose before automatic merge so failures remain repairable on the open PR. |
+| 17 | #275 | In Progress | #273 branch Compose evidence | Distinguish transport connection from host capability readiness in compatibility smokes and UI actions. |
 
-#241, #244, #246, #248, #251, #253, #255, #257, #260, and #273 are contributor
+#241, #244, #246, #248, #251, #253, #255, #257, #260, #273, and #275 are contributor
 tooling or validation reliability and do not supersede the Pilot sequence.
 #172 is complete. #174 and #180 remain externally gated.
 
@@ -117,7 +119,7 @@ When no Ready work exists, use this finite order:
 
 The qualifier must preserve the external blockers on `#174` and `#180`.
 Protocol slices `#263` through `#265` are complete, so `#266` is the next
-engineering fallback after the bounded #273 contributor-loop correction.
+engineering fallback after the bounded #273/#275 contributor-loop correction.
 Issues `#263` through `#268` are independently shippable protocol slices with
 focused plans; each successor depends on closure of its predecessor. `#175`
 retains the complete contract as a blocked program tracker and is never a

@@ -21,7 +21,9 @@ import {
   fetchAuthConfig,
   launchChrome,
   parseSmokeArgs,
+  poll,
 } from './workflow-smoke-lib.mjs';
+import { isSessionApplicationReady } from './session-readiness.mjs';
 
 const log = createLogger('bpane-cli-smoke');
 
@@ -1298,13 +1300,11 @@ async function connectHarnessSession(page, sessionId, options) {
     await window.__bpaneControl.selectSession(id);
     await window.__bpaneControl.connectSelected({ clientRole: 'interactive' });
   }, sessionId);
-  await page.waitForFunction(
-    (id) => {
-      const state = window.__bpaneControl?.getState?.();
-      return state?.connected === true && state?.sessionId === id;
-    },
-    sessionId,
-    { timeout: options.connectTimeoutMs },
+  await poll(
+    `application-ready session ${sessionId}`,
+    async () => await page.evaluate(() => window.__bpaneControl?.getState?.()),
+    (state) => isSessionApplicationReady(state, sessionId),
+    options.connectTimeoutMs,
   );
 }
 
