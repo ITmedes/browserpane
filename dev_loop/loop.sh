@@ -23,6 +23,7 @@ AUTO_RERUN_CANCELLED="${AUTO_RERUN_CANCELLED:-2}"
 SETTLE_SECONDS="${SETTLE_SECONDS:-180}"
 SESSION_TIMEOUT_SECONDS="${SESSION_TIMEOUT_SECONDS:-10800}"
 POST_MERGE_TIMEOUT_SECONDS="${POST_MERGE_TIMEOUT_SECONDS:-7200}"
+PRE_MERGE_TIMEOUT_SECONDS="${PRE_MERGE_TIMEOUT_SECONDS:-7200}"
 MIN_FREE_DISK_GB="${MIN_FREE_DISK_GB:-50}"
 AUTO_QUALIFY="${AUTO_QUALIFY:-1}"
 AUTO_MERGE="${AUTO_MERGE:-0}"
@@ -30,6 +31,7 @@ ADMIN_MERGE="${ADMIN_MERGE:-0}"
 MERGE_METHOD="${MERGE_METHOD:-squash}"
 DEFAULT_BRANCH="${DEFAULT_BRANCH:-main}"
 BRANCH_PREFIX="${BRANCH_PREFIX:-codex/BPANE-}"
+PRE_MERGE_WORKFLOW="${PRE_MERGE_WORKFLOW-compose.yml}"
 POST_MERGE_WORKFLOWS="${POST_MERGE_WORKFLOWS:-auto}"
 
 CODEX_BIN="${CODEX_BIN:-codex}"
@@ -75,7 +77,7 @@ validate_config() {
     value="${!name}"
     is_uint "$value" || die "$name must be a non-negative integer, got '$value'."
   done
-  for name in MAX_SPECIFICATION_CYCLES CI_TIMEOUT_SECONDS POLL_SECONDS FAIL_FAST_GRACE SETTLE_SECONDS SESSION_TIMEOUT_SECONDS POST_MERGE_TIMEOUT_SECONDS; do
+  for name in MAX_SPECIFICATION_CYCLES CI_TIMEOUT_SECONDS POLL_SECONDS FAIL_FAST_GRACE SETTLE_SECONDS SESSION_TIMEOUT_SECONDS PRE_MERGE_TIMEOUT_SECONDS POST_MERGE_TIMEOUT_SECONDS; do
     value="${!name}"
     is_positive_uint "$value" || die "$name must be a positive integer, got '$value'."
   done
@@ -89,6 +91,7 @@ validate_config() {
   case "$MERGE_METHOD" in squash|merge|rebase) ;; *) die "MERGE_METHOD must be squash, merge, or rebase." ;; esac
   [[ -n "$DEFAULT_BRANCH" ]] || die "DEFAULT_BRANCH must not be empty."
   [[ -n "$BRANCH_PREFIX" ]] || die "BRANCH_PREFIX must not be empty."
+  [[ -n "$PRE_MERGE_WORKFLOW" ]] || die "PRE_MERGE_WORKFLOW must not be empty."
 }
 
 disk_available_kib() {
@@ -571,13 +574,28 @@ ci_stall_diagnostics() {
     --jq '.[] | "    #\(.databaseId) \(.name): \(.status) / \(.conclusion // "pending") | \(.url)"' 2>/dev/null || true
 }
 
-wait_for_post_merge_workflow() {
-  local workflow="$1" commit_sha="$2"
-  local deadline=$(( $(date +%s) + POST_MERGE_TIMEOUT_SECONDS )) previous=""
+workflow_runs_for_commit() {
+  local workflow="$1" commit_sha="$2" json
+  json="$(gh run list --workflow "$workflow" --commit "$commit_sha" --limit 10 \
+    --json databaseId,status,conclusion,url,headSha,createdAt,attempt,event 2>/dev/null || printf '[]')"
+  jq -c --arg commit_sha "$commit_sha" '
+    if type != "array" then [] else
+      [.[] | select(.headSha == $commit_sha)]
+      | sort_by(.createdAt // "")
+      | reverse
+    end
+  ' <<< "$json" 2>/dev/null || printf '[]\n'
+}
+
+wait_for_exact_workflow() {
+  local workflow="$1" commit_sha="$2" timeout_seconds="$3"
+  local deadline=$(( $(date +%s) + timeout_seconds )) previous="" reruns=0
+  LAST_WORKFLOW_RUN_ID=""
+  LAST_WORKFLOW_RUN_URL=""
+  LAST_WORKFLOW_RUN_CONCLUSION=""
   while (( $(date +%s) <= deadline )); do
     local json count status conclusion line
-    json="$(gh run list --workflow "$workflow" --commit "$commit_sha" --limit 1 \
-      --json databaseId,status,conclusion,url 2>/dev/null || printf '[]')"
+    json="$(workflow_runs_for_commit "$workflow" "$commit_sha")"
     count="$(jq 'length' <<< "$json")"
     if (( count == 0 )); then
       line="$workflow: waiting for a run on ${commit_sha:0:12}"
@@ -586,19 +604,65 @@ wait_for_post_merge_workflow() {
       sleep "$POLL_SECONDS"
       continue
     fi
+    LAST_WORKFLOW_RUN_ID="$(jq -r '.[0].databaseId' <<< "$json")"
+    LAST_WORKFLOW_RUN_URL="$(jq -r '.[0].url' <<< "$json")"
     status="$(jq -r '.[0].status' <<< "$json")"
     conclusion="$(jq -r '.[0].conclusion // "pending"' <<< "$json")"
-    line="$workflow: $status / $conclusion | $(jq -r '.[0].url' <<< "$json")"
+    LAST_WORKFLOW_RUN_CONCLUSION="$conclusion"
+    line="$workflow: $status / $conclusion | $LAST_WORKFLOW_RUN_URL"
     [[ "$line" == "$previous" ]] || say "$line"
     previous="$line"
     if [[ "$status" != "completed" ]]; then
       sleep "$POLL_SECONDS"
       continue
     fi
-    [[ "$conclusion" == "success" || "$conclusion" == "neutral" || "$conclusion" == "skipped" ]]
-    return
+    if [[ "$conclusion" == "success" || "$conclusion" == "neutral" || "$conclusion" == "skipped" ]]; then
+      return 0
+    fi
+    if [[ "$conclusion" == "cancelled" && "$reruns" -lt "$AUTO_RERUN_CANCELLED" ]]; then
+      say "rerunning cancelled Actions run $LAST_WORKFLOW_RUN_ID"
+      if gh run rerun "$LAST_WORKFLOW_RUN_ID" >/dev/null 2>&1; then
+        reruns=$((reruns + 1))
+        sleep "$POLL_SECONDS"
+        continue
+      fi
+      warn "could not rerun $LAST_WORKFLOW_RUN_ID"
+    fi
+    return 1
   done
   return 2
+}
+
+wait_for_post_merge_workflow() {
+  wait_for_exact_workflow "$1" "$2" "$POST_MERGE_TIMEOUT_SECONDS"
+}
+
+ensure_pre_merge_compose() {
+  local branch="$1" commit_sha="$2" existing
+  existing="$(workflow_runs_for_commit "$PRE_MERGE_WORKFLOW" "$commit_sha")"
+  if (( $(jq 'length' <<< "$existing") == 0 )); then
+    step "dispatch $PRE_MERGE_WORKFLOW for ${commit_sha:0:12}"
+    if ! gh workflow run "$PRE_MERGE_WORKFLOW" --ref "$branch" >/dev/null 2>&1; then
+      LAST_WORKFLOW_RUN_ID=""
+      LAST_WORKFLOW_RUN_URL=""
+      LAST_WORKFLOW_RUN_CONCLUSION="dispatch-failed"
+      return 3
+    fi
+  else
+    say "adopting existing $PRE_MERGE_WORKFLOW run $(jq -r '.[0].databaseId' <<< "$existing") for ${commit_sha:0:12}"
+  fi
+  wait_for_exact_workflow "$PRE_MERGE_WORKFLOW" "$commit_sha" "$PRE_MERGE_TIMEOUT_SECONDS"
+}
+
+workflow_failure_snapshot() {
+  local run_id="$1"
+  [[ -n "$run_id" ]] || { printf '(no workflow run was created)\n'; return; }
+  gh run view "$run_id" --json url,headSha,status,conclusion,jobs \
+    --jq '"Run: \(.url)\nHead: \(.headSha)\nState: \(.status) / \(.conclusion // \"pending\")\nFailed jobs:\n" +
+      ([.jobs[] | select(.conclusion == "failure" or .conclusion == "cancelled") |
+        "- \(.name) | \(.conclusion) | \(.url)"] |
+        if length == 0 then "(none reported)" else join("\n") end)' \
+    2>/dev/null || printf '(workflow details unavailable for run %s)\n' "$run_id"
 }
 
 ci_builder_paths_changed() {
@@ -870,6 +934,11 @@ repair() {
     if [[ "$situation" == "ci-red" ]]; then
       printf 'Failing/cancelled checks snapshot:\n\n%s\n\n' "$(failing_checks "$pr_number")"
       printf 'Actions run IDs: `%s`\n\n' "$(failing_run_ids "$pr_number")"
+    elif [[ "$situation" == "pre-merge-compose-failed" ]]; then
+      printf 'Exact-head Compose snapshot:\n\n%s\n\n' "$(workflow_failure_snapshot "${LAST_WORKFLOW_RUN_ID:-}")"
+      printf -- '- Workflow: `%s`\n' "$PRE_MERGE_WORKFLOW"
+      printf -- '- Run ID: `%s`\n' "${LAST_WORKFLOW_RUN_ID:-unavailable}"
+      printf -- '- Conclusion: `%s`\n\n' "${LAST_WORKFLOW_RUN_CONCLUSION:-unavailable}"
     else
       gh pr view "$pr_number" --json mergeable,mergeStateStatus \
         --jq '"Mergeable: \(.mergeable)\nMerge state: \(.mergeStateStatus)"'
@@ -924,8 +993,9 @@ merge_mode_for_gate() {
 }
 
 land() {
-  local pr_number="$1" merge_mode="${2:-normal}"
+  local pr_number="$1" merge_mode="${2:-normal}" expected_head="${3:-}"
   local -a args=(pr merge "$pr_number" "--$MERGE_METHOD" --delete-branch)
+  [[ -z "$expected_head" ]] || args+=(--match-head-commit "$expected_head")
   case "$merge_mode" in
     normal) ;;
     admin) args+=(--admin) ;;
@@ -1155,36 +1225,64 @@ while :; do
         fi
         merge_mode="$(merge_mode_for_gate "$merge_gate" || true)"
         if [[ -n "$merge_mode" ]]; then
-          if [[ "$merge_mode" == "admin" ]]; then
-            step "iteration $n | admin merge PR #$pr"
-          else
-            step "iteration $n | merge PR #$pr"
-          fi
-          required_post_merge_workflows="$(post_merge_workflows_for_pr "$pr")"
-          if land "$pr" "$merge_mode"; then
-            merge_sha="$(gh pr view "$pr" --json mergeCommit --jq '.mergeCommit.oid // empty')"
-            [[ -n "$merge_sha" ]] || { record_outcome "merge-sha-missing"; die "#${pr} merged but its merge SHA is unavailable"; }
-            good "#${pr} merged at ${merge_sha:0:12}; validating published main"
-            post_merge_rc=0
-            wait_for_post_merge_workflows "$merge_sha" "$required_post_merge_workflows" || post_merge_rc=$?
-            if (( post_merge_rc != 0 )); then
-              record_outcome "post-merge-failed"
-              die "post-merge workflows did not pass for $merge_sha (status $post_merge_rc)"
-            fi
-            record_outcome "landed"
-            good "#${pr} merged and post-merge workflows passed"
-            break
-          fi
-          if ! merge_gate="$(pr_merge_gate "$pr")"; then
+          candidate_sha="$(pr_head_oid "$pr")"
+          [[ -n "$candidate_sha" ]] || { record_outcome "pr-head-missing"; die "could not read the current head for #$pr"; }
+          step "iteration $n | pre-merge Compose for PR #$pr"
+          pre_merge_rc=0
+          ensure_pre_merge_compose "$head_branch" "$candidate_sha" || pre_merge_rc=$?
+          if (( pre_merge_rc != 0 )); then
+            warn "$PRE_MERGE_WORKFLOW did not pass for PR #$pr at ${candidate_sha:0:12} (status $pre_merge_rc)"
+            situation="pre-merge-compose-failed"
+          elif [[ "$(pr_head_oid "$pr")" != "$candidate_sha" ]]; then
+            warn "PR #$pr changed while Compose was running; discarding stale evidence"
+            continue
+          elif ! up_to_date_with_main "$head_branch"; then
+            warn "$DEFAULT_BRANCH moved while Compose was running; refreshing PR #$pr before merge"
+            continue
+          elif ! merge_gate="$(pr_merge_gate "$pr")"; then
             record_outcome "merge-state-unavailable"
-            die "merge command failed and the live merge gate for #$pr is unavailable"
+            die "could not refresh the live merge gate for #$pr after Compose"
+          else
+            merge_mode="$(merge_mode_for_gate "$merge_gate" || true)"
+          fi
+          if [[ -z "$situation" && -n "$merge_mode" ]]; then
+            if [[ "$merge_mode" == "admin" ]]; then
+              step "iteration $n | admin merge PR #$pr"
+            else
+              step "iteration $n | merge PR #$pr"
+            fi
+            required_post_merge_workflows="$(post_merge_workflows_for_pr "$pr")"
+            if land "$pr" "$merge_mode" "$candidate_sha"; then
+              merge_sha="$(gh pr view "$pr" --json mergeCommit --jq '.mergeCommit.oid // empty')"
+              [[ -n "$merge_sha" ]] || { record_outcome "merge-sha-missing"; die "#${pr} merged but its merge SHA is unavailable"; }
+              good "#${pr} merged at ${merge_sha:0:12}; validating published main"
+              post_merge_rc=0
+              wait_for_post_merge_workflows "$merge_sha" "$required_post_merge_workflows" || post_merge_rc=$?
+              if (( post_merge_rc != 0 )); then
+                record_outcome "post-merge-failed"
+                die "post-merge workflows did not pass for $merge_sha (status $post_merge_rc)"
+              fi
+              record_outcome "landed"
+              good "#${pr} merged and post-merge workflows passed"
+              break
+            fi
+            if [[ "$(pr_head_oid "$pr")" != "$candidate_sha" ]]; then
+              warn "PR #$pr changed before GitHub accepted the merge; restarting exact-head validation"
+              continue
+            fi
+            if ! merge_gate="$(pr_merge_gate "$pr")"; then
+              record_outcome "merge-state-unavailable"
+              die "merge command failed and the live merge gate for #$pr is unavailable"
+            fi
           fi
         fi
-        case "$merge_gate" in
-          merge-conflict)
+        case "$situation:$merge_gate" in
+          pre-merge-compose-failed:*)
+            ;;
+          :merge-conflict)
             situation="merge-conflict"
             ;;
-          review-required|changes-requested|merge-policy-blocked)
+          :review-required|:changes-requested|:merge-policy-blocked)
             if [[ "$merge_mode" == "admin" ]]; then
               record_outcome "admin-merge-failed"
               die "admin merge failed for #$pr and GitHub still reports $merge_gate"
@@ -1193,11 +1291,11 @@ while :; do
             good "#${pr} is green and current but stopped by $merge_gate; leaving it open"
             exit 0
             ;;
-          base-behind)
+          :base-behind)
             record_outcome "base-state-stale"
             die "GitHub reports #$pr behind even though origin/$DEFAULT_BRANCH is an ancestor; rerun after merge state settles"
             ;;
-          ready)
+          :ready)
             if [[ "$merge_mode" == "admin" ]]; then
               record_outcome "admin-merge-failed"
               die "admin merge command failed for #$pr although its refreshed merge gate is ready"

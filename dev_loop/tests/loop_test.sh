@@ -210,7 +210,7 @@ grep -Fq 'When every candidate in the documented queue' "$qualify_routine" \
   || fail "qualification contract stops after documented queue exhaustion"
 pass "qualification contract stops after documented queue exhaustion"
 
-grep -Fq '`#174` -> `#180` -> `#175` -> `#124`' "$delivery_roadmap" \
+grep -Fq '`#174` -> `#180` -> `#263` -> `#264` -> `#265` -> `#266` -> `#267` -> `#268` -> `#124`' "$delivery_roadmap" \
   || fail "canonical roadmap defines the finite fallback queue"
 pass "canonical roadmap defines the finite fallback queue"
 
@@ -405,6 +405,16 @@ if MAX_SPECIFICATION_CYCLES=0 bash -c "source '$loop'; validate_config" >/dev/nu
 fi
 pass "zero specification-cycle budget is rejected"
 
+if PRE_MERGE_TIMEOUT_SECONDS=0 bash -c "source '$loop'; validate_config" >/dev/null 2>&1; then
+  fail "zero pre-merge workflow timeout is rejected"
+fi
+pass "zero pre-merge workflow timeout is rejected"
+
+if PRE_MERGE_WORKFLOW= bash -c "source '$loop'; validate_config" >/dev/null 2>&1; then
+  fail "empty pre-merge workflow name is rejected"
+fi
+pass "empty pre-merge workflow name is rejected"
+
 MAX_SPECIFICATION_CYCLES=2
 specification_cycles=0
 reserve_specification_cycle || fail "first specification cycle is reserved"
@@ -521,15 +531,113 @@ check_rc=0
 wait_for_checks 999 || check_rc=$?
 assert_eq "2" "$check_rc" "exhausted cancelled check reruns are inconclusive"
 
-MOCK_GH_JSON='[{"databaseId":4,"status":"completed","conclusion":"success","url":"https://github.com/ITmedes/browserpane/actions/runs/4"}]'
+MOCK_GH_JSON='[{"databaseId":4,"status":"completed","conclusion":"success","url":"https://github.com/ITmedes/browserpane/actions/runs/4","headSha":"abcdef1234567890","createdAt":"2026-08-22T00:00:00Z","attempt":1,"event":"push"}]'
 MOCK_GH_RC=0
 wait_for_post_merge_workflow validation.yml abcdef1234567890 || fail "successful post-merge workflow is accepted"
 pass "successful post-merge workflow is accepted"
 
-MOCK_GH_JSON='[{"databaseId":5,"status":"completed","conclusion":"failure","url":"https://github.com/ITmedes/browserpane/actions/runs/5"}]'
+MOCK_GH_JSON='[{"databaseId":5,"status":"completed","conclusion":"failure","url":"https://github.com/ITmedes/browserpane/actions/runs/5","headSha":"abcdef1234567890","createdAt":"2026-08-22T00:00:00Z","attempt":1,"event":"push"}]'
 post_merge_rc=0
 wait_for_post_merge_workflow compose.yml abcdef1234567890 || post_merge_rc=$?
 assert_eq "1" "$post_merge_rc" "failed post-merge workflow stops delivery"
+
+MOCK_GH_JSON='[{"databaseId":6,"status":"completed","conclusion":"success","url":"https://github.com/ITmedes/browserpane/actions/runs/6","headSha":"stale0000000000","createdAt":"2026-08-22T00:01:00Z","attempt":1,"event":"workflow_dispatch"},{"databaseId":7,"status":"completed","conclusion":"success","url":"https://github.com/ITmedes/browserpane/actions/runs/7","headSha":"abcdef1234567890","createdAt":"2026-08-22T00:00:00Z","attempt":1,"event":"workflow_dispatch"}]'
+exact_runs="$(workflow_runs_for_commit compose.yml abcdef1234567890)"
+assert_eq "1" "$(jq 'length' <<< "$exact_runs")" "stale workflow evidence is excluded"
+assert_eq "7" "$(jq -r '.[0].databaseId' <<< "$exact_runs")" "exact-head workflow evidence is retained"
+
+MOCK_DISPATCH_COUNT=0
+gh() {
+  if [[ "$*" == workflow\ run* ]]; then
+    MOCK_DISPATCH_COUNT=$((MOCK_DISPATCH_COUNT + 1))
+    return 0
+  fi
+  printf '%s\n' '[{"databaseId":8,"status":"completed","conclusion":"success","url":"https://github.com/ITmedes/browserpane/actions/runs/8","headSha":"head000000000001","createdAt":"2026-08-22T00:00:00Z","attempt":1,"event":"workflow_dispatch"}]'
+}
+ensure_pre_merge_compose codex/BPANE-00273 head000000000001 \
+  || fail "existing exact-head Compose success is adopted"
+assert_eq "0" "$MOCK_DISPATCH_COUNT" "existing exact-head Compose run is not duplicated"
+assert_eq "8" "$LAST_WORKFLOW_RUN_ID" "adopted Compose run is exposed to the driver"
+
+dispatch_marker="$tmp/pre-merge-dispatch"
+list_marker="$tmp/pre-merge-list"
+rm -f "$dispatch_marker" "$list_marker"
+gh() {
+  if [[ "$*" == workflow\ run* ]]; then
+    touch "$dispatch_marker"
+    return 0
+  fi
+  if [[ ! -f "$list_marker" ]]; then
+    touch "$list_marker"
+    printf '%s\n' '[]'
+  else
+    printf '%s\n' '[{"databaseId":9,"status":"completed","conclusion":"success","url":"https://github.com/ITmedes/browserpane/actions/runs/9","headSha":"head000000000002","createdAt":"2026-08-22T00:00:00Z","attempt":1,"event":"workflow_dispatch"}]'
+  fi
+}
+ensure_pre_merge_compose codex/BPANE-00273 head000000000002 \
+  || fail "missing exact-head Compose run is dispatched and accepted"
+[[ -f "$dispatch_marker" ]] || fail "missing exact-head Compose run triggers dispatch"
+pass "missing exact-head Compose run triggers dispatch"
+
+gh() {
+  if [[ "$*" == workflow\ run* ]]; then return 1; fi
+  printf '%s\n' '[]'
+}
+pre_merge_rc=0
+ensure_pre_merge_compose codex/BPANE-00273 head000000000003 || pre_merge_rc=$?
+assert_eq "3" "$pre_merge_rc" "pre-merge Compose dispatch failure fails closed"
+assert_eq "dispatch-failed" "$LAST_WORKFLOW_RUN_CONCLUSION" "dispatch failure is actionable"
+
+gh() {
+  printf '%s\n' '[{"databaseId":10,"status":"completed","conclusion":"failure","url":"https://github.com/ITmedes/browserpane/actions/runs/10","headSha":"head000000000004","createdAt":"2026-08-22T00:00:00Z","attempt":1,"event":"workflow_dispatch"}]'
+}
+pre_merge_rc=0
+ensure_pre_merge_compose codex/BPANE-00273 head000000000004 || pre_merge_rc=$?
+assert_eq "1" "$pre_merge_rc" "failed exact-head Compose run blocks merge"
+assert_eq "10" "$LAST_WORKFLOW_RUN_ID" "failed Compose run is exposed to repair"
+assert_eq "failure" "$LAST_WORKFLOW_RUN_CONCLUSION" "failed Compose conclusion is exposed to repair"
+
+cancelled_rerun_marker="$tmp/cancelled-rerun"
+rm -f "$cancelled_rerun_marker"
+original_auto_rerun_cancelled="$AUTO_RERUN_CANCELLED"
+original_poll_seconds="$POLL_SECONDS"
+AUTO_RERUN_CANCELLED=1
+POLL_SECONDS=0
+gh() {
+  if [[ "$*" == "run rerun 11" ]]; then
+    touch "$cancelled_rerun_marker"
+    return 0
+  fi
+  if [[ -f "$cancelled_rerun_marker" ]]; then
+    printf '%s\n' '[{"databaseId":11,"status":"completed","conclusion":"success","url":"https://github.com/ITmedes/browserpane/actions/runs/11","headSha":"head000000000005","createdAt":"2026-08-22T00:00:00Z","attempt":2,"event":"workflow_dispatch"}]'
+  else
+    printf '%s\n' '[{"databaseId":11,"status":"completed","conclusion":"cancelled","url":"https://github.com/ITmedes/browserpane/actions/runs/11","headSha":"head000000000005","createdAt":"2026-08-22T00:00:00Z","attempt":1,"event":"workflow_dispatch"}]'
+  fi
+}
+wait_for_exact_workflow compose.yml head000000000005 5 \
+  || fail "cancelled exact-head Compose run is rerun within budget"
+[[ -f "$cancelled_rerun_marker" ]] || fail "cancelled exact-head Compose run triggers rerun"
+pass "cancelled exact-head Compose run triggers bounded rerun"
+AUTO_RERUN_CANCELLED="$original_auto_rerun_cancelled"
+POLL_SECONDS="$original_poll_seconds"
+
+POLL_SECONDS=1
+gh() { printf '%s\n' '[]'; }
+pre_merge_rc=0
+wait_for_exact_workflow compose.yml head000000000006 1 || pre_merge_rc=$?
+assert_eq "2" "$pre_merge_rc" "exact-head Compose wait times out with a distinct status"
+POLL_SECONDS="$original_poll_seconds"
+
+gh() {
+  if [[ "$*" == *"run view 10"* ]]; then
+    printf '%s\n' '{"url":"https://github.com/ITmedes/browserpane/actions/runs/10","headSha":"head000000000004","status":"completed","conclusion":"failure","jobs":[{"name":"Browser smokes","conclusion":"failure","url":"https://github.com/ITmedes/browserpane/actions/runs/10/job/1"}]}' \
+      | jq -r '"Run: \(.url)\nHead: \(.headSha)\nState: \(.status) / \(.conclusion)\nFailed jobs:\n- \(.jobs[0].name) | \(.jobs[0].conclusion) | \(.jobs[0].url)"'
+  fi
+}
+failure_snapshot="$(workflow_failure_snapshot 10)"
+[[ "$failure_snapshot" == *"Browser smokes"* && "$failure_snapshot" == *"head000000000004"* ]] \
+  || fail "Compose repair snapshot identifies exact head and failed job"
+pass "Compose repair snapshot identifies exact head and failed job"
 
 printf '%s\n' '["Cargo.lock","README.md"]' | ci_builder_paths_changed \
   || fail "CI Rust builder path change is detected"
@@ -545,6 +653,8 @@ unset -f gh
 gh() { printf '%s\n' "$*"; }
 assert_eq "pr merge 999 --squash --delete-branch" "$(land 999 normal)" "normal land omits admin bypass"
 assert_eq "pr merge 999 --squash --delete-branch --admin" "$(land 999 admin)" "admin land is explicit"
+assert_eq "pr merge 999 --squash --delete-branch --match-head-commit abc123" \
+  "$(land 999 normal abc123)" "land binds GitHub merge to the tested head"
 if land 999 invalid >/dev/null 2>&1; then
   fail "unknown land mode is rejected"
 fi
