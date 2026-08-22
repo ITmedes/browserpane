@@ -1,9 +1,9 @@
 # Open GitHub Issues Context
 
 Created: 2026-07-10
-Revalidated: 2026-08-21 after the #175 program was decomposed from `main` at
-`e21e2206`; #174 and #180 are externally deferred, with ordered protocol
-issues #263-#268 then #124 as the finite engineering fallback
+Revalidated: 2026-08-22 from `main` at `7a2fb413` after #273/#275 merged through
+PR #274; #174 and #180 are externally deferred, with ordered protocol issues
+#266-#268 then #124 as the finite engineering fallback
 
 This document maps the current `docs/` workspace to the live open GitHub
 issues for `ITmedes/browserpane`. It is the bridge between the consolidated
@@ -11,7 +11,9 @@ local planning docs and the public issue tracker.
 
 Source check:
 
-- fetched and updated through the GitHub API on 2026-08-21,
+- fetched and updated through the GitHub API on 2026-08-22,
+- 34 open issues after restoring the #175 tracker, all represented in this
+  documentation workspace,
 - open issue range: `#6` through `#268`,
 - focused docs-derived implementation issues created on 2026-07-10: `#145`
   through `#170`,
@@ -98,15 +100,15 @@ Source check:
 | `#76` Data residency, encryption, and BYOK controls | `IMPLEMENTATION_WORK_ORDER.md`, `RESOURCE_LIFECYCLE_REQUIREMENTS.md` | Item 27 | Deferred enterprise storage/security capability. |
 | `#79` Central enterprise policy engine | `PROJECT_GOVERNANCE_REQUIREMENTS.md`, `IMPLEMENTATION_WORK_ORDER.md` | Items 17, 27 | Current project-policy UX is nearer term; central policy engine is later. |
 | `#80` DLP and content inspection hooks | `PROJECT_GOVERNANCE_REQUIREMENTS.md`, `IMPLEMENTATION_WORK_ORDER.md` | Items 17, 27 | Current file policy visibility is nearer term; DLP provider hooks are later. |
-| `#124` Admin session template catalog management | `DOMAIN_REQUIREMENTS.md`, `RESOURCE_LIFECYCLE_REQUIREMENTS.md`, `ADMIN_NEW_REQUIREMENTS.md`, `ADMIN_NEW_MANUAL_CHECKPOINTS.md` | Item 15 | Focused admin-new resource slice. Use as canonical issue for template catalog work. |
+| `#124` Admin session template catalog management | `BPANE-00124_SESSION_TEMPLATE_CATALOG_PLAN.md`, `DOMAIN_REQUIREMENTS.md`, `RESOURCE_LIFECYCLE_REQUIREMENTS.md`, `ADMIN_NEW_REQUIREMENTS.md`, `ADMIN_NEW_MANUAL_CHECKPOINTS.md` | Final current fallback after #268 | Focused Admin-New catalog plus additive active/archived API state. Use as canonical issue for template catalog work. |
 | `#171` Workflow Studio Teach Mode and controlled demonstration-to-workflow publishing | `BPANE-00171_WORKFLOW_TEACH_MODE_PLAN.md`, `DOMAIN_REQUIREMENTS.md`, `ADMIN_NEW_REQUIREMENTS.md`, `VALIDATION_MATRIX.md` | Deferred Phase N Innovation | Canonical owner for semantic demonstrations, candidate generation, replay, and repair. Explicitly not Phase 0. |
 | `#172` Phase 0 project-scoped Workflow Endpoint for BPM polling | `BPANE-00172_PHASE_0_WORKFLOW_ENDPOINT_PLAN.md`, `DOMAIN_REQUIREMENTS.md`, `IDENTITY_ACCESS_REQUIREMENTS.md`, `ADMIN_NEW_REQUIREMENTS.md`, `PROJECT_GOVERNANCE_REQUIREMENTS.md`, `RUNTIME_OPERATOR_REQUIREMENTS.md`, `VALIDATION_MATRIX.md` | Second Pilot Value slice after #47 | Canonical owner for one stable endpoint, service-principal grant, schemas, idempotency, typed outcomes, timeout/cancel, side-effect certainty, artifacts, and polling conformance. |
 | `#173` Executable delivery roadmap, capability maturity, and release gates | `BPANE-00173_DELIVERY_GOVERNANCE_PLAN.md`, `DELIVERY_ROADMAP.md`, `CAPABILITY_MATURITY_MATRIX.md`, `PRODUCT_PHASES_AND_RELEASE_GATES.md`, `RISK_REGISTER.md` | Governance baseline | Canonical owner for delivery structure and cross-reference integrity. No runtime scope. |
 | `#174` Bounded Phase 0 BPM browser activity | `BPANE-00174_PHASE_0_REFERENCE_WORKFLOW_PLAN.md`, `DELIVERY_ROADMAP.md`, `PRODUCT_PHASES_AND_RELEASE_GATES.md` | Third Pilot Value slice after #47/#172 | Canonical owner for candidate qualification, one real activity, operating evidence, and Stop/Operate/Phase 1 exit. No subprocess, Human Handoff, or Teach Mode. |
-| `#175` Remote protocol v1 productization tracker | `BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md`, ADR 0003 | Production lane | Non-executable program owner for the ordered implementation issues #263-#268. |
-| `#263` Remote protocol contract and vector baseline | `BPANE-00263_REMOTE_PROTOCOL_CONTRACT_PLAN.md`, `BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md`, `VALIDATION_MATRIX.md` | Protocol slice 1 | Publish the normative contract and complete current Rust/TypeScript vector consumption. |
-| `#264` Protocol negotiation codecs | `BPANE-00264_PROTOCOL_NEGOTIATION_CODECS_PLAN.md`, `BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md`, `VALIDATION_MATRIX.md` | Protocol slice 2 after #263 | Add pure Rust/TypeScript codecs, selection, and complete negotiation vectors without runtime wiring. |
-| `#265` Gateway protocol negotiation | `BPANE-00265_GATEWAY_PROTOCOL_NEGOTIATION_PLAN.md`, `BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md`, `VALIDATION_MATRIX.md` | Protocol slice 3 after #264 | Enforce negotiation before runtime/session side effects and preserve checked old clients. |
+| `#175` Remote protocol v1 productization tracker | `BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md`, ADR 0003 | Open blocked Production tracker | Non-executable program owner for the ordered implementation issues #263-#268; only #268 may close it. |
+| `#263` Remote protocol contract and vector baseline | `BPANE-00263_REMOTE_PROTOCOL_CONTRACT_PLAN.md`, `BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md`, `VALIDATION_MATRIX.md` | Protocol slice 1 complete | Normative contract and current Rust/TypeScript vector consumption merged. |
+| `#264` Protocol negotiation codecs | `BPANE-00264_PROTOCOL_NEGOTIATION_CODECS_PLAN.md`, `BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md`, `VALIDATION_MATRIX.md` | Protocol slice 2 complete | Pure Rust/TypeScript codecs, selection, and negotiation vectors merged. |
+| `#265` Gateway protocol negotiation | `BPANE-00265_GATEWAY_PROTOCOL_NEGOTIATION_PLAN.md`, `BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md`, `VALIDATION_MATRIX.md` | Protocol slice 3 complete | Gateway pre-session negotiation enforcement and checked old-client compatibility merged. |
 | `#266` Browser protocol negotiation | `BPANE-00266_BROWSER_PROTOCOL_NEGOTIATION_PLAN.md`, `BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md`, `VALIDATION_MATRIX.md` | Protocol slice 4 after #265 | Delay browser readiness, gate capabilities, preserve checked old gateways, and expose typed SDK errors. |
 | `#267` Protocol fuzzing and malformed-state coverage | `BPANE-00267_PROTOCOL_FUZZING_PLAN.md`, `BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md`, `VALIDATION_MATRIX.md` | Protocol slice 5 after #266 | Add deterministic corpus replay, four Rust fuzz targets, sanitizer evidence, and isolation tests. |
 | `#268` Protocol compatibility qualification | `BPANE-00268_PROTOCOL_COMPATIBILITY_QUALIFICATION_PLAN.md`, `BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md`, `VALIDATION_MATRIX.md` | Protocol slice 6 after #267 | Prove rolling upgrade/rollback, current features, Admin-New diagnostics, and close #175. |
@@ -234,15 +236,15 @@ The cross-reference pass also updated the issue bodies in both directions:
 | `#76` | Relevant but deferred enterprise storage/security capability. | Updated on GitHub 2026-07-31 with the `#172` data-classification/residency boundary in addition to `/admin-new/` effective-policy display alignment. | Effective residency/encryption policy belongs in admin-new once implemented; `#172` only references it. |
 | `#79` | Relevant but broad. Current project-policy visibility is nearer term than a central policy engine. | Updated on GitHub 2026-07-31 with the narrow `#172` endpoint-grant boundary in addition to `/admin-new/` effective-policy diagnostics alignment. | Admin-new policy diagnostics should be part of the eventual effective-policy surface; generalized policy evaluation remains here. |
 | `#80` | Relevant but broad. Current file-policy visibility is nearer term than pluggable DLP. | Updated on GitHub 2026-07-31 with the `#172` process-variable/artifact boundary in addition to `/admin-new/` file/artifact scan-state alignment. | Admin-new file/artifact indicators and filters are the expected operator UI; generalized inspection remains here. |
-| `#124` | Relevant and focused. This is the cleanest current admin-new implementation issue. | Updated on GitHub 2026-07-10 to name `/admin-new/` explicitly as the target surface. | Admin-new session-template catalog route is missing and should be built when this issue is selected. |
+| `#124` | Relevant and focused final fallback after #268. | Revalidated on 2026-08-22 against the current template API, CLI, create-session flow, and missing catalog. | Add the Admin-New catalog and additive active/archived API state; do not imply delete or version-history support. |
 | `#171` | Relevant and focused Phase N Teach Mode capability. | Explicitly deferred from Phase 0 on GitHub 2026-08-20. | Future Workflow Studio and training routes only after validated demand and stable execution contracts. |
 | `#172` | Required Phase 0 polling endpoint. | Refocused on GitHub 2026-08-20 and backed by a bounded plan. | One endpoint, machine grant, schemas, idempotency, typed outcomes, side-effect certainty, artifacts, and polling; advanced lifecycle moved to #240. |
 | `#173` | Current governance slice. | Created on GitHub 2026-07-31 with business case, use case, scope, acceptance, and smoke. | No runtime UI. It governs roadmap, maturity, gates, risks, and claim traceability. |
 | `#174` | Qualified bounded Pilot Value slice. | Refocused on GitHub and locally on 2026-08-20. | One external BPM activity and normally one session; no subprocess, internal handoff, or training. |
-| `#175` | Blocked non-executable protocol program tracker. | Reframed on GitHub 2026-08-21 to delegate implementation to ordered children #263-#268. | Final child #268 adds diagnostics to existing session surfaces and is the only child that may close #175. |
-| `#263` | First focused protocol slice. | Created on GitHub 2026-08-21 with complete business, scope, acceptance, smoke, and plan contract. | No Admin-New impact; freezes the normative contract/current vectors. |
-| `#264` | Second focused protocol slice after #263. | Created on GitHub 2026-08-21 with complete codec/conformance boundaries. | No Admin-New impact; no runtime wiring. |
-| `#265` | Third focused protocol slice after #264. | Created on GitHub 2026-08-21 with gateway enforcement and rollback boundaries. | Diagnostics are runtime inputs only; presentation waits for #268. |
+| `#175` | Open blocked non-executable protocol program tracker. | Reopened and reconciled on GitHub 2026-08-22 after premature manual closure; completed children #263-#265 are checked. | Final child #268 adds diagnostics to existing session surfaces and is the only child that may close #175. |
+| `#263` | Completed first protocol slice. | Closed with its normative contract/current-vector evidence. | No Admin-New impact. |
+| `#264` | Completed second protocol slice. | Closed with codec/conformance evidence. | No Admin-New impact; no runtime wiring. |
+| `#265` | Completed third protocol slice. | Closed with gateway enforcement and rollback evidence. | Diagnostics are runtime inputs only; presentation waits for #268. |
 | `#266` | Fourth focused protocol slice after #265. | Created on GitHub 2026-08-21 with browser enforcement and SDK boundaries. | Produces typed errors/snapshot consumed by #268. |
 | `#267` | Fifth focused protocol slice after #266. | Created on GitHub 2026-08-21 with bounded fuzz/sanitizer evidence. | No Admin-New change. |
 | `#268` | Final focused protocol qualification slice after #267. | Created on GitHub 2026-08-21 as the #175 closure owner. | Integrates safe live diagnostics into existing session preview/observability surfaces. |

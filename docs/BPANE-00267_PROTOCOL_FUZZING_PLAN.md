@@ -7,7 +7,7 @@
 - Owner: BrowserPane maintainers
 - Lane: Production
 - Target gate: Production Baseline parser-resilience checkpoint
-- Depends on: closed `#266`
+- Depends on: `#266` (must be closed before this slice enters Ready)
 - Parent program: `#175`; protocol slice 5 of 6
 - Last verified commit/date: `e21e2206a93a` / 2026-08-21
 

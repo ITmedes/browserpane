@@ -1,9 +1,8 @@
 # BrowserPane Current Context
 
-Last synchronized: 2026-08-22 after protocol slices `#263` through `#265`
-merged and the Codex loop's exact-head Compose gate entered implementation as
-`#273` from `main` at `6dd4838c`. Its first branch run exposed the inherited
-session-readiness smoke regression now tracked by `#275`.
+Last synchronized: 2026-08-22 after protocol slices `#263` through `#265` and
+the Codex loop exact-head Compose/readiness correction `#273`/`#275` merged
+through PR `#274` on `main` at `7a2fb413`.
 
 This is the first local document to read when starting a clean BrowserPane
 session. It records current product decisions, delivery order, and repository
@@ -11,7 +10,7 @@ state. Detailed requirements remain in the linked domain and plan documents.
 
 ## Current Baseline
 
-- Canonical base: `main` at `6dd4838c`; #172 is merged through PR #250, its
+- Canonical base: `main` at `7a2fb413`; #172 is merged through PR #250, its
   smoke stabilization is merged through PR #256, and #180 requirements are
   specified through PR #259 without resolving the external legal decision.
 - `/admin-new/` is the default operator console. `/admin/` is a compatibility
@@ -22,11 +21,10 @@ state. Detailed requirements remain in the linked domain and plan documents.
   OpenTelemetry runtime trace checkpoint, workflow/recording metrics,
   Prometheus starter alerts/runbook, and Grafana operations dashboard are
   merged through PRs #224, #226, #228, #230, #232, and #234.
-- Compose CI reliability was restored through PR #236. The post-merge main run
-  established the five-lane baseline. Main commit `6dd4838c` subsequently
-  exposed transport-versus-application readiness races in browser/CLI,
-  compatibility admin, session-file, and MCP smokes; #275 owns that bounded
-  correction while #273 keeps the repair on an open PR.
+- Compose CI reliability was restored through PR #236. PR #274 then required
+  exact-head Compose evidence before automatic merge and corrected the
+  transport-versus-application readiness races in browser/CLI, compatibility
+  admin, session-file, and MCP smokes. `#273` and `#275` are complete.
 - The supported immutable Playwright workflow package contract is frozen
   through #47/PR #242, including publication compatibility, Admin-New/CLI
   visibility, worker evidence redaction, and live package regression evidence.
@@ -106,7 +104,7 @@ decision.
 When both `#174` and `#180` are externally deferred, the finite qualification
 fallback is the ordered protocol sequence `#263` (complete) -> `#264`
 (complete) -> `#265` (complete) -> `#266` -> `#267` -> `#268`, followed by
-`#124`. `#175` is now the non-executable
+`#124`. `#175` is the open, blocked, non-executable
 program tracker and `BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md` is the program
 contract. Each child has a focused plan and must close before its successor can
 enter Ready. `#124` adds the Admin-New session-template catalog and is
@@ -169,8 +167,8 @@ gaps remain owned by the issues listed above and in `DELIVERY_ROADMAP.md`.
 ## Working Tree Guardrail
 
 At the time of this synchronization, local `main` matches `origin/main`. The
-generated files below are locally modified and must not be staged or reverted
-unless the user explicitly requests it:
+generated files below are locally ignored and must not be force-staged or
+reverted unless the user explicitly requests it:
 
 - `dev/certs/cert-fingerprint.txt`
 - `dev/certs/cert-hash.txt`
