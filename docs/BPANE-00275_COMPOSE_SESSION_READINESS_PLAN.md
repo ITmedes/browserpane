@@ -14,7 +14,8 @@
 Compose validation reports real browser-session failures instead of acting on a
 transport connection before the BrowserPane runtime is ready. Compatibility UI
 actions that require host capabilities remain unavailable until those
-capabilities have actually been advertised.
+capabilities have actually been advertised, and the admin follows authoritative
+transport closure instead of retaining stale connected state.
 
 ## Example Use Case
 
@@ -33,6 +34,10 @@ running runtime until the host sends its session-ready capability state.
   no file chooser.
 - Gateway and Admin-New lanes passed on the rerun; the failures are isolated to
   compatibility-fixture readiness assumptions.
+- Exact-head run `32558245570` proved the original CLI and session-file repairs,
+  then exposed two later races: compatibility admin disconnect-all completed at
+  the gateway while the UI retained connected state, and the MCP smoke checked
+  for two Docker runtimes immediately after creating their canvas shells.
 
 ## Scope
 
@@ -41,21 +46,29 @@ running runtime until the host sends its session-ready capability state.
 2. Keep Upload disabled until file transfer is advertised.
 3. Make CLI and compatibility file smokes wait for application capability
    readiness instead of transport-only connection state.
-4. Add focused predicate tests and rerun the exact-head Compose matrix.
+4. Forward SDK transport lifecycle callbacks into the compatibility admin and
+   clear its embedded-browser state when interactive clients are gone, even if
+   recorder or automation clients remain attached.
+5. Make the two-session MCP smoke require distinct sessions and poll for both
+   runtime containers within the existing bounded connect timeout.
+6. Add focused tests and rerun the exact-head Compose matrix.
 
 ## Non-Goals
 
 - Reverting protocol negotiation or allocating browser runtimes before the
   handshake.
 - Changing the frozen protocol or gateway API.
-- Expanding compatibility-admin functionality.
+- Expanding compatibility-admin functionality beyond accurate connection
+  lifecycle state.
 
 ## Contract And Compatibility
 
-- API/OpenAPI, protocol, persistence, CLI, and SDK contracts: N/A.
+- API/OpenAPI, protocol, persistence, CLI, and public SDK contracts: N/A.
 - The fixture-only `window.__bpaneControl.getState()` gains additive
   `applicationReady` and `capabilities` test fields.
 - Existing `connected` semantics remain transport-oriented for compatibility.
+- The compatibility admin's internal SDK adapter now forwards existing
+  transport lifecycle callbacks; this is not a new SDK contract.
 - Rollback removes the additive fields and smoke predicates; no migration is
   required.
 
@@ -67,7 +80,8 @@ The readiness state contains booleans only.
 ## Test Strategy
 
 - Unit: verify transport-only state is rejected, application-ready state is
-  accepted, and file readiness requires the advertised file-transfer flag.
+  accepted, file readiness requires the advertised file-transfer flag, and the
+  compatibility SDK adapter forwards lifecycle callbacks.
 - Integration: run browser-client tests/build and the two focused Compose smoke
   stages against local Compose when available.
 - E2E: run the full exact-head Compose workflow and require all five lanes.
@@ -82,6 +96,11 @@ The readiness state contains booleans only.
 4. Upload a file and verify it appears in the selected session's file list.
 5. Release and reconnect a runtime; verify status reaches `running` before
    release lifecycle assertions proceed.
+6. Use the lifecycle inspector to disconnect all interactive clients; verify
+   the embedded browser changes to Disconnected even if a non-interactive
+   attachment remains.
+7. Run the two-session MCP smoke and verify both distinct runtimes receive only
+   their own navigation marker.
 
 ## Documentation And Claim Impact
 
@@ -103,4 +122,13 @@ unchanged because this corrects fixture and validation synchronization only.
 - Local Compose: `compose-cli` passed in 159.3 seconds and
   `compose-admin-compat-session-files` passed in 85.7 seconds after rebuilding
   the fixture-bearing web image.
-- Hosted exact-head Compose: pending the repaired branch commit.
+- Exact-head Compose `32558245570` passed both originally repaired stages and
+  all gateway/Admin-New lanes; its later compatibility disconnect and MCP
+  readiness failures produced the second bounded repair.
+- Compatibility admin unit suite: `201/201` passed; connector callback test,
+  TypeScript check, and production build passed.
+- Local Compose: the complete compatibility admin session smoke passed after
+  rebuilding the web image. The two-session MCP endpoint smoke passed after a
+  clean gateway restart, including distinct runtime navigation and independent
+  MCP client teardown.
+- Hosted exact-head Compose: pending the second repaired branch commit.

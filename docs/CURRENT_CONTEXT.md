@@ -24,8 +24,9 @@ state. Detailed requirements remain in the linked domain and plan documents.
   merged through PRs #224, #226, #228, #230, #232, and #234.
 - Compose CI reliability was restored through PR #236. The post-merge main run
   established the five-lane baseline. Main commit `6dd4838c` subsequently
-  regressed browser/CLI and compatibility session-file readiness assumptions;
-  #275 owns that bounded correction while #273 keeps the repair on an open PR.
+  exposed transport-versus-application readiness races in browser/CLI,
+  compatibility admin, session-file, and MCP smokes; #275 owns that bounded
+  correction while #273 keeps the repair on an open PR.
 - The supported immutable Playwright workflow package contract is frozen
   through #47/PR #242, including publication compatibility, Admin-New/CLI
   visibility, worker evidence redaction, and live package regression evidence.

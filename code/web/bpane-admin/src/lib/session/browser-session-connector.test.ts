@@ -133,6 +133,38 @@ describe('BrowserSessionConnector', () => {
     });
   });
 
+  it('forwards transport lifecycle callbacks to the SDK', async () => {
+    let connectOptions: BrowserSessionConnectOptions | null = null;
+    const onDisconnect = vi.fn();
+    const onError = vi.fn();
+    const connector = new BrowserSessionConnector({
+      controlClient: new ControlClient({
+        baseUrl: 'http://localhost:8932',
+        accessTokenProvider: () => 'owner-token',
+        fetchImpl: ticketFetch(),
+      }),
+      sdkProvider: {
+        load: async () => ({
+          BpaneSession: {
+            connect: async (options) => {
+              connectOptions = options;
+              return { disconnect: vi.fn() };
+            },
+          },
+        }),
+      },
+    });
+
+    await connector.connect(
+      SESSION,
+      document.createElement('div'),
+      DEFAULT_BROWSER_SESSION_CONNECT_PREFERENCES,
+      { onDisconnect, onError },
+    );
+
+    expect(connectOptions).toMatchObject({ onDisconnect, onError });
+  });
+
   it('clears stale SDK mount state before connecting', async () => {
     const handle = { disconnect: vi.fn() };
     const connector = new BrowserSessionConnector({

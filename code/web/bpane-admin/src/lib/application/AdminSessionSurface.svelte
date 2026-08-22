@@ -91,6 +91,7 @@
   let browserError = $state<string | null>(null);
   let browserStatus = $state('Disconnected');
   let browserConnectRequestVersion = $state(0);
+  let browserConnectionGeneration = 0;
   let sessionFileCount = $state(0);
   let sessionFilesRefreshVersion = $state(0);
   let recordingsRefreshVersion = $state(0);
@@ -566,15 +567,32 @@
     const session = selectedSession;
     if (!session) return;
     disconnectBrowser(false);
+    const connectionGeneration = ++browserConnectionGeneration;
+    let transportDisconnected = false;
     browserConnecting = true;
     browserError = null;
     browserStatus = `Connecting to ${session.id}`;
     showGlobalMessage('loading', 'Browser connection', `Connecting to session ${shortAdminId(session.id)}...`);
     try {
-      const connection = await browserConnector.connect(session, container, browserPreferences);
-      if (selectedSession?.id !== session.id) {
+      const connection = await browserConnector.connect(session, container, browserPreferences, {
+        onDisconnect: (reason) => {
+          transportDisconnected = true;
+          handleBrowserTransportDisconnect(session.id, connectionGeneration, reason);
+        },
+      });
+      if (
+        transportDisconnected
+        || browserConnectionGeneration !== connectionGeneration
+        || selectedSession?.id !== session.id
+      ) {
+        const ownsConnectionGeneration = browserConnectionGeneration === connectionGeneration;
+        if (ownsConnectionGeneration) {
+          browserConnectionGeneration += 1;
+        }
         connection.handle.disconnect();
-        browserStatus = 'Disconnected';
+        if (ownsConnectionGeneration && selectedSession?.id === session.id) {
+          browserStatus = 'Disconnected';
+        }
         return;
       }
       liveConnection = connection;
@@ -582,14 +600,19 @@
       showGlobalMessage('success', 'Browser connected', `Connected to session ${shortAdminId(session.id)}.`);
       void refreshSelectedSessionInBackground();
     } catch (error) {
-      browserError = errorMessage(error);
-      browserStatus = 'Connection failed';
-      showGlobalMessage('error', 'Browser connection failed', browserError);
+      if (browserConnectionGeneration === connectionGeneration) {
+        browserError = errorMessage(error);
+        browserStatus = 'Connection failed';
+        showGlobalMessage('error', 'Browser connection failed', browserError);
+      }
     } finally {
-      browserConnecting = false;
+      if (browserConnectionGeneration === connectionGeneration) {
+        browserConnecting = false;
+      }
     }
   }
   function disconnectBrowser(refreshAfterDisconnect = false): void {
+    browserConnectionGeneration += 1;
     const hadLiveConnection = Boolean(liveConnection);
     const disconnectedSessionId = liveConnection?.sessionId ?? null;
     liveConnection?.handle.disconnect();
@@ -603,6 +626,22 @@
       );
     }
     if (hadLiveConnection && refreshAfterDisconnect) {
+      window.setTimeout(() => void refreshSelectedSessionInBackground(), 250);
+    }
+  }
+  function handleBrowserTransportDisconnect(sessionId: string, generation: number, reason: string): void {
+    if (generation !== browserConnectionGeneration) {
+      return;
+    }
+    const hadLiveConnection = liveConnection?.sessionId === sessionId;
+    liveConnection = null;
+    browserStatus = 'Disconnected';
+    if (hadLiveConnection) {
+      showGlobalMessage(
+        'info',
+        'Browser disconnected',
+        reason ? `Session ${shortAdminId(sessionId)} disconnected: ${reason}.` : `Session ${shortAdminId(sessionId)} disconnected.`,
+      );
       window.setTimeout(() => void refreshSelectedSessionInBackground(), 250);
     }
   }
@@ -633,6 +672,7 @@
     const previousLiveSessionId = liveConnection?.sessionId ?? null;
     const disconnectForSwitch = Boolean(previousLiveSessionId && previousLiveSessionId !== nextSession.id);
     if (disconnectForSwitch) {
+      browserConnectionGeneration += 1;
       liveConnection?.handle.disconnect();
       liveConnection = null;
       browserError = null;

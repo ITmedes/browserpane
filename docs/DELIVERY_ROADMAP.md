@@ -92,7 +92,7 @@ Qualified until a later post-merge audit passes.
 | 14 | #257 | Done | #246 requirements loop | Defer external decisions and evaluate only documented parallel/fallback requirements work; merged through PR #258. |
 | 15 | #260 | Done | #257 deferred-candidate contract | Finite roadmap-owned fallback traversal merged through PR #261. |
 | 16 | #273 | In Progress | #241 loop and Compose manual dispatch | Require exact-head Compose before automatic merge so failures remain repairable on the open PR. |
-| 17 | #275 | In Progress | #273 branch Compose evidence | Distinguish transport connection from host capability readiness in compatibility smokes and UI actions. |
+| 17 | #275 | In Progress | #273 branch Compose evidence | Distinguish transport, host-capability, runtime-container, and admin disconnect readiness in compatibility smokes and UI state. |
 
 #241, #244, #246, #248, #251, #253, #255, #257, #260, #273, and #275 are contributor
 tooling or validation reliability and do not supersede the Pilot sequence.

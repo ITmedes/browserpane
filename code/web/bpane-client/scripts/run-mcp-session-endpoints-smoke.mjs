@@ -43,12 +43,17 @@ async function run() {
     sessions.push(sessionA);
     const sessionB = await createConnectedSession(pageB, options);
     sessions.push(sessionB);
+    if (sessionA === sessionB) {
+      throw new Error(`Expected two distinct BrowserPane sessions, but both admin pages selected ${sessionA}.`);
+    }
+    log(`Created distinct BrowserPane sessions ${sessionA} and ${sessionB}.`);
     await delegateSession(accessToken, options, bridge, sessionA);
     await delegateSession(accessToken, options, bridge, sessionB);
 
-    const containerA = await lookupRuntimeContainerId(sessionA);
-    const containerB = await lookupRuntimeContainerId(sessionB);
-    if (!containerA || !containerB) throw new Error('Expected both runtime containers to be active.');
+    const [containerA, containerB] = await Promise.all([
+      waitForRuntimeContainer(sessionA, options),
+      waitForRuntimeContainer(sessionB, options),
+    ]);
 
     const clientA = await openMcpClient(bridge, sessionA, options);
     clients.push(clientA);
@@ -173,6 +178,16 @@ async function lookupRuntimeContainerId(sessionId) {
   const name = `bpane-runtime-${sessionId.replaceAll('-', '')}`;
   const { stdout } = await execFileAsync('docker', ['ps', '-q', '--filter', `name=^/${name}$`]);
   return stdout.trim();
+}
+
+async function waitForRuntimeContainer(sessionId, options) {
+  return await poll(
+    `runtime container for ${sessionId}`,
+    () => lookupRuntimeContainerId(sessionId),
+    Boolean,
+    options.connectTimeoutMs,
+    250,
+  );
 }
 
 async function fetchRuntimeUrls(containerId) {
