@@ -6,15 +6,16 @@ Governance issue: [#173](https://github.com/ITmedes/browserpane/issues/173)
 
 Last requirements audit: 2026-08-22 after protocol slices #263 through #265,
 the #273/#275 exact-head Compose/readiness correction merged through PR #274,
-and the bounded exact-SHA post-merge retry for #277 entered review. The
+the bounded exact-SHA post-merge retry for #277 merged through PR #279, and
+Compose run `32584253673` exposed the focused #280 protocol-bootstrap repair. The
 remaining focused #175 protocol issues are `#266`
 through `#268`. The Workflow
 Endpoint has passing focused, contract, and
 real-Compose fake-BPM evidence. #174 remains the next Pilot Value outcome but
 waits for real candidate and stakeholder decisions. #180 is specified but
 waits for reviewed legal/business decisions. #175 is a blocked non-executable
-tracker; #277 is the immediate Foundation review slice and #266 resumes after
-it closes.
+tracker; #280 is the immediate Foundation implementation slice and #266
+resumes after it closes with green Compose evidence.
 
 ## How To Use This Document
 
@@ -63,7 +64,7 @@ Qualified until a later post-merge audit passes.
 
 | Lane | Outcome | Current entry point | Promotion target |
 | --- | --- | --- | --- |
-| Foundation | Trusted build, auth, contracts, storage, and lifecycle baseline. | #277 review: bounded exact-SHA post-merge failed-job retry after #273/#275 | Foundation Gate |
+| Foundation | Trusted build, auth, contracts, storage, and lifecycle baseline. | #280 in progress: checked-legacy stream handoff and bootstrap registry cleanup | Foundation Gate |
 | Pilot Value | One bounded reusable BPM browser activity with accepted evidence and runbook. | #172 merged; #174 awaits real candidate selection | Phase 0 Gate |
 | Operator Product | Complete and promote `/admin-new/` as the default operator console. | Default promoted through #163; #124 is the next focused catalog gap | Phase 1 Gate |
 | Production | Harden deployment, security, recovery, supply chain, and telemetry. | #233 dashboard baseline merged; #178 retains broader telemetry scope | Production Baseline |
@@ -94,7 +95,8 @@ Qualified until a later post-merge audit passes.
 | 15 | #260 | Done | #257 deferred-candidate contract | Finite roadmap-owned fallback traversal merged through PR #261. |
 | 16 | #273 | Done | #241 loop and Compose manual dispatch | Exact-head Compose is required before automatic merge so failures remain repairable on the open PR; merged through PR #274. |
 | 17 | #275 | Done | #273 branch Compose evidence | Transport, host-capability, runtime-container, and admin disconnect readiness are distinguished in compatibility smokes and UI state; merged through PR #274. |
-| 18 | #277 | Review | #273/#275 complete; exact-head Compose passed and first main attempt failed transiently | Rerun failed jobs once by default on the same workflow run and exact merge SHA; preserve independent cancelled retries and fail closed on exhaustion or mismatched evidence. |
+| 18 | #277 | Done | #273/#275 complete | Bounded same-run, exact-SHA failed-job retry merged through PR #279; repeated failure remains terminal. |
+| 19 | #280 | In Progress | #277 complete; its post-merge run failed twice in compatibility session lifecycle | Preserve checked legacy bytes across stream chunking and remove registry clients after bootstrap write failure without changing the protocol/API contract. |
 
 #241, #244, #246, #248, #251, #253, #255, #257, #260, #273, and #275 are contributor
 tooling or validation reliability and do not supersede the Pilot sequence.
@@ -117,13 +119,13 @@ reviewed legal/business decision.
 
 When no Ready work exists, use this finite order:
 
-`#174` -> `#180` -> `#277` -> `#263` -> `#264` -> `#265` -> `#266` -> `#267` -> `#268` -> `#124`
+`#174` -> `#180` -> `#280` -> `#266` -> `#267` -> `#268` -> `#124`
 
 The qualifier must preserve the external blockers on `#174` and `#180`.
-Protocol slices `#263` through `#265` and the bounded #273/#275 contributor-loop
-correction are complete. `#277` is the active engineering fallback because the
-first post-merge main run exposed the remaining bounded retry gap; `#266`
-follows after it closes.
+Protocol slices `#263` through `#265`, the bounded #273/#275 contributor-loop
+correction, and #277 are complete. `#280` is the active engineering repair
+because #277's post-merge run exposed reproducible checked-legacy chunking and
+post-admission cleanup defects; `#266` follows after #280 closes.
 Issues `#263` through `#268` are independently shippable protocol slices with
 focused plans; each successor depends on closure of its predecessor. `#175`
 retains the complete contract as a blocked program tracker and is never a

@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Context;
+use tokio::io::AsyncWrite;
 use tracing::{debug, warn};
 use uuid::Uuid;
 
@@ -124,7 +125,7 @@ pub(super) async fn handle_session(context: SessionTaskContext) -> anyhow::Resul
     let recv_stream = negotiated.recv_stream;
     let protocol = negotiated.protocol;
 
-    send_initial_frames(
+    if let Err(error) = send_initial_frames_or_leave(
         &send_stream,
         &initial_frames,
         InitialFramesContext {
@@ -135,8 +136,26 @@ pub(super) async fn handle_session(context: SessionTaskContext) -> anyhow::Resul
             session_id,
             client_id,
         },
+        &registry,
+        routed_session_id,
     )
-    .await?;
+    .await
+    {
+        session.deactivate();
+        transition_session_to_idle_if_empty(IdleTransitionContext {
+            session_id: routed_session_id,
+            client_role,
+            recording_termination_reason: Some(SessionRecordingTerminationReason::ClientDisconnect),
+            idle_stop_timeout,
+            registry,
+            session_store,
+            session_manager,
+            recording_lifecycle,
+        })
+        .await;
+        connection.close(wtransport::VarInt::from_u32(0), b"session bootstrap failed");
+        return Err(error);
+    }
 
     let dgram_stats = Arc::new(DatagramStats::new());
     let agent_to_browser = spawn_agent_to_browser_task(
@@ -160,6 +179,7 @@ pub(super) async fn handle_session(context: SessionTaskContext) -> anyhow::Resul
         client_id,
         recv_stream,
         initial_frames: negotiated.initial_client_frames,
+        initial_bytes: negotiated.initial_client_bytes,
         to_host,
         file_recorder: SessionFileRecorder::new(
             routed_session_id,
@@ -242,45 +262,17 @@ pub(super) async fn handle_session(context: SessionTaskContext) -> anyhow::Resul
     }
     registry.leave(routed_session_id, client_id).await;
     if should_transition_to_idle {
-        if let Some(snapshot) = registry.telemetry_snapshot_if_live(routed_session_id).await {
-            if !snapshot.has_interactive_session_activity() {
-                if client_role == BrowserClientRole::Interactive {
-                    if let Some(reason) = recording_termination_reason {
-                        let _ = recording_lifecycle
-                            .request_stop_and_wait(routed_session_id, reason)
-                            .await;
-                    }
-                }
-                let _ = session_store.mark_session_idle(routed_session_id).await;
-                session_manager.mark_session_idle(routed_session_id).await;
-                schedule_idle_session_stop(
-                    routed_session_id,
-                    idle_stop_timeout,
-                    registry.clone(),
-                    session_store.clone(),
-                    session_manager.clone(),
-                    recording_lifecycle.clone(),
-                );
-            }
-        } else {
-            if client_role == BrowserClientRole::Interactive {
-                if let Some(reason) = recording_termination_reason {
-                    let _ = recording_lifecycle
-                        .request_stop_and_wait(routed_session_id, reason)
-                        .await;
-                }
-            }
-            let _ = session_store.mark_session_idle(routed_session_id).await;
-            session_manager.mark_session_idle(routed_session_id).await;
-            schedule_idle_session_stop(
-                routed_session_id,
-                idle_stop_timeout,
-                registry.clone(),
-                session_store,
-                session_manager.clone(),
-                recording_lifecycle,
-            );
-        }
+        transition_session_to_idle_if_empty(IdleTransitionContext {
+            session_id: routed_session_id,
+            client_role,
+            recording_termination_reason,
+            idle_stop_timeout,
+            registry,
+            session_store,
+            session_manager,
+            recording_lifecycle,
+        })
+        .await;
     }
 
     if protocol_failure.is_none() {
@@ -288,6 +280,71 @@ pub(super) async fn handle_session(context: SessionTaskContext) -> anyhow::Resul
     }
 
     Ok(())
+}
+
+async fn send_initial_frames_or_leave<S>(
+    send_stream: &Arc<tokio::sync::Mutex<S>>,
+    initial_frames: &[Arc<bpane_protocol::frame::Frame>],
+    context: InitialFramesContext,
+    registry: &SessionRegistry,
+    routed_session_id: Uuid,
+) -> anyhow::Result<()>
+where
+    S: AsyncWrite + Unpin + Send + 'static,
+{
+    let client_id = context.client_id;
+    let result = send_initial_frames(send_stream, initial_frames, context).await;
+    if result.is_err() {
+        registry.leave(routed_session_id, client_id).await;
+    }
+    result
+}
+
+struct IdleTransitionContext {
+    session_id: Uuid,
+    client_role: BrowserClientRole,
+    recording_termination_reason: Option<SessionRecordingTerminationReason>,
+    idle_stop_timeout: Duration,
+    registry: Arc<SessionRegistry>,
+    session_store: SessionStore,
+    session_manager: Arc<SessionManager>,
+    recording_lifecycle: Arc<RecordingLifecycleManager>,
+}
+
+async fn transition_session_to_idle_if_empty(context: IdleTransitionContext) {
+    let IdleTransitionContext {
+        session_id,
+        client_role,
+        recording_termination_reason,
+        idle_stop_timeout,
+        registry,
+        session_store,
+        session_manager,
+        recording_lifecycle,
+    } = context;
+    if let Some(snapshot) = registry.telemetry_snapshot_if_live(session_id).await {
+        if snapshot.has_interactive_session_activity() {
+            return;
+        }
+    }
+
+    if client_role == BrowserClientRole::Interactive {
+        if let Some(reason) = recording_termination_reason {
+            let _ = recording_lifecycle
+                .request_stop_and_wait(session_id, reason)
+                .await;
+        }
+    }
+    let _ = session_store.mark_session_idle(session_id).await;
+    session_manager.mark_session_idle(session_id).await;
+    schedule_idle_session_stop(
+        session_id,
+        idle_stop_timeout,
+        registry,
+        session_store,
+        session_manager,
+        recording_lifecycle,
+    );
 }
 
 async fn resolve_runtime_after_negotiation(
@@ -336,3 +393,6 @@ fn recording_reason_for_termination(
         SessionTerminationReason::SessionKilled => None,
     }
 }
+
+#[cfg(test)]
+mod tests;

@@ -1,10 +1,10 @@
 # Open GitHub Issues Context
 
 Created: 2026-07-10
-Revalidated: 2026-08-22 after #273/#275 merged through PR #274 and #277 was
-isolated from post-merge main evidence; #174 and #180 are externally deferred,
-with #277, ordered protocol issues #266-#268, then #124 as the finite
-engineering fallback
+Revalidated: 2026-08-22 after #277 merged through PR #279 and its post-merge
+Compose evidence isolated protocol-bootstrap repair #280; #174 and #180 are
+externally deferred, with #280, ordered protocol issues #266-#268, then #124 as
+the finite engineering fallback
 
 This document maps the current `docs/` workspace to the live open GitHub
 issues for `ITmedes/browserpane`. It is the bridge between the consolidated
@@ -13,9 +13,9 @@ local planning docs and the public issue tracker.
 Source check:
 
 - fetched and updated through the GitHub API on 2026-08-22,
-- 35 open issues after restoring the #175 tracker and adding #277, all represented in this
+- 35 open issues after closing #277 and adding #280, all represented in this
   documentation workspace,
-- open issue range: `#6` through `#268`,
+- open issue range: `#6` through `#280`,
 - focused docs-derived implementation issues created on 2026-07-10: `#145`
   through `#170`,
 - focused Phase N Teach Mode issue created on 2026-07-31: `#171`,
@@ -65,7 +65,7 @@ Source check:
 | Focused Pilot Value issues | `#47`, `#172`, `#174` | Use `#47` for the immutable Playwright package, `#172` for one polling-based BPM activity endpoint, and `#174` for the selected real Pilot process. |
 | Deferred workflow productization | `#171`, `#240` | Use `#171` for Teach Mode and controlled repair. Use `#240` for endpoint revisions, callbacks, replay, tracing, throttling, and connector compatibility. Neither is a Phase 0 dependency. |
 | Delivery governance | `#173` | Owns the canonical roadmap, maturity, gates, risks, plan template, and issue/claim reconciliation. It does not own runtime features. |
-| Contributor automation | `#241`, `#244`, `#246`, `#248`, `#251`, `#253`, `#255`, `#257`, `#260` | These issues own the optional bounded Codex loop, disk safety, requirements specification, result/merge handling, smoke reliability, external-gate deferral, and finite fallback traversal. None changes product priority or capability maturity. |
+| Contributor automation | `#241`, `#244`, `#246`, `#248`, `#251`, `#253`, `#255`, `#257`, `#260`, `#273`, `#275`, `#277` | These issues own the optional bounded Codex loop, disk safety, requirements specification, result/merge handling, smoke reliability, exact-head/post-merge gates, external-gate deferral, and finite fallback traversal. None changes product priority or capability maturity. |
 | Focused cross-product gaps | `#174` through `#180` | Use these for Phase 0 delivery, protocol conformance, authorization, identity lifecycle, platform telemetry, API compatibility, and open-source governance. |
 | Focused validation performance | `#184` | Preserve the #151 validation baseline while reducing hosted compose feedback time through isolated execution lanes. |
 | Focused Docker build acceleration | `#185` | Preserve #184 lane coverage while adding deterministic, supply-chain-safe Docker build reuse for trusted hosted runs. |
@@ -113,7 +113,8 @@ Source check:
 | `#266` Browser protocol negotiation | `BPANE-00266_BROWSER_PROTOCOL_NEGOTIATION_PLAN.md`, `BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md`, `VALIDATION_MATRIX.md` | Protocol slice 4 after #265 | Delay browser readiness, gate capabilities, preserve checked old gateways, and expose typed SDK errors. |
 | `#267` Protocol fuzzing and malformed-state coverage | `BPANE-00267_PROTOCOL_FUZZING_PLAN.md`, `BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md`, `VALIDATION_MATRIX.md` | Protocol slice 5 after #266 | Add deterministic corpus replay, four Rust fuzz targets, sanitizer evidence, and isolation tests. |
 | `#268` Protocol compatibility qualification | `BPANE-00268_PROTOCOL_COMPATIBILITY_QUALIFICATION_PLAN.md`, `BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md`, `VALIDATION_MATRIX.md` | Protocol slice 6 after #267 | Prove rolling upgrade/rollback, current features, Admin-New diagnostics, and close #175. |
-| `#277` Exact-SHA post-merge workflow retry | `BPANE-00277_POST_MERGE_WORKFLOW_RETRY_PLAN.md`, `BPANE-00273_EXACT_HEAD_COMPOSE_GATE_PLAN.md`, `DELIVERY_ROADMAP.md` | Immediate Foundation slice | Retry failed post-merge jobs once by default for the exact merge SHA after successful pre-merge evidence; repeated failure remains terminal. |
+| closed `#277` Exact-SHA post-merge workflow retry | `BPANE-00277_POST_MERGE_WORKFLOW_RETRY_PLAN.md`, `BPANE-00273_EXACT_HEAD_COMPOSE_GATE_PLAN.md`, `DELIVERY_ROADMAP.md` | Completed Foundation slice | Same-run exact-SHA failed-job retry merged through PR #279; repeated failure remains terminal. |
+| `#280` Protocol bootstrap compatibility and session cleanup | `BPANE-00280_PROTOCOL_BOOTSTRAP_CLEANUP_PLAN.md`, `BPANE-00265_GATEWAY_PROTOCOL_NEGOTIATION_PLAN.md`, `VALIDATION_MATRIX.md` | Immediate Foundation repair before #266 | Preserve checked legacy bytes across stream chunk boundaries and guarantee registry cleanup after bootstrap write failure. |
 | `#176` Organization/project-role/service-principal grant enforcement | `IDENTITY_ACCESS_REQUIREMENTS.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md` | Enterprise lane | Canonical owner for enforceable authorization and migration from owner-scoped deployments. |
 | `#177` Provisioning/deprovisioning and break-glass lifecycle | `IDENTITY_ACCESS_REQUIREMENTS.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md` | Enterprise lane | Canonical owner for remaining identity lifecycle scope from closed #52. |
 | `#178` Platform telemetry, SLOs, and capacity evidence | `BPANE-00178_PLATFORM_TELEMETRY_PLAN.md`, `PLATFORM_TELEMETRY.md`, `DELIVERY_ROADMAP.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md` | Production lane | Metrics, traces, rules/runbooks, and Grafana baseline merged through PRs #222, #228, #230, #232, and #234. Broader traces/metrics, calibrated SLOs, alert routing, synthetics, and tested envelopes remain. |
@@ -250,7 +251,8 @@ The cross-reference pass also updated the issue bodies in both directions:
 | `#266` | Fourth focused protocol slice after #265. | Created on GitHub 2026-08-21 with browser enforcement and SDK boundaries. | Produces typed errors/snapshot consumed by #268. |
 | `#267` | Fifth focused protocol slice after #266. | Created on GitHub 2026-08-21 with bounded fuzz/sanitizer evidence. | No Admin-New change. |
 | `#268` | Final focused protocol qualification slice after #267. | Created on GitHub 2026-08-21 as the #175 closure owner. | Integrates safe live diagnostics into existing session preview/observability surfaces. |
-| `#277` | Focused Foundation reliability slice before #266. | Created from exact-head success run `32559531743` and failed main run `32560886312`. | Adds one bounded exact-SHA failed-job rerun after merge; no product behavior or gate suppression. |
+| `#277` | Completed Foundation reliability slice. | Merged through PR #279; run `32584253673` proved the one-retry fail-closed bound. | Adds one bounded exact-SHA failed-job rerun after merge; no product behavior or gate suppression. |
+| `#280` | Active focused Foundation repair before #266. | Created from both failed attempts of Compose run `32584253673`. | Correct byte-stream handoff and post-admission cleanup without broadening legacy compatibility or absorbing browser negotiation. |
 | `#176` | Relevant authorization enforcement gap. | Created on GitHub 2026-07-31 to own organization/project roles and enforced service-principal grants. | Admin-new identity/project views must eventually show effective grants and denial reasons. |
 | `#177` | Relevant later identity-lifecycle gap. | Created on GitHub 2026-07-31 to own provisioning/deprovisioning and safeguarded break-glass controls. | Admin-new identity/access review becomes the operator surface when implemented. |
 | `#178` | Relevant production observability gap. | Created on GitHub 2026-07-31 to separate platform telemetry/SLOs from per-session inspection and readiness. | Admin-new observability consumes the common telemetry contract; it does not define a separate model. |

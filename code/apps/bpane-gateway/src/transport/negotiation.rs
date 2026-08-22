@@ -15,6 +15,7 @@ use crate::metrics::GatewayMetrics;
 
 const MAX_NEGOTIATION_FRAME_BYTES: usize = 153;
 const NEGOTIATION_READ_BYTES: usize = 4 * 1024;
+const MAX_NEGOTIATION_PENDING_BYTES: usize = MAX_NEGOTIATION_FRAME_BYTES + NEGOTIATION_READ_BYTES;
 const PROTOCOL_REJECT_DRAIN_TIMEOUT: Duration = Duration::from_secs(1);
 const AUDIO_PAYLOAD_MAGIC: &[u8; 4] = b"WRA1";
 
@@ -197,6 +198,7 @@ pub(super) struct NegotiatedConnection {
     pub recv_stream: RecvStream,
     pub protocol: ConnectionProtocol,
     pub initial_client_frames: Vec<Frame>,
+    pub initial_client_bytes: Vec<u8>,
 }
 
 pub(super) async fn negotiate_connection(
@@ -245,9 +247,11 @@ pub(super) async fn negotiate_connection(
                 recv_stream,
                 protocol: ConnectionProtocol::V1 { selection },
                 initial_client_frames: Vec::new(),
+                initial_client_bytes: Vec::new(),
             }))
         }
-        Ok(HandshakeDecision::Legacy(initial_client_frames)) => {
+        Ok(HandshakeDecision::Legacy(initial_client_frame)) => {
+            let initial_client_bytes = state.into_pending_bytes();
             metrics.record_protocol_legacy_selection(started_at);
             warn!(
                 protocol_mode = "legacy",
@@ -257,7 +261,8 @@ pub(super) async fn negotiate_connection(
                 send_stream: Arc::new(Mutex::new(send_stream)),
                 recv_stream,
                 protocol: ConnectionProtocol::Legacy,
-                initial_client_frames,
+                initial_client_frames: vec![initial_client_frame],
+                initial_client_bytes,
             }))
         }
         Err(failure) => {
@@ -300,7 +305,7 @@ fn protocol_close_code(failure: ProtocolFailure) -> wtransport::VarInt {
 #[derive(Debug, PartialEq, Eq)]
 enum HandshakeDecision {
     Negotiated(ServerSelection),
-    Legacy(Vec<Frame>),
+    Legacy(Frame),
 }
 
 struct GatewayNegotiation {
@@ -311,13 +316,21 @@ struct GatewayNegotiation {
 impl GatewayNegotiation {
     fn new(legacy_compatibility: bool) -> Self {
         Self {
-            decoder: FrameDecoder::with_max_pending(MAX_NEGOTIATION_FRAME_BYTES),
+            decoder: FrameDecoder::with_max_pending(MAX_NEGOTIATION_PENDING_BYTES),
             legacy_compatibility,
         }
     }
 
     fn ingest(&mut self, bytes: &[u8]) -> Result<Option<HandshakeDecision>, ProtocolFailure> {
         self.decoder.push(bytes).map_err(map_decoder_error)?;
+        if self
+            .decoder
+            .next_frame_size()
+            .map_err(map_decoder_error)?
+            .is_some_and(|size| size > MAX_NEGOTIATION_FRAME_BYTES)
+        {
+            return Err(ProtocolFailure::ProtocolPendingBufferLimit);
+        }
         let Some(first_frame) = self.decoder.next_frame().map_err(map_decoder_error)? else {
             return Ok(None);
         };
@@ -341,14 +354,15 @@ impl GatewayNegotiation {
         if !self.legacy_compatibility {
             return Err(ProtocolFailure::ProtocolDowngradeRefused);
         }
-        if self.decoder.pending_len() != 0 {
-            return Err(ProtocolFailure::UnexpectedProtocolFrame);
-        }
-        Ok(Some(HandshakeDecision::Legacy(vec![first_frame])))
+        Ok(Some(HandshakeDecision::Legacy(first_frame)))
     }
 
     fn on_timeout(&self) -> Result<HandshakeDecision, ProtocolFailure> {
         Err(ProtocolFailure::ProtocolHandshakeTimeout)
+    }
+
+    fn into_pending_bytes(self) -> Vec<u8> {
+        self.decoder.into_pending_bytes()
     }
 }
 
