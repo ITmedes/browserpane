@@ -1,10 +1,10 @@
 # Open GitHub Issues Context
 
 Created: 2026-07-10
-Revalidated: 2026-08-22 after #277 merged through PR #279 and its post-merge
-Compose evidence isolated protocol-bootstrap repair #280; #174 and #180 are
-externally deferred, with #280, ordered protocol issues #266-#268, then #124 as
-the finite engineering fallback
+Revalidated: 2026-08-22 after #277 merged through PR #279 and the resulting
+protocol-bootstrap repair #280 closed through PR #281; #174 and #180 are
+externally deferred, with ordered protocol issues #266-#268, then #124 as the
+finite engineering fallback
 
 This document maps the current `docs/` workspace to the live open GitHub
 issues for `ITmedes/browserpane`. It is the bridge between the consolidated
@@ -13,9 +13,9 @@ local planning docs and the public issue tracker.
 Source check:
 
 - fetched and updated through the GitHub API on 2026-08-22,
-- 35 open issues after closing #277 and adding #280, all represented in this
+- 34 open issues after closing #277 and #280, all represented in this
   documentation workspace,
-- open issue range: `#6` through `#280`,
+- open issue range: `#6` through `#268`,
 - focused docs-derived implementation issues created on 2026-07-10: `#145`
   through `#170`,
 - focused Phase N Teach Mode issue created on 2026-07-31: `#171`,
@@ -114,7 +114,7 @@ Source check:
 | `#267` Protocol fuzzing and malformed-state coverage | `BPANE-00267_PROTOCOL_FUZZING_PLAN.md`, `BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md`, `VALIDATION_MATRIX.md` | Protocol slice 5 after #266 | Add deterministic corpus replay, four Rust fuzz targets, sanitizer evidence, and isolation tests. |
 | `#268` Protocol compatibility qualification | `BPANE-00268_PROTOCOL_COMPATIBILITY_QUALIFICATION_PLAN.md`, `BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md`, `VALIDATION_MATRIX.md` | Protocol slice 6 after #267 | Prove rolling upgrade/rollback, current features, Admin-New diagnostics, and close #175. |
 | closed `#277` Exact-SHA post-merge workflow retry | `BPANE-00277_POST_MERGE_WORKFLOW_RETRY_PLAN.md`, `BPANE-00273_EXACT_HEAD_COMPOSE_GATE_PLAN.md`, `DELIVERY_ROADMAP.md` | Completed Foundation slice | Same-run exact-SHA failed-job retry merged through PR #279; repeated failure remains terminal. |
-| `#280` Protocol bootstrap compatibility and session cleanup | `BPANE-00280_PROTOCOL_BOOTSTRAP_CLEANUP_PLAN.md`, `BPANE-00265_GATEWAY_PROTOCOL_NEGOTIATION_PLAN.md`, `VALIDATION_MATRIX.md` | Immediate Foundation repair before #266 | Preserve checked legacy bytes across stream chunk boundaries and guarantee registry cleanup after bootstrap write failure. |
+| closed `#280` Protocol bootstrap compatibility and session cleanup | `BPANE-00280_PROTOCOL_BOOTSTRAP_CLEANUP_PLAN.md`, `BPANE-00265_GATEWAY_PROTOCOL_NEGOTIATION_PLAN.md`, `VALIDATION_MATRIX.md` | Completed Foundation repair | Checked legacy bytes survive stream chunk boundaries and bootstrap write failure removes admitted registry clients; merged through PR #281. |
 | `#176` Organization/project-role/service-principal grant enforcement | `IDENTITY_ACCESS_REQUIREMENTS.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md` | Enterprise lane | Canonical owner for enforceable authorization and migration from owner-scoped deployments. |
 | `#177` Provisioning/deprovisioning and break-glass lifecycle | `IDENTITY_ACCESS_REQUIREMENTS.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md` | Enterprise lane | Canonical owner for remaining identity lifecycle scope from closed #52. |
 | `#178` Platform telemetry, SLOs, and capacity evidence | `BPANE-00178_PLATFORM_TELEMETRY_PLAN.md`, `PLATFORM_TELEMETRY.md`, `DELIVERY_ROADMAP.md`, `CAPABILITY_MATURITY_MATRIX.md`, `RISK_REGISTER.md` | Production lane | Metrics, traces, rules/runbooks, and Grafana baseline merged through PRs #222, #228, #230, #232, and #234. Broader traces/metrics, calibrated SLOs, alert routing, synthetics, and tested envelopes remain. |
@@ -252,7 +252,7 @@ The cross-reference pass also updated the issue bodies in both directions:
 | `#267` | Fifth focused protocol slice after #266. | Created on GitHub 2026-08-21 with bounded fuzz/sanitizer evidence. | No Admin-New change. |
 | `#268` | Final focused protocol qualification slice after #267. | Created on GitHub 2026-08-21 as the #175 closure owner. | Integrates safe live diagnostics into existing session preview/observability surfaces. |
 | `#277` | Completed Foundation reliability slice. | Merged through PR #279; run `32584253673` proved the one-retry fail-closed bound. | Adds one bounded exact-SHA failed-job rerun after merge; no product behavior or gate suppression. |
-| `#280` | Active focused Foundation repair before #266. | Created from both failed attempts of Compose run `32584253673`. | Correct byte-stream handoff and post-admission cleanup without broadening legacy compatibility or absorbing browser negotiation. |
+| `#280` | Completed focused Foundation repair. | Created from both failed attempts of Compose run `32584253673` and merged through PR #281. | Corrected byte-stream handoff and post-admission cleanup without broadening legacy compatibility or absorbing browser negotiation. |
 | `#176` | Relevant authorization enforcement gap. | Created on GitHub 2026-07-31 to own organization/project roles and enforced service-principal grants. | Admin-new identity/project views must eventually show effective grants and denial reasons. |
 | `#177` | Relevant later identity-lifecycle gap. | Created on GitHub 2026-07-31 to own provisioning/deprovisioning and safeguarded break-glass controls. | Admin-new identity/access review becomes the operator surface when implemented. |
 | `#178` | Relevant production observability gap. | Created on GitHub 2026-07-31 to separate platform telemetry/SLOs from per-session inspection and readiness. | Admin-new observability consumes the common telemetry contract; it does not define a separate model. |

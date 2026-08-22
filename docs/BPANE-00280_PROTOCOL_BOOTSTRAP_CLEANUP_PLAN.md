@@ -3,7 +3,7 @@
 ## Metadata
 
 - Issue: `#280`
-- State: In Progress
+- State: Done
 - Owner: `thebackplane`
 - Lane: Foundation
 - Target gate: restore deterministic exact-head and post-merge Compose evidence
@@ -212,4 +212,10 @@ evidence.
   - gateway protocol compatibility/refusal/recovery smoke: passed;
   - repository fast profile: all 44 stages passed;
   - development-loop regression suite: all 150 tests passed.
-- PR and hosted exact-head/post-merge run links: pending.
+- PR: [#281](https://github.com/ITmedes/browserpane/pull/281).
+- Hosted exact-head evidence:
+  - [Validation `32587596413`](https://github.com/ITmedes/browserpane/actions/runs/32587596413), 10 jobs passed;
+  - [Compose `32587607368`](https://github.com/ITmedes/browserpane/actions/runs/32587607368), 5 jobs passed, including compatibility admin promotion.
+- Post-merge evidence for `1978b530`: Validation and Compose runs are recorded
+  on the merge commit; final status is tracked by the delivery loop before the
+  next qualification.
