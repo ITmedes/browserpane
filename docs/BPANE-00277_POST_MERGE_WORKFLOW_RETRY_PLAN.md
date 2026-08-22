@@ -3,12 +3,12 @@
 ## Metadata
 
 - Issue: `#277`
-- State: Qualified
+- State: Review
 - Owner: BrowserPane maintainers
 - Lane: Foundation
 - Target gate: Contributor-loop publication reliability checkpoint
 - Depends on: closed `#273` and `#275`, merged through PR `#274`
-- Last verified commit/date: `275c136942c7` / 2026-08-22
+- Last verified commit/date: `aee785a1` / 2026-08-22
 
 ## Business Outcome
 
@@ -192,6 +192,27 @@ deployment claims do not change.
 
 ## Evidence Record
 
-Record PR/commit, configuration contract, exact mocked command/result matrix,
-shell and document checks, changed branch coverage, security/redaction review,
-observed exact-head/main run ids, later live confirmation, and residual risk.
+- Implementation commit: `aee785a1`.
+- Configuration: `POST_MERGE_FAILED_RERUNS` defaults to `1`, accepts `0`
+  through `3`, rejects empty, negative, non-numeric, and over-limit values, and
+  is nounset-safe. `AUTO_RERUN_CANCELLED` remains independent.
+- Mocked state matrix: exact run/SHA/workflow success after one failed-job
+  rerun, repeated failure, disabled retry, rejected rerun, changed SHA, changed
+  workflow identity, unavailable run, timeout, cancelled-then-failed,
+  failed-then-cancelled, and stop-before-next-workflow all pass. The journal
+  contract records fixed workflow/run/attempt/retry/conclusion fields without
+  raw logs.
+- `bash -n dev_loop/loop.sh dev_loop/tests/loop_test.sh`: passed.
+- `bash dev_loop/tests/loop_test.sh`: passed, 150 tests.
+- `node scripts/check-repository-documents.mjs`: passed, 118 Markdown, 19
+  YAML, and 3 workflow documents.
+- `node scripts/validate.mjs --profile fast`: passed all 44 stages, including
+  repository/security/dependency checks, Rust fmt/clippy/tests/coverage, Node
+  checks/tests/coverage/builds, OpenAPI compatibility, and egress observer
+  checks.
+- `git diff --check`: passed.
+- API/OpenAPI, protocol, database, Admin-New product, product CLI/SDK, runtime,
+  deployment, and real Compose stack validation: N/A; this changes only the
+  contributor loop and its documentation. The first later loop-owned automatic
+  merge remains the planned live confirmation because post-merge evidence
+  cannot exist before this change is published.

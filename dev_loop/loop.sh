@@ -20,6 +20,8 @@ POLL_SECONDS="${POLL_SECONDS:-30}"
 FAIL_FAST="${FAIL_FAST:-1}"
 FAIL_FAST_GRACE="${FAIL_FAST_GRACE:-120}"
 AUTO_RERUN_CANCELLED="${AUTO_RERUN_CANCELLED:-2}"
+POST_MERGE_FAILED_RERUNS="${POST_MERGE_FAILED_RERUNS-1}"
+readonly POST_MERGE_FAILED_RERUN_LIMIT=3
 SETTLE_SECONDS="${SETTLE_SECONDS:-180}"
 SESSION_TIMEOUT_SECONDS="${SESSION_TIMEOUT_SECONDS:-10800}"
 POST_MERGE_TIMEOUT_SECONDS="${POST_MERGE_TIMEOUT_SECONDS:-7200}"
@@ -73,10 +75,13 @@ is_positive_uint() { is_uint "$1" && (( 10#$1 > 0 )); }
 
 validate_config() {
   local name value
-  for name in ITERATIONS MAX_REPAIRS MAX_UPDATE_BRANCH AUTO_RERUN_CANCELLED MIN_FREE_DISK_GB; do
+  for name in ITERATIONS MAX_REPAIRS MAX_UPDATE_BRANCH AUTO_RERUN_CANCELLED POST_MERGE_FAILED_RERUNS MIN_FREE_DISK_GB; do
     value="${!name}"
     is_uint "$value" || die "$name must be a non-negative integer, got '$value'."
   done
+  if [[ ! "$POST_MERGE_FAILED_RERUNS" =~ ^0*[0-${POST_MERGE_FAILED_RERUN_LIMIT}]$ ]]; then
+    die "POST_MERGE_FAILED_RERUNS must not exceed $POST_MERGE_FAILED_RERUN_LIMIT."
+  fi
   for name in MAX_SPECIFICATION_CYCLES CI_TIMEOUT_SECONDS POLL_SECONDS FAIL_FAST_GRACE SETTLE_SECONDS SESSION_TIMEOUT_SECONDS PRE_MERGE_TIMEOUT_SECONDS POST_MERGE_TIMEOUT_SECONDS; do
     value="${!name}"
     is_positive_uint "$value" || die "$name must be a positive integer, got '$value'."
@@ -574,42 +579,130 @@ ci_stall_diagnostics() {
     --jq '.[] | "    #\(.databaseId) \(.name): \(.status) / \(.conclusion // "pending") | \(.url)"' 2>/dev/null || true
 }
 
-workflow_runs_for_commit() {
+workflow_run_candidates() {
   local workflow="$1" commit_sha="$2" json
   json="$(gh run list --workflow "$workflow" --commit "$commit_sha" --limit 10 \
-    --json databaseId,status,conclusion,url,headSha,createdAt,attempt,event 2>/dev/null || printf '[]')"
-  jq -c --arg commit_sha "$commit_sha" '
-    if type != "array" then [] else
-      [.[] | select(.headSha == $commit_sha)]
-      | sort_by(.createdAt // "")
-      | reverse
-    end
+    --json databaseId,status,conclusion,url,headSha,createdAt,attempt,event,workflowDatabaseId 2>/dev/null || printf '[]')"
+  jq -c '
+    if type != "array" then [] else sort_by(.createdAt // "") | reverse end
   ' <<< "$json" 2>/dev/null || printf '[]\n'
 }
 
+workflow_runs_for_commit() {
+  local workflow="$1" commit_sha="$2" json
+  json="$(workflow_run_candidates "$workflow" "$commit_sha")"
+  jq -c --arg commit_sha "$commit_sha" '[.[] | select(.headSha == $commit_sha)]' \
+    <<< "$json" 2>/dev/null || printf '[]\n'
+}
+
 wait_for_exact_workflow() {
-  local workflow="$1" commit_sha="$2" timeout_seconds="$3"
-  local deadline=$(( $(date +%s) + timeout_seconds )) previous="" reruns=0
+  local workflow="$1" commit_sha="$2" timeout_seconds="$3" failed_rerun_budget="${4:-0}"
+  local deadline=$(( $(date +%s) + timeout_seconds )) previous=""
+  local cancelled_reruns=0 failed_reruns=0 tracked_run_id="" tracked_workflow_id=""
+  local last_attempt=0 expected_attempt=0
+  is_uint "$failed_rerun_budget" || return 3
+  failed_rerun_budget=$((10#$failed_rerun_budget))
   LAST_WORKFLOW_RUN_ID=""
   LAST_WORKFLOW_RUN_URL=""
   LAST_WORKFLOW_RUN_CONCLUSION=""
+  LAST_WORKFLOW_RUN_ATTEMPT=""
+  LAST_WORKFLOW_CANCELLED_RERUNS=0
+  LAST_WORKFLOW_FAILED_RERUNS=0
   while (( $(date +%s) <= deadline )); do
-    local json count status conclusion line
-    json="$(workflow_runs_for_commit "$workflow" "$commit_sha")"
+    local json exact_json count run tracked_any run_id workflow_id head_sha
+    local attempt status conclusion line
+    json="$(workflow_run_candidates "$workflow" "$commit_sha")"
     count="$(jq 'length' <<< "$json")"
-    if (( count == 0 )); then
-      line="$workflow: waiting for a run on ${commit_sha:0:12}"
-      [[ "$line" == "$previous" ]] || say "$line"
-      previous="$line"
-      sleep "$POLL_SECONDS"
-      continue
+    if [[ -z "$tracked_run_id" ]]; then
+      exact_json="$(jq -c --arg commit_sha "$commit_sha" '[.[] | select(.headSha == $commit_sha)]' <<< "$json")"
+      if (( $(jq 'length' <<< "$exact_json") == 0 )); then
+        if (( count > 0 )); then
+          LAST_WORKFLOW_RUN_ID="$(jq -r '.[0].databaseId // empty' <<< "$json")"
+          LAST_WORKFLOW_RUN_URL="$(jq -r '.[0].url // empty' <<< "$json")"
+          LAST_WORKFLOW_RUN_ATTEMPT="$(jq -r '.[0].attempt // empty' <<< "$json")"
+          LAST_WORKFLOW_RUN_CONCLUSION="sha-mismatch"
+          warn "$workflow returned non-matching SHA evidence while waiting for ${commit_sha:0:12}"
+          return 3
+        fi
+        line="$workflow: waiting for a run on ${commit_sha:0:12}"
+        [[ "$line" == "$previous" ]] || say "$line"
+        previous="$line"
+        sleep "$POLL_SECONDS"
+        continue
+      fi
+      run="$(jq -c '.[0]' <<< "$exact_json")"
+    else
+      tracked_any="$(jq -c --arg run_id "$tracked_run_id" \
+        '[.[] | select((.databaseId | tostring) == $run_id)][0] // empty' <<< "$json")"
+      if [[ -z "$tracked_any" ]]; then
+        LAST_WORKFLOW_RUN_CONCLUSION="run-unavailable"
+        warn "$workflow run $tracked_run_id is no longer available for ${commit_sha:0:12}"
+        return 3
+      fi
+      run="$tracked_any"
     fi
-    LAST_WORKFLOW_RUN_ID="$(jq -r '.[0].databaseId' <<< "$json")"
-    LAST_WORKFLOW_RUN_URL="$(jq -r '.[0].url' <<< "$json")"
-    status="$(jq -r '.[0].status' <<< "$json")"
-    conclusion="$(jq -r '.[0].conclusion // "pending"' <<< "$json")"
+
+    run_id="$(jq -r '.databaseId // empty' <<< "$run")"
+    workflow_id="$(jq -r '.workflowDatabaseId // empty' <<< "$run")"
+    head_sha="$(jq -r '.headSha // empty' <<< "$run")"
+    attempt="$(jq -r '.attempt // empty' <<< "$run")"
+    status="$(jq -r '.status // empty' <<< "$run")"
+    conclusion="$(jq -r '.conclusion // "pending"' <<< "$run")"
+    LAST_WORKFLOW_RUN_ID="$run_id"
+    LAST_WORKFLOW_RUN_URL="$(jq -r '.url // empty' <<< "$run")"
+    LAST_WORKFLOW_RUN_ATTEMPT="$attempt"
     LAST_WORKFLOW_RUN_CONCLUSION="$conclusion"
-    line="$workflow: $status / $conclusion | $LAST_WORKFLOW_RUN_URL"
+
+    if ! is_positive_uint "$run_id" || ! is_positive_uint "$workflow_id" ||
+      ! is_positive_uint "$attempt" || [[ -z "$status" ]]; then
+      LAST_WORKFLOW_RUN_CONCLUSION="invalid-run-evidence"
+      warn "$workflow returned incomplete run evidence for ${commit_sha:0:12}"
+      return 3
+    fi
+    if [[ "$head_sha" != "$commit_sha" ]]; then
+      LAST_WORKFLOW_RUN_CONCLUSION="sha-mismatch"
+      warn "$workflow run $run_id no longer resolves to ${commit_sha:0:12}"
+      return 3
+    fi
+
+    if [[ -z "$tracked_run_id" ]]; then
+      tracked_run_id="$run_id"
+      tracked_workflow_id="$workflow_id"
+      last_attempt=$((10#$attempt))
+    else
+      if [[ "$run_id" != "$tracked_run_id" ]]; then
+        LAST_WORKFLOW_RUN_CONCLUSION="run-mismatch"
+        warn "$workflow changed from run $tracked_run_id to run $run_id"
+        return 3
+      fi
+      if [[ "$workflow_id" != "$tracked_workflow_id" ]]; then
+        LAST_WORKFLOW_RUN_CONCLUSION="workflow-mismatch"
+        warn "$workflow run $run_id no longer resolves to the required workflow"
+        return 3
+      fi
+      if (( expected_attempt > 0 )); then
+        if (( 10#$attempt == last_attempt )); then
+          line="$workflow: run $run_id waiting for rerun attempt $expected_attempt on ${commit_sha:0:12}"
+          [[ "$line" == "$previous" ]] || say "$line"
+          previous="$line"
+          sleep "$POLL_SECONDS"
+          continue
+        fi
+        if (( 10#$attempt != expected_attempt )); then
+          LAST_WORKFLOW_RUN_CONCLUSION="attempt-mismatch"
+          warn "$workflow run $run_id advanced to unexpected attempt $attempt (expected $expected_attempt)"
+          return 3
+        fi
+        last_attempt=$((10#$attempt))
+        expected_attempt=0
+      elif (( 10#$attempt != last_attempt )); then
+        LAST_WORKFLOW_RUN_CONCLUSION="attempt-mismatch"
+        warn "$workflow run $run_id advanced without a loop-owned rerun"
+        return 3
+      fi
+    fi
+
+    line="$workflow: run $run_id attempt $attempt | $status / $conclusion | $LAST_WORKFLOW_RUN_URL"
     [[ "$line" == "$previous" ]] || say "$line"
     previous="$line"
     if [[ "$status" != "completed" ]]; then
@@ -617,24 +710,57 @@ wait_for_exact_workflow() {
       continue
     fi
     if [[ "$conclusion" == "success" || "$conclusion" == "neutral" || "$conclusion" == "skipped" ]]; then
+      if (( failed_reruns > 0 )); then
+        good "$workflow run $run_id recovered on attempt $attempt after $failed_reruns failed-job rerun(s)"
+      fi
       return 0
     fi
-    if [[ "$conclusion" == "cancelled" && "$reruns" -lt "$AUTO_RERUN_CANCELLED" ]]; then
-      say "rerunning cancelled Actions run $LAST_WORKFLOW_RUN_ID"
-      if gh run rerun "$LAST_WORKFLOW_RUN_ID" >/dev/null 2>&1; then
-        reruns=$((reruns + 1))
+    if [[ "$conclusion" == "cancelled" && "$cancelled_reruns" -lt "$AUTO_RERUN_CANCELLED" ]]; then
+      say "rerunning cancelled Actions run $run_id (retry $((cancelled_reruns + 1))/$AUTO_RERUN_CANCELLED)"
+      if gh run rerun "$run_id" >/dev/null 2>&1; then
+        cancelled_reruns=$((cancelled_reruns + 1))
+        LAST_WORKFLOW_CANCELLED_RERUNS="$cancelled_reruns"
+        expected_attempt=$((10#$attempt + 1))
         sleep "$POLL_SECONDS"
         continue
       fi
-      warn "could not rerun $LAST_WORKFLOW_RUN_ID"
+      LAST_WORKFLOW_RUN_CONCLUSION="cancelled-rerun-rejected"
+      warn "could not rerun cancelled Actions run $run_id"
+      return 1
+    fi
+    if [[ "$conclusion" == "failure" && "$failed_reruns" -lt "$failed_rerun_budget" ]]; then
+      say "$workflow: rerunning failed jobs for Actions run $run_id on ${commit_sha:0:12} (retry $((failed_reruns + 1))/$failed_rerun_budget)"
+      if gh run rerun "$run_id" --failed >/dev/null 2>&1; then
+        failed_reruns=$((failed_reruns + 1))
+        LAST_WORKFLOW_FAILED_RERUNS="$failed_reruns"
+        expected_attempt=$((10#$attempt + 1))
+        sleep "$POLL_SECONDS"
+        continue
+      fi
+      LAST_WORKFLOW_RUN_CONCLUSION="failed-rerun-rejected"
+      warn "could not rerun failed jobs for Actions run $run_id"
+      return 3
     fi
     return 1
   done
+  LAST_WORKFLOW_RUN_CONCLUSION="timeout"
+  LAST_WORKFLOW_CANCELLED_RERUNS="$cancelled_reruns"
+  LAST_WORKFLOW_FAILED_RERUNS="$failed_reruns"
   return 2
 }
 
 wait_for_post_merge_workflow() {
-  wait_for_exact_workflow "$1" "$2" "$POST_MERGE_TIMEOUT_SECONDS"
+  wait_for_exact_workflow "$1" "$2" "$POST_MERGE_TIMEOUT_SECONDS" "$POST_MERGE_FAILED_RERUNS"
+}
+
+append_post_merge_workflow_evidence() {
+  local workflow="$1" entry
+  entry="${workflow}:run=${LAST_WORKFLOW_RUN_ID:-none},attempt=${LAST_WORKFLOW_RUN_ATTEMPT:-none},failed_reruns=${LAST_WORKFLOW_FAILED_RERUNS:-0},cancelled_reruns=${LAST_WORKFLOW_CANCELLED_RERUNS:-0},conclusion=${LAST_WORKFLOW_RUN_CONCLUSION:-unknown}"
+  if [[ -n "${POST_MERGE_WORKFLOW_EVIDENCE:-}" ]]; then
+    POST_MERGE_WORKFLOW_EVIDENCE+=";$entry"
+  else
+    POST_MERGE_WORKFLOW_EVIDENCE="$entry"
+  fi
 }
 
 ensure_pre_merge_compose() {
@@ -657,10 +783,10 @@ ensure_pre_merge_compose() {
 workflow_failure_snapshot() {
   local run_id="$1"
   [[ -n "$run_id" ]] || { printf '(no workflow run was created)\n'; return; }
-  gh run view "$run_id" --json url,headSha,status,conclusion,jobs \
-    --jq '"Run: \(.url)\nHead: \(.headSha)\nState: \(.status) / \(.conclusion // \"pending\")\nFailed jobs:\n" +
+  gh run view "$run_id" --json workflowName,url,headSha,status,conclusion,attempt,jobs \
+    --jq '"Workflow: \(.workflowName)\nRun: \(.url)\nHead: \(.headSha)\nAttempt: \(.attempt)\nState: \(.status) / \(.conclusion // \"pending\")\nFailed jobs (up to 10):\n" +
       ([.jobs[] | select(.conclusion == "failure" or .conclusion == "cancelled") |
-        "- \(.name) | \(.conclusion) | \(.url)"] |
+        "- \(.name) | \(.conclusion) | \(.url)"][0:10] |
         if length == 0 then "(none reported)" else join("\n") end)' \
     2>/dev/null || printf '(workflow details unavailable for run %s)\n' "$run_id"
 }
@@ -691,19 +817,30 @@ post_merge_workflows_for_pr() {
 
 wait_for_post_merge_workflows() {
   local commit_sha="$1" workflows="$2" workflow rc
+  POST_MERGE_WORKFLOW_EVIDENCE=""
   for workflow in $workflows; do
     rc=0
     wait_for_post_merge_workflow "$workflow" "$commit_sha" || rc=$?
+    append_post_merge_workflow_evidence "$workflow"
     case "$rc" in
-      0) good "$workflow passed for ${commit_sha:0:12}" ;;
-      1) return 1 ;;
-      2) return 2 ;;
+      0)
+        good "$workflow passed for ${commit_sha:0:12} (run ${LAST_WORKFLOW_RUN_ID:-none}, attempt ${LAST_WORKFLOW_RUN_ATTEMPT:-none})"
+        ;;
+      1|2|3)
+        warn "$workflow stopped post-merge validation for ${commit_sha:0:12}: run ${LAST_WORKFLOW_RUN_ID:-none}, attempt ${LAST_WORKFLOW_RUN_ATTEMPT:-none}, conclusion ${LAST_WORKFLOW_RUN_CONCLUSION:-unknown}, failed reruns ${LAST_WORKFLOW_FAILED_RERUNS:-0}, cancelled reruns ${LAST_WORKFLOW_CANCELLED_RERUNS:-0}"
+        workflow_failure_snapshot "${LAST_WORKFLOW_RUN_ID:-}" | sed 's/^/    /' >&2
+        return "$rc"
+        ;;
+      *)
+        warn "$workflow returned unexpected post-merge status $rc"
+        return 3
+        ;;
     esac
   done
 }
 
 journal_row() {
-  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$@" >> "$JOURNAL"
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$@" >> "$JOURNAL"
 }
 
 record_usage() {
@@ -719,7 +856,8 @@ record_usage() {
 record_outcome() {
   local outcome="$1"
   journal_row "$n" "${pr:-}" "$outcome" "${attempt:-0}" "$(( $(date +%s) - iter_start ))" \
-    "$iter_input" "$iter_cached" "$iter_output" "$iter_reasoning"
+    "$iter_input" "$iter_cached" "$iter_output" "$iter_reasoning" \
+    "${POST_MERGE_WORKFLOW_EVIDENCE:-}"
 }
 
 enforce_iteration_disk_space() {
@@ -1012,6 +1150,8 @@ Usage: dev_loop/loop.sh [--check] [--once] [--help]
   --once   Run one qualification/proposal/PR convergence iteration.
   --help   Show this help.
 
+Post-merge workflow failures retry failed jobs up to POST_MERGE_FAILED_RERUNS
+times (default 1, maximum 3) after a loop-owned automatic merge.
 Configuration is documented in dev_loop/README.md.
 EOF
 }
@@ -1044,7 +1184,7 @@ if [[ -f "$STOP_FILE" ]]; then
   rm -f "$STOP_FILE"
 fi
 mkdir -p "$LOG_DIR"
-printf 'iter\tpr\toutcome\trepairs\twall_s\tinput_tokens\tcached_input_tokens\toutput_tokens\treasoning_output_tokens\n' > "$JOURNAL"
+printf 'iter\tpr\toutcome\trepairs\twall_s\tinput_tokens\tcached_input_tokens\toutput_tokens\treasoning_output_tokens\tpost_merge_workflows\n' > "$JOURNAL"
 
 run_start="$(date +%s)"
 iteration=0
@@ -1057,7 +1197,7 @@ trap on_exit EXIT
 trap 'printf "\n"; warn "interrupted"; exit 130' INT TERM
 
 printf '%sBrowserPane Codex development loop | run %s%s\n' "$c_b" "$RUN_ID" "$c_reset"
-say "iterations=$ITERATIONS repairs=$MAX_REPAIRS specification_cycles=$MAX_SPECIFICATION_CYCLES min_free_disk_gb=$MIN_FREE_DISK_GB auto_qualify=$AUTO_QUALIFY auto_merge=$AUTO_MERGE admin_merge=$ADMIN_MERGE logs=dev_loop/runs/$RUN_ID"
+say "iterations=$ITERATIONS repairs=$MAX_REPAIRS specification_cycles=$MAX_SPECIFICATION_CYCLES post_merge_failed_reruns=$POST_MERGE_FAILED_RERUNS min_free_disk_gb=$MIN_FREE_DISK_GB auto_qualify=$AUTO_QUALIFY auto_merge=$AUTO_MERGE admin_merge=$ADMIN_MERGE logs=dev_loop/runs/$RUN_ID"
 
 specification_cycles=0
 while :; do
@@ -1070,7 +1210,7 @@ while :; do
   n="$(printf '%02d' "$iteration")"
   iter_start="$(date +%s)"
   iter_input=0; iter_cached=0; iter_output=0; iter_reasoning=0
-  pr=""; attempt=0
+  pr=""; attempt=0; POST_MERGE_WORKFLOW_EVIDENCE=""
 
   step "iteration $n | synchronize"
   enforce_iteration_disk_space "synchronization"

@@ -29,6 +29,12 @@ assert_eq() {
   pass "$label"
 }
 
+workflow_run_json() {
+  local run_id="$1" status="$2" conclusion="$3" head_sha="$4" attempt="$5" workflow_id="$6"
+  printf '[{"databaseId":%s,"status":"%s","conclusion":"%s","url":"https://github.com/ITmedes/browserpane/actions/runs/%s","headSha":"%s","createdAt":"2026-08-22T00:00:00Z","attempt":%s,"event":"push","workflowDatabaseId":%s}]\n' \
+    "$run_id" "$status" "$conclusion" "$run_id" "$head_sha" "$attempt" "$workflow_id"
+}
+
 valid="$tmp/valid.json"
 invalid="$tmp/invalid.json"
 invalid_proposed="$tmp/invalid-proposed.json"
@@ -210,7 +216,7 @@ grep -Fq 'When every candidate in the documented queue' "$qualify_routine" \
   || fail "qualification contract stops after documented queue exhaustion"
 pass "qualification contract stops after documented queue exhaustion"
 
-grep -Fq '`#174` -> `#180` -> `#263` -> `#264` -> `#265` -> `#266` -> `#267` -> `#268` -> `#124`' "$delivery_roadmap" \
+grep -Fq '`#174` -> `#180` -> `#277` -> `#263` -> `#264` -> `#265` -> `#266` -> `#267` -> `#268` -> `#124`' "$delivery_roadmap" \
   || fail "canonical roadmap defines the finite fallback queue"
 pass "canonical roadmap defines the finite fallback queue"
 
@@ -415,6 +421,46 @@ if PRE_MERGE_WORKFLOW= bash -c "source '$loop'; validate_config" >/dev/null 2>&1
 fi
 pass "empty pre-merge workflow name is rejected"
 
+assert_eq "1" "$(env -u POST_MERGE_FAILED_RERUNS bash -c "source '$loop'; printf '%s' \"\$POST_MERGE_FAILED_RERUNS\"")" \
+  "post-merge failed-job reruns default to one"
+
+POST_MERGE_FAILED_RERUNS=0 bash -c "source '$loop'; validate_config" \
+  || fail "disabled post-merge failed-job reruns are accepted"
+pass "disabled post-merge failed-job reruns are accepted"
+
+POST_MERGE_FAILED_RERUNS=3 bash -c "source '$loop'; validate_config" \
+  || fail "bounded post-merge failed-job reruns are accepted"
+pass "bounded post-merge failed-job reruns are accepted"
+
+if POST_MERGE_FAILED_RERUNS=-1 bash -c "source '$loop'; validate_config" >/dev/null 2>&1; then
+  fail "negative post-merge failed-job reruns are rejected"
+fi
+pass "negative post-merge failed-job reruns are rejected"
+
+if POST_MERGE_FAILED_RERUNS=invalid bash -c "source '$loop'; validate_config" >/dev/null 2>&1; then
+  fail "non-numeric post-merge failed-job reruns are rejected"
+fi
+pass "non-numeric post-merge failed-job reruns are rejected"
+
+if POST_MERGE_FAILED_RERUNS= bash -c "source '$loop'; validate_config" >/dev/null 2>&1; then
+  fail "empty post-merge failed-job reruns are rejected"
+fi
+pass "empty post-merge failed-job reruns are rejected"
+
+if POST_MERGE_FAILED_RERUNS=4 bash -c "source '$loop'; validate_config" >/dev/null 2>&1; then
+  fail "post-merge failed-job reruns above the limit are rejected"
+fi
+pass "post-merge failed-job reruns above the limit are rejected"
+
+env -u POST_MERGE_FAILED_RERUNS bash -u -c "source '$loop'; validate_config; [[ \"\$POST_MERGE_FAILED_RERUNS\" == 1 ]]" \
+  || fail "post-merge failed-job rerun configuration is nounset-safe"
+pass "post-merge failed-job rerun configuration is nounset-safe"
+
+help_output="$(usage)"
+[[ "$help_output" == *"POST_MERGE_FAILED_RERUNS"* && "$help_output" == *"maximum 3"* ]] \
+  || fail "loop help documents the post-merge failed-job bound"
+pass "loop help documents the post-merge failed-job bound"
+
 MAX_SPECIFICATION_CYCLES=2
 specification_cycles=0
 reserve_specification_cycle || fail "first specification cycle is reserved"
@@ -531,17 +577,20 @@ check_rc=0
 wait_for_checks 999 || check_rc=$?
 assert_eq "2" "$check_rc" "exhausted cancelled check reruns are inconclusive"
 
-MOCK_GH_JSON='[{"databaseId":4,"status":"completed","conclusion":"success","url":"https://github.com/ITmedes/browserpane/actions/runs/4","headSha":"abcdef1234567890","createdAt":"2026-08-22T00:00:00Z","attempt":1,"event":"push"}]'
+MOCK_GH_JSON='[{"databaseId":4,"status":"completed","conclusion":"success","url":"https://github.com/ITmedes/browserpane/actions/runs/4","headSha":"abcdef1234567890","createdAt":"2026-08-22T00:00:00Z","attempt":1,"event":"push","workflowDatabaseId":101}]'
 MOCK_GH_RC=0
 wait_for_post_merge_workflow validation.yml abcdef1234567890 || fail "successful post-merge workflow is accepted"
 pass "successful post-merge workflow is accepted"
 
-MOCK_GH_JSON='[{"databaseId":5,"status":"completed","conclusion":"failure","url":"https://github.com/ITmedes/browserpane/actions/runs/5","headSha":"abcdef1234567890","createdAt":"2026-08-22T00:00:00Z","attempt":1,"event":"push"}]'
+MOCK_GH_JSON='[{"databaseId":5,"status":"completed","conclusion":"failure","url":"https://github.com/ITmedes/browserpane/actions/runs/5","headSha":"abcdef1234567890","createdAt":"2026-08-22T00:00:00Z","attempt":1,"event":"push","workflowDatabaseId":102}]'
+original_post_merge_failed_reruns="$POST_MERGE_FAILED_RERUNS"
+POST_MERGE_FAILED_RERUNS=0
 post_merge_rc=0
 wait_for_post_merge_workflow compose.yml abcdef1234567890 || post_merge_rc=$?
-assert_eq "1" "$post_merge_rc" "failed post-merge workflow stops delivery"
+assert_eq "1" "$post_merge_rc" "disabled failed-job reruns stop on the first post-merge failure"
+POST_MERGE_FAILED_RERUNS="$original_post_merge_failed_reruns"
 
-MOCK_GH_JSON='[{"databaseId":6,"status":"completed","conclusion":"success","url":"https://github.com/ITmedes/browserpane/actions/runs/6","headSha":"stale0000000000","createdAt":"2026-08-22T00:01:00Z","attempt":1,"event":"workflow_dispatch"},{"databaseId":7,"status":"completed","conclusion":"success","url":"https://github.com/ITmedes/browserpane/actions/runs/7","headSha":"abcdef1234567890","createdAt":"2026-08-22T00:00:00Z","attempt":1,"event":"workflow_dispatch"}]'
+MOCK_GH_JSON='[{"databaseId":6,"status":"completed","conclusion":"success","url":"https://github.com/ITmedes/browserpane/actions/runs/6","headSha":"stale0000000000","createdAt":"2026-08-22T00:01:00Z","attempt":1,"event":"workflow_dispatch","workflowDatabaseId":103},{"databaseId":7,"status":"completed","conclusion":"success","url":"https://github.com/ITmedes/browserpane/actions/runs/7","headSha":"abcdef1234567890","createdAt":"2026-08-22T00:00:00Z","attempt":1,"event":"workflow_dispatch","workflowDatabaseId":103}]'
 exact_runs="$(workflow_runs_for_commit compose.yml abcdef1234567890)"
 assert_eq "1" "$(jq 'length' <<< "$exact_runs")" "stale workflow evidence is excluded"
 assert_eq "7" "$(jq -r '.[0].databaseId' <<< "$exact_runs")" "exact-head workflow evidence is retained"
@@ -552,7 +601,7 @@ gh() {
     MOCK_DISPATCH_COUNT=$((MOCK_DISPATCH_COUNT + 1))
     return 0
   fi
-  printf '%s\n' '[{"databaseId":8,"status":"completed","conclusion":"success","url":"https://github.com/ITmedes/browserpane/actions/runs/8","headSha":"head000000000001","createdAt":"2026-08-22T00:00:00Z","attempt":1,"event":"workflow_dispatch"}]'
+  printf '%s\n' '[{"databaseId":8,"status":"completed","conclusion":"success","url":"https://github.com/ITmedes/browserpane/actions/runs/8","headSha":"head000000000001","createdAt":"2026-08-22T00:00:00Z","attempt":1,"event":"workflow_dispatch","workflowDatabaseId":104}]'
 }
 ensure_pre_merge_compose codex/BPANE-00273 head000000000001 \
   || fail "existing exact-head Compose success is adopted"
@@ -571,7 +620,7 @@ gh() {
     touch "$list_marker"
     printf '%s\n' '[]'
   else
-    printf '%s\n' '[{"databaseId":9,"status":"completed","conclusion":"success","url":"https://github.com/ITmedes/browserpane/actions/runs/9","headSha":"head000000000002","createdAt":"2026-08-22T00:00:00Z","attempt":1,"event":"workflow_dispatch"}]'
+    printf '%s\n' '[{"databaseId":9,"status":"completed","conclusion":"success","url":"https://github.com/ITmedes/browserpane/actions/runs/9","headSha":"head000000000002","createdAt":"2026-08-22T00:00:00Z","attempt":1,"event":"workflow_dispatch","workflowDatabaseId":104}]'
   fi
 }
 ensure_pre_merge_compose codex/BPANE-00273 head000000000002 \
@@ -589,7 +638,7 @@ assert_eq "3" "$pre_merge_rc" "pre-merge Compose dispatch failure fails closed"
 assert_eq "dispatch-failed" "$LAST_WORKFLOW_RUN_CONCLUSION" "dispatch failure is actionable"
 
 gh() {
-  printf '%s\n' '[{"databaseId":10,"status":"completed","conclusion":"failure","url":"https://github.com/ITmedes/browserpane/actions/runs/10","headSha":"head000000000004","createdAt":"2026-08-22T00:00:00Z","attempt":1,"event":"workflow_dispatch"}]'
+  printf '%s\n' '[{"databaseId":10,"status":"completed","conclusion":"failure","url":"https://github.com/ITmedes/browserpane/actions/runs/10","headSha":"head000000000004","createdAt":"2026-08-22T00:00:00Z","attempt":1,"event":"workflow_dispatch","workflowDatabaseId":104}]'
 }
 pre_merge_rc=0
 ensure_pre_merge_compose codex/BPANE-00273 head000000000004 || pre_merge_rc=$?
@@ -609,15 +658,229 @@ gh() {
     return 0
   fi
   if [[ -f "$cancelled_rerun_marker" ]]; then
-    printf '%s\n' '[{"databaseId":11,"status":"completed","conclusion":"success","url":"https://github.com/ITmedes/browserpane/actions/runs/11","headSha":"head000000000005","createdAt":"2026-08-22T00:00:00Z","attempt":2,"event":"workflow_dispatch"}]'
+    printf '%s\n' '[{"databaseId":11,"status":"completed","conclusion":"success","url":"https://github.com/ITmedes/browserpane/actions/runs/11","headSha":"head000000000005","createdAt":"2026-08-22T00:00:00Z","attempt":2,"event":"workflow_dispatch","workflowDatabaseId":104}]'
   else
-    printf '%s\n' '[{"databaseId":11,"status":"completed","conclusion":"cancelled","url":"https://github.com/ITmedes/browserpane/actions/runs/11","headSha":"head000000000005","createdAt":"2026-08-22T00:00:00Z","attempt":1,"event":"workflow_dispatch"}]'
+    printf '%s\n' '[{"databaseId":11,"status":"completed","conclusion":"cancelled","url":"https://github.com/ITmedes/browserpane/actions/runs/11","headSha":"head000000000005","createdAt":"2026-08-22T00:00:00Z","attempt":1,"event":"workflow_dispatch","workflowDatabaseId":104}]'
   fi
 }
 wait_for_exact_workflow compose.yml head000000000005 5 \
   || fail "cancelled exact-head Compose run is rerun within budget"
 [[ -f "$cancelled_rerun_marker" ]] || fail "cancelled exact-head Compose run triggers rerun"
 pass "cancelled exact-head Compose run triggers bounded rerun"
+AUTO_RERUN_CANCELLED="$original_auto_rerun_cancelled"
+POLL_SECONDS="$original_poll_seconds"
+
+failed_rerun_marker="$tmp/failed-rerun"
+rm -f "$failed_rerun_marker"
+POST_MERGE_FAILED_RERUNS=1
+AUTO_RERUN_CANCELLED=0
+POLL_SECONDS=0
+gh() {
+  if [[ "$*" == "run rerun 21 --failed" ]]; then
+    touch "$failed_rerun_marker"
+    return 0
+  fi
+  if [[ -f "$failed_rerun_marker" ]]; then
+    workflow_run_json 21 completed success postmerge00000001 2 201
+  else
+    workflow_run_json 21 completed failure postmerge00000001 1 201
+  fi
+}
+wait_for_post_merge_workflows postmerge00000001 "compose.yml" \
+  || fail "one failed post-merge attempt is recovered"
+[[ -f "$failed_rerun_marker" ]] || fail "post-merge failure triggers a failed-job rerun"
+pass "post-merge failure triggers a failed-job rerun"
+assert_eq "21" "$LAST_WORKFLOW_RUN_ID" "failed-job rerun stays on the same Actions run"
+assert_eq "2" "$LAST_WORKFLOW_RUN_ATTEMPT" "failed-job rerun advances exactly one attempt"
+assert_eq "1" "$LAST_WORKFLOW_FAILED_RERUNS" "failed-job rerun count is recorded"
+assert_eq "compose.yml:run=21,attempt=2,failed_reruns=1,cancelled_reruns=0,conclusion=success" \
+  "$POST_MERGE_WORKFLOW_EVIDENCE" "recovered post-merge evidence is bounded and journal-safe"
+
+original_journal="$JOURNAL"
+JOURNAL="$tmp/journal.tsv"
+n=1
+pr=999
+attempt=0
+iter_start="$(date +%s)"
+iter_input=0
+iter_cached=0
+iter_output=0
+iter_reasoning=0
+record_outcome landed
+assert_eq "$POST_MERGE_WORKFLOW_EVIDENCE" "$(awk -F '\t' 'NR == 1 { print $10 }' "$JOURNAL")" \
+  "post-merge run evidence is persisted in the iteration journal"
+JOURNAL="$original_journal"
+
+repeated_failure_marker="$tmp/repeated-failure"
+rm -f "$repeated_failure_marker"
+gh() {
+  if [[ "$*" == "run rerun 22 --failed" ]]; then
+    touch "$repeated_failure_marker"
+    return 0
+  fi
+  if [[ -f "$repeated_failure_marker" ]]; then
+    workflow_run_json 22 completed failure postmerge00000002 2 202
+  else
+    workflow_run_json 22 completed failure postmerge00000002 1 202
+  fi
+}
+post_merge_rc=0
+wait_for_post_merge_workflow compose.yml postmerge00000002 || post_merge_rc=$?
+assert_eq "1" "$post_merge_rc" "a repeated post-merge failure exhausts the failed-job budget"
+assert_eq "2" "$LAST_WORKFLOW_RUN_ATTEMPT" "repeated failure retains the final attempt"
+assert_eq "1" "$LAST_WORKFLOW_FAILED_RERUNS" "repeated failure does not dispatch an extra rerun"
+
+rerun_rejected_marker="$tmp/rerun-rejected"
+rm -f "$rerun_rejected_marker"
+gh() {
+  if [[ "$*" == "run rerun 23 --failed" ]]; then
+    touch "$rerun_rejected_marker"
+    return 1
+  fi
+  workflow_run_json 23 completed failure postmerge00000003 1 203
+}
+post_merge_rc=0
+wait_for_post_merge_workflow compose.yml postmerge00000003 || post_merge_rc=$?
+assert_eq "3" "$post_merge_rc" "a rejected failed-job rerun fails closed"
+[[ -f "$rerun_rejected_marker" ]] || fail "failed-job rerun rejection is exercised"
+pass "failed-job rerun rejection is exercised"
+assert_eq "failed-rerun-rejected" "$LAST_WORKFLOW_RUN_CONCLUSION" \
+  "failed-job rerun rejection is actionable"
+
+sha_mismatch_marker="$tmp/sha-mismatch-rerun"
+rm -f "$sha_mismatch_marker"
+gh() {
+  if [[ "$*" == "run rerun 24 --failed" ]]; then
+    touch "$sha_mismatch_marker"
+    return 0
+  fi
+  if [[ -f "$sha_mismatch_marker" ]]; then
+    workflow_run_json 24 completed success wrongmerge0000004 2 204
+  else
+    workflow_run_json 24 completed failure postmerge00000004 1 204
+  fi
+}
+post_merge_rc=0
+wait_for_post_merge_workflow compose.yml postmerge00000004 || post_merge_rc=$?
+assert_eq "3" "$post_merge_rc" "a rerun SHA mismatch fails closed"
+assert_eq "sha-mismatch" "$LAST_WORKFLOW_RUN_CONCLUSION" "rerun SHA mismatch is explicit"
+
+workflow_mismatch_marker="$tmp/workflow-mismatch-rerun"
+rm -f "$workflow_mismatch_marker"
+gh() {
+  if [[ "$*" == "run rerun 25 --failed" ]]; then
+    touch "$workflow_mismatch_marker"
+    return 0
+  fi
+  if [[ -f "$workflow_mismatch_marker" ]]; then
+    workflow_run_json 25 completed success postmerge00000005 2 999
+  else
+    workflow_run_json 25 completed failure postmerge00000005 1 205
+  fi
+}
+post_merge_rc=0
+wait_for_post_merge_workflow compose.yml postmerge00000005 || post_merge_rc=$?
+assert_eq "3" "$post_merge_rc" "a rerun workflow mismatch fails closed"
+assert_eq "workflow-mismatch" "$LAST_WORKFLOW_RUN_CONCLUSION" \
+  "rerun workflow mismatch is explicit"
+
+missing_run_marker="$tmp/missing-rerun"
+rm -f "$missing_run_marker"
+gh() {
+  if [[ "$*" == "run rerun 26 --failed" ]]; then
+    touch "$missing_run_marker"
+    return 0
+  fi
+  if [[ -f "$missing_run_marker" ]]; then
+    printf '%s\n' '[]'
+  else
+    workflow_run_json 26 completed failure postmerge00000006 1 206
+  fi
+}
+post_merge_rc=0
+wait_for_post_merge_workflow compose.yml postmerge00000006 || post_merge_rc=$?
+assert_eq "3" "$post_merge_rc" "an unavailable rerun fails closed"
+assert_eq "run-unavailable" "$LAST_WORKFLOW_RUN_CONCLUSION" "unavailable rerun is explicit"
+
+cancel_then_fail_marker="$tmp/cancel-then-fail"
+cancel_then_fail_retry_marker="$tmp/cancel-then-fail-retry"
+rm -f "$cancel_then_fail_marker" "$cancel_then_fail_retry_marker"
+AUTO_RERUN_CANCELLED=1
+gh() {
+  if [[ "$*" == "run rerun 27" ]]; then
+    touch "$cancel_then_fail_marker"
+    return 0
+  fi
+  if [[ "$*" == "run rerun 27 --failed" ]]; then
+    touch "$cancel_then_fail_retry_marker"
+    return 0
+  fi
+  if [[ -f "$cancel_then_fail_retry_marker" ]]; then
+    workflow_run_json 27 completed success postmerge00000007 3 207
+  elif [[ -f "$cancel_then_fail_marker" ]]; then
+    workflow_run_json 27 completed failure postmerge00000007 2 207
+  else
+    workflow_run_json 27 completed cancelled postmerge00000007 1 207
+  fi
+}
+wait_for_post_merge_workflow compose.yml postmerge00000007 \
+  || fail "cancelled then failed attempts use independent rerun budgets"
+assert_eq "1" "$LAST_WORKFLOW_CANCELLED_RERUNS" "cancelled retry budget is counted independently"
+assert_eq "1" "$LAST_WORKFLOW_FAILED_RERUNS" "failed retry budget follows a cancelled retry"
+assert_eq "3" "$LAST_WORKFLOW_RUN_ATTEMPT" "mixed cancelled and failed retries advance deterministically"
+
+fail_then_cancel_marker="$tmp/fail-then-cancel"
+fail_then_cancel_retry_marker="$tmp/fail-then-cancel-retry"
+rm -f "$fail_then_cancel_marker" "$fail_then_cancel_retry_marker"
+gh() {
+  if [[ "$*" == "run rerun 28 --failed" ]]; then
+    touch "$fail_then_cancel_marker"
+    return 0
+  fi
+  if [[ "$*" == "run rerun 28" ]]; then
+    touch "$fail_then_cancel_retry_marker"
+    return 0
+  fi
+  if [[ -f "$fail_then_cancel_retry_marker" ]]; then
+    workflow_run_json 28 completed success postmerge00000008 3 208
+  elif [[ -f "$fail_then_cancel_marker" ]]; then
+    workflow_run_json 28 completed cancelled postmerge00000008 2 208
+  else
+    workflow_run_json 28 completed failure postmerge00000008 1 208
+  fi
+}
+wait_for_post_merge_workflow compose.yml postmerge00000008 \
+  || fail "failed then cancelled attempts use independent rerun budgets"
+assert_eq "1" "$LAST_WORKFLOW_FAILED_RERUNS" "failed retry budget is counted independently"
+assert_eq "1" "$LAST_WORKFLOW_CANCELLED_RERUNS" "cancelled retry budget follows a failed retry"
+
+next_workflow_marker="$tmp/next-post-merge-workflow"
+blocked_rerun_marker="$tmp/blocked-post-merge-rerun"
+rm -f "$next_workflow_marker" "$blocked_rerun_marker"
+gh() {
+  if [[ "$*" == *"--workflow validation.yml"* ]]; then
+    touch "$next_workflow_marker"
+    workflow_run_json 30 completed success postmerge00000009 1 210
+    return 0
+  fi
+  if [[ "$*" == "run rerun 29 --failed" ]]; then
+    touch "$blocked_rerun_marker"
+    return 0
+  fi
+  if [[ "$*" == *"run view 29"* ]]; then return 1; fi
+  if [[ -f "$blocked_rerun_marker" ]]; then
+    workflow_run_json 29 completed failure postmerge00000009 2 209
+  else
+    workflow_run_json 29 completed failure postmerge00000009 1 209
+  fi
+}
+post_merge_rc=0
+wait_for_post_merge_workflows postmerge00000009 "compose.yml validation.yml" || post_merge_rc=$?
+assert_eq "1" "$post_merge_rc" "failed post-merge validation stops the required-workflow sequence"
+[[ ! -f "$next_workflow_marker" ]] || fail "a repeated failure does not advance post-merge delivery"
+pass "a repeated failure does not advance post-merge delivery"
+
+POST_MERGE_FAILED_RERUNS="$original_post_merge_failed_reruns"
 AUTO_RERUN_CANCELLED="$original_auto_rerun_cancelled"
 POLL_SECONDS="$original_poll_seconds"
 

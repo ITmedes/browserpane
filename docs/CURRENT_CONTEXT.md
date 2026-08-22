@@ -2,7 +2,8 @@
 
 Last synchronized: 2026-08-22 after protocol slices `#263` through `#265`, the
 Codex loop exact-head Compose/readiness correction `#273`/`#275` merged through
-PR `#274`, and post-merge retry gap `#277` was isolated from main-run evidence.
+PR `#274`, and the bounded post-merge retry implementation for `#277` entered
+review.
 
 This is the first local document to read when starting a clean BrowserPane
 session. It records current product decisions, delivery order, and repository
@@ -27,9 +28,12 @@ state. Detailed requirements remain in the linked domain and plan documents.
   transport-versus-application readiness races in browser/CLI, compatibility
   admin, session-file, and MCP smokes. `#273` and `#275` are complete.
 - PR #274's exact-head Compose passed, but its first main Compose run failed one
-  Admin-New authenticated-route timeout. `#277` owns one bounded exact-SHA
-  post-merge failed-job retry; repeated failure remains fail-closed. This is the
-  immediate Foundation slice before protocol work resumes.
+  Admin-New authenticated-route timeout. The in-review `#277` slice reruns
+  failed jobs once by default on the same required workflow run and exact merge
+  SHA, with a configurable `0` through `3` bound. Cancelled retries remain
+  independent; repeated failure, mismatched or unavailable evidence, rejected
+  dispatch, and timeout remain fail-closed. This is the immediate Foundation
+  slice before protocol work resumes.
 - The supported immutable Playwright workflow package contract is frozen
   through #47/PR #242, including publication compatibility, Admin-New/CLI
   visibility, worker evidence redaction, and live package regression evidence.
