@@ -3,12 +3,12 @@
 ## Metadata
 
 - Issue: `#284`
-- State: In Progress
+- State: Review
 - Owner: BrowserPane maintainers
 - Lane: Foundation
 - Target gate: deterministic Compose qualification
 - Depends on: `#283`; completed `#235`
-- Last verified commit/date: `8ebb03a69125` / 2026-08-23
+- Last verified commit/date: `feadf86e1df0` / 2026-08-23
 
 ## Business Outcome
 
@@ -173,5 +173,37 @@ determinism only; it does not promote product maturity or deployment support.
 
 ## Evidence Record
 
-Record the PR, commit, unit/integration outputs, two hosted workflow runs,
-cancellation run, leak inventories, and baseline comparison in issue `#284`.
+Proposal evidence for implementation commit `feadf86e1df0`:
+
+- `node scripts/validate.mjs --stage validation-tool-tests --stage
+  repository-baseline --stage repository-documents`: PASS; 164 validation-tool
+  tests, 48 tracked JSON files, 125 Markdown files, 19 YAML files, and three
+  workflows.
+- `cargo fmt --all -- --check`: PASS.
+- `cargo clippy -p bpane-gateway --all-targets --locked -- -D warnings`: PASS.
+- `cargo test -p bpane-gateway --locked`: PASS; 506 gateway unit tests plus
+  the crate's non-ignored integration and documentation targets.
+- `node scripts/run-rust-coverage.mjs`: PASS; workspace tests and the checked
+  Rust coverage ratchet passed (64.98% regions, 64.15% functions, 61.16%
+  lines).
+- `npx tsc --noEmit && npm test && npm run test:coverage && npm run build` in
+  `code/web/bpane-client`: PASS; 91 files / 695 tests and the 93.21% statement
+  coverage ratchet passed before the production build.
+- Four `node scripts/compose-harness.mjs wait-http` probes against the existing
+  stack: PASS for OIDC, control, runtime, and MCP health with four bounded
+  readiness events.
+- Live read-only cleanup inventory fixture against the existing Docker and
+  Postgres dependencies: PASS in one attempt without changing foreign state.
+- `node scripts/validate.mjs --stage compose-session-files`: PASS against the
+  existing stack. The stage created and stopped its namespaced session; cleanup
+  reported zero active sessions, owned containers, temporary volumes,
+  unexpected containers, or unexpected volumes, with one intentional retained
+  stopped-session data volume.
+
+Deferred validation is explicit: the complete five-lane hosted Compose matrix
+and the required consecutive-run comparison remain post-merge, scheduled, or
+manual evidence because Compose is not a pull-request trigger. The canonical
+local full-profile wrapper was not run because it would rebuild and ultimately
+tear down a pre-existing operator stack; the ownership-safe live smoke above
+was used instead. Record the two hosted run links, cancellation run, and timing
+comparison in issue `#284` after that evidence exists.
