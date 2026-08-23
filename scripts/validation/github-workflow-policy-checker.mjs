@@ -1,7 +1,8 @@
 const SHA_PATTERN = /^[0-9a-f]{40}$/;
 const ALLOWED_ARTIFACT_ROOTS = [
   'test-results/coverage',
-  'test-results/ci-diagnostics'
+  'test-results/ci-diagnostics',
+  'test-results/compose-evidence'
 ];
 
 export class GitHubWorkflowPolicyChecker {

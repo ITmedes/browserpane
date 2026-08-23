@@ -21,6 +21,9 @@ test('workflow policy accepts pinned least-privilege jobs and bounded artifacts'
           { uses: `actions/cache@${SHA}`, with: { key: "cargo-${{ hashFiles('Cargo.lock') }}" } },
           { uses: `actions/upload-artifact@${SHA}`, with: {
             path: 'test-results/coverage/rust.md', 'retention-days': 7
+          } },
+          { uses: `actions/upload-artifact@${SHA}`, with: {
+            path: 'test-results/compose-evidence/lane/result.json', 'retention-days': 7
           } }
         ]
       }

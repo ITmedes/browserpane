@@ -3,12 +3,12 @@
 ## Metadata
 
 - Issue: `#283`
-- State: Ready
+- State: In Progress
 - Owner: BrowserPane maintainers
 - Lane: Foundation
 - Target gate: reliable Compose qualification
 - Depends on: completed issues `#184`, `#185`, `#235`, `#273`, and `#277`
-- Last verified commit/date: `e79164cc3a84` / 2026-08-22
+- Last verified commit/date: `c0e0ae503236` / 2026-08-23
 
 ## Business Outcome
 

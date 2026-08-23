@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
@@ -55,4 +56,34 @@ test('compose cleanup removes observer projects before the primary stack', () =>
   assert.match(cleanup, /BPANE_EGRESS_OBSERVER_PROJECT:-bpane-ci-egress/);
   assert.match(cleanup, /BPANE_EGRESS_TLS_OBSERVER_PROJECT:-bpane-ci-egress-tls/);
   assert.equal((cleanup.match(/down --volumes --remove-orphans/g) ?? []).length, 3);
+});
+
+test('compose cleanup reports failure after attempting every cleanup boundary', (t) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'bpane-cleanup-fixture-'));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const dockerPath = path.join(directory, 'docker');
+  const callsPath = path.join(directory, 'calls.log');
+  fs.writeFileSync(dockerPath, [
+    '#!/usr/bin/env bash',
+    'printf "%s\\n" "$*" >>"$BPANE_FAKE_DOCKER_CALLS"',
+    'if [[ "$1" == "ps" ]]; then exit 0; fi',
+    'if [[ "$*" == *"--project-name bpane-ci-egress -f"* ]]; then exit 7; fi',
+    'exit 0',
+    '',
+  ].join('\n'), { mode: 0o700 });
+
+  const result = spawnSync(cleanupPath, [], {
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      PATH: `${directory}:${process.env.PATH}`,
+      BPANE_FAKE_DOCKER_CALLS: callsPath,
+    },
+  });
+  const calls = fs.readFileSync(callsPath, 'utf8');
+
+  assert.equal(result.status, 1);
+  assert.match(calls, /bpane-ci-egress-tls/);
+  assert.match(calls, /bpane-ci-egress -f/);
+  assert.match(calls, /deploy\/compose\.yml down --volumes --remove-orphans/);
 });

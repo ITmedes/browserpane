@@ -1,7 +1,8 @@
 # Open GitHub Issues Context
 
 Created: 2026-07-10
-Revalidated: 2026-08-22 after #277 merged through PR #279 and the resulting
+Revalidated: 2026-08-23 with #283 structured Compose stage evidence in Review,
+after #277 merged through PR #279 and the resulting
 protocol-bootstrap repair #280 closed through PR #281. #174 and #180 are
 externally deferred. Compose Qualification v2 issues #283-#287 now precede
 ordered protocol issues #266-#268 and #124 in the finite engineering fallback.
@@ -72,7 +73,7 @@ Source check:
 | Focused cross-product gaps | `#174` through `#180` | Use these for Phase 0 delivery, protocol conformance, authorization, identity lifecycle, platform telemetry, API compatibility, and open-source governance. |
 | Focused validation performance | `#184` | Preserve the #151 validation baseline while reducing hosted compose feedback time through isolated execution lanes. |
 | Focused Docker build acceleration | `#185` | Preserve #184 lane coverage while adding deterministic, supply-chain-safe Docker build reuse for trusted hosted runs. |
-| Compose Qualification v2 | `#283` through `#287` | Execute in order: evidence, deterministic harness, immutable test-image bundle, fail-closed affected-area selection, then exact-tree post-merge reuse. Only #283 is Ready. |
+| Compose Qualification v2 | `#283` through `#287` | Execute in order: evidence, deterministic harness, immutable test-image bundle, fail-closed affected-area selection, then exact-tree post-merge reuse. #283 is in Review. |
 | Focused runtime authorization boundary | `#214` | Complete the typed, policy-validating broker and gateway-isolated Docker-host topology beyond the #167 direct compatibility boundary. |
 | Completed threat-model baseline | closed `#223` | Durable evidence baseline merged through PR #224; #72 keeps residual security ownership. |
 | Completed single-node deployment | closed `#225` | Independent single-node package merged through PR #226; #66 keeps broader deployment ownership. |
@@ -119,7 +120,7 @@ Source check:
 | `#268` Protocol compatibility qualification | `BPANE-00268_PROTOCOL_COMPATIBILITY_QUALIFICATION_PLAN.md`, `BPANE-00175_REMOTE_PROTOCOL_V1_PLAN.md`, `VALIDATION_MATRIX.md` | Protocol slice 6 after #267 | Prove rolling upgrade/rollback, current features, Admin-New diagnostics, and close #175. |
 | closed `#277` Exact-SHA post-merge workflow retry | `BPANE-00277_POST_MERGE_WORKFLOW_RETRY_PLAN.md`, `BPANE-00273_EXACT_HEAD_COMPOSE_GATE_PLAN.md`, `DELIVERY_ROADMAP.md` | Completed Foundation slice | Same-run exact-SHA failed-job retry merged through PR #279; repeated failure remains terminal. |
 | closed `#280` Protocol bootstrap compatibility and session cleanup | `BPANE-00280_PROTOCOL_BOOTSTRAP_CLEANUP_PLAN.md`, `BPANE-00265_GATEWAY_PROTOCOL_NEGOTIATION_PLAN.md`, `VALIDATION_MATRIX.md` | Completed Foundation repair | Checked legacy bytes survive stream chunk boundaries and bootstrap write failure removes admitted registry clients; merged through PR #281. |
-| `#283` Compose stage evidence and reliability baseline | `BPANE-00283_COMPOSE_STAGE_EVIDENCE_PLAN.md`, `VALIDATION_MATRIX.md`, `DELIVERY_ROADMAP.md` | Ready Foundation maintenance slice | Add bounded per-stage timing, failure classification, input identity, diagnostics, and cleanup evidence without changing coverage or retry semantics. |
+| `#283` Compose stage evidence and reliability baseline | `BPANE-00283_COMPOSE_STAGE_EVIDENCE_PLAN.md`, `COMPOSE_RELIABILITY_BASELINE.md`, `VALIDATION_MATRIX.md`, `DELIVERY_ROADMAP.md` | Review Foundation maintenance slice | Checked v1 JSON/JUnit stage timing, deterministic classification, exact identity, bounded diagnostics, independent cleanup evidence, and a reviewed 30-run baseline without changing coverage or retry semantics. |
 | `#284` Deterministic Compose smoke harness | `BPANE-00284_COMPOSE_SMOKE_HARNESS_PLAN.md`, `VALIDATION_MATRIX.md`, `DELIVERY_ROADMAP.md` | Qualified after #283 | Unify typed readiness, unique CI namespaces, cancellation, and cleanup invariants across all lanes. |
 | `#285` Immutable Compose test-image bundle | `BPANE-00285_COMPOSE_TEST_IMAGE_BUNDLE_PLAN.md`, `VALIDATION_MATRIX.md`, `DELIVERY_ROADMAP.md` | Qualified after #283/#284 integration | Build required images once and fan out a tree-bound immutable digest manifest without replacing local source builds. |
 | `#286` Affected-area Compose qualification | `BPANE-00286_AFFECTED_COMPOSE_QUALIFICATION_PLAN.md`, `VALIDATION_MATRIX.md`, `DELIVERY_ROADMAP.md` | Qualified after #283-#285 | Deterministic canary/affected/full plans; docs-only changes use lightweight policy and unknown/high-risk changes select full. |
@@ -263,7 +264,7 @@ The cross-reference pass also updated the issue bodies in both directions:
 | `#268` | Final focused protocol qualification slice after #267. | Created on GitHub 2026-08-21 as the #175 closure owner. | Integrates safe live diagnostics into existing session preview/observability surfaces. |
 | `#277` | Completed Foundation reliability slice. | Merged through PR #279; run `32584253673` proved the one-retry fail-closed bound. | Adds one bounded exact-SHA failed-job rerun after merge; no product behavior or gate suppression. |
 | `#280` | Completed focused Foundation repair. | Created from both failed attempts of Compose run `32584253673` and merged through PR #281. | Corrected byte-stream handoff and post-admission cleanup without broadening legacy compatibility or absorbing browser negotiation. |
-| `#283` | Ready first Compose Qualification v2 slice. | Created and cross-referenced on GitHub 2026-08-22. | Establishes evidence and reliability baseline; no gate selection or retry change. |
+| `#283` | Review first Compose Qualification v2 slice. | v1 evidence contract, workflow wiring, and pre-instrumentation baseline proposed on 2026-08-23. | Establishes evidence and reliability baseline; no gate selection or retry change. |
 | `#284` | Qualified second Compose Qualification v2 slice. | Created and cross-referenced on GitHub 2026-08-22. | Depends on #283 and owns shared readiness/namespacing/cleanup. |
 | `#285` | Qualified third Compose Qualification v2 slice. | Created and cross-referenced on GitHub 2026-08-22. | Uses #283 identity and follows #284 integration; no selector scope. |
 | `#286` | Qualified fourth Compose Qualification v2 slice. | Created and cross-referenced on GitHub 2026-08-22. | Owns fail-closed affected-area and docs-only qualification; full scheduled/manual coverage remains. |
@@ -304,7 +305,8 @@ shown as `closed #142`.
 | `BPANE-00179_CONTROL_API_CONFORMANCE_PLAN.md` | `#179`, review-ready Foundation control-contract conformance and compatibility slice |
 | `BPANE-00184_COMPOSE_VALIDATION_PERFORMANCE_PLAN.md` | `#184`, implemented Foundation validation-performance slice; measured build-cache follow-up `#185` |
 | `BPANE-00185_CI_RUST_BUILDER_PLAN.md` | closed `#185`, implemented deterministic GHCR builder and compose-consumption slice |
-| `BPANE-00283_COMPOSE_STAGE_EVIDENCE_PLAN.md` | `#283`, Ready first Compose Qualification v2 slice |
+| `BPANE-00283_COMPOSE_STAGE_EVIDENCE_PLAN.md` | `#283`, Review first Compose Qualification v2 slice |
+| `COMPOSE_RELIABILITY_BASELINE.md` | `#283`, reviewed pre-v1 30-run baseline and flake ledger |
 | `BPANE-00284_COMPOSE_SMOKE_HARNESS_PLAN.md` | `#284`, qualified deterministic harness slice after #283 |
 | `BPANE-00285_COMPOSE_TEST_IMAGE_BUNDLE_PLAN.md` | `#285`, qualified immutable image fan-out slice |
 | `BPANE-00286_AFFECTED_COMPOSE_QUALIFICATION_PLAN.md` | `#286`, qualified fail-closed selection and docs-only path slice |
@@ -367,7 +369,7 @@ issue and capture the exact slice boundary in a checked-in `docs/*_PLAN.md`:
 | Work-order item | Current issue state | Recommended action |
 | --- | --- | --- |
 | Foundation validation baseline | closed `#151` | Keep the implemented validation scope intact. |
-| Foundation validation performance | closed `#184`/`#185`; `#283` Ready and `#284`-`#287` Qualified | Preserve the sharding/builder baseline and execute Compose Qualification v2 in dependency order without reducing coverage. |
+| Foundation validation performance | closed `#184`/`#185`; `#283` Review and `#284`-`#287` Qualified | Preserve the sharding/builder baseline and execute Compose Qualification v2 in dependency order without reducing coverage. |
 | Remaining Foundation trust/runtime work | `#145`-`#150`, `#152`, and `#179` merged | Foundation Gate is complete; preserve its validation and compatibility evidence. |
 | Active Operator Product work | none; `#124` qualified | Admin-new is promoted; select #124 only when session-template catalog work outranks the current Production slice. |
 | Items 10-19: admin-new parity and promotion work | `#154`-`#163`, with session templates still tracked by `#124` | Use the matching focused issue and keep old admin regression scope explicit. |

@@ -34,19 +34,39 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - name: Authenticate to GitHub Container Registry
+      - name: Initialize Compose evidence
         run: >-
-          echo "${{ github.token }}" |
-          docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+          node scripts/compose-evidence.mjs init
+          --lane gateway-${{ matrix.suite }}
+      - name: Authenticate to GitHub Container Registry
+        env:
+          BPANE_GHCR_TOKEN: ${{ github.token }}
+        run: >-
+          node scripts/compose-evidence.mjs run
+          --lane gateway-${{ matrix.suite }}
+          --stage registry-auth --
+          bash -euo pipefail -c
+          'printf "%s" "$BPANE_GHCR_TOKEN" |
+          docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin'
       - name: Resolve CI Rust builder
-        run: node scripts/ci/ci-rust-builder-resolver.mjs --github-env "${GITHUB_ENV}"
+        run: >-
+          node scripts/compose-evidence.mjs run
+          --lane gateway-${{ matrix.suite }}
+          --stage builder-resolution --
+          node scripts/ci/ci-rust-builder-resolver.mjs --github-env "${GITHUB_ENV}"
       - name: Verify native build prerequisites
-        run: |
-          for tool in cc c++ make cmake pkg-config; do
-            command -v "$tool"
-          done
+        run: >-
+          node scripts/compose-evidence.mjs run
+          --lane gateway-${{ matrix.suite }}
+          --stage native-prerequisites --
+          bash -euo pipefail -c
+          'for tool in cc c++ make cmake pkg-config; do command -v "$tool"; done'
       - name: Select pinned Rust toolchain
-        run: rustup show active-toolchain
+        run: >-
+          node scripts/compose-evidence.mjs run
+          --lane gateway-${{ matrix.suite }}
+          --stage rust-toolchain --
+          rustup show active-toolchain
       - name: Cache Rust build inputs
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
@@ -56,28 +76,56 @@ jobs:
             target
           key: compose-rust-1.93.1-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
       - name: Verify runtime prerequisites
-        run: docker compose version
+        run: >-
+          node scripts/compose-evidence.mjs run
+          --lane gateway-${{ matrix.suite }}
+          --stage runtime-prerequisites --
+          docker compose version
       - name: Build workflow worker image
-        run: docker compose -f deploy/compose.yml --profile workflow build workflow-worker
+        run: >-
+          node scripts/compose-evidence.mjs run
+          --lane gateway-${{ matrix.suite }}
+          --stage worker-image --
+          docker compose -f deploy/compose.yml --profile workflow build workflow-worker
       - name: Run gateway compose API suite
-        run: scripts/run-gateway-compose-e2e.sh --suite ${{ matrix.suite }}
+        run: >-
+          node scripts/compose-evidence.mjs run
+          --lane gateway-${{ matrix.suite }}
+          --stage gateway-suite --
+          scripts/run-gateway-compose-e2e.sh --suite ${{ matrix.suite }}
       - name: Collect redacted failure diagnostics
-        if: failure()
-        run: node scripts/collect-compose-diagnostics.mjs
-      - name: Publish redacted failure diagnostics
-        if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: compose-diagnostics-gateway-${{ matrix.suite }}-${{ github.run_id }}
-          path: test-results/ci-diagnostics/compose.log
-          if-no-files-found: ignore
-          retention-days: 7
+        if: failure() || cancelled()
+        run: >-
+          node scripts/compose-evidence.mjs run
+          --lane gateway-${{ matrix.suite }}
+          --stage diagnostics --
+          node scripts/collect-compose-diagnostics.mjs
       - name: Clean compose resources
         if: always()
-        run: scripts/ci/cleanup-compose.sh
-      - name: Log out of GitHub Container Registry
+        run: >-
+          node scripts/compose-evidence.mjs run
+          --lane gateway-${{ matrix.suite }}
+          --stage cleanup --
+          bash -euo pipefail -c
+          'status=0; scripts/ci/cleanup-compose.sh || status=$?;
+          docker logout ghcr.io || status=$?; exit "$status"'
+      - name: Finalize Compose evidence
         if: always()
-        run: docker logout ghcr.io
+        run: >-
+          node scripts/compose-evidence.mjs finalize
+          --lane gateway-${{ matrix.suite }}
+      - name: Publish Compose evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: compose-evidence-gateway-${{ matrix.suite }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            test-results/compose-evidence/gateway-${{ matrix.suite }}/compose-stage-evidence-v1.json
+            test-results/compose-evidence/gateway-${{ matrix.suite }}/compose-stage-evidence-v1.xml
+            test-results/compose-evidence/gateway-${{ matrix.suite }}/attachments
+            test-results/ci-diagnostics/compose.log
+          if-no-files-found: error
+          retention-days: 7
 
   browser-integrations:
     name: Browser and integration smokes
@@ -91,12 +139,22 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+      - name: Initialize Compose evidence
+        run: node scripts/compose-evidence.mjs init --lane browser-integrations
       - name: Authenticate to GitHub Container Registry
+        env:
+          BPANE_GHCR_TOKEN: ${{ github.token }}
         run: >-
-          echo "${{ github.token }}" |
-          docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+          node scripts/compose-evidence.mjs run
+          --lane browser-integrations --stage registry-auth --
+          bash -euo pipefail -c
+          'printf "%s" "$BPANE_GHCR_TOKEN" |
+          docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin'
       - name: Resolve CI Rust builder
-        run: node scripts/ci/ci-rust-builder-resolver.mjs --github-env "${GITHUB_ENV}"
+        run: >-
+          node scripts/compose-evidence.mjs run
+          --lane browser-integrations --stage builder-resolution --
+          node scripts/ci/ci-rust-builder-resolver.mjs --github-env "${GITHUB_ENV}"
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
@@ -104,21 +162,32 @@ jobs:
           cache: npm
           cache-dependency-path: code/web/bpane-client/package-lock.json
       - name: Verify runtime prerequisites
-        run: |
-          docker compose version
-          if command -v google-chrome >/dev/null; then
-            google-chrome --version
-          else
-            chromium --version
-          fi
+        run: >-
+          node scripts/compose-evidence.mjs run
+          --lane browser-integrations --stage runtime-prerequisites --
+          bash -euo pipefail -c
+          'docker compose version;
+          if command -v google-chrome >/dev/null; then google-chrome --version;
+          else chromium --version; fi'
       - name: Install browser-client dependencies
-        run: node scripts/validate.mjs --stage client-install
+        run: >-
+          node scripts/compose-evidence.mjs run
+          --lane browser-integrations --stage client-dependencies --
+          node scripts/validate.mjs --stage client-install
       - name: Build workflow worker image
-        run: docker compose -f deploy/compose.yml --profile workflow build workflow-worker
+        run: >-
+          node scripts/compose-evidence.mjs run
+          --lane browser-integrations --stage worker-image --
+          docker compose -f deploy/compose.yml --profile workflow build workflow-worker
       - name: Prepare compose runtime
-        run: scripts/run-gateway-compose-e2e.sh --suite stack
+        run: >-
+          node scripts/compose-evidence.mjs run
+          --lane browser-integrations --stage compose-runtime --
+          scripts/run-gateway-compose-e2e.sh --suite stack
       - name: Run browser-facing compose validation
         run: >-
+          node scripts/compose-evidence.mjs run
+          --lane browser-integrations --stage browser-validation --
           node scripts/validate.mjs
           --stage compose-cli
           --stage compose-session-files
@@ -129,22 +198,34 @@ jobs:
           --stage compose-workflow-workspace
           --stage compose-workflow-events
       - name: Collect redacted failure diagnostics
-        if: failure()
-        run: node scripts/collect-compose-diagnostics.mjs
-      - name: Publish redacted failure diagnostics
-        if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: compose-diagnostics-browser-integrations-${{ github.run_id }}
-          path: test-results/ci-diagnostics/compose.log
-          if-no-files-found: ignore
-          retention-days: 7
+        if: failure() || cancelled()
+        run: >-
+          node scripts/compose-evidence.mjs run
+          --lane browser-integrations --stage diagnostics --
+          node scripts/collect-compose-diagnostics.mjs
       - name: Clean compose resources
         if: always()
-        run: scripts/ci/cleanup-compose.sh
-      - name: Log out of GitHub Container Registry
+        run: >-
+          node scripts/compose-evidence.mjs run
+          --lane browser-integrations --stage cleanup --
+          bash -euo pipefail -c
+          'status=0; scripts/ci/cleanup-compose.sh || status=$?;
+          docker logout ghcr.io || status=$?; exit "$status"'
+      - name: Finalize Compose evidence
         if: always()
-        run: docker logout ghcr.io
+        run: node scripts/compose-evidence.mjs finalize --lane browser-integrations
+      - name: Publish Compose evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: compose-evidence-browser-integrations-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            test-results/compose-evidence/browser-integrations/compose-stage-evidence-v1.json
+            test-results/compose-evidence/browser-integrations/compose-stage-evidence-v1.xml
+            test-results/compose-evidence/browser-integrations/attachments
+            test-results/ci-diagnostics/compose.log
+          if-no-files-found: error
+          retention-days: 7
 
   admin-promotion:
     name: Admin promotion (${{ matrix.surface }})
@@ -164,12 +245,26 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - name: Authenticate to GitHub Container Registry
+      - name: Initialize Compose evidence
         run: >-
-          echo "${{ github.token }}" |
-          docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+          node scripts/compose-evidence.mjs init
+          --lane admin-${{ matrix.surface }}
+      - name: Authenticate to GitHub Container Registry
+        env:
+          BPANE_GHCR_TOKEN: ${{ github.token }}
+        run: >-
+          node scripts/compose-evidence.mjs run
+          --lane admin-${{ matrix.surface }}
+          --stage registry-auth --
+          bash -euo pipefail -c
+          'printf "%s" "$BPANE_GHCR_TOKEN" |
+          docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin'
       - name: Resolve CI Rust builder
-        run: node scripts/ci/ci-rust-builder-resolver.mjs --github-env "${GITHUB_ENV}"
+        run: >-
+          node scripts/compose-evidence.mjs run
+          --lane admin-${{ matrix.surface }}
+          --stage builder-resolution --
+          node scripts/ci/ci-rust-builder-resolver.mjs --github-env "${GITHUB_ENV}"
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
@@ -177,38 +272,75 @@ jobs:
           cache: npm
           cache-dependency-path: code/web/bpane-client/package-lock.json
       - name: Verify runtime prerequisites
-        run: |
-          docker compose version
-          if command -v google-chrome >/dev/null; then
-            google-chrome --version
-          else
-            chromium --version
-          fi
+        run: >-
+          node scripts/compose-evidence.mjs run
+          --lane admin-${{ matrix.surface }}
+          --stage runtime-prerequisites --
+          bash -euo pipefail -c
+          'docker compose version;
+          if command -v google-chrome >/dev/null; then google-chrome --version;
+          else chromium --version; fi'
       - name: Install browser-client dependencies
-        run: node scripts/validate.mjs --stage client-install
+        run: >-
+          node scripts/compose-evidence.mjs run
+          --lane admin-${{ matrix.surface }}
+          --stage client-dependencies --
+          node scripts/validate.mjs --stage client-install
       - name: Build workflow worker image
-        run: docker compose -f deploy/compose.yml --profile workflow build workflow-worker
+        run: >-
+          node scripts/compose-evidence.mjs run
+          --lane admin-${{ matrix.surface }}
+          --stage worker-image --
+          docker compose -f deploy/compose.yml --profile workflow build workflow-worker
       - name: Prepare compose runtime
-        run: scripts/run-gateway-compose-e2e.sh --suite stack
+        run: >-
+          node scripts/compose-evidence.mjs run
+          --lane admin-${{ matrix.surface }}
+          --stage compose-runtime --
+          scripts/run-gateway-compose-e2e.sh --suite stack
       - name: Prepare egress observer fixtures
         if: matrix.surface == 'compatibility'
-        run: scripts/ci/start-compose-egress-fixtures.sh
+        run: >-
+          node scripts/compose-evidence.mjs run
+          --lane admin-${{ matrix.surface }}
+          --stage egress-fixtures --
+          scripts/ci/start-compose-egress-fixtures.sh
       - name: Run admin promotion validation
-        run: node scripts/run-admin-promotion-validation.mjs "${{ matrix.surface }}"
+        run: >-
+          node scripts/compose-evidence.mjs run
+          --lane admin-${{ matrix.surface }}
+          --stage admin-validation --
+          node scripts/run-admin-promotion-validation.mjs "${{ matrix.surface }}"
       - name: Collect redacted failure diagnostics
-        if: failure()
-        run: node scripts/collect-compose-diagnostics.mjs
-      - name: Publish redacted failure diagnostics
-        if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: compose-diagnostics-admin-${{ matrix.surface }}-${{ github.run_id }}
-          path: test-results/ci-diagnostics/compose.log
-          if-no-files-found: ignore
-          retention-days: 7
+        if: failure() || cancelled()
+        run: >-
+          node scripts/compose-evidence.mjs run
+          --lane admin-${{ matrix.surface }}
+          --stage diagnostics --
+          node scripts/collect-compose-diagnostics.mjs
       - name: Clean compose resources
         if: always()
-        run: scripts/ci/cleanup-compose.sh
-      - name: Log out of GitHub Container Registry
+        run: >-
+          node scripts/compose-evidence.mjs run
+          --lane admin-${{ matrix.surface }}
+          --stage cleanup --
+          bash -euo pipefail -c
+          'status=0; scripts/ci/cleanup-compose.sh || status=$?;
+          docker logout ghcr.io || status=$?; exit "$status"'
+      - name: Finalize Compose evidence
         if: always()
-        run: docker logout ghcr.io
+        run: >-
+          node scripts/compose-evidence.mjs finalize
+          --lane admin-${{ matrix.surface }}
+      - name: Publish Compose evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: compose-evidence-admin-${{ matrix.surface }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            test-results/compose-evidence/admin-${{ matrix.surface }}/compose-stage-evidence-v1.json
+            test-results/compose-evidence/admin-${{ matrix.surface }}/compose-stage-evidence-v1.xml
+            test-results/compose-evidence/admin-${{ matrix.surface }}/attachments
+            test-results/ci-diagnostics/compose.log
+          if-no-files-found: error
+          retention-days: 7

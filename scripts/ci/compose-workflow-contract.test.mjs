@@ -6,6 +6,7 @@ import {
   COMPATIBILITY_ADMIN_PROMOTION_SMOKES,
   UNIFIED_ADMIN_PROMOTION_SMOKES,
 } from '../validation/admin-promotion-contract.mjs';
+import { ComposeLanePlanCatalog } from '../compose-evidence/compose-lane-plans.mjs';
 import { YamlDocumentParser } from '../validation/yaml-document-parser.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
@@ -48,13 +49,15 @@ test('compose workflow preserves every browser-facing smoke stage', () => {
   ];
 
   assert.equal(
-    stepByName(job, 'Prepare compose runtime').run,
-    'scripts/run-gateway-compose-e2e.sh --suite stack'
+    stepByName(job, 'Prepare compose runtime').run.includes(
+      'scripts/run-gateway-compose-e2e.sh --suite stack'
+    ),
+    true
   );
   for (const stage of expectedStages) {
     assert.match(command, new RegExp(`--stage ${stage}(?:\\s|$)`));
   }
-  assert.equal((command.match(/--stage /g) ?? []).length, expectedStages.length);
+  assert.equal((command.match(/--stage compose-/g) ?? []).length, expectedStages.length);
 });
 
 test('compose workflow runs unified and compatibility promotion lanes independently', () => {
@@ -64,12 +67,11 @@ test('compose workflow runs unified and compatibility promotion lanes independen
   assert.ok(job);
   assert.equal(job.strategy['fail-fast'], false);
   assert.deepEqual(job.strategy.matrix.surface, ['unified', 'compatibility']);
-  assert.equal(
-    stepByName(job, 'Run admin promotion validation').run,
-    'node scripts/run-admin-promotion-validation.mjs "${{ matrix.surface }}"',
-  );
+  assert.match(stepByName(job, 'Run admin promotion validation').run,
+    /run-admin-promotion-validation\.mjs "\$\{\{ matrix\.surface \}\}"/);
   assert.equal(fixtureStep.if, "matrix.surface == 'compatibility'");
-  assert.equal(fixtureStep.run, 'scripts/ci/start-compose-egress-fixtures.sh');
+  assert.match(fixtureStep.run, /--stage egress-fixtures --/);
+  assert.match(fixtureStep.run, /scripts\/ci\/start-compose-egress-fixtures\.sh/);
   assert.ok(UNIFIED_ADMIN_PROMOTION_SMOKES.length > 0);
   assert.ok(COMPATIBILITY_ADMIN_PROMOTION_SMOKES.length > 0);
 });
@@ -88,15 +90,21 @@ test('gateway validation uses preinstalled native tools without a host package m
   );
 });
 
-test('every compose lane retains failure diagnostics and unconditional cleanup', () => {
+test('every compose lane retains cancellation-aware diagnostics and unconditional evidence', () => {
   for (const [jobId, job] of Object.entries(workflow.jobs)) {
     const collect = stepByName(job, 'Collect redacted failure diagnostics');
-    const publish = stepByName(job, 'Publish redacted failure diagnostics');
     const cleanup = stepByName(job, 'Clean compose resources');
+    const finalize = stepByName(job, 'Finalize Compose evidence');
+    const publish = stepByName(job, 'Publish Compose evidence');
 
-    assert.equal(collect.if, 'failure()', `${jobId} diagnostics collection`);
-    assert.equal(publish.if, 'failure()', `${jobId} diagnostics publication`);
+    assert.equal(collect.if, 'failure() || cancelled()', `${jobId} diagnostics collection`);
     assert.equal(cleanup.if, 'always()', `${jobId} cleanup`);
+    assert.equal(finalize.if, 'always()', `${jobId} finalization`);
+    assert.equal(publish.if, 'always()', `${jobId} publication`);
+    assert.equal(publish.with['if-no-files-found'], 'error');
+    assert.match(publish.with.name, /github\.run_attempt/);
+    assert.match(publish.with.path, /compose-stage-evidence-v1\.json/);
+    assert.match(publish.with.path, /compose-stage-evidence-v1\.xml/);
   }
 });
 
@@ -107,15 +115,40 @@ test('every compose lane resolves a read-only builder digest with cold fallback'
       { contents: 'read', packages: 'read' },
       `${jobId} package permissions`
     );
-    assert.match(
-      stepByName(job, 'Authenticate to GitHub Container Registry').run,
-      /github\.token/
-    );
+    const auth = stepByName(job, 'Authenticate to GitHub Container Registry');
+    assert.equal(auth.env.BPANE_GHCR_TOKEN, '${{ github.token }}');
+    assert.match(auth.run, /BPANE_GHCR_TOKEN/);
+    assert.doesNotMatch(auth.run, /github\.token/);
     assert.match(
       stepByName(job, 'Resolve CI Rust builder').run,
       /ci-rust-builder-resolver\.mjs --github-env/
     );
-    assert.equal(stepByName(job, 'Log out of GitHub Container Registry').if, 'always()');
+    assert.match(stepByName(job, 'Clean compose resources').run, /docker logout ghcr\.io/);
     assert.doesNotMatch(JSON.stringify(job), /secrets\./);
+  }
+});
+
+test('workflow initializes and records the checked lane plans for all five lanes', () => {
+  const catalog = new ComposeLanePlanCatalog();
+  assert.deepEqual(catalog.lanes(), [
+    'gateway-default',
+    'gateway-docker-pool',
+    'browser-integrations',
+    'admin-unified',
+    'admin-compatibility',
+  ]);
+
+  const laneJobs = [
+    ['gateway-api', 'gateway-${{ matrix.suite }}'],
+    ['browser-integrations', 'browser-integrations'],
+    ['admin-promotion', 'admin-${{ matrix.surface }}'],
+  ];
+  for (const [jobId, lane] of laneJobs) {
+    const job = workflow.jobs[jobId];
+    assert.match(stepByName(job, 'Initialize Compose evidence').run,
+      new RegExp(`--lane ${lane.replaceAll('$', '\\$').replaceAll('{', '\\{').replaceAll('}', '\\}')}`));
+    for (const step of steps(job).filter((candidate) => candidate.run?.includes('--stage '))) {
+      assert.match(step.run, /node scripts\/compose-evidence\.mjs run/);
+    }
   }
 });
