@@ -32,20 +32,25 @@ export async function installNamespacedPlaywrightTarget(target, environment = pr
   if (!namespace || !registryPath || typeof target?.route !== 'function') return;
   const registry = new ComposeResourceRegistry(registryPath, namespace);
   await target.route('**/api/v1/**', async (route) => {
-    const request = route.request();
-    const method = request.method().toUpperCase();
-    if (!MUTATING_METHODS.has(method)) {
-      await route.continue();
-      return;
+    try {
+      const request = route.request();
+      const method = request.method().toUpperCase();
+      if (!MUTATING_METHODS.has(method)) {
+        await route.continue();
+        return;
+      }
+      const url = request.url();
+      const response = await route.fetch(namespacedRequestOverrides(
+        request, url, method, namespace,
+      ));
+      const body = await response.body();
+      if (response.ok()) {
+        recordResources(registry, url, parseJsonBody(body));
+      }
+      await route.fulfill({ response, body });
+    } catch (error) {
+      if (!isTargetClosedError(error)) throw error;
     }
-    const url = request.url();
-    const response = await route.fetch({
-      postData: namespacedPostData(url, method, request.postData(), namespace),
-    });
-    if (response.ok()) {
-      recordResources(registry, url, await response.json().catch(() => null));
-    }
-    await route.fulfill({ response });
   });
 }
 
@@ -69,8 +74,54 @@ function namespacedPostData(url, method, postData, namespace) {
   }
 }
 
+function namespacedRequestOverrides(request, url, method, namespace) {
+  const postData = request.postData();
+  const rewrittenPostData = namespacedPostData(url, method, postData, namespace);
+  if (rewrittenPostData !== postData) return { postData: rewrittenPostData };
+  if (!isBrowserContextImport(url)) return {};
+  const headers = request.headers();
+  let labels = {};
+  try {
+    labels = JSON.parse(headers['x-bpane-browser-context-labels'] ?? '{}');
+  } catch {
+    labels = {};
+  }
+  return {
+    headers: {
+      ...headers,
+      'x-bpane-browser-context-labels': JSON.stringify({
+        ...labels,
+        bpane_ci_namespace: namespace,
+      }),
+    },
+  };
+}
+
+function isBrowserContextImport(url) {
+  try {
+    return new URL(url, 'http://localhost').pathname === '/api/v1/browser-contexts/import';
+  } catch {
+    return false;
+  }
+}
+
 function recordResources(registry, url, body) {
   for (const record of resourceRecords(url, body)) registry.record(record.kind, record.id);
+}
+
+function parseJsonBody(body) {
+  try {
+    return JSON.parse(body.toString('utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function isTargetClosedError(error) {
+  const name = error instanceof Error ? error.name : '';
+  const message = error instanceof Error ? error.message : '';
+  return name === 'TargetClosedError'
+    || message.includes('Target page, context or browser has been closed');
 }
 
 function requestUrl(input) {

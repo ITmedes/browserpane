@@ -102,6 +102,11 @@ function acceptsRootLabels(url) {
 function resourceKind(url) {
   const segments = apiSegments(url);
   if (segments.length === 0) return null;
+  if (segments[0] === 'browser-contexts'
+    && ((segments.length === 2 && segments[1] === 'import')
+      || (segments.length === 3 && segments[2] === 'clone'))) {
+    return 'browser_context';
+  }
   if (segments[0] === 'sessions' && segments.length === 3 && segments[2] === 'recordings') {
     return 'recording';
   }

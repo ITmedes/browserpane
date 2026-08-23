@@ -255,3 +255,45 @@ Local repair checks:
 
 The shell driver owns the next exact-head hosted Compose run; this repair does
 not treat the failed run as passing evidence and does not wait for that rerun.
+
+Exact-head manual Compose run `32634536034` on
+`99b172690c2be4a1fd869ef7ed3d3a918ff4172f` remained a PR regression. The
+uploaded v1 evidence bound all five lanes to that commit. Both gateway lanes
+passed. The unified-admin lane reproduced locally only with the new Playwright
+namespace transport: a raw browser-context ZIP import was converted to text by
+the generic `postData` override, so the import remained on its form while the
+same smoke passed without the harness. The compatibility lane completed its
+product assertions but then rejected an in-flight namespaced route after the
+browser target closed. The run also reported a separate workflow cleanup
+invariant timeout; this bounded transport repair does not claim to resolve or
+reclassify that cleanup evidence before the next exact-head run.
+
+The second repair keeps non-JSON request bodies on Playwright's original byte
+transport, namespaces browser-context import metadata through its supported
+labels header, explicitly forwards intercepted response bytes, registers clone
+and import action results, and ignores only Playwright's target-closed teardown
+error. Other route and network failures continue to propagate. Changed files
+are `scripts/compose-harness/namespace-transports.mjs`,
+`scripts/compose-harness/resource-registry.mjs`, the focused namespace contract
+test, and this evidence record. No product behavior, public API, security
+policy, promotion scenario, or `dev_loop/` file changed.
+
+Second-repair local checks:
+
+- `node --test scripts/ci/compose-harness-*.test.mjs
+  scripts/ci/compose-evidence-*.test.mjs
+  scripts/ci/compose-workflow-contract.test.mjs`: PASS, 46 tests.
+- `node scripts/validate.mjs --stage compose-admin-new-browser-contexts`: PASS;
+  the previously deterministic harness-only failure completed in 7.1 seconds.
+- `node scripts/validate.mjs --stage compose-admin-compat`: PASS in 129.5
+  seconds with no target-closed route rejection.
+- `node --check` for both changed harness modules and the focused test: PASS.
+- `node scripts/validate.mjs --stage validation-tool-tests --stage
+  repository-baseline --stage repository-documents`: PASS, 169 tooling tests
+  plus repository and document contracts.
+- `git diff --check`: PASS.
+
+The local full workflow stage was not run because it force-recreates the
+operator's existing gateway configuration. The shell driver owns the next
+exact-head hosted run and must re-evaluate its workflow cleanup inventory; this
+record does not treat run `32634536034` as passing evidence.

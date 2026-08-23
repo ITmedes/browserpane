@@ -55,6 +55,9 @@ test('Playwright requests carry ownership and register created resources', async
 
   let rewrittenBody = null;
   let fulfilled = false;
+  const responseBody = Buffer.from(JSON.stringify({
+    id: '019db438-c74a-7ef2-810c-792e298faf11',
+  }));
   await routeHandler({
     request: () => ({
       method: () => 'POST',
@@ -65,10 +68,10 @@ test('Playwright requests carry ownership and register created resources', async
       rewrittenBody = JSON.parse(postData);
       return {
         ok: () => true,
-        json: async () => ({ id: '019db438-c74a-7ef2-810c-792e298faf11' }),
+        body: async () => responseBody,
       };
     },
-    fulfill: async () => { fulfilled = true; },
+    fulfill: async ({ body }) => { fulfilled = body === responseBody; },
   });
 
   assert.equal(rewrittenBody.labels.bpane_ci_namespace, 'bpane-run-stage');
@@ -79,3 +82,107 @@ test('Playwright requests carry ownership and register created resources', async
     id: '019db438-c74a-7ef2-810c-792e298faf11',
   }]);
 });
+
+test('Playwright forwards action responses and registers their created resource', async (t) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'bpane-transport-action-'));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const registryPath = path.join(directory, 'resources.jsonl');
+  let routeHandler = null;
+  await installNamespacedPlaywrightTarget({
+    route: async (_pattern, handler) => { routeHandler = handler; },
+  }, {
+    BPANE_CI_STAGE_NAMESPACE: 'bpane-run-stage',
+    BPANE_CI_RESOURCE_REGISTRY: registryPath,
+  });
+  const responseBody = Buffer.from(JSON.stringify({
+    id: '019db438-c74a-7ef2-810c-792e298faf12',
+  }));
+  let forwardedBody = null;
+
+  await routeHandler(routeFixture({
+    url: 'http://localhost:8932/api/v1/browser-contexts/source-id/clone',
+    responseBody,
+    fulfill: ({ body }) => { forwardedBody = body; },
+  }));
+
+  assert.equal(forwardedBody, responseBody);
+  assert.deepEqual(new ComposeResourceRegistry(registryPath, 'bpane-run-stage').load(), [{
+    namespace: 'bpane-run-stage',
+    kind: 'browser_context',
+    id: '019db438-c74a-7ef2-810c-792e298faf12',
+  }]);
+});
+
+test('Playwright preserves import bytes while namespacing import metadata', async (t) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'bpane-transport-import-'));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  let routeHandler = null;
+  await installNamespacedPlaywrightTarget({
+    route: async (_pattern, handler) => { routeHandler = handler; },
+  }, {
+    BPANE_CI_STAGE_NAMESPACE: 'bpane-run-stage',
+    BPANE_CI_RESOURCE_REGISTRY: path.join(directory, 'resources.jsonl'),
+  });
+  let fetchOptions = null;
+
+  await routeHandler(routeFixture({
+    url: 'http://localhost:8932/api/v1/browser-contexts/import',
+    postData: 'binary archive bytes',
+    headers: {
+      'content-type': 'application/zip',
+      'x-bpane-browser-context-labels': JSON.stringify({ suite: 'smoke' }),
+    },
+    fetch: async (options) => {
+      fetchOptions = options;
+      return { ok: () => true, body: async () => Buffer.from('{}') };
+    },
+  }));
+
+  assert.equal(fetchOptions.postData, undefined);
+  assert.deepEqual(JSON.parse(fetchOptions.headers['x-bpane-browser-context-labels']), {
+    suite: 'smoke',
+    bpane_ci_namespace: 'bpane-run-stage',
+  });
+});
+
+test('Playwright ignores only target closure during route teardown', async (t) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'bpane-transport-close-'));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  let routeHandler = null;
+  await installNamespacedPlaywrightTarget({
+    route: async (_pattern, handler) => { routeHandler = handler; },
+  }, {
+    BPANE_CI_STAGE_NAMESPACE: 'bpane-run-stage',
+    BPANE_CI_RESOURCE_REGISTRY: path.join(directory, 'resources.jsonl'),
+  });
+  const closed = new Error('Target page, context or browser has been closed');
+  closed.name = 'TargetClosedError';
+
+  await assert.doesNotReject(routeHandler(routeFixture({ fetchError: closed })));
+  await assert.rejects(routeHandler(routeFixture({ fetchError: new Error('network failed') })),
+    /network failed/);
+});
+
+function routeFixture({
+  url = 'http://localhost:8932/api/v1/sessions',
+  responseBody = Buffer.from('{}'),
+  fulfill = () => {},
+  fetchError = null,
+  fetch = null,
+  postData = JSON.stringify({ labels: { suite: 'smoke' } }),
+  headers = { 'content-type': 'application/json' },
+} = {}) {
+  return {
+    request: () => ({
+      method: () => 'POST',
+      url: () => url,
+      postData: () => postData,
+      headers: () => headers,
+    }),
+    fetch: fetch ?? (async () => {
+      if (fetchError) throw fetchError;
+      return { ok: () => true, body: async () => responseBody };
+    }),
+    fulfill,
+  };
+}
