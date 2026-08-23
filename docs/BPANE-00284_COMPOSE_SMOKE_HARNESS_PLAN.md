@@ -343,3 +343,46 @@ The local workflow-admission stage was not run because it force-recreates the
 operator's existing gateway configuration. The shell driver owns the next
 exact-head hosted run; this record does not treat run `32636333318` as passing
 evidence.
+
+Exact-head manual Compose run `32638052687` on
+`13e9660f67bf055b14a22deaafcc58bb7d3d458b` remained a PR regression. Live
+Actions metadata and the uploaded v1 evidence bind all five lanes to that
+commit. Both gateway lanes passed. Every compatibility, browser-integration,
+and unified-admin product assertion also passed; compatibility and unified then
+failed one inner cleanup check plus the enclosing lane check, while browser
+integration passed all eight inner stages and failed only the enclosing check.
+Diagnostics retained one compatibility runtime and one unified runtime; the
+browser diagnostics were already container-clean.
+
+The fourth bounded repair corrects the nested ownership boundary instead of
+extending the deadline again. Child validation-stage registries now propagate
+their validated resource records into the enclosing lane registry, allowing
+the outer verifier to recognize stopped-session storage while it continues to
+reject active sessions, temporary storage, and unowned dynamic containers. The
+compatibility helper now waits for browser disconnect and the session-kill
+response before closing Playwright. The unified session smoke closes its live
+browser context before issuing owner-authenticated cleanup, so kill cannot race
+an attached transport. Changed files are the shared stage harness, the two
+affected admin smoke helpers, focused harness/workflow contract tests, and this
+evidence record. Product behavior, public APIs, security policy, promotion
+inventory, and `dev_loop/` remain unchanged.
+
+Fourth-repair local checks:
+
+- `node --test scripts/ci/compose-harness-*.test.mjs
+  scripts/ci/compose-evidence-*.test.mjs
+  scripts/ci/compose-workflow-contract.test.mjs`: PASS, 50 tests.
+- `npx tsc --noEmit && npm test` in `code/web/bpane-client`: PASS, 91 files and
+  695 tests.
+- `node scripts/validate.mjs --stage validation-tool-tests --stage
+  repository-baseline --stage repository-documents`: PASS, 173 tooling tests
+  plus repository and document contracts.
+- `node --check` for the three changed runtime modules: PASS.
+- `git diff --check`: PASS.
+
+Narrow live attempts of `compose-admin-new-sessions` and
+`compose-admin-compat-workflow` against the pre-existing operator stack reached
+a browser transport readiness timeout before the hosted cleanup path. The
+stack was neither rebuilt nor torn down, and those divergent attempts are not
+claimed as passing validation. The shell driver owns the next exact-head hosted
+run; this record does not treat run `32638052687` as passing evidence.

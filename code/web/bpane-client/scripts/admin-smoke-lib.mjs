@@ -35,7 +35,9 @@ async function navigateToAdminAuthSurface(page, pageUrl) {
 }
 
 export async function cleanupAdminSmoke(page, options, log) {
-  await cleanupAdminSession(page).catch(() => {});
+  await cleanupAdminSession(page, options).catch((error) => {
+    log(`Admin session cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
+  });
   const accessToken = await getAdminAccessToken(page).catch(() => '');
   if (accessToken) {
     await cleanupWorkflowSmokeSessions(accessToken, rootApiOptions(options), log).catch(() => {});
@@ -257,14 +259,22 @@ async function fetchSessionResource(page, options, sessionId) {
   });
 }
 
-async function cleanupAdminSession(page) {
+async function cleanupAdminSession(page, options) {
   if (await page.getByTestId('browser-disconnect').isEnabled().catch(() => false)) {
-    await closeAdminOverlay(page);
-    await page.getByTestId('browser-disconnect').click();
+    await disconnectEmbeddedBrowser(page, options);
   }
   await openAdminTab(page, 'lifecycle').catch(() => {});
   if (await page.getByTestId('session-kill').isEnabled().catch(() => false)) {
+    const responsePromise = page.waitForResponse((response) => {
+      const request = response.request();
+      const pathname = new URL(response.url()).pathname;
+      return request.method() === 'POST' && pathname.endsWith('/kill');
+    }, { timeout: options.connectTimeoutMs });
     await page.getByTestId('session-kill').click();
+    const response = await responsePromise;
+    if (!response.ok() && ![404, 409].includes(response.status())) {
+      throw new Error(`Admin session kill failed with HTTP ${response.status()}.`);
+    }
   }
 }
 

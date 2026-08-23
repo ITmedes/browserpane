@@ -170,3 +170,19 @@ test('promotion stages use shared resource isolation without reducing their scen
   assert.match(wrapper, /wait_for_boundary runtime/);
   assert.doesNotMatch(wrapper, /\bsleep\b/);
 });
+
+test('admin smokes close live transports before bounded session teardown', () => {
+  const compatibility = fs.readFileSync(
+    path.join(root, 'code/web/bpane-client/scripts/admin-smoke-lib.mjs'),
+    'utf8',
+  );
+  const unified = fs.readFileSync(
+    path.join(root, 'code/web/bpane-client/scripts/run-admin-unified-sessions-smoke.mjs'),
+    'utf8',
+  );
+
+  assert.match(compatibility, /await disconnectEmbeddedBrowser\(page, options\)/);
+  assert.match(compatibility, /const response = await responsePromise/);
+  assert.ok(unified.indexOf('await context.close()') < unified.indexOf('await cleanupMcpDelegation('));
+  assert.ok(unified.indexOf('await browser.close()') < unified.indexOf('await cleanupSession('));
+});

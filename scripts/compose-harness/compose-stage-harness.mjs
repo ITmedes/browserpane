@@ -80,16 +80,37 @@ export class ComposeStageHarness {
       ? { exitCode: 1, signal: null, spawnError: false, requestedSignal: null }
       : await execute(command, childEnvironment);
     let cleanupError = preparationError;
+    let records = [];
     if (verifier && !preparationError) {
       try {
+        records = registry.load();
         await verifier.verify({
           namespace,
-          records: registry.load(),
+          records,
           baseline,
         });
       } catch (error) {
         cleanupError = error;
       }
+    }
+    try {
+      this.#forwardResources(records, environment, paths.registry);
+    } catch (error) {
+      cleanupError ??= new ComposeHarnessError(
+        'cleanup_failure',
+        'Compose nested harness ownership propagation failed.',
+        {},
+        { cause: error },
+      );
+      recorder.record({
+        type: 'cleanup',
+        namespace,
+        outcome: 'failure',
+        code: 'cleanup_failure',
+        attempts: 1,
+        elapsed_ms: 0,
+        inventory: { status: 'ownership_propagation_failed' },
+      });
     }
 
     return {
@@ -111,6 +132,16 @@ export class ComposeStageHarness {
 
   #preloadPath() {
     return path.join(this.#rootDirectory, 'scripts/compose-harness/preload.mjs');
+  }
+
+  #forwardResources(records, environment, registryPath) {
+    const parentPath = environment.BPANE_CI_RESOURCE_REGISTRY;
+    const parentNamespace = environment.BPANE_CI_STAGE_NAMESPACE;
+    if (!parentPath || !parentNamespace || path.resolve(parentPath) === path.resolve(registryPath)) {
+      return;
+    }
+    const parent = new ComposeResourceRegistry(parentPath, parentNamespace);
+    for (const record of records) parent.record(record.kind, record.id);
   }
 
   #priorResourceRecords(currentRegistryPath) {

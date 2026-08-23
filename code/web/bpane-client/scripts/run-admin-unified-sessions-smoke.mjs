@@ -151,6 +151,12 @@ async function run() {
       stoppedSessionRestarted: true,
     }, null, 2));
   } finally {
+    await context.close().catch((error) => {
+      log(`Browser context cleanup failed: ${error.message}`);
+    });
+    await browser.close().catch((error) => {
+      log(`Browser cleanup failed: ${error.message}`);
+    });
     if (accessToken && createdSessionId) {
       await cleanupMcpDelegation(accessToken, options, createdSessionId, authConfig).catch((error) => {
         log(`MCP cleanup for ${createdSessionId} failed: ${error.message}`);
@@ -163,8 +169,6 @@ async function run() {
         });
       }
     }
-    await context.close();
-    await browser.close();
   }
 }
 

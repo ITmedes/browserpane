@@ -5,6 +5,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { ComposeStageHarness } from '../compose-harness/compose-stage-harness.mjs';
+import { ComposeResourceRegistry } from '../compose-harness/resource-registry.mjs';
 
 test('a primary command failure remains available when bounded teardown also fails', async (t) => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'bpane-stage-harness-'));
@@ -63,6 +64,43 @@ test('a cancelled primary command still executes bounded teardown', async (t) =>
   assert.equal(result.execution.exitCode, 143);
   assert.equal(result.execution.requestedSignal, 'SIGTERM');
   assert.equal(teardownCalls, 1);
+});
+
+test('nested stages propagate owned resources to the enclosing lane registry', async (t) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'bpane-nested-stage-'));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const parentPath = path.join(directory, 'parent-resources.jsonl');
+  const sessionId = '019db438-c74a-7ef2-810c-792e298faf11';
+  const harness = new ComposeStageHarness(directory, directory, {
+    namespaceFactory: { stage: () => 'bpane-run-child' },
+    verifierFactory: () => ({
+      baseline: async () => inventory(),
+      verify: async () => {},
+    }),
+  });
+
+  await harness.run({
+    lane: 'browser-integrations',
+    stage: { id: 'browser-validation', isolation: 'resources' },
+    command: ['fixture'],
+    execute: async (_command, environment) => {
+      new ComposeResourceRegistry(
+        environment.BPANE_CI_RESOURCE_REGISTRY,
+        environment.BPANE_CI_STAGE_NAMESPACE,
+      ).record('session', sessionId);
+      return { exitCode: 0, signal: null, spawnError: false, requestedSignal: null };
+    },
+    runNamespace: 'bpane-run',
+    environment: {
+      BPANE_CI_RESOURCE_REGISTRY: parentPath,
+      BPANE_CI_STAGE_NAMESPACE: 'bpane-run-parent',
+    },
+  });
+
+  assert.deepEqual(
+    new ComposeResourceRegistry(parentPath, 'bpane-run-parent').load(),
+    [{ namespace: 'bpane-run-parent', kind: 'session', id: sessionId }],
+  );
 });
 
 function inventory() {
