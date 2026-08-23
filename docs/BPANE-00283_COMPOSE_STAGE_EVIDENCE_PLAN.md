@@ -8,7 +8,8 @@
 - Lane: Foundation
 - Target gate: reliable Compose qualification
 - Depends on: completed issues `#184`, `#185`, `#235`, `#273`, and `#277`
-- Last verified commit/date: `d0ffede5` / 2026-08-23
+- Last verified commit/date: `d0ffede5` plus the focused PR #288 CI
+  convergence repair / 2026-08-23
 
 ## Business Outcome
 
@@ -216,3 +217,22 @@ this is delivery reliability evidence, not a new product capability.
   all five lane summaries and retained JSON/JUnit artifacts. The proposal
   routine does not dispatch, poll, rerun, or wait for that shell-driver-owned
   evidence.
+- CI convergence classification: PR regression. Exact-head Compose run
+  `32625717737` at `8a2539499908b7042f941e9ae7f1d2f442c3dfd1` passed every
+  primary lane stage and cleanup, then all five lanes failed in evidence
+  finalization. The retained summaries showed that identity collection included
+  the unselected `runtime-broker` service and resolved compatibility egress
+  build tags without the CI fixture project names.
+- The focused repair scopes base image identity to services selected by the
+  hosted stack plus the explicitly built workflow worker and uses the exact
+  `bpane-ci-egress` and `bpane-ci-egress-tls` fixture projects. Changed files:
+  `scripts/compose-evidence/compose-identity-collector.mjs`,
+  `scripts/ci/compose-evidence-identity.test.mjs`, and this plan.
+- Repair checks: `node --test scripts/ci/compose-evidence-*.test.mjs
+  scripts/ci/compose-workflow-contract.test.mjs
+  scripts/validation/github-workflow-policy-checker.test.mjs` passed 28 tests;
+  `node scripts/validate.mjs --stage validation-tool-tests --stage
+  repository-baseline --stage repository-documents` passed all three stages;
+  `node scripts/validate.mjs --profile fast --dry-run`,
+  `node scripts/check-repository-documents.mjs`, and
+  `git diff --check origin/main...HEAD` passed.

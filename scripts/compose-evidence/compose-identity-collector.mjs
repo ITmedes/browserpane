@@ -8,6 +8,15 @@ import { COMPOSE_TEST_PLAN_FILES } from './compose-lane-plans.mjs';
 const ZERO_GIT_ID = '0'.repeat(40);
 const ZERO_SHA256 = '0'.repeat(64);
 const DIGEST_PATTERN = /sha256:[0-9a-f]{64}/g;
+const BASE_COMPOSE_SERVICES = Object.freeze([
+  'keycloak',
+  'postgres',
+  'host',
+  'gateway',
+  'mcp-bridge',
+  'web',
+  'workflow-worker',
+]);
 
 export class ComposeIdentityCollector {
   #rootDirectory;
@@ -63,16 +72,31 @@ export class ComposeIdentityCollector {
   }
 
   #imageDigests(lane, errors) {
-    const composeFiles = [['-f', 'deploy/compose.yml', '--profile', 'workflow']];
+    const composeSources = [{
+      args: ['-f', 'deploy/compose.yml', '--profile', 'workflow'],
+      services: BASE_COMPOSE_SERVICES,
+    }];
     if (lane === 'admin-compatibility') {
-      composeFiles.push(['-f', 'deploy/examples/egress-observer/compose.yml']);
-      composeFiles.push(['-f', 'deploy/examples/egress-observer/compose.tls.yml']);
+      composeSources.push({
+        args: [
+          '--project-name', 'bpane-ci-egress',
+          '-f', 'deploy/examples/egress-observer/compose.yml',
+        ],
+        services: ['egress-proxy', 'egress-auth-proxy'],
+      });
+      composeSources.push({
+        args: [
+          '--project-name', 'bpane-ci-egress-tls',
+          '-f', 'deploy/examples/egress-observer/compose.tls.yml',
+        ],
+        services: ['egress-tls-proxy'],
+      });
     }
     const imageNames = [];
-    for (const composeArgs of composeFiles) {
+    for (const source of composeSources) {
       try {
         const output = String(this.#execute('docker',
-          ['compose', ...composeArgs, 'config', '--images'], this.#options()));
+          ['compose', ...source.args, 'config', '--images', ...source.services], this.#options()));
         imageNames.push(...output.split(/\r?\n/).filter(Boolean));
       } catch {
         errors.push('identity-image-plan-unavailable');

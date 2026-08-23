@@ -46,3 +46,38 @@ test('identity collection exposes bounded stable errors instead of raw command f
   assert.deepEqual(result.errors, ['identity-image-1-unavailable']);
   assert.doesNotMatch(JSON.stringify(result), /credential-bearing|private-image-name/);
 });
+
+test('identity collection scopes images to tested services and fixture projects', () => {
+  const configCalls = [];
+  const execute = (command, args) => {
+    if (command === 'git') return `${'a'.repeat(40)}\n`;
+    if (command === 'docker' && args.includes('config')) {
+      configCalls.push(args);
+      if (args.includes('deploy/compose.yml')) return 'deploy-gateway\n';
+      if (args.some((arg) => arg.endsWith('/compose.tls.yml'))) {
+        return 'mitmproxy/mitmproxy:11.0.2\n';
+      }
+      const projectIndex = args.indexOf('--project-name');
+      const project = projectIndex >= 0 ? args[projectIndex + 1] : 'egress-observer';
+      return `${project}-egress-proxy\n${project}-egress-auth-proxy\n`;
+    }
+    if (command === 'docker' && args.includes('inspect')) {
+      if (args.at(-1).startsWith('egress-observer-')) throw new Error('wrong project');
+      return `[] sha256:${'b'.repeat(64)}`;
+    }
+    throw new Error('unexpected fixture command');
+  };
+
+  const result = new ComposeIdentityCollector(root, execute).collect('admin-compatibility');
+  const baseCall = configCalls.find((args) => args.includes('deploy/compose.yml'));
+  const observerCall = configCalls.find((args) =>
+    args.includes('deploy/examples/egress-observer/compose.yml'));
+  const tlsCall = configCalls.find((args) =>
+    args.some((arg) => arg.endsWith('/compose.tls.yml')));
+
+  assert.equal(result.errors.length, 0);
+  assert.ok(baseCall.includes('gateway'));
+  assert.equal(baseCall.includes('runtime-broker'), false);
+  assert.deepEqual(observerCall.slice(1, 3), ['--project-name', 'bpane-ci-egress']);
+  assert.deepEqual(tlsCall.slice(1, 3), ['--project-name', 'bpane-ci-egress-tls']);
+});
