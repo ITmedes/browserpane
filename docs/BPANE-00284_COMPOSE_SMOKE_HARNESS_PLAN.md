@@ -207,3 +207,51 @@ local full-profile wrapper was not run because it would rebuild and ultimately
 tear down a pre-existing operator stack; the ownership-safe live smoke above
 was used instead. Record the two hosted run links, cancellation run, and timing
 comparison in issue `#284` after that evidence exists.
+
+## CI Convergence
+
+Exact-head manual Compose run `32632472208` on
+`f8d9d64a213dbe0d01ad4dd7f4285d9e4e4a564a` was classified as a PR regression.
+The unified-admin lane exposed the injected `bpane_ci_namespace` label in its
+project edit assertion. The compatibility-admin lane waited for a transient
+busy state after upload instead of its deterministic success message. The
+browser lane showed gateway runtime reconciliation taking about 40 seconds,
+beyond the smoke helper's 15-second cap; the resulting exception skipped
+browser closure and left two namespaced runtime containers. Compatibility
+evidence finalization also resolved the old fixed egress project names after
+fixture startup had moved to run-scoped names.
+
+The bounded repair updates the affected admin and workflow smoke helpers,
+namespaced egress identity/diagnostics resolution, and label-owned final
+container cleanup. It adds or strengthens regression coverage in
+`compose-harness-readiness.test.mjs`, `compose-evidence-identity.test.mjs`,
+`compose-evidence-runner.test.mjs`, `compose-diagnostics-collector.test.mjs`,
+and `compose-egress-fixtures-contract.test.mjs`. No product behavior, public
+API, security policy, or promotion scenario changed, so no README, OpenAPI, or
+product-security document update is required.
+
+Changed files are the four affected smoke/helper modules under
+`code/web/bpane-client/scripts/`; `scripts/ci/cleanup-compose.sh`; the Compose
+diagnostics, identity, finalizer, plan-catalog, and new egress project-name
+modules; their five focused test files; and this plan evidence record.
+
+Local repair checks:
+
+- `node --test scripts/ci/compose-harness-readiness.test.mjs
+  scripts/ci/compose-evidence-identity.test.mjs
+  scripts/ci/compose-evidence-runner.test.mjs
+  scripts/ci/compose-diagnostics-collector.test.mjs
+  scripts/ci/compose-egress-fixtures-contract.test.mjs`: PASS, 18 tests.
+- `bash -n scripts/ci/cleanup-compose.sh
+  scripts/ci/start-compose-egress-fixtures.sh`: PASS.
+- `node --check` for every changed smoke, evidence, diagnostics, and project-name
+  module: PASS.
+- `node scripts/validate.mjs --stage validation-tool-tests --stage
+  repository-baseline --stage repository-documents`: PASS, 166 tooling tests
+  plus repository and document contracts.
+- `npx tsc --noEmit && npm test` in `code/web/bpane-client`: PASS, 91 files and
+  695 tests.
+- `git diff --check`: PASS.
+
+The shell driver owns the next exact-head hosted Compose run; this repair does
+not treat the failed run as passing evidence and does not wait for that rerun.

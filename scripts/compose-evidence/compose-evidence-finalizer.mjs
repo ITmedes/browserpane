@@ -29,7 +29,8 @@ export class ComposeEvidenceFinalizer {
   finalize(lane, environment = process.env) {
     const plan = this.#store.loadPlan(lane);
     const stages = this.#store.loadStages(lane);
-    const identity = this.#identityCollector.collect(lane);
+    const runNamespace = this.#store.loadHarness(lane)?.run_namespace ?? null;
+    const identity = this.#identityCollector.collect(lane, runNamespace);
     const artifacts = this.#artifactCollector.collect(this.#store.laneDirectory(lane));
     const summary = this.#aggregator.aggregate(plan, stages, identity, artifacts, environment);
     const junit = this.#junitWriter.write(summary);

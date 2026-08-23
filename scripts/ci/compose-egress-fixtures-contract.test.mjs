@@ -88,3 +88,49 @@ test('compose cleanup reports failure after attempting every cleanup boundary', 
   assert.match(calls, /bpane-ci-egress -f/);
   assert.match(calls, /deploy\/compose\.yml down --volumes --remove-orphans/);
 });
+
+test('compose cleanup removes only containers owned by the current run namespace', (t) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'bpane-cleanup-ownership-'));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const dockerPath = path.join(directory, 'docker');
+  const callsPath = path.join(directory, 'calls.log');
+  const removedPath = path.join(directory, 'removed');
+  fs.writeFileSync(dockerPath, [
+    '#!/usr/bin/env bash',
+    'printf "%s\\n" "$*" >>"$BPANE_FAKE_DOCKER_CALLS"',
+    'if [[ "$1" == "ps" ]]; then',
+    '  [[ -f "$BPANE_FAKE_REMOVED" ]] || printf "%s\\n" owned-container',
+    '  printf "%s\\n" foreign-container',
+    '  exit 0',
+    'fi',
+    'if [[ "$1" == "inspect" ]]; then',
+    '  if [[ "${@: -1}" == "owned-container" ]]; then',
+    '    printf "%s\\n" bpane-32632472208-1-admin-compatibility-stage',
+    '  else',
+    '    printf "%s\\n" bpane-foreign-run-stage',
+    '  fi',
+    '  exit 0',
+    'fi',
+    'if [[ "$1" == "rm" && "${@: -1}" == "owned-container" ]]; then',
+    '  touch "$BPANE_FAKE_REMOVED"',
+    'fi',
+    'exit 0',
+    '',
+  ].join('\n'), { mode: 0o700 });
+
+  const result = spawnSync(cleanupPath, [], {
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      PATH: `${directory}:${process.env.PATH}`,
+      BPANE_CI_RUN_NAMESPACE: 'bpane-32632472208-1-admin-compatibility',
+      BPANE_FAKE_DOCKER_CALLS: callsPath,
+      BPANE_FAKE_REMOVED: removedPath,
+    },
+  });
+  const calls = fs.readFileSync(callsPath, 'utf8');
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(calls, /rm --force owned-container/);
+  assert.doesNotMatch(calls, /rm --force foreign-container/);
+});

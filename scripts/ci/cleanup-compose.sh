@@ -4,7 +4,6 @@ set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 COMPOSE_FILE="${BPANE_COMPOSE_FILE:-$ROOT_DIR/deploy/compose.yml}"
-RECORDING_IMAGE="${BPANE_RECORDING_WORKER_IMAGE:-deploy-recording-worker}"
 OBSERVER_COMPOSE_FILE="$ROOT_DIR/deploy/examples/egress-observer/compose.yml"
 TLS_COMPOSE_FILE="$ROOT_DIR/deploy/examples/egress-observer/compose.tls.yml"
 RUN_NAMESPACE="${BPANE_CI_RUN_NAMESPACE:-}"
@@ -29,25 +28,38 @@ docker compose \
   down --volumes --remove-orphans || CLEANUP_STATUS=1
 docker compose -f "$COMPOSE_FILE" down --volumes --remove-orphans || CLEANUP_STATUS=1
 
-assert_no_dynamic_containers() {
-  local filter_value="$1"
-  local matches
-  if ! matches="$(docker ps --all --quiet --filter "name=$filter_value")"; then
-    CLEANUP_STATUS=1
-  elif [[ -n "$matches" ]]; then
-    echo "cleanup invariant failed: dynamic BrowserPane containers remain" >&2
-    CLEANUP_STATUS=1
+owned_dynamic_containers() {
+  local container_id
+  local container_ids
+  local container_namespace
+  if ! container_ids="$(docker ps --all --quiet --filter "label=browserpane.ci_namespace")"; then
+    return 1
   fi
+  while IFS= read -r container_id; do
+    [[ -n "$container_id" ]] || continue
+    if ! container_namespace="$(docker inspect --format '{{ index .Config.Labels "browserpane.ci_namespace" }}' "$container_id")"; then
+      return 1
+    fi
+    if [[ "$container_namespace" == "$CI_NAMESPACE" || "$container_namespace" == "$CI_NAMESPACE"-* ]]; then
+      printf '%s\n' "$container_id"
+    fi
+  done <<<"$container_ids"
 }
 
 if [[ -n "$CI_NAMESPACE" ]]; then
-  assert_no_dynamic_containers bpane-runtime-
-  assert_no_dynamic_containers bpane-workflow-
-  recording_matches=""
-  if ! recording_matches="$(docker ps --all --quiet --filter "ancestor=$RECORDING_IMAGE")"; then
+  owned_matches=""
+  if ! owned_matches="$(owned_dynamic_containers)"; then
     CLEANUP_STATUS=1
-  elif [[ -n "$recording_matches" ]]; then
-    echo "cleanup invariant failed: recording worker containers remain" >&2
+  else
+    while IFS= read -r container_id; do
+      [[ -n "$container_id" ]] || continue
+      docker rm --force "$container_id" >/dev/null || CLEANUP_STATUS=1
+    done <<<"$owned_matches"
+  fi
+  if ! owned_matches="$(owned_dynamic_containers)"; then
+    CLEANUP_STATUS=1
+  elif [[ -n "$owned_matches" ]]; then
+    echo "cleanup invariant failed: CI-owned BrowserPane containers remain" >&2
     CLEANUP_STATUS=1
   fi
 fi

@@ -18,6 +18,7 @@ export const DEFAULTS = {
 };
 
 export const TEST_EMBED_PATH = '/test-embed.html';
+const CONTROL_PLANE_READY_TIMEOUT_MS = 120_000;
 
 const COMMON_CHROME_PATHS = [
   process.env.BPANE_BENCHMARK_CHROME,
@@ -319,9 +320,13 @@ export async function waitForWorkflowControlPlane(accessToken, options) {
       }
     },
     (value) => !(value instanceof Error),
-    Math.min(options.connectTimeoutMs, 15000),
+    workflowControlPlaneTimeoutMs(options),
     500,
   );
+}
+
+export function workflowControlPlaneTimeoutMs(options) {
+  return Math.max(options.connectTimeoutMs, CONTROL_PLANE_READY_TIMEOUT_MS);
 }
 
 export function restartComposeService(service, { profile = null } = {}) {

@@ -402,24 +402,27 @@ async function main() {
     };
     console.log(JSON.stringify(summary, null, 2));
   } finally {
-    if (accessToken) {
-      await cleanupWorkflowSmokeSessions(accessToken, options, log).catch((error) => {
-        log(`Cleanup skipped after workflow admission smoke: ${error}`);
-      });
-    }
-    if (gatewayReconfigured) {
-      log('Restoring gateway compose defaults after workflow admission smoke');
-      recreateComposeServices(['gateway']);
+    try {
       if (accessToken) {
-        await waitForWorkflowControlPlane(accessToken, options);
+        await cleanupWorkflowSmokeSessions(accessToken, options, log).catch((error) => {
+          log(`Cleanup skipped after workflow admission smoke: ${error}`);
+        });
       }
-    }
-    if (context) {
-      await context.close().catch(() => {});
-    }
-    await browser.close().catch(() => {});
-    if (localWorkflowSource) {
-      await localWorkflowSource.cleanup().catch(() => {});
+      if (gatewayReconfigured) {
+        log('Restoring gateway compose defaults after workflow admission smoke');
+        recreateComposeServices(['gateway']);
+        if (accessToken) {
+          await waitForWorkflowControlPlane(accessToken, options);
+        }
+      }
+    } finally {
+      if (context) {
+        await context.close().catch(() => {});
+      }
+      await browser.close().catch(() => {});
+      if (localWorkflowSource) {
+        await localWorkflowSource.cleanup().catch(() => {});
+      }
     }
   }
 }

@@ -36,11 +36,17 @@ test('finalizer writes JSON, JUnit, and a bounded workflow summary', (t) => {
   const store = new ComposeEvidenceStore(directory);
   const fixture = new ComposeEvidenceFixture();
   const plan = fixture.plan();
-  store.initialize(plan);
+  store.initialize(plan, { run_namespace: 'bpane-123-1-gateway-default' });
   for (const result of fixture.results()) store.writeStage(plan.lane, result);
   const workflowSummary = path.join(directory, 'workflow-summary.md');
+  let identityNamespace = null;
   const finalizer = new ComposeEvidenceFinalizer(store, directory, {
-    identityCollector: { collect: () => fixture.identityResult() },
+    identityCollector: {
+      collect: (_lane, runNamespace) => {
+        identityNamespace = runNamespace;
+        return fixture.identityResult();
+      },
+    },
     artifactCollector: { collect: () => ({ artifacts: [], errors: [] }) },
   });
 
@@ -57,6 +63,7 @@ test('finalizer writes JSON, JUnit, and a bounded workflow summary', (t) => {
   const junit = fs.readFileSync(path.join(laneDirectory, 'compose-stage-evidence-v1.xml'), 'utf8');
 
   assert.equal(exitCode, 0);
+  assert.equal(identityNamespace, 'bpane-123-1-gateway-default');
   assert.equal(json.outcome, 'success');
   assert.match(junit, /<testsuites/);
   assert.match(fs.readFileSync(workflowSummary, 'utf8'), /Cleanup: success/);

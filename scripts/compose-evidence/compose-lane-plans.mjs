@@ -96,6 +96,7 @@ export const COMPOSE_TEST_PLAN_FILES = Object.freeze([
   'scripts/compose-evidence/compose-stage-runner.mjs',
   'scripts/compose-harness/cleanup-verifier.mjs',
   'scripts/compose-harness/compose-namespace.mjs',
+  'scripts/compose-harness/egress-project-names.mjs',
   'scripts/compose-harness/compose-stage-harness.mjs',
   'scripts/compose-harness/harness-recorder.mjs',
   'scripts/compose-harness/namespace-transports.mjs',

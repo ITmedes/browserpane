@@ -554,7 +554,15 @@ async function verifyUpdatedProjectForm(page, options, resources, projectId, run
   await assertInputValue(page, 'project-edit-name', `Unified updated project ${runLabel}`);
   await assertInputValue(page, 'project-edit-description', 'Updated through the unified admin Projects detail smoke.');
   await assertInputValue(page, 'project-edit-state', 'archived');
-  await assertInputValue(page, 'project-edit-labels', `phase=updated\nrun=${runLabel}\nsuite=admin-unified-projects-smoke`);
+  const expectedLabels = [
+    ...(process.env.BPANE_CI_STAGE_NAMESPACE
+      ? [`bpane_ci_namespace=${process.env.BPANE_CI_STAGE_NAMESPACE}`]
+      : []),
+    'phase=updated',
+    `run=${runLabel}`,
+    'suite=admin-unified-projects-smoke',
+  ].join('\n');
+  await assertInputValue(page, 'project-edit-labels', expectedLabels);
   await assertCheckbox(page, 'project-policy-browser-uploads', true);
   await assertCheckbox(page, 'project-policy-browser-downloads', true);
   await assertCheckbox(page, 'project-policy-session-file-bindings', true);

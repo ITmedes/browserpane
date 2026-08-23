@@ -4,6 +4,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 import { COMPOSE_TEST_PLAN_FILES } from './compose-lane-plans.mjs';
+import { egressProjectNames } from '../compose-harness/egress-project-names.mjs';
 
 const ZERO_GIT_ID = '0'.repeat(40);
 const ZERO_SHA256 = '0'.repeat(64);
@@ -27,13 +28,13 @@ export class ComposeIdentityCollector {
     this.#execute = execute;
   }
 
-  collect(lane) {
+  collect(lane, runNamespace = null) {
     const errors = [];
     const testedCommit = this.#git(['rev-parse', 'HEAD'], 'commit', errors);
     const testedTree = this.#git(['rev-parse', 'HEAD^{tree}'], 'tree', errors);
     const workflowSha = this.#hashFiles(['.github/workflows/compose.yml'], errors);
     const testPlanSha = this.#hashFiles(COMPOSE_TEST_PLAN_FILES, errors);
-    const imageDigests = this.#imageDigests(lane, errors);
+    const imageDigests = this.#imageDigests(lane, runNamespace, errors);
     return {
       identity: {
         tested_commit: testedCommit ?? ZERO_GIT_ID,
@@ -71,22 +72,23 @@ export class ComposeIdentityCollector {
     }
   }
 
-  #imageDigests(lane, errors) {
+  #imageDigests(lane, runNamespace, errors) {
     const composeSources = [{
       args: ['-f', 'deploy/compose.yml', '--profile', 'workflow'],
       services: BASE_COMPOSE_SERVICES,
     }];
     if (lane === 'admin-compatibility') {
+      const projects = egressProjectNames(runNamespace);
       composeSources.push({
         args: [
-          '--project-name', 'bpane-ci-egress',
+          '--project-name', projects.observer,
           '-f', 'deploy/examples/egress-observer/compose.yml',
         ],
         services: ['egress-proxy', 'egress-auth-proxy'],
       });
       composeSources.push({
         args: [
-          '--project-name', 'bpane-ci-egress-tls',
+          '--project-name', projects.tls,
           '-f', 'deploy/examples/egress-observer/compose.tls.yml',
         ],
         services: ['egress-tls-proxy'],

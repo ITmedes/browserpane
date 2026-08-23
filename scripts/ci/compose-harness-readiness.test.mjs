@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { workflowControlPlaneTimeoutMs } from '../../code/web/bpane-client/scripts/workflow-smoke-lib.mjs';
 import { ReadinessWaiter, boundaryReady } from '../compose-harness/readiness-waiter.mjs';
 
 test('typed boundaries distinguish control, runtime, transport, workers, and artifacts', () => {
@@ -85,6 +86,11 @@ test('a recovered dependency can still reach readiness before its deadline', asy
 
   assert.equal(result.attempts, 2);
   assert.equal(result.last_state.available, true);
+});
+
+test('workflow gateway recovery uses the shared bounded readiness deadline', () => {
+  assert.equal(workflowControlPlaneTimeoutMs({ connectTimeoutMs: 30_000 }), 120_000);
+  assert.equal(workflowControlPlaneTimeoutMs({ connectTimeoutMs: 180_000 }), 180_000);
 });
 
 function deterministicWaiter(observe) {
