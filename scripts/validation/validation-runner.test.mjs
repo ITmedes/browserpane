@@ -78,3 +78,25 @@ test('runner cancellation prevents new stages and returns the signal exit code',
   assert.deepEqual(executor.cancelled, ['SIGTERM']);
   assert.deepEqual(executor.executed, []);
 });
+
+test('runner reports bounded cleanup inventory when isolated teardown fails', async () => {
+  const executor = new ExecutorFixture([]);
+  const logger = new LoggerFixture();
+  const cleanupError = new Error('cleanup failed');
+  cleanupError.details = {
+    inventory: { status: 'cleanup_pending', unexpected_containers: 1 },
+  };
+  const isolation = {
+    execute: async () => ({
+      execution: { exitCode: 0, timedOut: false },
+      cleanupError,
+    }),
+  };
+  const isolatedStage = { ...stage('isolated'), isolation: 'resources' };
+  const runner = new ValidationRunner(executor, logger, isolation);
+
+  const exitCode = await runner.run([isolatedStage]);
+
+  assert.equal(exitCode, 1);
+  assert.ok(logger.messages.some((message) => message.includes('"unexpected_containers":1')));
+});

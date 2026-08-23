@@ -183,6 +183,12 @@ test('admin smokes close live transports before bounded session teardown', () =>
 
   assert.match(compatibility, /await disconnectEmbeddedBrowser\(page, options\)/);
   assert.match(compatibility, /const response = await responsePromise/);
+  assert.match(compatibility, /await cleanupAdminSessionIds\(accessToken/);
+  const compatibilityWorkflow = fs.readFileSync(
+    path.join(root, 'code/web/bpane-client/scripts/run-admin-workflow-smoke.mjs'),
+    'utf8',
+  );
+  assert.match(compatibilityWorkflow, /cleanupAdminSmoke\(page, options, log, \[sessionId\]\)/);
   assert.ok(unified.indexOf('await context.close()') < unified.indexOf('await cleanupMcpDelegation('));
   assert.ok(unified.indexOf('await browser.close()') < unified.indexOf('await cleanupSession('));
 });

@@ -28,14 +28,6 @@ pub(super) async fn kill_session(
             )
         })?;
 
-    if stored.state == SessionLifecycleState::Stopped {
-        return Ok(Json(
-            session_resource(&state, &stored, None)
-                .await
-                .map_err(map_session_store_error)?,
-        ));
-    }
-
     terminate_session_workloads(&state, &stored).await?;
 
     if let Err(error) = state

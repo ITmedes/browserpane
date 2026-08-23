@@ -1,4 +1,4 @@
-import { cleanupWorkflowSmokeSessions, fetchAuthConfig, fetchJson, poll } from './workflow-smoke-lib.mjs';
+import { cleanupWorkflowSmokeSessions, fetchAuthConfig, fetchJson, killSession, poll } from './workflow-smoke-lib.mjs';
 
 export async function ensureAdminLoggedIn(page, options) {
   await installBearerCapture(page);
@@ -34,13 +34,24 @@ async function navigateToAdminAuthSurface(page, pageUrl) {
   }
 }
 
-export async function cleanupAdminSmoke(page, options, log) {
+export async function cleanupAdminSmoke(page, options, log, explicitSessionIds = []) {
+  const accessToken = await getAdminAccessToken(page).catch(() => '');
   await cleanupAdminSession(page, options).catch((error) => {
     log(`Admin session cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
   });
-  const accessToken = await getAdminAccessToken(page).catch(() => '');
+  if (explicitSessionIds.some(Boolean) && !accessToken) {
+    throw new Error('Admin session cleanup could not obtain an access token.');
+  }
   if (accessToken) {
+    await cleanupAdminSessionIds(accessToken, rootApiOptions(options), explicitSessionIds, log);
     await cleanupWorkflowSmokeSessions(accessToken, rootApiOptions(options), log).catch(() => {});
+  }
+}
+
+export async function cleanupAdminSessionIds(accessToken, options, sessionIds, log = () => {}) {
+  for (const sessionId of new Set(sessionIds.filter(Boolean))) {
+    await killSession(accessToken, options, sessionId);
+    log(`Released borrowed admin smoke session ${sessionId}.`);
   }
 }
 

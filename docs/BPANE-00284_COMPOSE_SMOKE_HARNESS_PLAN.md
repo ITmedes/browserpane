@@ -386,3 +386,67 @@ a browser transport readiness timeout before the hosted cleanup path. The
 stack was neither rebuilt nor torn down, and those divergent attempts are not
 claimed as passing validation. The shell driver owns the next exact-head hosted
 run; this record does not treat run `32638052687` as passing evidence.
+
+Exact-head manual Compose run `32639904736` on
+`b8bb31c143ac181facbbe6ea6dd51b8e358b28e8` narrowed the remaining failure to
+the final cleanup invariant in `compose-admin-new-sessions` and
+`compose-admin-compat-workflow`. Every product assertion passed, both gateway
+lanes passed, and the browser-integration lane passed. Each failed admin lane
+retained one running session runtime after its owner-authenticated kill request
+returned HTTP 200. Gateway logs confirmed that force-kill reached the runtime
+release boundary, isolating the defect from namespace ownership and browser
+disconnect ordering.
+
+The post-budget lifecycle repair makes force-kill idempotent for already-stopped
+sessions and makes Docker runtime release stop the deterministic session
+runtime even when a concurrent drain or reconciliation already removed its
+in-memory lease. Persisted assignment clearing and teardown failures are now
+logged instead of being silently discarded. Validation failures also print the
+bounded cleanup inventory counters needed to distinguish active sessions,
+containers, and temporary volumes without exposing resource identifiers. The
+repair adds focused API, runtime-manager, and validation-runner regression
+tests. No public API shape, protocol, authentication policy, or promotion
+scenario changed.
+
+A rebuilt local reproduction then made the remaining race observable. The
+admin-new product assertions passed, both session kill requests returned HTTP
+200, and the cleanup inventory reported one owned and unexpected container
+with no active session or temporary-volume leak. The retained container was
+created about 20 seconds after force-kill returned, and Postgres recorded its
+runtime assignment as ready while the session resource remained stopped. An
+in-flight transport startup had therefore completed after release and adopted
+a newer starting lease by variant alone.
+
+Runtime startup now validates the persisted session lifecycle before each
+resolve attempt and again after container launch. Starting-operation promotion
+also matches the exact notify identity rather than any `Starting` variant for
+the same session id. A launch that loses ownership or observes a stopped
+session removes its container and persisted assignment before returning an
+error. A broker-backed concurrency regression holds launch in flight, stops
+and releases the session, resumes launch, and proves that no lease, runtime, or
+assignment survives.
+
+The compatibility-admin reproduction exposed a separate deterministic teardown
+gap after the startup race was fixed. Its workflow borrowed a pre-existing
+baseline session, while label-based cleanup deliberately selected only
+stage-namespaced sessions. Compatibility workflow cleanup now receives that
+borrowed session id explicitly, releases it idempotently through the control
+API, and treats an explicit-release failure as a smoke failure. The helper's
+success, deduplication, and failure behavior is part of the fast validation
+catalog rather than relying only on the live Compose stage.
+
+Post-repair local evidence:
+
+- `compose-admin-new-sessions`: PASS in 85.4 seconds after rebuilding the
+  gateway with the lifecycle repair.
+- `compose-admin-compat-workflow`: PASS in 63.5 seconds; the smoke logged the
+  explicit borrowed-session release and the cleanup invariant passed.
+- Postgres reported the borrowed baseline as stopped with no runtime assignment,
+  and Docker reported no remaining `bpane-runtime-*` container.
+- `cargo test -p bpane-gateway runtime_manager::tests`: PASS, 36 tests.
+- `cargo test -p bpane-gateway explicit_kill`: PASS, 2 tests.
+- `cargo fmt --all -- --check` and gateway all-target clippy with warnings
+  denied: PASS.
+- Browser client TypeScript compilation and all 695 Vitest tests: PASS.
+- Fast validation tooling, repository baseline, and document checks: PASS, 176
+  tooling tests.

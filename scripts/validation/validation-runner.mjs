@@ -37,6 +37,10 @@ export class ValidationRunner {
       }
       if (harnessResult.cleanupError) {
         this.#logger.error(`[validate] FAIL ${stage.id} (cleanup invariants, ${duration}s)`);
+        const inventory = harnessResult.cleanupError.details?.inventory;
+        if (inventory && typeof inventory === 'object') {
+          this.#logger.error(`[validate] cleanup inventory: ${JSON.stringify(inventory)}`);
+        }
         this.#logger.error(`[validate] rerun: ${this.#rerunCommand(stage.id)}`);
         return 1;
       }

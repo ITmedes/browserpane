@@ -368,6 +368,30 @@ impl DockerRuntimeManager {
         Self::runtime_data_scope_from_session(&session)
     }
 
+    pub(super) async fn ensure_session_runtime_candidate(
+        &self,
+        session_id: Uuid,
+    ) -> Result<(), RuntimeManagerError> {
+        let Some(store) = self.session_store().await else {
+            return Ok(());
+        };
+        let session = store
+            .get_session_by_id(session_id)
+            .await
+            .map_err(|error| RuntimeManagerError::PersistenceFailed(error.to_string()))?
+            .ok_or_else(|| {
+                RuntimeManagerError::PersistenceFailed(format!(
+                    "session {session_id} not found while validating docker runtime startup"
+                ))
+            })?;
+        if !session.state.is_runtime_candidate() {
+            return Err(RuntimeManagerError::StartupFailed(format!(
+                "session {session_id} is no longer runtime-compatible"
+            )));
+        }
+        Ok(())
+    }
+
     pub(super) fn runtime_data_scope_from_session(
         session: &StoredSession,
     ) -> Result<RuntimeSessionDataScope, RuntimeManagerError> {

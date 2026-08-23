@@ -73,6 +73,7 @@ export class ValidationStageCatalog {
         'scripts/validation/github-workflow-policy-checker.test.mjs',
         'scripts/validation/markdown-link-checker.test.mjs',
         'scripts/validation/repository-document-checker.test.mjs',
+        'code/web/bpane-client/scripts/admin-smoke-lib.test.mjs',
         'code/web/bpane-client/scripts/cdp-profile-state-probe.test.mjs',
         'code/web/bpane-client/scripts/new-session-selection.test.mjs',
         'code/web/bpane-client/scripts/session-cleanup.test.mjs',
