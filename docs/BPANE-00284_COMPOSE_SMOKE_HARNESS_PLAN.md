@@ -3,12 +3,12 @@
 ## Metadata
 
 - Issue: `#284`
-- State: Qualified
+- State: In Progress
 - Owner: BrowserPane maintainers
 - Lane: Foundation
 - Target gate: deterministic Compose qualification
 - Depends on: `#283`; completed `#235`
-- Last verified commit/date: `e79164cc3a84` / 2026-08-22
+- Last verified commit/date: `8ebb03a69125` / 2026-08-23
 
 ## Business Outcome
 

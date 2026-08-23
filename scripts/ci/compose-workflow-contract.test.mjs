@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 
@@ -151,4 +152,21 @@ test('workflow initializes and records the checked lane plans for all five lanes
       assert.match(step.run, /node scripts\/compose-evidence\.mjs run/);
     }
   }
+});
+
+test('promotion stages use shared resource isolation without reducing their scenarios', () => {
+  const catalog = new ComposeLanePlanCatalog();
+  for (const lane of catalog.lanes()) {
+    const plan = catalog.plan(lane);
+    const isolated = plan.stages.filter((stage) => stage.isolation === 'resources');
+    assert.ok(isolated.length > 0, `${lane} has an isolated promotion stage`);
+    assert.ok(isolated.every((stage) => stage.role === 'primary'));
+  }
+
+  const wrapper = fs.readFileSync(path.join(root, 'scripts/run-gateway-compose-e2e.sh'), 'utf8');
+  assert.match(wrapper, /compose-harness\.mjs" wait-http/);
+  assert.match(wrapper, /wait_for_boundary\s+\\\n\s+oidc/);
+  assert.match(wrapper, /wait_for_boundary control/);
+  assert.match(wrapper, /wait_for_boundary runtime/);
+  assert.doesNotMatch(wrapper, /\bsleep\b/);
 });

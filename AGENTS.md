@@ -201,6 +201,10 @@ Current product shape:
     failure classes, bounded JSON/JUnit summaries, exact input/image identity,
     synthetic-only Playwright attachments, and cleanup results that remain
     independent of the primary failure.
+- `scripts/compose-harness.mjs` and `scripts/compose-harness/`
+  - Shared Compose qualification harness: typed OIDC/control/runtime/transport/
+    worker/artifact waits, deterministic run/stage namespaces, namespace-aware
+    resource registration, and bounded ownership-safe cleanup invariants.
 - `code/web/bpane-client/js`
   - Real browser client implementation.
   - `bpane.ts`: public API and session orchestration.
@@ -314,7 +318,7 @@ Current product shape:
 - Gateway compose e2e API suite: `cargo test -p bpane-gateway --test compose_api_surface -- --ignored --test-threads=1`
 - Gateway docker-pool compose e2e suite: `cargo test -p bpane-gateway --test compose_api_surface_docker_pool -- --ignored --test-threads=1`
 - Gateway compose e2e wrapper: `scripts/run-gateway-compose-e2e.sh --suite all`
-- Compose evidence and workflow contracts: `node --test scripts/ci/compose-evidence-*.test.mjs scripts/ci/compose-workflow-contract.test.mjs scripts/validation/github-workflow-policy-checker.test.mjs`
+- Compose harness, evidence, and workflow contracts: `node --test scripts/ci/compose-harness-*.test.mjs scripts/ci/compose-evidence-*.test.mjs scripts/ci/compose-workflow-contract.test.mjs scripts/validation/github-workflow-policy-checker.test.mjs`
 - Runtime-broker storage smoke: `scripts/smoke-runtime-broker-storage.sh`
 - Runtime-broker isolation smoke: `scripts/smoke-runtime-broker-isolation.sh`
 - Runtime-broker restart smoke: run `npm run smoke:runtime-broker-restart -- --headless` in `code/web/bpane-client`

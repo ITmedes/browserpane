@@ -74,25 +74,16 @@ require_command() {
   fi
 }
 
-wait_for_http() {
-  local name="$1"
+wait_for_boundary() {
+  local boundary="$1"
   local url="$2"
-  local max_attempts="${3:-60}"
-  local sleep_seconds="${4:-2}"
-  local attempt=1
-
-  until curl -fsS "$url" >/dev/null 2>&1; do
-    if (( attempt >= max_attempts )); then
-      echo "timed out waiting for $name at $url" >&2
-      exit 1
-    fi
-    sleep "$sleep_seconds"
-    attempt=$((attempt + 1))
-  done
-}
-
-wait_for_gateway_api() {
-  wait_for_http "gateway dependency readiness" "http://localhost:8932/readyz"
+  shift 2
+  node "$ROOT_DIR/scripts/compose-harness.mjs" wait-http \
+    --boundary "$boundary" \
+    --url "$url" \
+    --timeout-ms "${BPANE_COMPOSE_READINESS_TIMEOUT_MS:-120000}" \
+    --interval-ms "${BPANE_COMPOSE_READINESS_INTERVAL_MS:-1000}" \
+    "$@"
 }
 
 cleanup() {
@@ -114,11 +105,12 @@ mkdir -p "$ROOT_DIR/dev/certs"
 
 compose up -d --build keycloak postgres host gateway mcp-bridge web
 
-wait_for_http \
-  "Keycloak realm metadata" \
+wait_for_boundary \
+  oidc \
   "http://localhost:8091/realms/browserpane-dev/.well-known/openid-configuration"
-wait_for_gateway_api
-wait_for_http "mcp-bridge health" "http://localhost:8931/health"
+wait_for_boundary control "http://localhost:8932/readyz"
+wait_for_boundary runtime "http://localhost:8932/readyz"
+wait_for_boundary control "http://localhost:8931/health" --expect-status ok
 
 run_default_suite() {
   cargo test -p bpane-gateway --test compose_api_surface -- --ignored --test-threads=1

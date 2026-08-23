@@ -3,13 +3,13 @@
 ## Metadata
 
 - Issue: `#283`
-- State: Review
+- State: Done
 - Owner: BrowserPane maintainers
 - Lane: Foundation
 - Target gate: reliable Compose qualification
 - Depends on: completed issues `#184`, `#185`, `#235`, `#273`, and `#277`
-- Last verified commit/date: `d0ffede5` plus the focused PR #288 CI
-  convergence repair / 2026-08-23
+- Last verified commit/date: `8ebb03a69125` / 2026-08-23; merged through PR
+  `#288`
 
 ## Business Outcome
 

@@ -1178,7 +1178,10 @@ fn docker_runtime_maps_network_identity_to_launch_env() {
         },
         automation_delegate: None,
         idle_timeout_sec: None,
-        labels: HashMap::new(),
+        labels: HashMap::from([(
+            "bpane_ci_namespace".to_string(),
+            "bpane-123-1-gateway-suite".to_string(),
+        )]),
         integration_context: None,
         extensions: Vec::new(),
         recording: SessionRecordingPolicy::default(),
@@ -1240,6 +1243,16 @@ fn docker_runtime_maps_network_identity_to_launch_env() {
         .iter()
         .cloned()
         .collect::<HashMap<_, _>>();
+    let labels = launch_options
+        .labels
+        .iter()
+        .cloned()
+        .collect::<HashMap<_, _>>();
+
+    assert_eq!(
+        labels.get("browserpane.ci_namespace").map(String::as_str),
+        Some("bpane-123-1-gateway-suite")
+    );
 
     assert_eq!(env.get("LANG").map(String::as_str), Some("de_DE.UTF-8"));
     assert_eq!(env.get("LC_ALL").map(String::as_str), Some("de_DE.UTF-8"));

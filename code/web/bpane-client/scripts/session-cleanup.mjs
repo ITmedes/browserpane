@@ -10,6 +10,7 @@ export class SessionCleanup {
   #quietPasses;
   #now;
   #wait;
+  #select;
 
   constructor({
     list,
@@ -19,8 +20,9 @@ export class SessionCleanup {
     quietPasses = DEFAULT_QUIET_PASSES,
     now = Date.now,
     wait = delay,
+    select = () => true,
   }) {
-    SessionCleanup.#validate({ list, kill, timeoutMs, settleMs, quietPasses, now, wait });
+    SessionCleanup.#validate({ list, kill, timeoutMs, settleMs, quietPasses, now, wait, select });
     this.#list = list;
     this.#kill = kill;
     this.#timeoutMs = timeoutMs;
@@ -28,6 +30,7 @@ export class SessionCleanup {
     this.#quietPasses = quietPasses;
     this.#now = now;
     this.#wait = wait;
+    this.#select = select;
   }
 
   async run() {
@@ -36,7 +39,7 @@ export class SessionCleanup {
     let consecutiveQuietPasses = 0;
 
     while (this.#now() <= progressDeadline) {
-      const sessionIds = SessionCleanup.#activeSessionIds(await this.#list());
+      const sessionIds = SessionCleanup.#activeSessionIds(await this.#list(), this.#select);
       if (sessionIds.length === 0) {
         consecutiveQuietPasses += 1;
         if (consecutiveQuietPasses >= this.#quietPasses) {
@@ -62,23 +65,27 @@ export class SessionCleanup {
     );
   }
 
-  static #activeSessionIds(response) {
+  static #activeSessionIds(response, select) {
     if (!response || !Array.isArray(response.sessions)) {
       throw new Error('Session cleanup expected a session catalog response.');
     }
     return [...new Set(response.sessions.flatMap((session) => {
+      if (!select(session)) return [];
       const sessionId = typeof session?.id === 'string' ? session.id : '';
       const sessionState = typeof session?.state === 'string' ? session.state : '';
       return sessionId && sessionState && sessionState !== 'stopped' ? [sessionId] : [];
     }))];
   }
 
-  static #validate({ list, kill, timeoutMs, settleMs, quietPasses, now, wait }) {
+  static #validate({ list, kill, timeoutMs, settleMs, quietPasses, now, wait, select }) {
     if (typeof list !== 'function' || typeof kill !== 'function') {
       throw new TypeError('Session cleanup requires list and kill functions.');
     }
     if (typeof now !== 'function' || typeof wait !== 'function') {
       throw new TypeError('Session cleanup requires clock and wait functions.');
+    }
+    if (typeof select !== 'function') {
+      throw new TypeError('Session cleanup select must be a function.');
     }
     if (!Number.isInteger(timeoutMs) || timeoutMs <= 0) {
       throw new TypeError('Session cleanup timeoutMs must be a positive integer.');

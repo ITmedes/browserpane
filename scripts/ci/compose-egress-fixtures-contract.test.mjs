@@ -55,6 +55,7 @@ test('compose cleanup removes observer projects before the primary stack', () =>
   assert.ok(primaryDown > observerDown);
   assert.match(cleanup, /BPANE_EGRESS_OBSERVER_PROJECT:-bpane-ci-egress/);
   assert.match(cleanup, /BPANE_EGRESS_TLS_OBSERVER_PROJECT:-bpane-ci-egress-tls/);
+  assert.match(cleanup, /RUN_NAMESPACE:0:32/);
   assert.equal((cleanup.match(/down --volumes --remove-orphans/g) ?? []).length, 3);
 });
 

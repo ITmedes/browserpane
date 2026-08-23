@@ -19,13 +19,13 @@ export class SubprocessStageExecutor {
     this.#stdio = options.stdio ?? 'inherit';
   }
 
-  execute(stage) {
+  execute(stage, environment = process.env) {
     return new Promise((resolve) => {
       let timedOut = false;
       let settled = false;
       const child = spawn(stage.command, stage.args, {
         cwd: stage.cwd,
-        env: process.env,
+        env: environment,
         stdio: this.#stdio,
         detached: process.platform !== 'win32'
       });

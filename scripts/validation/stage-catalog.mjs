@@ -54,6 +54,10 @@ export class ValidationStageCatalog {
         'scripts/ci/compose-evidence-classification.test.mjs',
         'scripts/ci/compose-evidence-identity.test.mjs',
         'scripts/ci/compose-evidence-runner.test.mjs',
+        'scripts/ci/compose-harness-cleanup.test.mjs',
+        'scripts/ci/compose-harness-namespace.test.mjs',
+        'scripts/ci/compose-harness-readiness.test.mjs',
+        'scripts/ci/compose-harness-stage.test.mjs',
         'scripts/ci/compose-egress-fixtures-contract.test.mjs',
         'scripts/ci/compose-workflow-contract.test.mjs',
         'scripts/ci/compose-diagnostics-collector.test.mjs',
@@ -72,6 +76,7 @@ export class ValidationStageCatalog {
         'code/web/bpane-client/scripts/cdp-profile-state-probe.test.mjs',
         'code/web/bpane-client/scripts/new-session-selection.test.mjs',
         'code/web/bpane-client/scripts/session-cleanup.test.mjs',
+        'code/web/bpane-client/scripts/session-readiness.test.mjs',
         'scripts/validation/arguments.test.mjs',
         'scripts/validation/repository-baseline.test.mjs',
         'scripts/validation/stage-catalog.test.mjs',
@@ -131,7 +136,7 @@ export class ValidationStageCatalog {
         'Validate provisioned Grafana operations dashboard', root,
         ['scripts/observability/validate-grafana-dashboard.mjs'], 300),
       this.#stage('compose-gateway-api', 'Run gateway compose API suites', 'bash',
-        ['scripts/run-gateway-compose-e2e.sh', '--suite', 'all'], root, 2700),
+        ['scripts/run-gateway-compose-e2e.sh', '--suite', 'all'], root, 2700, 'resources'),
       ...ADMIN_PROMOTION_SMOKES.map(({ id, description, script, extraArgs }) => (
         this.#npmSmoke(id, description, client, script, extraArgs)
       )),
@@ -165,14 +170,16 @@ export class ValidationStageCatalog {
 
   #npmSmoke(id, description, cwd, script, extraArgs = []) {
     return this.#stage(id, description, 'npm',
-      ['run', script, '--', '--headless', ...extraArgs], cwd, 900);
+      ['run', script, '--', '--headless', ...extraArgs], cwd, 900, 'resources');
   }
 
   #node(id, description, cwd, args, timeoutSeconds) {
     return this.#stage(id, description, process.execPath, args, cwd, timeoutSeconds);
   }
 
-  #stage(id, description, command, args, cwd, timeoutSeconds) {
-    return new ValidationStage({ id, description, command, args, cwd, timeoutSeconds });
+  #stage(id, description, command, args, cwd, timeoutSeconds, isolation = 'none') {
+    return new ValidationStage({
+      id, description, command, args, cwd, timeoutSeconds, isolation,
+    });
   }
 }

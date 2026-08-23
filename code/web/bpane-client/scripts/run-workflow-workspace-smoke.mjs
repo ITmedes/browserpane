@@ -6,7 +6,8 @@ import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
-import { testEmbedPageUrl } from './workflow-smoke-lib.mjs';
+import { poll, testEmbedPageUrl } from './workflow-smoke-lib.mjs';
+import { installNamespacedPlaywrightTarget } from '../../../../scripts/compose-harness/namespace-transports.mjs';
 
 const DEFAULTS = {
   pageUrl: 'http://localhost:8080',
@@ -72,23 +73,6 @@ Options:
 
 function log(message) {
   console.log(`[workflow-workspace-smoke] ${message}`);
-}
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function poll(description, fn, predicate, timeoutMs, intervalMs = 500) {
-  const startedAt = Date.now();
-  let lastValue = null;
-  while (Date.now() - startedAt < timeoutMs) {
-    lastValue = await fn();
-    if (predicate(lastValue)) {
-      return lastValue;
-    }
-    await sleep(intervalMs);
-  }
-  throw new Error(`Timed out waiting for ${description}`);
 }
 
 async function resolveChromeExecutable() {
@@ -553,6 +537,7 @@ async function main() {
       viewport: { width: 1440, height: 960 },
       deviceScaleFactor: 1,
     });
+    await installNamespacedPlaywrightTarget(context);
     page = await context.newPage();
     await configurePage(page, options);
     await ensureLoggedIn(page, options);

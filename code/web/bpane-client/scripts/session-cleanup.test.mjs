@@ -89,6 +89,27 @@ describe('SessionCleanup', () => {
 
     assert.deepEqual(result.removedSessionIds, ['session-a']);
   });
+
+  it('preserves active sessions outside the owned namespace', async () => {
+    const killed = [];
+    const responses = [
+      catalog(
+        { ...session('owned', 'active'), labels: { bpane_ci_namespace: 'bpane-run-a' } },
+        { ...session('foreign', 'active'), labels: { bpane_ci_namespace: 'bpane-run-b' } },
+      ),
+      catalog({ ...session('foreign', 'active'), labels: { bpane_ci_namespace: 'bpane-run-b' } }),
+    ];
+
+    await new SessionCleanup({
+      list: async () => responses.shift() ?? catalog(),
+      kill: async (sessionId) => killed.push(sessionId),
+      select: (candidate) => candidate?.labels?.bpane_ci_namespace === 'bpane-run-a',
+      quietPasses: 1,
+      wait: async () => {},
+    }).run();
+
+    assert.deepEqual(killed, ['owned']);
+  });
 });
 
 function catalog(...sessions) {

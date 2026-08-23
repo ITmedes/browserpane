@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, OnceLock};
@@ -332,16 +334,28 @@ impl ComposeHarness {
     }
 
     pub async fn post_json(&self, path: &str, body: Value) -> Result<Value> {
-        self.send_json(Method::POST, path, Some(body), None).await
+        let body = namespace_api_payload(path, body);
+        let response = self.send_json(Method::POST, path, Some(body), None).await?;
+        register_ci_resource(path, &response)?;
+        Ok(response)
     }
 
     pub async fn post_json_outcome(&self, path: &str, body: Value) -> Result<JsonOutcome> {
-        self.send_json_outcome(Method::POST, path, Some(body), None)
-            .await
+        let body = namespace_api_payload(path, body);
+        let outcome = self
+            .send_json_outcome(Method::POST, path, Some(body), None)
+            .await?;
+        if outcome.status.is_success() {
+            register_ci_resource(path, &outcome.body)?;
+        }
+        Ok(outcome)
     }
 
     pub async fn put_json(&self, path: &str, body: Value) -> Result<Value> {
-        self.send_json(Method::PUT, path, Some(body), None).await
+        let body = namespace_api_payload(path, body);
+        let response = self.send_json(Method::PUT, path, Some(body), None).await?;
+        register_ci_resource(path, &response)?;
+        Ok(response)
     }
 
     pub async fn post_json_outcome_without_bearer(
@@ -350,8 +364,14 @@ impl ComposeHarness {
         body: Value,
         headers: HeaderMap,
     ) -> Result<JsonOutcome> {
-        self.send_json_outcome_without_bearer(Method::POST, path, Some(body), Some(headers))
-            .await
+        let body = namespace_api_payload(path, body);
+        let outcome = self
+            .send_json_outcome_without_bearer(Method::POST, path, Some(body), Some(headers))
+            .await?;
+        if outcome.status.is_success() {
+            register_ci_resource(path, &outcome.body)?;
+        }
+        Ok(outcome)
     }
 
     pub async fn get_bridge_json(&self, path: &str) -> Result<Value> {
@@ -378,8 +398,12 @@ impl ComposeHarness {
         body: Value,
         headers: HeaderMap,
     ) -> Result<Value> {
-        self.send_json(Method::POST, path, Some(body), Some(headers))
-            .await
+        let body = namespace_api_payload(path, body);
+        let response = self
+            .send_json(Method::POST, path, Some(body), Some(headers))
+            .await?;
+        register_ci_resource(path, &response)?;
+        Ok(response)
     }
 
     pub async fn post_bytes(
@@ -631,7 +655,14 @@ impl ComposeHarness {
     }
 
     pub fn unique_name(&self, prefix: &str) -> String {
-        format!("{prefix}-{}", Uuid::now_v7())
+        let namespace = std::env::var("BPANE_CI_STAGE_NAMESPACE")
+            .ok()
+            .filter(|value| valid_ci_namespace(value))
+            .map(|value| value.chars().take(24).collect::<String>());
+        match namespace {
+            Some(namespace) => format!("{prefix}-{namespace}-{}", Uuid::now_v7()),
+            None => format!("{prefix}-{}", Uuid::now_v7()),
+        }
     }
 
     pub fn repo_root(&self) -> &Path {
@@ -1256,10 +1287,165 @@ pub fn map_headers(values: &[(&str, &str)]) -> Result<HeaderMap> {
 }
 
 pub fn label_map(scope: &str) -> HashMap<String, String> {
-    HashMap::from([
+    let mut labels = HashMap::from([
         ("suite".to_string(), "bpane-gateway-compose-e2e".to_string()),
         ("scope".to_string(), scope.to_string()),
-    ])
+    ]);
+    if let Ok(namespace) = std::env::var("BPANE_CI_STAGE_NAMESPACE") {
+        if valid_ci_namespace(&namespace) {
+            labels.insert("bpane_ci_namespace".to_string(), namespace);
+        }
+    }
+    labels
+}
+
+fn namespace_api_payload(path: &str, mut body: Value) -> Value {
+    let Ok(namespace) = std::env::var("BPANE_CI_STAGE_NAMESPACE") else {
+        return body;
+    };
+    if !valid_ci_namespace(&namespace) {
+        return body;
+    }
+    add_namespace_to_labels(&mut body, &namespace);
+    if accepts_root_ci_labels(path) {
+        if let Some(object) = body.as_object_mut() {
+            object
+                .entry("labels")
+                .or_insert_with(|| json!({ "bpane_ci_namespace": namespace }));
+        }
+    }
+    body
+}
+
+fn add_namespace_to_labels(value: &mut Value, namespace: &str) {
+    match value {
+        Value::Object(object) => {
+            if let Some(labels) = object.get_mut("labels").and_then(Value::as_object_mut) {
+                labels.insert("bpane_ci_namespace".to_string(), json!(namespace));
+            }
+            for child in object.values_mut() {
+                add_namespace_to_labels(child, namespace);
+            }
+        }
+        Value::Array(items) => {
+            for item in items {
+                add_namespace_to_labels(item, namespace);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn accepts_root_ci_labels(path: &str) -> bool {
+    let segments = api_segments(path);
+    segments.len() == 1
+        && matches!(
+            segments[0],
+            "automation-tasks"
+                | "browser-contexts"
+                | "credential-bindings"
+                | "egress-profiles"
+                | "extensions"
+                | "file-workspaces"
+                | "identity-mappings"
+                | "projects"
+                | "service-principals"
+                | "session-templates"
+                | "sessions"
+                | "workflow-endpoints"
+                | "workflow-runs"
+                | "workflows"
+        )
+}
+
+fn register_ci_resource(path: &str, body: &Value) -> Result<()> {
+    let Ok(registry_path) = std::env::var("BPANE_CI_RESOURCE_REGISTRY") else {
+        return Ok(());
+    };
+    let Ok(namespace) = std::env::var("BPANE_CI_STAGE_NAMESPACE") else {
+        return Ok(());
+    };
+    if !valid_ci_namespace(&namespace) {
+        bail!("invalid BPANE_CI_STAGE_NAMESPACE");
+    }
+    let Some(kind) = resource_kind(path) else {
+        return Ok(());
+    };
+    let Some(id) = body.get("id").and_then(Value::as_str) else {
+        return Ok(());
+    };
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&registry_path)
+        .with_context(|| "failed to open Compose resource registry")?;
+    writeln!(
+        file,
+        "{}",
+        json!({ "namespace": namespace, "kind": kind, "id": id })
+    )
+    .context("failed to append Compose resource registry")?;
+    if kind == "workflow_run" {
+        if let Some(session_id) = body.get("session_id").and_then(Value::as_str) {
+            writeln!(
+                file,
+                "{}",
+                json!({ "namespace": namespace, "kind": "session", "id": session_id })
+            )
+            .context("failed to append workflow session to Compose resource registry")?;
+        }
+    }
+    Ok(())
+}
+
+fn resource_kind(path: &str) -> Option<&'static str> {
+    let segments = api_segments(path);
+    if segments.len() == 3 && segments[0] == "sessions" && segments[2] == "recordings" {
+        return Some("recording");
+    }
+    if segments.len() != 1 {
+        return None;
+    }
+    match segments[0] {
+        "automation-tasks" => Some("automation_task"),
+        "browser-contexts" => Some("browser_context"),
+        "credential-bindings" => Some("credential_binding"),
+        "egress-profiles" => Some("egress_profile"),
+        "extensions" => Some("extension"),
+        "file-workspaces" => Some("file_workspace"),
+        "identity-mappings" => Some("identity_mapping"),
+        "projects" => Some("project"),
+        "service-principals" => Some("service_principal"),
+        "session-templates" => Some("session_template"),
+        "sessions" => Some("session"),
+        "workflow-endpoints" => Some("workflow_endpoint"),
+        "workflow-event-subscriptions" => Some("workflow_event_subscription"),
+        "workflow-runs" => Some("workflow_run"),
+        "workflows" => Some("workflow"),
+        _ => None,
+    }
+}
+
+fn api_segments(path: &str) -> Vec<&str> {
+    path.split('?')
+        .next()
+        .unwrap_or(path)
+        .trim_matches('/')
+        .strip_prefix("api/v1/")
+        .unwrap_or_default()
+        .split('/')
+        .filter(|segment| !segment.is_empty())
+        .collect()
+}
+
+fn valid_ci_namespace(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 63
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+        && !value.starts_with('-')
+        && !value.ends_with('-')
 }
 
 pub fn recording_policy(mode: &str) -> Value {
