@@ -97,7 +97,7 @@ async function run() {
       workflowGatewayLogs: true,
     }, log);
   } finally {
-    await cleanupAdminSmoke(page, options, log);
+    await cleanupAdminSmoke(page, options, log, [sessionId]);
     await context.close();
     await browser.close();
   }

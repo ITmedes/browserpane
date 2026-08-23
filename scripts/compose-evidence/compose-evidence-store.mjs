@@ -11,16 +11,23 @@ export class ComposeEvidenceStore {
     this.#rootDirectory = path.resolve(rootDirectory);
   }
 
-  initialize(plan) {
+  initialize(plan, harness = null) {
     this.#assertLane(plan.lane);
     const stateDirectory = this.stateDirectory(plan.lane);
     fs.mkdirSync(path.join(stateDirectory, 'stages'), { recursive: true, mode: 0o700 });
     this.#writeNew(path.join(stateDirectory, 'plan.json'), plan);
+    if (harness) this.#writeNew(path.join(stateDirectory, 'harness.json'), harness);
   }
 
   loadPlan(lane) {
     this.#assertLane(lane);
     return this.#readJson(path.join(this.stateDirectory(lane), 'plan.json'));
+  }
+
+  loadHarness(lane) {
+    this.#assertLane(lane);
+    const filePath = path.join(this.stateDirectory(lane), 'harness.json');
+    return fs.existsSync(filePath) ? this.#readJson(filePath) : null;
   }
 
   writeStage(lane, result) {

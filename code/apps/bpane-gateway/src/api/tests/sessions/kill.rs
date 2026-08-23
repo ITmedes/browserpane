@@ -61,6 +61,62 @@ async fn explicit_kill_route_stops_session_and_terminates_live_clients() {
 }
 
 #[tokio::test]
+async fn explicit_kill_releases_an_assignment_for_an_already_stopped_session() {
+    let (app, token, state) = test_router_with_state();
+
+    let created = response_json(
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/sessions")
+                    .header("authorization", bearer(&token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({}).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await;
+    let session_id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
+    state.session_manager.resolve(session_id).await.unwrap();
+    let owner = AuthenticatedPrincipal {
+        subject: created["owner"]["subject"].as_str().unwrap().to_string(),
+        issuer: created["owner"]["issuer"].as_str().unwrap().to_string(),
+        display_name: None,
+        client_id: None,
+        safe_claims: Default::default(),
+    };
+    state
+        .session_store
+        .stop_session_for_owner(&owner, session_id)
+        .await
+        .unwrap();
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/sessions/{session_id}/kill"))
+                .header("authorization", bearer(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        state
+            .session_manager
+            .describe_session_runtime_assignment_status(session_id)
+            .await,
+        None
+    );
+}
+
+#[tokio::test]
 async fn kill_route_cancels_active_session_workloads() {
     let (app, token, state) = test_router_with_state();
 

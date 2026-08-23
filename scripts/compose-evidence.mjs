@@ -8,6 +8,7 @@ import { ComposeEvidenceStore } from './compose-evidence/compose-evidence-store.
 import { ComposeEvidenceValidator } from './compose-evidence/compose-evidence-validator.mjs';
 import { ComposeLanePlanCatalog } from './compose-evidence/compose-lane-plans.mjs';
 import { ComposeStageRunner } from './compose-evidence/compose-stage-runner.mjs';
+import { ComposeNamespaceFactory } from './compose-harness/compose-namespace.mjs';
 
 class ComposeEvidenceCommand {
   #rootDirectory;
@@ -39,7 +40,8 @@ class ComposeEvidenceCommand {
     const plan = this.#catalog.plan(options.lane);
     const errors = new ComposeEvidenceValidator().validatePlan(plan);
     if (errors.length > 0) throw new Error(`invalid Compose lane plan: ${errors.join(',')}`);
-    this.#store.initialize(plan);
+    const runNamespace = new ComposeNamespaceFactory().run(plan.lane);
+    this.#store.initialize(plan, { run_namespace: runNamespace });
     return 0;
   }
 

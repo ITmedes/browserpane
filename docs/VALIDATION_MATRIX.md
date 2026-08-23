@@ -91,21 +91,27 @@ head before automatic merge; it is not a blanket `pull_request` trigger. Split
 gateway, browser-integration, unified-admin, and compatibility-admin jobs
 execute the canonical evidence journeys, capture only selected control-plane
 status/log tails after a failure, redact credential and identity material
-before upload, and always remove BrowserPane containers and compose volumes.
+before upload, and run bounded namespace-aware teardown before the final
+Compose-project cleanup.
 
 ## Compose Qualification V2
 
 Issues #283-#287 are an ordered Foundation-maintenance sequence. BPANE-00283
-now defines the checked v1 evidence contract; the remaining behavior is not
-current until its focused successor closes with evidence:
+defines the checked v1 evidence contract and BPANE-00284 adds deterministic
+readiness and isolation; later behavior is not current until its focused
+successor closes with evidence:
 
 1. #283 records versioned per-stage timing, deterministic `product`, `harness`,
    `infrastructure`, or terminal `unknown` classification, exact tree and
    workflow/test-plan identity, image digests, retry attempt, bounded artifacts,
    and independent cleanup results for all five lanes. Every lane publishes
    JSON and JUnit on success, failure, cancellation, and cleanup failure.
-2. #284 adds shared typed readiness, unique CI namespaces, and stage cleanup
-   invariants across all five lanes.
+2. #284 adds shared typed readiness, unique run/stage namespaces, namespace
+   labels and registries for Node, Playwright, and gateway fixtures, and bounded
+   stage cleanup invariants across all five lanes. A stage refuses leaked
+   resources registered by an earlier isolated stage, never deletes foreign
+   resources, and records cleanup independently from the primary command
+   result.
 3. #285 builds qualification images once and fans out one immutable digest
    manifest instead of rebuilding overlapping images per lane.
 4. #286 adds deterministic canary/affected/full selection. A strictly
@@ -130,6 +136,24 @@ node --test scripts/ci/compose-evidence-*.test.mjs \
 node scripts/validate.mjs --stage validation-tool-tests
 node scripts/check-repository-documents.mjs
 ```
+
+Run the #284 harness state, namespace, cleanup, cancellation, and integration
+fixtures with:
+
+```bash
+node --test scripts/ci/compose-harness-*.test.mjs \
+  scripts/ci/compose-evidence-*.test.mjs \
+  scripts/ci/compose-workflow-contract.test.mjs \
+  scripts/ci/gateway-compose-e2e-wrapper.test.mjs
+```
+
+`scripts/run-gateway-compose-e2e.sh` uses the shared waiter for OIDC,
+control-plane, and runtime readiness. Promotion smoke polling records transport,
+workflow-worker, recording-worker, and artifact boundaries through the same
+deadline model. Deliberate recording capture windows and controlled delayed
+fixtures remain duration-based product actions, not readiness sleeps. Hosted
+Compose remains a post-merge, scheduled, or manual gate; it is not a normal
+pull-request trigger.
 
 The hosted artifacts are named `compose-evidence-<lane>-<run>-<attempt>` and
 contain `compose-stage-evidence-v1.json`, `compose-stage-evidence-v1.xml`, and

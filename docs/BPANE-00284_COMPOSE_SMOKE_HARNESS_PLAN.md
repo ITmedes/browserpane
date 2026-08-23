@@ -3,12 +3,12 @@
 ## Metadata
 
 - Issue: `#284`
-- State: Qualified
+- State: Review
 - Owner: BrowserPane maintainers
 - Lane: Foundation
 - Target gate: deterministic Compose qualification
 - Depends on: `#283`; completed `#235`
-- Last verified commit/date: `e79164cc3a84` / 2026-08-22
+- Last verified commit/date: `feadf86e1df0` / 2026-08-23
 
 ## Business Outcome
 
@@ -173,5 +173,280 @@ determinism only; it does not promote product maturity or deployment support.
 
 ## Evidence Record
 
-Record the PR, commit, unit/integration outputs, two hosted workflow runs,
-cancellation run, leak inventories, and baseline comparison in issue `#284`.
+Proposal evidence for implementation commit `feadf86e1df0`:
+
+- `node scripts/validate.mjs --stage validation-tool-tests --stage
+  repository-baseline --stage repository-documents`: PASS; 164 validation-tool
+  tests, 48 tracked JSON files, 125 Markdown files, 19 YAML files, and three
+  workflows.
+- `cargo fmt --all -- --check`: PASS.
+- `cargo clippy -p bpane-gateway --all-targets --locked -- -D warnings`: PASS.
+- `cargo test -p bpane-gateway --locked`: PASS; 506 gateway unit tests plus
+  the crate's non-ignored integration and documentation targets.
+- `node scripts/run-rust-coverage.mjs`: PASS; workspace tests and the checked
+  Rust coverage ratchet passed (64.98% regions, 64.15% functions, 61.16%
+  lines).
+- `npx tsc --noEmit && npm test && npm run test:coverage && npm run build` in
+  `code/web/bpane-client`: PASS; 91 files / 695 tests and the 93.21% statement
+  coverage ratchet passed before the production build.
+- Four `node scripts/compose-harness.mjs wait-http` probes against the existing
+  stack: PASS for OIDC, control, runtime, and MCP health with four bounded
+  readiness events.
+- Live read-only cleanup inventory fixture against the existing Docker and
+  Postgres dependencies: PASS in one attempt without changing foreign state.
+- `node scripts/validate.mjs --stage compose-session-files`: PASS against the
+  existing stack. The stage created and stopped its namespaced session; cleanup
+  reported zero active sessions, owned containers, temporary volumes,
+  unexpected containers, or unexpected volumes, with one intentional retained
+  stopped-session data volume.
+
+Deferred validation is explicit: the complete five-lane hosted Compose matrix
+and the required consecutive-run comparison remain post-merge, scheduled, or
+manual evidence because Compose is not a pull-request trigger. The canonical
+local full-profile wrapper was not run because it would rebuild and ultimately
+tear down a pre-existing operator stack; the ownership-safe live smoke above
+was used instead. Record the two hosted run links, cancellation run, and timing
+comparison in issue `#284` after that evidence exists.
+
+## CI Convergence
+
+Exact-head manual Compose run `32632472208` on
+`f8d9d64a213dbe0d01ad4dd7f4285d9e4e4a564a` was classified as a PR regression.
+The unified-admin lane exposed the injected `bpane_ci_namespace` label in its
+project edit assertion. The compatibility-admin lane waited for a transient
+busy state after upload instead of its deterministic success message. The
+browser lane showed gateway runtime reconciliation taking about 40 seconds,
+beyond the smoke helper's 15-second cap; the resulting exception skipped
+browser closure and left two namespaced runtime containers. Compatibility
+evidence finalization also resolved the old fixed egress project names after
+fixture startup had moved to run-scoped names.
+
+The bounded repair updates the affected admin and workflow smoke helpers,
+namespaced egress identity/diagnostics resolution, and label-owned final
+container cleanup. It adds or strengthens regression coverage in
+`compose-harness-readiness.test.mjs`, `compose-evidence-identity.test.mjs`,
+`compose-evidence-runner.test.mjs`, `compose-diagnostics-collector.test.mjs`,
+and `compose-egress-fixtures-contract.test.mjs`. No product behavior, public
+API, security policy, or promotion scenario changed, so no README, OpenAPI, or
+product-security document update is required.
+
+Changed files are the four affected smoke/helper modules under
+`code/web/bpane-client/scripts/`; `scripts/ci/cleanup-compose.sh`; the Compose
+diagnostics, identity, finalizer, plan-catalog, and new egress project-name
+modules; their five focused test files; and this plan evidence record.
+
+Local repair checks:
+
+- `node --test scripts/ci/compose-harness-readiness.test.mjs
+  scripts/ci/compose-evidence-identity.test.mjs
+  scripts/ci/compose-evidence-runner.test.mjs
+  scripts/ci/compose-diagnostics-collector.test.mjs
+  scripts/ci/compose-egress-fixtures-contract.test.mjs`: PASS, 18 tests.
+- `bash -n scripts/ci/cleanup-compose.sh
+  scripts/ci/start-compose-egress-fixtures.sh`: PASS.
+- `node --check` for every changed smoke, evidence, diagnostics, and project-name
+  module: PASS.
+- `node scripts/validate.mjs --stage validation-tool-tests --stage
+  repository-baseline --stage repository-documents`: PASS, 166 tooling tests
+  plus repository and document contracts.
+- `npx tsc --noEmit && npm test` in `code/web/bpane-client`: PASS, 91 files and
+  695 tests.
+- `git diff --check`: PASS.
+
+The shell driver owns the next exact-head hosted Compose run; this repair does
+not treat the failed run as passing evidence and does not wait for that rerun.
+
+Exact-head manual Compose run `32634536034` on
+`99b172690c2be4a1fd869ef7ed3d3a918ff4172f` remained a PR regression. The
+uploaded v1 evidence bound all five lanes to that commit. Both gateway lanes
+passed. The unified-admin lane reproduced locally only with the new Playwright
+namespace transport: a raw browser-context ZIP import was converted to text by
+the generic `postData` override, so the import remained on its form while the
+same smoke passed without the harness. The compatibility lane completed its
+product assertions but then rejected an in-flight namespaced route after the
+browser target closed. The run also reported a separate workflow cleanup
+invariant timeout; this bounded transport repair does not claim to resolve or
+reclassify that cleanup evidence before the next exact-head run.
+
+The second repair keeps non-JSON request bodies on Playwright's original byte
+transport, namespaces browser-context import metadata through its supported
+labels header, explicitly forwards intercepted response bytes, registers clone
+and import action results, and ignores only Playwright's target-closed teardown
+error. Other route and network failures continue to propagate. Changed files
+are `scripts/compose-harness/namespace-transports.mjs`,
+`scripts/compose-harness/resource-registry.mjs`, the focused namespace contract
+test, and this evidence record. No product behavior, public API, security
+policy, promotion scenario, or `dev_loop/` file changed.
+
+Second-repair local checks:
+
+- `node --test scripts/ci/compose-harness-*.test.mjs
+  scripts/ci/compose-evidence-*.test.mjs
+  scripts/ci/compose-workflow-contract.test.mjs`: PASS, 46 tests.
+- `node scripts/validate.mjs --stage compose-admin-new-browser-contexts`: PASS;
+  the previously deterministic harness-only failure completed in 7.1 seconds.
+- `node scripts/validate.mjs --stage compose-admin-compat`: PASS in 129.5
+  seconds with no target-closed route rejection.
+- `node --check` for both changed harness modules and the focused test: PASS.
+- `node scripts/validate.mjs --stage validation-tool-tests --stage
+  repository-baseline --stage repository-documents`: PASS, 169 tooling tests
+  plus repository and document contracts.
+- `git diff --check`: PASS.
+
+The local full workflow stage was not run because it force-recreates the
+operator's existing gateway configuration. The shell driver owns the next
+exact-head hosted run and must re-evaluate its workflow cleanup inventory; this
+record does not treat run `32634536034` as passing evidence.
+
+Exact-head manual Compose run `32636333318` on
+`494363001a62c4c3b2d03d73e3472bf5bbfb1042` was classified as a PR regression.
+Both gateway lanes passed. The compatibility, browser-integration, and unified
+admin lanes completed their product assertions and then failed the new cleanup
+invariant at its fixed 15-second deadline. Uploaded diagnostics retained one
+compatibility runtime, two workflow runtimes across gateway reconciliation, and
+one unified-admin runtime. The browser diagnostics showed stale assignment
+reconciliation continuing for about 40 seconds. The workflow-run request
+interceptor also added ownership only where a nested `labels` object already
+existed, so explicit `session.create_session` overrides without labels could
+create project-run sessions that label-owned cleanup would not select.
+
+The third bounded repair gives runtime teardown up to 60 seconds and requires
+eight consecutive clean observations at 250-millisecond intervals before a
+stage can pass. This preserves the cleanup invariant while rejecting transient
+clean snapshots. It also creates the supported nested workflow-run session
+labels object when needed and injects the stage namespace; existing-session
+bindings remain unchanged. Changed files are
+`scripts/compose-harness/cleanup-verifier.mjs`,
+`scripts/compose-harness/resource-registry.mjs`, their two focused contract
+tests, and this evidence record. No product behavior, public API, security
+policy, promotion scenario, or `dev_loop/` file changed.
+
+Third-repair local checks:
+
+- `node --test scripts/ci/compose-harness-*.test.mjs
+  scripts/ci/compose-evidence-*.test.mjs
+  scripts/ci/compose-workflow-contract.test.mjs`: PASS, 48 tests.
+- `node scripts/validate.mjs --stage validation-tool-tests --stage
+  repository-baseline --stage repository-documents`: PASS, 171 tooling tests
+  plus repository and document contracts.
+- `node scripts/validate.mjs --stage compose-admin-new-api-companion`: PASS in
+  6.3 seconds against the existing stack.
+- `node scripts/validate.mjs --stage compose-admin-compat`: PASS in 160.8
+  seconds. Its cleanup stayed bounded and reached a stable clean inventory
+  after 98 observations and 36.285 seconds, directly reproducing the hosted
+  timing that exceeded the old deadline.
+- `node --check scripts/compose-harness/cleanup-verifier.mjs
+  scripts/compose-harness/resource-registry.mjs`: PASS.
+- `git diff --check`: PASS.
+
+The local workflow-admission stage was not run because it force-recreates the
+operator's existing gateway configuration. The shell driver owns the next
+exact-head hosted run; this record does not treat run `32636333318` as passing
+evidence.
+
+Exact-head manual Compose run `32638052687` on
+`13e9660f67bf055b14a22deaafcc58bb7d3d458b` remained a PR regression. Live
+Actions metadata and the uploaded v1 evidence bind all five lanes to that
+commit. Both gateway lanes passed. Every compatibility, browser-integration,
+and unified-admin product assertion also passed; compatibility and unified then
+failed one inner cleanup check plus the enclosing lane check, while browser
+integration passed all eight inner stages and failed only the enclosing check.
+Diagnostics retained one compatibility runtime and one unified runtime; the
+browser diagnostics were already container-clean.
+
+The fourth bounded repair corrects the nested ownership boundary instead of
+extending the deadline again. Child validation-stage registries now propagate
+their validated resource records into the enclosing lane registry, allowing
+the outer verifier to recognize stopped-session storage while it continues to
+reject active sessions, temporary storage, and unowned dynamic containers. The
+compatibility helper now waits for browser disconnect and the session-kill
+response before closing Playwright. The unified session smoke closes its live
+browser context before issuing owner-authenticated cleanup, so kill cannot race
+an attached transport. Changed files are the shared stage harness, the two
+affected admin smoke helpers, focused harness/workflow contract tests, and this
+evidence record. Product behavior, public APIs, security policy, promotion
+inventory, and `dev_loop/` remain unchanged.
+
+Fourth-repair local checks:
+
+- `node --test scripts/ci/compose-harness-*.test.mjs
+  scripts/ci/compose-evidence-*.test.mjs
+  scripts/ci/compose-workflow-contract.test.mjs`: PASS, 50 tests.
+- `npx tsc --noEmit && npm test` in `code/web/bpane-client`: PASS, 91 files and
+  695 tests.
+- `node scripts/validate.mjs --stage validation-tool-tests --stage
+  repository-baseline --stage repository-documents`: PASS, 173 tooling tests
+  plus repository and document contracts.
+- `node --check` for the three changed runtime modules: PASS.
+- `git diff --check`: PASS.
+
+Narrow live attempts of `compose-admin-new-sessions` and
+`compose-admin-compat-workflow` against the pre-existing operator stack reached
+a browser transport readiness timeout before the hosted cleanup path. The
+stack was neither rebuilt nor torn down, and those divergent attempts are not
+claimed as passing validation. The shell driver owns the next exact-head hosted
+run; this record does not treat run `32638052687` as passing evidence.
+
+Exact-head manual Compose run `32639904736` on
+`b8bb31c143ac181facbbe6ea6dd51b8e358b28e8` narrowed the remaining failure to
+the final cleanup invariant in `compose-admin-new-sessions` and
+`compose-admin-compat-workflow`. Every product assertion passed, both gateway
+lanes passed, and the browser-integration lane passed. Each failed admin lane
+retained one running session runtime after its owner-authenticated kill request
+returned HTTP 200. Gateway logs confirmed that force-kill reached the runtime
+release boundary, isolating the defect from namespace ownership and browser
+disconnect ordering.
+
+The post-budget lifecycle repair makes force-kill idempotent for already-stopped
+sessions and makes Docker runtime release stop the deterministic session
+runtime even when a concurrent drain or reconciliation already removed its
+in-memory lease. Persisted assignment clearing and teardown failures are now
+logged instead of being silently discarded. Validation failures also print the
+bounded cleanup inventory counters needed to distinguish active sessions,
+containers, and temporary volumes without exposing resource identifiers. The
+repair adds focused API, runtime-manager, and validation-runner regression
+tests. No public API shape, protocol, authentication policy, or promotion
+scenario changed.
+
+A rebuilt local reproduction then made the remaining race observable. The
+admin-new product assertions passed, both session kill requests returned HTTP
+200, and the cleanup inventory reported one owned and unexpected container
+with no active session or temporary-volume leak. The retained container was
+created about 20 seconds after force-kill returned, and Postgres recorded its
+runtime assignment as ready while the session resource remained stopped. An
+in-flight transport startup had therefore completed after release and adopted
+a newer starting lease by variant alone.
+
+Runtime startup now validates the persisted session lifecycle before each
+resolve attempt and again after container launch. Starting-operation promotion
+also matches the exact notify identity rather than any `Starting` variant for
+the same session id. A launch that loses ownership or observes a stopped
+session removes its container and persisted assignment before returning an
+error. A broker-backed concurrency regression holds launch in flight, stops
+and releases the session, resumes launch, and proves that no lease, runtime, or
+assignment survives.
+
+The compatibility-admin reproduction exposed a separate deterministic teardown
+gap after the startup race was fixed. Its workflow borrowed a pre-existing
+baseline session, while label-based cleanup deliberately selected only
+stage-namespaced sessions. Compatibility workflow cleanup now receives that
+borrowed session id explicitly, releases it idempotently through the control
+API, and treats an explicit-release failure as a smoke failure. The helper's
+success, deduplication, and failure behavior is part of the fast validation
+catalog rather than relying only on the live Compose stage.
+
+Post-repair local evidence:
+
+- `compose-admin-new-sessions`: PASS in 85.4 seconds after rebuilding the
+  gateway with the lifecycle repair.
+- `compose-admin-compat-workflow`: PASS in 63.5 seconds; the smoke logged the
+  explicit borrowed-session release and the cleanup invariant passed.
+- Postgres reported the borrowed baseline as stopped with no runtime assignment,
+  and Docker reported no remaining `bpane-runtime-*` container.
+- `cargo test -p bpane-gateway runtime_manager::tests`: PASS, 36 tests.
+- `cargo test -p bpane-gateway explicit_kill`: PASS, 2 tests.
+- `cargo fmt --all -- --check` and gateway all-target clippy with warnings
+  denied: PASS.
+- Browser client TypeScript compilation and all 695 Vitest tests: PASS.
+- Fast validation tooling, repository baseline, and document checks: PASS, 176
+  tooling tests.

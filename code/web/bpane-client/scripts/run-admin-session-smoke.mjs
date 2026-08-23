@@ -484,11 +484,12 @@ async function verifyDisplayUpload(page, options) {
     mimeType: 'text/plain',
     buffer: Buffer.from('BrowserPane admin upload smoke\n'),
   });
-  await page.waitForTimeout(250);
   const state = await poll('admin display upload completion', async () => ({
-    busy: await page.getByTestId('display-busy').isVisible().catch(() => false),
+    message: await page.getByTestId('display-message').textContent().catch(() => ''),
     error: await page.getByTestId('display-error').textContent().catch(() => ''),
-  }), (value) => Boolean(value.error) || !value.busy, options.connectTimeoutMs, 100);
+  }), (value) => Boolean(value.error)
+    || value.message?.includes('1 file was sent to the session.') === true,
+  options.connectTimeoutMs, 100);
   if (state.error) {
     throw new Error(`Admin display upload failed: ${state.error}`);
   }

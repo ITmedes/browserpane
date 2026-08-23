@@ -2,10 +2,12 @@ export class ValidationRunner {
   #executor;
   #logger;
   #cancelledSignal = null;
+  #isolation;
 
-  constructor(executor, logger = console) {
+  constructor(executor, logger = console, isolation = null) {
     this.#executor = executor;
     this.#logger = logger;
+    this.#isolation = isolation;
   }
 
   async run(stages, options = {}) {
@@ -19,7 +21,11 @@ export class ValidationRunner {
       if (this.#cancelledSignal) return this.#signalExitCode(this.#cancelledSignal);
       this.#printStage('START', stage);
       const startedAt = Date.now();
-      const result = await this.#executor.execute(stage);
+      const harnessResult = stage.isolation === 'resources' && this.#isolation
+        ? await this.#isolation.execute(stage, (candidate, environment) =>
+          this.#executor.execute(candidate, environment))
+        : { execution: await this.#executor.execute(stage), cleanupError: null };
+      const result = harnessResult.execution;
       const duration = ((Date.now() - startedAt) / 1000).toFixed(1);
       if (result.exitCode !== 0) {
         const reason = result.timedOut
@@ -28,6 +34,15 @@ export class ValidationRunner {
         this.#logger.error(`[validate] FAIL ${stage.id} (${reason}, ${duration}s)`);
         this.#logger.error(`[validate] rerun: ${this.#rerunCommand(stage.id)}`);
         return result.exitCode;
+      }
+      if (harnessResult.cleanupError) {
+        this.#logger.error(`[validate] FAIL ${stage.id} (cleanup invariants, ${duration}s)`);
+        const inventory = harnessResult.cleanupError.details?.inventory;
+        if (inventory && typeof inventory === 'object') {
+          this.#logger.error(`[validate] cleanup inventory: ${JSON.stringify(inventory)}`);
+        }
+        this.#logger.error(`[validate] rerun: ${this.#rerunCommand(stage.id)}`);
+        return 1;
       }
       this.#logger.log(`[validate] PASS ${stage.id} (${duration}s)`);
     }

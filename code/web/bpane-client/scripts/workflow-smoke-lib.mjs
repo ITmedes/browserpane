@@ -5,6 +5,9 @@ import process from 'node:process';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { SessionCleanup } from './session-cleanup.mjs';
+import { ComposeHarnessRecorder } from '../../../../scripts/compose-harness/harness-recorder.mjs';
+import { ReadinessWaiter } from '../../../../scripts/compose-harness/readiness-waiter.mjs';
+import { installNamespacedPlaywrightTarget } from '../../../../scripts/compose-harness/namespace-transports.mjs';
 
 export const DEFAULTS = {
   pageUrl: 'http://localhost:8080',
@@ -15,6 +18,7 @@ export const DEFAULTS = {
 };
 
 export const TEST_EMBED_PATH = '/test-embed.html';
+const CONTROL_PLANE_READY_TIMEOUT_MS = 120_000;
 
 const COMMON_CHROME_PATHS = [
   process.env.BPANE_BENCHMARK_CHROME,
@@ -81,16 +85,20 @@ export function sleep(ms) {
 }
 
 export async function poll(description, fn, predicate, timeoutMs, intervalMs = 500) {
-  const startedAt = Date.now();
-  let lastValue = null;
-  while (Date.now() - startedAt < timeoutMs) {
-    lastValue = await fn();
-    if (predicate(lastValue)) {
-      return lastValue;
-    }
-    await sleep(intervalMs);
-  }
-  throw new Error(`Timed out waiting for ${description}`);
+  const boundary = readinessBoundary(description);
+  const recorder = new ComposeHarnessRecorder(process.env.BPANE_CI_HARNESS_EVENTS);
+  const result = await new ReadinessWaiter({
+    observe: fn,
+    record: (event) => recorder.record({
+      ...event,
+      namespace: process.env.BPANE_CI_STAGE_NAMESPACE ?? 'bpane-local-readiness',
+    }),
+  }).waitFor(boundary, {
+    timeoutMs,
+    intervalMs,
+    isReady: (_candidate, state) => predicate(state),
+  });
+  return result.value;
 }
 
 export async function resolveChromeExecutable() {
@@ -285,10 +293,20 @@ export async function cleanupWorkflowSmokeSessions(accessToken, options, log = (
     list: async () => await waitForWorkflowControlPlane(accessToken, options),
     kill: async (sessionId) => await killSession(accessToken, options, sessionId),
     timeoutMs: Math.max(15_000, Math.min(options.connectTimeoutMs, 30_000)),
+    select: ownsSmokeSession,
   }).run();
   if (result.removedSessionIds.length > 0) {
     log(`Removed ${result.removedSessionIds.length} stale visible sessions before the smoke run.`);
   }
+}
+
+function ownsSmokeSession(session) {
+  const labels = session?.labels;
+  if (!labels || typeof labels !== 'object') return false;
+  const namespace = process.env.BPANE_CI_STAGE_NAMESPACE;
+  if (namespace) return labels.bpane_ci_namespace === namespace;
+  return Object.values(labels).some((value) =>
+    typeof value === 'string' && value.toLowerCase().includes('smoke'));
 }
 
 export async function waitForWorkflowControlPlane(accessToken, options) {
@@ -302,9 +320,13 @@ export async function waitForWorkflowControlPlane(accessToken, options) {
       }
     },
     (value) => !(value instanceof Error),
-    Math.min(options.connectTimeoutMs, 15000),
+    workflowControlPlaneTimeoutMs(options),
     500,
   );
+}
+
+export function workflowControlPlaneTimeoutMs(options) {
+  return Math.max(options.connectTimeoutMs, CONTROL_PLANE_READY_TIMEOUT_MS);
 }
 
 export function restartComposeService(service, { profile = null } = {}) {
@@ -353,11 +375,46 @@ export async function launchChrome(chromium, options) {
   if (certSpki) {
     chromeArgs.push(`--ignore-certificate-errors-spki-list=${certSpki}`);
   }
-  return await chromium.launch({
+  const browser = await chromium.launch({
     headless: options.headless,
     executablePath,
     args: chromeArgs,
   });
+  return namespacedBrowser(browser);
+}
+
+function namespacedBrowser(browser) {
+  return new Proxy(browser, {
+    get(target, property) {
+      if (property === 'newContext') {
+        return async (...args) => {
+          const context = await target.newContext(...args);
+          await installNamespacedPlaywrightTarget(context);
+          return context;
+        };
+      }
+      if (property === 'newPage') {
+        return async (...args) => {
+          const page = await target.newPage(...args);
+          await installNamespacedPlaywrightTarget(page);
+          return page;
+        };
+      }
+      const value = Reflect.get(target, property, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+}
+
+function readinessBoundary(description) {
+  const normalized = String(description).toLowerCase();
+  if (normalized.includes('artifact') || normalized.includes('playback')
+    || normalized.includes('file')) return 'artifact';
+  if (normalized.includes('recording')) return 'recording_worker';
+  if (normalized.includes('workflow') || normalized.includes('run')) return 'workflow_worker';
+  if (normalized.includes('session') || normalized.includes('connect')
+    || normalized.includes('browser') || normalized.includes('mcp')) return 'transport';
+  return 'control';
 }
 
 export function runGitCommand(repoDir, args, options = {}) {

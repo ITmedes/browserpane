@@ -1,3 +1,5 @@
+import { egressProjectNames } from '../compose-harness/egress-project-names.mjs';
+
 const MAX_SECTION_CHARACTERS = 500_000;
 
 export class ComposeDiagnosticsCollector {
@@ -9,10 +11,11 @@ export class ComposeDiagnosticsCollector {
     this.#redactor = redactor;
   }
 
-  collect(rootDirectory) {
+  collect(rootDirectory, environment = process.env) {
     const composeFile = `${rootDirectory}/deploy/compose.yml`;
     const observerComposeFile = `${rootDirectory}/deploy/examples/egress-observer/compose.yml`;
     const tlsComposeFile = `${rootDirectory}/deploy/examples/egress-observer/compose.tls.yml`;
+    const projects = egressProjectNames(environment.BPANE_CI_RUN_NAMESPACE ?? null);
     const commands = [
       {
         title: 'Compose service status',
@@ -33,13 +36,13 @@ export class ComposeDiagnosticsCollector {
       },
       {
         title: 'Egress observer service status',
-        args: ['compose', '--project-name', 'bpane-ci-egress', '-f',
+        args: ['compose', '--project-name', projects.observer, '-f',
           observerComposeFile, 'ps', '--all', '--format',
           'table {{.Name}}\t{{.Service}}\t{{.State}}\t{{.Status}}']
       },
       {
         title: 'TLS egress observer service status',
-        args: ['compose', '--project-name', 'bpane-ci-egress-tls', '-f',
+        args: ['compose', '--project-name', projects.tls, '-f',
           tlsComposeFile, 'ps', '--all', '--format',
           'table {{.Name}}\t{{.Service}}\t{{.State}}\t{{.Status}}']
       }

@@ -47,7 +47,7 @@ test('identity collection exposes bounded stable errors instead of raw command f
   assert.doesNotMatch(JSON.stringify(result), /credential-bearing|private-image-name/);
 });
 
-test('identity collection scopes images to tested services and fixture projects', () => {
+test('identity collection scopes images to tested services and namespaced fixture projects', () => {
   const configCalls = [];
   const execute = (command, args) => {
     if (command === 'git') return `${'a'.repeat(40)}\n`;
@@ -68,7 +68,10 @@ test('identity collection scopes images to tested services and fixture projects'
     throw new Error('unexpected fixture command');
   };
 
-  const result = new ComposeIdentityCollector(root, execute).collect('admin-compatibility');
+  const runNamespace = 'bpane-32632472208-1-admin-compatibility';
+  const suffix = runNamespace.slice(0, 32);
+  const result = new ComposeIdentityCollector(root, execute)
+    .collect('admin-compatibility', runNamespace);
   const baseCall = configCalls.find((args) => args.includes('deploy/compose.yml'));
   const observerCall = configCalls.find((args) =>
     args.includes('deploy/examples/egress-observer/compose.yml'));
@@ -78,6 +81,6 @@ test('identity collection scopes images to tested services and fixture projects'
   assert.equal(result.errors.length, 0);
   assert.ok(baseCall.includes('gateway'));
   assert.equal(baseCall.includes('runtime-broker'), false);
-  assert.deepEqual(observerCall.slice(1, 3), ['--project-name', 'bpane-ci-egress']);
-  assert.deepEqual(tlsCall.slice(1, 3), ['--project-name', 'bpane-ci-egress-tls']);
+  assert.deepEqual(observerCall.slice(1, 3), ['--project-name', `bpane-ci-egress-${suffix}`]);
+  assert.deepEqual(tlsCall.slice(1, 3), ['--project-name', `bpane-ci-egress-tls-${suffix}`]);
 });

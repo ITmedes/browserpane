@@ -1,12 +1,13 @@
 # BrowserPane Current Context
 
-Last synchronized: 2026-08-23 with `#283` structured Compose stage evidence in
-Review after protocol slices `#263` through `#265`, the
+Last synchronized: 2026-08-23 with `#283` structured Compose stage evidence
+merged through PR `#288` and `#284` deterministic smoke isolation in Review
+after protocol slices `#263` through `#265`, the
 Codex loop exact-head Compose/readiness correction `#273`/`#275` merged through
 PR `#274`, the bounded post-merge retry implementation for `#277` merged
 through PR `#279`, and protocol bootstrap repair `#280` completed through PR
 `#281`. Compose Qualification v2 is split into focused issues `#283` through
-`#287`; `#284` remains Qualified until `#283` closes.
+`#287`; `#285` remains Qualified until `#284` closes.
 
 This is the first local document to read when starting a clean BrowserPane
 session. It records current product decisions, delivery order, and repository
@@ -14,8 +15,8 @@ state. Detailed requirements remain in the linked domain and plan documents.
 
 ## Current Baseline
 
-- Canonical base: `main` includes protocol bootstrap repair PR #281 and the
-  subsequent documentation synchronization at `e79164cc3a84`. #172
+- Canonical base: `main` includes structured Compose evidence PR #288 at
+  `8ebb03a69125`. #172
   is merged through PR #250, its
   smoke stabilization is merged through PR #256, and #180 requirements are
   specified through PR #259 without resolving the external legal decision.
@@ -41,10 +42,13 @@ state. Detailed requirements remain in the linked domain and plan documents.
   failed bootstrap writes remove the admitted registry client. Cancelled
   retries remain independent; repeated failure, mismatched or unavailable
   evidence, rejected dispatch, and timeout remain fail-closed.
-- The next runner correction is not another retry. #283 now adds checked v1
+- The next runner correction is not another retry. #283 added checked v1
   JSON/JUnit stage evidence, deterministic terminal failure classes, exact
   input/image identity, cancellation-aware publication, independent cleanup
-  results, and the reviewed pre-v1 30-run baseline. Issues #283-#287 define an
+  results, and the reviewed pre-v1 30-run baseline. #284 now layers shared typed
+  readiness, deterministic run/stage namespaces, namespace-aware resource
+  registration, and fail-closed stage cleanup over that evidence without
+  reducing scenarios. Issues #283-#287 define an
   ordered Compose Qualification v2 sequence: structured stage evidence,
   deterministic readiness/cleanup, one immutable image bundle, fail-closed
   affected-area selection, and exact-tree evidence reuse. The current full
@@ -130,8 +134,9 @@ decision.
 
 When both `#174` and `#180` are externally deferred, the maintainer-prioritized
 Foundation sequence is `#283` -> `#284` -> `#285` -> `#286` -> `#287`.
-`#283` is in Review; each successor remains Qualified until its predecessor
-closes and its live contract is revalidated. After that sequence, continue the
+`#283` is complete and `#284` is in Review; each successor remains Qualified
+until its predecessor closes and its live contract is revalidated. After that
+sequence, continue the
 ordered protocol work `#263` (complete) -> `#264` (complete) -> `#265`
 (complete) -> `#266` -> `#267` -> `#268`, followed by `#124`. `#280` is
 complete through PR #281. `#175` is the open, blocked, non-executable
@@ -189,8 +194,8 @@ Use `PRODUCT_PHASES_AND_RELEASE_GATES.md` for exact gate evidence and
 
 The #172 Workflow Endpoint gaps and #280 protocol bootstrap repair previously
 listed here are implemented and validated. The immediate engineering gap is
-the remaining Compose Qualification v2 sequence #284-#287 after structured
-failure/timing evidence #283 closes. External Pilot selection remains #174, the
+the remaining Compose Qualification v2 sequence #285-#287 after deterministic
+readiness/cleanup #284 closes. External Pilot selection remains #174, the
 reviewed governance decision remains #180, ordered remote-protocol delivery
 remains #266-#268/#175, and the Admin-New session-template catalog remains
 #124. Later production and Phase N gaps remain owned by the issues listed above
@@ -199,7 +204,7 @@ and in `DELIVERY_ROADMAP.md`.
 ## Working Tree Guardrail
 
 At the start of this implementation, `main` was clean and synchronized with
-`origin/main` at `c0e0ae503236`. The generated files below are locally ignored
+`origin/main` at `8ebb03a69125`. The generated files below are locally ignored
 and must not be force-staged or reverted unless the user explicitly requests it:
 
 - `dev/certs/cert-fingerprint.txt`

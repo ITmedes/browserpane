@@ -1533,8 +1533,11 @@ admin-new coverage ratchets, OpenAPI lint/inventory/example/compatibility
 contracts, Markdown/YAML/workflow policy, and operational script checks.
 `compose` runs the bounded gateway API, admin, CLI, MCP, session-evidence,
 recording, workflow admission/CLI/workspace/event, and admin-new API-companion
-smoke set; it may build or start the local stack and leaves it running for
-inspection. `full` runs both profiles. Use `--list`,
+smoke set. Each promoted stage receives a unique namespace, uses shared typed
+readiness deadlines, refuses registered leaks from an earlier isolated stage,
+and proves that its owned active sessions, containers, and temporary volumes
+drained before the next stage. It may build or start the local stack and leaves
+the base stack running for inspection. `full` runs both profiles. Use `--list`,
 `--dry-run`, or repeatable `--stage <id>` selections for focused work. The
 runner stops at the first failing stage, preserves its exit code, prints the
 exact rerun command, and terminates the active child process on timeout or

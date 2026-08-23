@@ -25,6 +25,7 @@ impl DockerRuntimeManager {
     ) -> Result<ResolvedSessionRuntime, RuntimeManagerError> {
         let scope = self.runtime_data_scope_for_session(session_id).await?;
         loop {
+            self.ensure_session_runtime_candidate(session_id).await?;
             let action = {
                 let mut leases = self.leases.lock().await;
                 match leases.get_mut(&session_id) {
@@ -106,33 +107,28 @@ impl DockerRuntimeManager {
                         .await
                     {
                         let mut leases = self.leases.lock().await;
-                        if matches!(
-                            leases.get(&session_id),
-                            Some(DockerLeaseState::Starting { .. })
-                        ) {
+                        if starting_operation_matches(leases.get(&session_id), &notify) {
                             leases.remove(&session_id);
                         }
                         notify.notify_waiters();
                         return Err(error);
                     }
-                    let result = self.start_container(&lease).await;
+                    let result = match self.start_container(&lease).await {
+                        Ok(()) => self.ensure_session_runtime_candidate(session_id).await,
+                        Err(error) => Err(error),
+                    };
                     let mut leases = self.leases.lock().await;
                     let stop_container = match result {
                         Ok(()) => {
-                            if matches!(
-                                leases.get(&session_id),
-                                Some(DockerLeaseState::Starting { .. })
-                            ) {
+                            if starting_operation_matches(leases.get(&session_id), &notify) {
                                 drop(leases);
                                 if let Err(error) = self
                                     .persist_assignment(&lease, RuntimeAssignmentStatus::Ready)
                                     .await
                                 {
                                     let mut leases = self.leases.lock().await;
-                                    if matches!(
-                                        leases.get(&session_id),
-                                        Some(DockerLeaseState::Starting { .. })
-                                    ) {
+                                    if starting_operation_matches(leases.get(&session_id), &notify)
+                                    {
                                         leases.remove(&session_id);
                                     }
                                     notify.notify_waiters();
@@ -142,6 +138,13 @@ impl DockerRuntimeManager {
                                     return Err(error);
                                 }
                                 let mut leases = self.leases.lock().await;
+                                if !starting_operation_matches(leases.get(&session_id), &notify) {
+                                    notify.notify_waiters();
+                                    drop(leases);
+                                    self.cleanup_runtime_resources(&lease).await;
+                                    let _ = self.clear_assignment(session_id).await;
+                                    continue;
+                                }
                                 leases.insert(session_id, DockerLeaseState::Ready(lease.clone()));
                                 notify.notify_waiters();
                                 if let Some(context_id) = lease.browser_context_id {
@@ -158,16 +161,13 @@ impl DockerRuntimeManager {
                             lease.container_name.clone()
                         }
                         Err(error) => {
-                            if matches!(
-                                leases.get(&session_id),
-                                Some(DockerLeaseState::Starting { .. })
-                            ) {
+                            if starting_operation_matches(leases.get(&session_id), &notify) {
                                 leases.remove(&session_id);
                             }
-                            let _ = self.clear_assignment(session_id).await;
                             notify.notify_waiters();
                             drop(leases);
                             self.cleanup_runtime_resources(&lease).await;
+                            let _ = self.clear_assignment(session_id).await;
                             return Err(error);
                         }
                     };
@@ -187,13 +187,32 @@ impl DockerRuntimeManager {
             leases.remove(&session_id)
         };
 
-        if let Some(state) = removed {
+        let lease = if let Some(state) = removed {
             if let DockerLeaseState::Starting { notify, .. } = &state {
                 notify.notify_waiters();
             }
-            let lease = state.lease().clone();
-            self.cleanup_runtime_resources(&lease).await;
-            let _ = self.clear_assignment(session_id).await;
+            state.lease().clone()
+        } else {
+            let scope = match self.runtime_data_scope_for_session(session_id).await {
+                Ok(scope) => scope,
+                Err(error) => {
+                    warn!(%session_id, "could not resolve runtime data scope during idempotent release: {error}");
+                    RuntimeSessionDataScope::default()
+                }
+            };
+            RuntimeLease {
+                session_id,
+                agent_socket_path: self.socket_path_for_session(session_id),
+                container_name: Some(self.container_name_for_session(session_id)),
+                browser_context_id: scope.browser_context_id,
+                discard_session_data_on_release: scope.discard_session_data_on_release,
+                idle_generation: 0,
+            }
+        };
+
+        self.cleanup_runtime_resources(&lease).await;
+        if let Err(error) = self.clear_assignment(session_id).await {
+            warn!(%session_id, "failed to clear runtime assignment during release: {error}");
         }
     }
 
@@ -237,13 +256,31 @@ impl DockerRuntimeManager {
 
     async fn cleanup_runtime_resources(&self, lease: &RuntimeLease) {
         if let Some(container_name) = lease.container_name.as_deref() {
-            let _ = self
+            if let Err(error) = self
                 .stop_browser_container(lease.session_id, container_name)
-                .await;
+                .await
+            {
+                warn!(session_id = %lease.session_id, "failed to stop browser runtime during release: {error}");
+            }
         }
-        let _ = remove_socket_path(&lease.agent_socket_path).await;
+        if let Err(error) = remove_socket_path(&lease.agent_socket_path).await {
+            warn!(session_id = %lease.session_id, "failed to remove browser runtime socket during release: {error}");
+        }
         if lease.discard_session_data_on_release {
-            let _ = self.remove_session_data_volume(lease.session_id).await;
+            if let Err(error) = self.remove_session_data_volume(lease.session_id).await {
+                warn!(session_id = %lease.session_id, "failed to remove ephemeral session data during release: {error}");
+            }
         }
     }
+}
+
+fn starting_operation_matches(
+    state: Option<&DockerLeaseState>,
+    expected_notify: &Arc<Notify>,
+) -> bool {
+    matches!(
+        state,
+        Some(DockerLeaseState::Starting { notify, .. })
+            if Arc::ptr_eq(notify, expected_notify)
+    )
 }

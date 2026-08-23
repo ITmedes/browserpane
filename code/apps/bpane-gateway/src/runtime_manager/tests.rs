@@ -113,6 +113,9 @@ async fn docker_capacity_snapshot_distinguishes_starting_and_ready_assignments()
 #[derive(Default)]
 struct StatefulBrokerClient {
     exists: AtomicBool,
+    block_launch: AtomicBool,
+    launch_started: tokio::sync::Notify,
+    allow_launch: tokio::sync::Notify,
     requests: StdMutex<Vec<RuntimeOperationRequest>>,
     storage_requests: StdMutex<Vec<(RuntimeOperationRequest, Option<Vec<u8>>)>>,
     storage_response: StdMutex<Option<RuntimeStorageOperationResponse>>,
@@ -139,6 +142,10 @@ impl RuntimeBrokerClient for StatefulBrokerClient {
         self.requests.lock().unwrap().push(request.clone());
         let result = match &request.operation {
             RuntimeOperation::LaunchBrowser(_) => {
+                if self.block_launch.load(Ordering::SeqCst) {
+                    self.launch_started.notify_one();
+                    self.allow_launch.notified().await;
+                }
                 self.exists.store(true, Ordering::SeqCst);
                 RuntimeOperationResult::Accepted
             }
@@ -732,6 +739,87 @@ async fn broker_browser_control_routes_readiness_inspect_and_stop_by_session_id(
 }
 
 #[tokio::test]
+async fn docker_runtime_release_stops_runtime_without_an_in_memory_lease() {
+    let client = Arc::new(StatefulBrokerClient::default());
+    client.exists.store(true, Ordering::SeqCst);
+    let runtime_client: Arc<dyn RuntimeBrokerClient> = client.clone();
+    let manager = DockerRuntimeManager::new_with_browser_control(
+        docker_config(),
+        docker_profile(2),
+        BrowserContainerControl::Broker(runtime_client),
+    )
+    .unwrap();
+    let session_id = Uuid::now_v7();
+
+    manager.release(session_id).await;
+
+    assert!(!client.exists.load(Ordering::SeqCst));
+    assert!(client
+        .requests
+        .lock()
+        .unwrap()
+        .iter()
+        .any(|request| matches!(
+            &request.operation,
+            RuntimeOperation::ContainerLifecycle(operation)
+                if operation.resource_id == session_id
+                    && operation.action == bpane_runtime_contract::ContainerLifecycleAction::Stop
+        )));
+}
+
+#[tokio::test]
+async fn docker_runtime_start_cleans_up_when_session_stops_during_launch() {
+    let client = Arc::new(StatefulBrokerClient::default());
+    client.block_launch.store(true, Ordering::SeqCst);
+    let runtime_client: Arc<dyn RuntimeBrokerClient> = client.clone();
+    let temp = tempfile::tempdir().unwrap();
+    let manager = Arc::new(
+        DockerRuntimeManager::new_with_browser_control(
+            DockerRuntimeConfig {
+                socket_root: temp.path().display().to_string(),
+                ..docker_config()
+            },
+            docker_profile(2),
+            BrowserContainerControl::Broker(runtime_client),
+        )
+        .unwrap(),
+    );
+    let store = SessionStore::in_memory_with_config(docker_profile(2));
+    manager.attach_session_store(store.clone()).await;
+    let owner = test_principal("owner");
+    let session = store
+        .create_session(
+            &owner,
+            CreateSessionRequest::default(),
+            SessionOwnerMode::Collaborative,
+        )
+        .await
+        .unwrap();
+    let launch_started = client.launch_started.notified();
+    let manager_for_start = Arc::clone(&manager);
+    let start = tokio::spawn(async move { manager_for_start.resolve(session.id).await });
+    launch_started.await;
+
+    store
+        .stop_session_for_owner(&owner, session.id)
+        .await
+        .unwrap();
+    manager.release(session.id).await;
+    std::fs::write(manager.socket_path_for_session(session.id), b"").unwrap();
+    client.allow_launch.notify_one();
+
+    let error = start.await.unwrap().unwrap_err();
+    assert!(error.to_string().contains("no longer runtime-compatible"));
+    assert!(!client.exists.load(Ordering::SeqCst));
+    assert!(manager.leases.lock().await.get(&session.id).is_none());
+    assert!(store
+        .list_runtime_assignments(&manager.profile.runtime_binding)
+        .await
+        .unwrap()
+        .is_empty());
+}
+
+#[tokio::test]
 async fn broker_browser_control_maps_transport_failures_without_backend_detail() {
     let client = Arc::new(StatefulBrokerClient::default());
     *client.failure.lock().unwrap() = Some(RuntimeBrokerClientErrorCode::Unreachable);
@@ -1178,7 +1266,10 @@ fn docker_runtime_maps_network_identity_to_launch_env() {
         },
         automation_delegate: None,
         idle_timeout_sec: None,
-        labels: HashMap::new(),
+        labels: HashMap::from([(
+            "bpane_ci_namespace".to_string(),
+            "bpane-123-1-gateway-suite".to_string(),
+        )]),
         integration_context: None,
         extensions: Vec::new(),
         recording: SessionRecordingPolicy::default(),
@@ -1240,6 +1331,16 @@ fn docker_runtime_maps_network_identity_to_launch_env() {
         .iter()
         .cloned()
         .collect::<HashMap<_, _>>();
+    let labels = launch_options
+        .labels
+        .iter()
+        .cloned()
+        .collect::<HashMap<_, _>>();
+
+    assert_eq!(
+        labels.get("browserpane.ci_namespace").map(String::as_str),
+        Some("bpane-123-1-gateway-suite")
+    );
 
     assert_eq!(env.get("LANG").map(String::as_str), Some("de_DE.UTF-8"));
     assert_eq!(env.get("LC_ALL").map(String::as_str), Some("de_DE.UTF-8"));

@@ -2,8 +2,12 @@ const GIT_PATTERN = /^[0-9a-f]{40}$/;
 const SHA_PATTERN = /^[0-9a-f]{64}$/;
 const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/;
 const ID_PATTERN = /^[a-z0-9-]{1,48}$/;
+const NAMESPACE_PATTERN = /^[a-z0-9-]{1,63}$/;
 const FAILURE_CLASSES = new Set(['product', 'harness', 'infrastructure', 'unknown']);
 const OUTCOMES = new Set(['success', 'failure', 'cancelled', 'skipped', 'unknown']);
+const READINESS_BOUNDARIES = new Set([
+  'oidc', 'control', 'runtime', 'transport', 'workflow_worker', 'recording_worker', 'artifact',
+]);
 const SENSITIVE_PATTERN = /(?:bearer|password|private[_ -]?key|secret|token|https?:\/\/)/i;
 const ARTIFACT_PATH_PATTERN = /^(?:attachments\/[a-z0-9][a-z0-9._-]{0,80}\.(?:png|webp|zip)|test-results\/ci-diagnostics\/compose\.log)$/;
 
@@ -27,6 +31,9 @@ export class ComposeEvidenceValidator {
       if (!['success', 'failure', 'always'].includes(stage.required_when)) {
         errors.push('plan-stage-requirement-invalid');
       }
+      if (!['none', 'resources'].includes(stage.isolation)) {
+        errors.push('plan-stage-isolation-invalid');
+      }
       if (!FAILURE_CLASSES.has(stage.failure_class)) errors.push('plan-failure-class-invalid');
       if (!this.#safeCommand(stage.reproduction_command)) errors.push('plan-reproduction-invalid');
     }
@@ -41,7 +48,7 @@ export class ComposeEvidenceValidator {
     if (!result || result.id !== expected.id || result.sequence !== expected.sequence) {
       return ['stage-identity-invalid'];
     }
-    for (const field of ['role', 'required_when', 'reproduction_command']) {
+    for (const field of ['role', 'required_when', 'reproduction_command', 'isolation']) {
       if (result[field] !== expected[field]) errors.push(`stage-${field}-invalid`);
     }
     if (!OUTCOMES.has(result.outcome)) errors.push('stage-outcome-invalid');
@@ -60,6 +67,9 @@ export class ComposeEvidenceValidator {
       || result.exit_code < 0 || result.exit_code > 255)) errors.push('stage-exit-code-invalid');
     if (result.signal !== null && !/^SIG[A-Z0-9]+$/.test(result.signal)) {
       errors.push('stage-signal-invalid');
+    }
+    if (result.harness !== undefined && !validHarness(result.harness)) {
+      errors.push('stage-harness-invalid');
     }
     return errors;
   }
@@ -125,4 +135,34 @@ export class ComposeEvidenceValidator {
     return typeof command === 'string' && command.length > 0 && command.length <= 240
       && !SENSITIVE_PATTERN.test(command);
   }
+}
+
+function validHarness(harness) {
+  if (!harness || typeof harness !== 'object'
+    || !NAMESPACE_PATTERN.test(harness.namespace ?? '')
+    || !Array.isArray(harness.namespaces) || harness.namespaces.length < 1
+    || harness.namespaces.length > 64
+    || harness.namespaces.some((value) => !NAMESPACE_PATTERN.test(value))) {
+    return false;
+  }
+  const readiness = harness.readiness;
+  const cleanup = harness.cleanup;
+  return readiness && cleanup
+    && Array.isArray(readiness.boundaries) && readiness.boundaries.length <= 7
+    && readiness.boundaries.every((value) => READINESS_BOUNDARIES.has(value))
+    && boundedCount(readiness.observations, 256) && boundedCount(readiness.attempts, 100_000)
+    && boundedCount(readiness.failures, 256) && boundedDuration(readiness.elapsed_ms)
+    && (readiness.last_state === null || typeof readiness.last_state === 'string')
+    && ['success', 'failure'].includes(cleanup.outcome)
+    && boundedCount(cleanup.checks, 256) && boundedCount(cleanup.failures, 256)
+    && boundedCount(cleanup.attempts, 100_000) && boundedDuration(cleanup.elapsed_ms)
+    && (cleanup.last_state === null || typeof cleanup.last_state === 'string');
+}
+
+function boundedCount(value, maximum) {
+  return Number.isInteger(value) && value >= 0 && value <= maximum;
+}
+
+function boundedDuration(value) {
+  return boundedCount(value, 21_600_000);
 }

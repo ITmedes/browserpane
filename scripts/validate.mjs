@@ -7,6 +7,7 @@ import { ValidationArguments } from './validation/arguments.mjs';
 import { ValidationStageCatalog } from './validation/stage-catalog.mjs';
 import { SubprocessStageExecutor } from './validation/subprocess-executor.mjs';
 import { ValidationRunner } from './validation/validation-runner.mjs';
+import { ComposeValidationIsolation } from './validation/compose-validation-isolation.mjs';
 
 class ValidationCommand {
   #rootDirectory;
@@ -29,7 +30,11 @@ class ValidationCommand {
       return 0;
     }
 
-    const runner = new ValidationRunner(new SubprocessStageExecutor());
+    const runner = new ValidationRunner(
+      new SubprocessStageExecutor(),
+      console,
+      new ComposeValidationIsolation(this.#rootDirectory),
+    );
     const signals = ['SIGINT', 'SIGTERM'];
     const handlers = new Map(signals.map((signal) => [signal, () => runner.cancel(signal)]));
     for (const [signal, handler] of handlers) process.once(signal, handler);

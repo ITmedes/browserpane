@@ -178,6 +178,14 @@ impl DockerRuntimeManager {
         let mut egress_custom_ca_path = None;
         let identity = &session.network_identity;
 
+        if let Some(namespace) = session
+            .labels
+            .get("bpane_ci_namespace")
+            .filter(|value| valid_ci_namespace(value))
+        {
+            push_label(&mut labels, "browserpane.ci_namespace", namespace.clone());
+        }
+
         if let Some(locale) = identity.locale.as_deref().filter(|value| !value.is_empty()) {
             let posix_locale = posix_locale(locale);
             push_env(&mut env, "LANG", posix_locale.clone());
@@ -618,6 +626,16 @@ fn push_label(labels: &mut Vec<(String, String)>, key: &str, value: String) {
     if !value.is_empty() {
         labels.push((key.to_string(), value));
     }
+}
+
+fn valid_ci_namespace(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 63
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+        && !value.starts_with('-')
+        && !value.ends_with('-')
 }
 
 fn log_egress_observer_launch(

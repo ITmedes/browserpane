@@ -1,10 +1,13 @@
 export class ValidationStage {
-  constructor({ id, description, command, args = [], cwd, timeoutSeconds }) {
+  constructor({ id, description, command, args = [], cwd, timeoutSeconds, isolation = 'none' }) {
     if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) {
       throw new Error(`invalid validation stage id: ${id}`);
     }
     if (!Number.isInteger(timeoutSeconds) || timeoutSeconds <= 0) {
       throw new Error(`invalid timeout for validation stage: ${id}`);
+    }
+    if (!['none', 'resources'].includes(isolation)) {
+      throw new Error(`invalid isolation for validation stage: ${id}`);
     }
     this.id = id;
     this.description = description;
@@ -12,6 +15,7 @@ export class ValidationStage {
     this.args = Object.freeze([...args]);
     this.cwd = cwd;
     this.timeoutMs = timeoutSeconds * 1000;
+    this.isolation = isolation;
     Object.freeze(this);
   }
 

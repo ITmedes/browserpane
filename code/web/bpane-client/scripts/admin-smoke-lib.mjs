@@ -1,4 +1,4 @@
-import { cleanupWorkflowSmokeSessions, fetchAuthConfig, fetchJson, poll } from './workflow-smoke-lib.mjs';
+import { cleanupWorkflowSmokeSessions, fetchAuthConfig, fetchJson, killSession, poll } from './workflow-smoke-lib.mjs';
 
 export async function ensureAdminLoggedIn(page, options) {
   await installBearerCapture(page);
@@ -34,11 +34,24 @@ async function navigateToAdminAuthSurface(page, pageUrl) {
   }
 }
 
-export async function cleanupAdminSmoke(page, options, log) {
-  await cleanupAdminSession(page).catch(() => {});
+export async function cleanupAdminSmoke(page, options, log, explicitSessionIds = []) {
   const accessToken = await getAdminAccessToken(page).catch(() => '');
+  await cleanupAdminSession(page, options).catch((error) => {
+    log(`Admin session cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
+  });
+  if (explicitSessionIds.some(Boolean) && !accessToken) {
+    throw new Error('Admin session cleanup could not obtain an access token.');
+  }
   if (accessToken) {
+    await cleanupAdminSessionIds(accessToken, rootApiOptions(options), explicitSessionIds, log);
     await cleanupWorkflowSmokeSessions(accessToken, rootApiOptions(options), log).catch(() => {});
+  }
+}
+
+export async function cleanupAdminSessionIds(accessToken, options, sessionIds, log = () => {}) {
+  for (const sessionId of new Set(sessionIds.filter(Boolean))) {
+    await killSession(accessToken, options, sessionId);
+    log(`Released borrowed admin smoke session ${sessionId}.`);
   }
 }
 
@@ -257,14 +270,22 @@ async function fetchSessionResource(page, options, sessionId) {
   });
 }
 
-async function cleanupAdminSession(page) {
+async function cleanupAdminSession(page, options) {
   if (await page.getByTestId('browser-disconnect').isEnabled().catch(() => false)) {
-    await closeAdminOverlay(page);
-    await page.getByTestId('browser-disconnect').click();
+    await disconnectEmbeddedBrowser(page, options);
   }
   await openAdminTab(page, 'lifecycle').catch(() => {});
   if (await page.getByTestId('session-kill').isEnabled().catch(() => false)) {
+    const responsePromise = page.waitForResponse((response) => {
+      const request = response.request();
+      const pathname = new URL(response.url()).pathname;
+      return request.method() === 'POST' && pathname.endsWith('/kill');
+    }, { timeout: options.connectTimeoutMs });
     await page.getByTestId('session-kill').click();
+    const response = await responsePromise;
+    if (!response.ok() && ![404, 409].includes(response.status())) {
+      throw new Error(`Admin session kill failed with HTTP ${response.status()}.`);
+    }
   }
 }
 

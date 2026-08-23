@@ -19,11 +19,15 @@ test('compose diagnostics use bounded, selected commands and redact every result
   };
   const collector = new ComposeDiagnosticsCollector(executor, new DiagnosticRedactor());
 
-  const result = collector.collect('/repo');
+  const runNamespace = 'bpane-32632472208-1-admin-compatibility';
+  const result = collector.collect('/repo', { BPANE_CI_RUN_NAMESPACE: runNamespace });
 
   assert.equal(calls.length, 5);
   assert.ok(calls.every((call) => call.command === 'docker' && call.cwd === '/repo'));
   assert.ok(calls.some((call) => call.args.includes('--tail') && call.args.includes('300')));
+  assert.ok(calls.some((call) => call.args.includes(
+    `bpane-ci-egress-${runNamespace.slice(0, 32)}`,
+  )));
   assert.ok(calls.every((call) => !call.args.includes('inspect')));
   assert.ok(!result.includes('do-not-upload'));
   assert.match(result, /Control-plane service logs/);

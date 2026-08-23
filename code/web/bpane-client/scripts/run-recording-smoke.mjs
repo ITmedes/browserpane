@@ -4,7 +4,8 @@ import path from 'node:path';
 import process from 'node:process';
 import { spawnSync } from 'node:child_process';
 import { chromium } from 'playwright-core';
-import { testEmbedPageUrl } from './workflow-smoke-lib.mjs';
+import { poll, testEmbedPageUrl } from './workflow-smoke-lib.mjs';
+import { installNamespacedPlaywrightTarget } from '../../../../scripts/compose-harness/namespace-transports.mjs';
 
 const DEFAULTS = {
   pageUrl: 'http://localhost:8080',
@@ -109,19 +110,6 @@ function runBpaneCli(args, accessToken, options) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function poll(description, fn, predicate, timeoutMs, intervalMs = 500) {
-  const startedAt = Date.now();
-  let lastValue = null;
-  while (Date.now() - startedAt < timeoutMs) {
-    lastValue = await fn();
-    if (predicate(lastValue)) {
-      return lastValue;
-    }
-    await sleep(intervalMs);
-  }
-  throw new Error(`Timed out waiting for ${description}`);
 }
 
 async function resolveChromeExecutable() {
@@ -562,6 +550,7 @@ async function main() {
       deviceScaleFactor: 1,
       acceptDownloads: true,
     });
+    await installNamespacedPlaywrightTarget(context);
 
     ownerPage = await context.newPage();
     await configurePage(ownerPage, options);
