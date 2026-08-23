@@ -9,7 +9,10 @@ import {
   validateComposeNamespace,
 } from '../compose-harness/compose-namespace.mjs';
 import { installNamespacedPlaywrightTarget } from '../compose-harness/namespace-transports.mjs';
-import { ComposeResourceRegistry } from '../compose-harness/resource-registry.mjs';
+import {
+  ComposeResourceRegistry,
+  namespaceApiPayload,
+} from '../compose-harness/resource-registry.mjs';
 
 test('GitHub run and stage namespaces are deterministic and bounded', () => {
   const factory = new ComposeNamespaceFactory(() => 'unused');
@@ -38,6 +41,28 @@ test('configured namespaces fail closed when malformed', () => {
     () => new ComposeNamespaceFactory().run('lane', { BPANE_CI_RUN_NAMESPACE: 'UPPER' }),
     /Compose namespace/,
   );
+});
+
+test('workflow-run session creation receives the stage namespace without broadening bindings', () => {
+  const namespace = 'bpane-run-stage';
+  const created = namespaceApiPayload(
+    'http://localhost:8932/api/v1/workflow-runs',
+    'POST',
+    {
+      labels: { suite: 'workflow' },
+      session: { create_session: { project_id: 'project-id' } },
+    },
+    namespace,
+  );
+  const bound = namespaceApiPayload(
+    'http://localhost:8932/api/v1/workflow-runs',
+    'POST',
+    { session: { session_id: 'session-id', create_session: null } },
+    namespace,
+  );
+
+  assert.equal(created.session.create_session.labels.bpane_ci_namespace, namespace);
+  assert.equal(bound.session.create_session, null);
 });
 
 test('Playwright requests carry ownership and register created resources', async (t) => {

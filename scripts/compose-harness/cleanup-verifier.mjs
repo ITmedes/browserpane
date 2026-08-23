@@ -6,6 +6,8 @@ import { ComposeHarnessError, ReadinessWaiter } from './readiness-waiter.mjs';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 const DYNAMIC_CONTAINER_PATTERN = /^bpane-(?:runtime|workflow)-[a-z0-9-]+$/u;
 const DYNAMIC_VOLUME_PATTERN = /^deploy_bpane-session-data-(?:browser-context-)?[a-z0-9]+$/u;
+const DEFAULT_CLEANUP_TIMEOUT_MS = 60_000;
+const DEFAULT_CLEAN_PASSES = 8;
 
 export class ComposeCleanupVerifier {
   #inspector;
@@ -27,7 +29,18 @@ export class ComposeCleanupVerifier {
     return await this.#inspector.snapshot(records);
   }
 
-  async verify({ namespace, records, baseline, timeoutMs = 15_000, signal }) {
+  async verify({
+    namespace,
+    records,
+    baseline,
+    timeoutMs = DEFAULT_CLEANUP_TIMEOUT_MS,
+    cleanPasses = DEFAULT_CLEAN_PASSES,
+    signal,
+  }) {
+    if (!Number.isInteger(cleanPasses) || cleanPasses <= 0) {
+      throw new TypeError('Compose cleanup cleanPasses must be a positive integer.');
+    }
+    let consecutiveCleanPasses = 0;
     const waiter = new ReadinessWaiter({
       observe: async () => summarizeLeaks(await this.#inspector.snapshot(records), baseline),
       clock: this.#clock,
@@ -38,7 +51,12 @@ export class ComposeCleanupVerifier {
         timeoutMs,
         intervalMs: 250,
         signal,
-        isReady: (_boundary, state) => state?.available === true,
+        isReady: (_boundary, state) => {
+          consecutiveCleanPasses = state?.available === true
+            ? consecutiveCleanPasses + 1
+            : 0;
+          return consecutiveCleanPasses >= cleanPasses;
+        },
       });
       const event = {
         type: 'cleanup',

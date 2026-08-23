@@ -297,3 +297,49 @@ The local full workflow stage was not run because it force-recreates the
 operator's existing gateway configuration. The shell driver owns the next
 exact-head hosted run and must re-evaluate its workflow cleanup inventory; this
 record does not treat run `32634536034` as passing evidence.
+
+Exact-head manual Compose run `32636333318` on
+`494363001a62c4c3b2d03d73e3472bf5bbfb1042` was classified as a PR regression.
+Both gateway lanes passed. The compatibility, browser-integration, and unified
+admin lanes completed their product assertions and then failed the new cleanup
+invariant at its fixed 15-second deadline. Uploaded diagnostics retained one
+compatibility runtime, two workflow runtimes across gateway reconciliation, and
+one unified-admin runtime. The browser diagnostics showed stale assignment
+reconciliation continuing for about 40 seconds. The workflow-run request
+interceptor also added ownership only where a nested `labels` object already
+existed, so explicit `session.create_session` overrides without labels could
+create project-run sessions that label-owned cleanup would not select.
+
+The third bounded repair gives runtime teardown up to 60 seconds and requires
+eight consecutive clean observations at 250-millisecond intervals before a
+stage can pass. This preserves the cleanup invariant while rejecting transient
+clean snapshots. It also creates the supported nested workflow-run session
+labels object when needed and injects the stage namespace; existing-session
+bindings remain unchanged. Changed files are
+`scripts/compose-harness/cleanup-verifier.mjs`,
+`scripts/compose-harness/resource-registry.mjs`, their two focused contract
+tests, and this evidence record. No product behavior, public API, security
+policy, promotion scenario, or `dev_loop/` file changed.
+
+Third-repair local checks:
+
+- `node --test scripts/ci/compose-harness-*.test.mjs
+  scripts/ci/compose-evidence-*.test.mjs
+  scripts/ci/compose-workflow-contract.test.mjs`: PASS, 48 tests.
+- `node scripts/validate.mjs --stage validation-tool-tests --stage
+  repository-baseline --stage repository-documents`: PASS, 171 tooling tests
+  plus repository and document contracts.
+- `node scripts/validate.mjs --stage compose-admin-new-api-companion`: PASS in
+  6.3 seconds against the existing stack.
+- `node scripts/validate.mjs --stage compose-admin-compat`: PASS in 160.8
+  seconds. Its cleanup stayed bounded and reached a stable clean inventory
+  after 98 observations and 36.285 seconds, directly reproducing the hosted
+  timing that exceeded the old deadline.
+- `node --check scripts/compose-harness/cleanup-verifier.mjs
+  scripts/compose-harness/resource-registry.mjs`: PASS.
+- `git diff --check`: PASS.
+
+The local workflow-admission stage was not run because it force-recreates the
+operator's existing gateway configuration. The shell driver owns the next
+exact-head hosted run; this record does not treat run `32636333318` as passing
+evidence.

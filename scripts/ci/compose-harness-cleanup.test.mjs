@@ -64,12 +64,38 @@ test('cleanup waits through asynchronous lifecycle drain and accounts for every 
   const baseline = await verifier.baseline();
 
   const result = await verifier.verify({
-    namespace: 'bpane-run-stage', records: [], baseline, timeoutMs: 5,
+    namespace: 'bpane-run-stage', records: [], baseline, timeoutMs: 5, cleanPasses: 1,
   });
 
   assert.equal(result.outcome, 'success');
   assert.equal(result.attempts, 3);
   assert.equal(events[0].inventory.status, 'clean');
+});
+
+test('cleanup requires a stable clean window and tolerates hosted runtime drain', async () => {
+  let clock = 0;
+  const snapshots = [
+    inventory(),
+    inventory(),
+    inventory({ owned_containers: 1 }),
+    inventory(),
+    inventory(),
+    inventory(),
+  ];
+  const verifier = new ComposeCleanupVerifier({
+    inspector: { snapshot: async () => snapshots.shift() ?? inventory() },
+    clock: () => clock,
+    wait: async () => { clock += 10_000; },
+  });
+  const baseline = await verifier.baseline();
+
+  const result = await verifier.verify({
+    namespace: 'bpane-run-stage', records: [], baseline, cleanPasses: 3,
+  });
+
+  assert.equal(result.outcome, 'success');
+  assert.equal(result.attempts, 5);
+  assert.equal(result.elapsed_ms, 40_000);
 });
 
 test('cleanup permits stopped-session storage while rejecting temporary volume leaks', async () => {
@@ -107,7 +133,9 @@ test('cleanup failure preserves bounded accounting for active sessions and stora
   const baseline = await verifier.baseline();
 
   await assert.rejects(
-    verifier.verify({ namespace: 'bpane-run-stage', records: [], baseline, timeoutMs: 2 }),
+    verifier.verify({
+      namespace: 'bpane-run-stage', records: [], baseline, timeoutMs: 2, cleanPasses: 1,
+    }),
     (error) => error.code === 'cleanup_failure'
       && error.details.inventory.active_sessions === 1
       && error.details.inventory.owned_volumes === 1,

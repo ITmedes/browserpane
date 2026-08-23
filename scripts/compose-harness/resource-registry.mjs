@@ -66,6 +66,7 @@ export function namespaceApiPayload(url, method, payload, namespace) {
   }
   const copy = structuredClone(payload);
   addNamespaceToExistingLabels(copy, namespace);
+  addWorkflowRunSessionNamespace(url, copy, namespace);
   if (acceptsRootLabels(url) && (!copy.labels || typeof copy.labels !== 'object')) {
     copy.labels = { [CI_LABEL]: namespace };
   }
@@ -92,6 +93,18 @@ function addNamespaceToExistingLabels(value, namespace) {
     value.labels[CI_LABEL] = namespace;
   }
   for (const child of Object.values(value)) addNamespaceToExistingLabels(child, namespace);
+}
+
+function addWorkflowRunSessionNamespace(url, payload, namespace) {
+  const segments = apiSegments(url);
+  if (segments.length !== 1 || segments[0] !== 'workflow-runs') return;
+  const createSession = payload.session?.create_session;
+  if (!createSession || typeof createSession !== 'object' || Array.isArray(createSession)) return;
+  if (!createSession.labels || typeof createSession.labels !== 'object'
+    || Array.isArray(createSession.labels)) {
+    createSession.labels = {};
+  }
+  createSession.labels[CI_LABEL] = namespace;
 }
 
 function acceptsRootLabels(url) {
