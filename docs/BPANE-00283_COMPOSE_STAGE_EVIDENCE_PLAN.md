@@ -3,12 +3,12 @@
 ## Metadata
 
 - Issue: `#283`
-- State: In Progress
+- State: Review
 - Owner: BrowserPane maintainers
 - Lane: Foundation
 - Target gate: reliable Compose qualification
 - Depends on: completed issues `#184`, `#185`, `#235`, `#273`, and `#277`
-- Last verified commit/date: `c0e0ae503236` / 2026-08-23
+- Last verified commit/date: `d0ffede5` / 2026-08-23
 
 ## Business Outcome
 
@@ -188,5 +188,31 @@ this is delivery reliability evidence, not a new product capability.
 
 ## Evidence Record
 
-Record the PR, commit, workflow run, five lane artifacts, controlled-negative
-run, redaction review, coverage result, and 30-run baseline in issue `#283`.
+- Implementation commit: `d0ffede5`.
+- `node --test scripts/ci/compose-evidence-*.test.mjs
+  scripts/ci/compose-workflow-contract.test.mjs
+  scripts/validation/github-workflow-policy-checker.test.mjs`: passed 27 tests.
+- `node scripts/validate.mjs --stage validation-tool-tests --stage
+  repository-baseline --stage repository-documents`: passed all three stages;
+  141 validation-tool tests passed, 48 tracked JSON files passed the repository
+  baseline, and 125 Markdown, 19 YAML, and three workflow documents passed.
+- `node scripts/validate.mjs --profile fast --dry-run`: passed and retained the
+  existing 44-stage fast inventory without executing it.
+- Deterministic evidence covers success, each supported failure class, timeout
+  exit semantics, cancellation, terminal unknowns, missing/malformed evidence,
+  cleanup failure without primary-failure replacement, retry attempts, timing,
+  JSON/JUnit serialization, input/image identity, attachment traversal,
+  symlinks, size bounds, and credential/URL rejection.
+- `docs/COMPOSE_RELIABILITY_BASELINE.md` records the reviewed 30-run pre-v1
+  sample: 53.3% first-pass success and a 16.06-minute full median. Only one run
+  was scheduled, so the unchanged-scheduled >=95% target is explicitly not yet
+  evaluated.
+- API/OpenAPI, product protocol, database, Admin-New, CLI/SDK, runtime behavior,
+  README, ARCH, capability maturity, investor claims, threat model, and
+  production security baseline: N/A. This slice changes internal CI evidence,
+  preserves the existing five lanes and scenario inventory, and adds no new
+  product data class or trust boundary.
+- Deferred to the exact-head hosted gate: one complete Compose dispatch proving
+  all five lane summaries and retained JSON/JUnit artifacts. The proposal
+  routine does not dispatch, poll, rerun, or wait for that shell-driver-owned
+  evidence.
