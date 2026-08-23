@@ -1,6 +1,6 @@
 # Consolidated Validation Matrix
 
-Revalidated against current package scripts: 2026-08-22
+Revalidated against current package scripts: 2026-08-23
 
 This matrix defines the available validation surfaces for product slices. Use
 `PRODUCT_PHASES_AND_RELEASE_GATES.md` to decide which evidence is required for
@@ -93,13 +93,17 @@ execute the canonical evidence journeys, capture only selected control-plane
 status/log tails after a failure, redact credential and identity material
 before upload, and always remove BrowserPane containers and compose volumes.
 
-## Planned Compose Qualification V2
+## Compose Qualification V2
 
-Issues #283-#287 are an ordered Foundation-maintenance sequence. None of the
-following behavior is current until its focused issue closes with evidence:
+Issues #283-#287 are an ordered Foundation-maintenance sequence. BPANE-00283
+now defines the checked v1 evidence contract; the remaining behavior is not
+current until its focused successor closes with evidence:
 
-1. #283 adds versioned per-stage timing, failure classification, exact input
-   identity, bounded artifacts, and independent cleanup results.
+1. #283 records versioned per-stage timing, deterministic `product`, `harness`,
+   `infrastructure`, or terminal `unknown` classification, exact tree and
+   workflow/test-plan identity, image digests, retry attempt, bounded artifacts,
+   and independent cleanup results for all five lanes. Every lane publishes
+   JSON and JUnit on success, failure, cancellation, and cleanup failure.
 2. #284 adds shared typed readiness, unique CI namespaces, and stage cleanup
    invariants across all five lanes.
 3. #285 builds qualification images once and fans out one immutable digest
@@ -116,6 +120,24 @@ The complete matrix remains scheduled, release/manual-dispatchable, and the
 authoritative fallback throughout this sequence. Required-check aggregation
 must remain stable, compatibility-admin coverage remains for relevant and full
 runs, and no slice may convert `unknown` into pass or retry.
+
+Run the #283 static and schema contracts with:
+
+```bash
+node --test scripts/ci/compose-evidence-*.test.mjs \
+  scripts/ci/compose-workflow-contract.test.mjs \
+  scripts/validation/github-workflow-policy-checker.test.mjs
+node scripts/validate.mjs --stage validation-tool-tests
+node scripts/check-repository-documents.mjs
+```
+
+The hosted artifacts are named `compose-evidence-<lane>-<run>-<attempt>` and
+contain `compose-stage-evidence-v1.json`, `compose-stage-evidence-v1.xml`, and
+bounded redacted diagnostics when a lane fails. Playwright screenshots or
+traces are eligible only through the explicit synthetic-fixture manifest; raw
+browser content, credentials, identity claims, requested URLs, and unbounded
+logs remain prohibited. `COMPOSE_RELIABILITY_BASELINE.md` records the reviewed
+pre-v1 30-run baseline and the ongoing flake-ledger rules.
 
 ## Docker Runtime Topology Evidence
 

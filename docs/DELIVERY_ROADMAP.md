@@ -4,7 +4,8 @@ Status: Canonical execution roadmap
 
 Governance issue: [#173](https://github.com/ITmedes/browserpane/issues/173)
 
-Last requirements audit: 2026-08-22 after protocol slices #263 through #265,
+Last requirements audit: 2026-08-23 with #283 structured Compose evidence in
+Review after protocol slices #263 through #265,
 the #273/#275 exact-head Compose/readiness correction merged through PR #274,
 the bounded exact-SHA post-merge retry for #277 merged through PR #279, and
 the #280 protocol-bootstrap repair merged through PR #281 after Compose run
@@ -16,7 +17,7 @@ real-Compose fake-BPM evidence. #174 remains the next Pilot Value outcome but
 waits for real candidate and stakeholder decisions. #180 is specified but
 waits for reviewed legal/business decisions. #175 is a blocked non-executable
 tracker. A maintainer-prioritized Compose Qualification v2 sequence is now
-split across #283-#287. #283 is the single Ready engineering candidate while
+split across #283-#287. #283 is in Review while
 #174 and #180 remain externally deferred; #266 follows the runner sequence.
 
 ## How To Use This Document
@@ -66,7 +67,7 @@ Qualified until a later post-merge audit passes.
 
 | Lane | Outcome | Current entry point | Promotion target |
 | --- | --- | --- | --- |
-| Foundation | Trusted build, auth, contracts, storage, and lifecycle baseline. | #283 structured Compose evidence is Ready; #284-#287 follow in order | Foundation Gate maintenance |
+| Foundation | Trusted build, auth, contracts, storage, and lifecycle baseline. | #283 structured Compose evidence is in Review; #284-#287 follow in order | Foundation Gate maintenance |
 | Pilot Value | One bounded reusable BPM browser activity with accepted evidence and runbook. | #172 merged; #174 awaits real candidate selection | Phase 0 Gate |
 | Operator Product | Complete and promote `/admin-new/` as the default operator console. | Default promoted through #163; #124 is the next focused catalog gap | Phase 1 Gate |
 | Production | Harden deployment, security, recovery, supply chain, and telemetry. | #233 dashboard baseline merged; #178 retains broader telemetry scope | Production Baseline |
@@ -99,7 +100,7 @@ Qualified until a later post-merge audit passes.
 | 17 | #275 | Done | #273 branch Compose evidence | Transport, host-capability, runtime-container, and admin disconnect readiness are distinguished in compatibility smokes and UI state; merged through PR #274. |
 | 18 | #277 | Done | #273/#275 complete | Bounded same-run, exact-SHA failed-job retry merged through PR #279; repeated failure remains terminal. |
 | 19 | #280 | Done | #277 complete; its post-merge run failed twice in compatibility session lifecycle | Checked legacy bytes survive stream chunking and bootstrap write failure removes admitted registry clients; merged through PR #281. |
-| 20 | #283 | Ready | #184/#185/#235/#273/#277 complete | Emit bounded stage timing, failure classification, identity, diagnostics, and cleanup evidence before changing gate semantics. |
+| 20 | #283 | Review | #184/#185/#235/#273/#277 complete | Checked v1 JSON/JUnit stage timing, deterministic failure classification, exact identity, bounded diagnostics, independent cleanup, and a reviewed 30-run baseline. |
 | 21 | #284 | Qualified | #283 | Use shared typed readiness, unique CI namespaces, and enforced cleanup invariants across all Compose lanes. |
 | 22 | #285 | Qualified | #283; integrate after #284 | Build each required qualification image once and fan out immutable digests to every selected lane. |
 | 23 | #286 | Qualified | #283-#285 | Add deterministic fail-closed canary/affected/full selection, including a lightweight docs-only path. |
@@ -131,8 +132,8 @@ When no Ready work exists, use this finite order:
 The qualifier must preserve the external blockers on `#174` and `#180`.
 Protocol slices `#263` through `#265`, the bounded #273/#275 contributor-loop
 correction, #277, and the resulting #280 bootstrap repair are complete. The
-maintainer-prioritized #283-#287 runner sequence now precedes `#266`; only
-`#283` is Ready and successors must be promoted one at a time after their
+maintainer-prioritized #283-#287 runner sequence now precedes `#266`; #283 is
+in Review and successors must be promoted one at a time after their
 dependencies close.
 Issues `#263` through `#268` are independently shippable protocol slices with
 focused plans; each successor depends on closure of its predecessor. `#175`
